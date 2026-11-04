@@ -2,7 +2,7 @@
 title: Security Rules Across the Surface
 status: approved
 last-reviewed: 2026-11-04
-related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md, sqlite-contract.md]
+related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Security Rules Across the Surface
@@ -506,6 +506,13 @@ states the rule that answers it.
   `FR-LITE-015`, and `query_only` beside them. `BR-LITE-001` states it, and
   `FR-LITE-008` states the files the library itself may create beside a
   database in write-ahead-log mode.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the promise has the two parts it has for a `mariadb` entry: the closed
+  lists of `FR-MYSQL-015` and `FR-MYSQL-016`, which prevent, and the read-only
+  session of `FR-MYSQL-018`, read back under `@@session.transaction_read_only`
+  and refused with `78` where it does not hold, per `FR-MYSQL-019`.
+  `BR-MYSQL-002` states it.
 
 ## Dependencies
 

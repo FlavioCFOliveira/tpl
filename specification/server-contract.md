@@ -1,8 +1,8 @@
 ---
 title: Server Contract
 status: approved
-last-reviewed: 2026-11-03
-related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md, sqlite-contract.md]
+last-reviewed: 2026-11-04
+related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Server Contract
@@ -26,6 +26,13 @@ read with that scope. An entry whose provider is `sqlite` is governed by
 [sqlite-contract.md](sqlite-contract.md), which states which of the rules here
 it adopts and on what ground. No requirement of this file changes for a
 `mariadb` entry.
+
+*Note added in the seventy-third edition,* for rmp `#324`. An entry whose
+provider is `mysql` is governed by [mysql-contract.md](mysql-contract.md),
+which adopts requirements of this file by citing each, with the MySQL series
+of `FR-MYSQL-003` in place of the MariaDB series of `FR-SRV-015`. No
+requirement of this file changes for a `mariadb` entry, and a `mariadb` entry
+that reaches a MySQL server is refused as before.
 
 ## Scope
 
@@ -94,6 +101,11 @@ record has not been observed, and SHALL NOT be written down.
   [sqlite-contract.md](sqlite-contract.md). A server reached through a
   `mariadb` entry that is not MariaDB is still refused, per `FR-SRV-003`, and
   the window is unchanged.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The system also
+  reads MySQL, through an entry whose provider is `mysql`, under the supported
+  set of `FR-MYSQL-002`. This requirement, the window and its table are
+  unchanged, and they govern a `mariadb` entry alone.
 
   *Rationale.* Both conditions are load-bearing and neither is sufficient alone.
   The family condition alone would admit `10.5` and `10.6`, which no longer
@@ -419,6 +431,16 @@ record has not been observed, and SHALL NOT be written down.
   condition and the one `FR-SRV-020` refuses share the code `78`, so the
   `cause` is what separates them for the reader who has to act.
 
+  *Note added in the seventy-third edition,* for rmp `#324`. MySQL is read
+  through a `mysql` entry, by a reader written for the three divergences the
+  rationale above names, per [mysql-contract.md](mysql-contract.md). This
+  requirement is unchanged and governs a `mariadb` entry: its rationale still
+  holds for the MariaDB reader, and its `cause` still states that `tpl`
+  supports MariaDB only, which is true of a `mariadb` entry. `FR-MYSQL-012`
+  records that a `mariadb` entry on a supported MySQL server is expected to
+  be refused at the read-back of `FR-SRV-009`, under `FR-SRV-010`, before
+  this check is reached.
+
 - **FR-SRV-020**: IF the server is MariaDB, its series is not one of
   `FR-SRV-015`, and its series is older than the newest series of `FR-SRV-015`,
   THEN the system SHALL exit `78` with the message of `FR-SRV-030`, and SHALL
@@ -492,6 +514,10 @@ record has not been observed, and SHALL NOT be written down.
   *Note added in the sixty-fifth edition.* For a `sqlite` entry the same
   commands open the database file, and `FR-LITE-003` states that none of the
   three checks applies to it.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the same commands open a connection, and `FR-MYSQL-011` applies the
+  three checks of [mysql-contract.md](mysql-contract.md) to each of them.
 
 - **FR-SRV-021**: The comparison of `FR-SRV-020` SHALL be made against the
   series, not the point release, and series SHALL be ordered by version number —
@@ -1443,8 +1469,11 @@ variable is `version_ssl_library`, and the fixture reads it, so this is a
 second run of a reading that already exists rather than an ad-hoc read whose
 first step is recovering a name. **Nothing in this corpus waits on
 it.** No requirement reads any of the three, so it is not an open question and
-no entry is opened for it; the index of
-[open-questions.md](open-questions.md) stays empty.
+no entry is opened for it in the index of
+[open-questions.md](open-questions.md). *Corrected in the seventy-third
+edition:* the clause read that the index "stays empty", which stopped being
+true when that edition opened two entries for the `mysql` provider; no entry
+concerns this reading.
 
 **This passage takes the note shapes of a stopped verification and joins
 neither family the [README](README.md#writing-conventions) names.** The two
@@ -1621,6 +1650,9 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   *Note added in the sixty-fifth edition.* `FR-SRV-006` and this requirement
   close the statements of a `mariadb` entry. The closed list of a `sqlite`
   entry is `FR-LITE-015`, with `FR-LITE-016`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The closed list
+  of a `mysql` entry is `FR-MYSQL-015`, with `FR-MYSQL-016`.
 
 - **BR-SRV-001**: The closed list is the read-only guarantee. It is a property of
   what `tpl` is built to send, it holds whatever the server permits, and it is
@@ -2035,6 +2067,8 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 
 - [sqlite-contract.md](sqlite-contract.md) — the contract of a `sqlite` entry,
   which stands beside this one.
+- [mysql-contract.md](mysql-contract.md) — the contract of a `mysql` entry,
+  which stands beside this one and adopts requirements of it by citation.
 - [catalogue-coverage.md](catalogue-coverage.md) — the fields whose absence
   `FR-SRV-004` turns into `null`, and `FR-CAT-029`, the ambiguous-meaning
   exclusion list that `FR-SRV-025` writes into.

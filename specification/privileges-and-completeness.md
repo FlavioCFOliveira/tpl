@@ -1,8 +1,8 @@
 ---
 title: Privileges and Completeness
 status: approved
-last-reviewed: 2026-11-03
-related: [catalogue-coverage.md, server-contract.md, context-document.md, errors-and-exit-codes.md, sqlite-contract.md]
+last-reviewed: 2026-11-04
+related: [catalogue-coverage.md, server-contract.md, context-document.md, errors-and-exit-codes.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Privileges and Completeness
@@ -33,6 +33,13 @@ whose definition does not compile as the one way a `sqlite` read came back
 incomplete. `FR-LITE-035`, which marked it, is withdrawn by the user's
 decision recorded under `FR-LITE-033`, and such a view is read whole and
 unmarked. No requirement of this file changes.
+
+*Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+entry every rule of this file applies as it applies to a `mariadb` entry, per
+`FR-MYSQL-041`. The shapes `FR-PRIV-018` records are MariaDB's, observed on
+its four series; which shape MySQL gives each absence is pending observation
+in that requirement, and the cross-checks apply in MariaDB's shapes until it
+is recorded. No requirement of this file changes.
 
 ## Scope
 

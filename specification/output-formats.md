@@ -1,7 +1,7 @@
 ---
 title: Output Formats
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [cli-contract.md, schema-commands.md, errors-and-exit-codes.md, help-and-version.md]
 ---
 
@@ -361,7 +361,7 @@ owns the shape of its `data`.
   characters — U+0080 to U+009F — and
   [bidirectional formatting characters](glossary.md#bidirectional-formatting-character)
   in the `text` and `json` output of the read commands — `schema`,
-  `template`, `cfg`, and `cache` — for a `mariadb` and a `sqlite` entry alike.
+  `template`, `cfg`, and `cache` — for an entry of every provider alike.
   In `text` output, a C1 control character and a bidirectional formatting
   character SHALL be escaped in the form a C0 control character is, and tab
   is excepted, in `text` output alone. In `json` output there is no exception
@@ -423,6 +423,12 @@ owns the shape of its `data`.
   characters where the catalogue holds one, and a template rendered with
   `--context` from a dump would emit the escape where a render from the
   database emits the character.
+
+  *Amended in the seventy-third edition,* for rmp `#324`: the rule names an
+  entry of every provider, where it named a `mariadb` and a `sqlite` entry,
+  so that a `mysql` entry, whose catalogue values are free text on a server as
+  a MariaDB server's are, is escaped alike. Nothing a `mariadb` or a `sqlite`
+  entry prints changes.
 
 - **FR-OUT-019**: The escaping of `FR-OUT-018` SHALL apply to every value
   interpolated into that output, whatever its source: the catalogue, a

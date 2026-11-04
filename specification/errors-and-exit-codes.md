@@ -2,7 +2,7 @@
 title: Errors and Exit Codes
 status: approved
 last-reviewed: 2026-11-04
-related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md, sqlite-contract.md]
+related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Errors and Exit Codes
@@ -51,7 +51,7 @@ Out of scope: the wording of any individual message.
   | `73` | `EX_CANTCREAT` | `tpl init` cannot create `.tpl`, or `.tpl` already exists at the destination | Check permissions, or choose another destination |
   | `74` | `EX_IOERR` | I/O failure on a file or stream the invocation reads or writes: `.tpl` and what it holds, a `--context` document, trust material named by `ca_file` or `ca_path`, a SQLite database file an entry names together with the files and the memory the library needs to read it, or stdout, including a pipe closed part-way through a JSON document | Check permissions and free space, and, for a SQLite read, free memory |
   | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue; or an object requested by name that comes back incomplete, per `FR-PRIV-003` | Fix the credentials, or request read access |
-  | `78` | `EX_CONFIG` | No `.tpl` found, or a `--tpl-dir` that names no `.tpl` folder; unsafe `.cfg` ownership or mode, or a `.tpl` folder without `.cfg` owned by another user; malformed `.cfg`, including a `${VAR}` in `ca_file` or `ca_path`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported; a `provider` outside its two values, or an entry key its provider refuses; a SQLite path that is not a regular file, or a file that is not a SQLite database or whose schema cannot be loaded | Fix `.tpl/.cfg`, or run `tpl init` |
+  | `78` | `EX_CONFIG` | No `.tpl` found, or a `--tpl-dir` that names no `.tpl` folder; unsafe `.cfg` ownership or mode, or a `.tpl` folder without `.cfg` owned by another user; malformed `.cfg`, including a `${VAR}` in `ca_file` or `ca_path`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not the product its entry's provider names; the server series is not supported; a `provider` outside its three values, or an entry key its provider refuses; a SQLite path that is not a regular file, or a file that is not a SQLite database or whose schema cannot be loaded | Fix `.tpl/.cfg`, or run `tpl init` |
 
   The codes are a closed set and the *Condition* column is not. *And no
   others* above fixes the list of codes; each *Condition* cell characterises
@@ -138,6 +138,15 @@ Out of scope: the wording of any individual message.
   that does not take effect, per `FR-LITE-012`, which its cell already
   characterises as a defect in `tpl`. The code set is unchanged and the column
   still characterises rather than enumerates.
+
+  *Amended in the seventy-third edition,* for rmp `#324`: the `78` cell names
+  the product check of each server provider — MariaDB for a `mariadb` entry,
+  per `FR-SRV-003`, and MySQL for a `mysql` entry, per `FR-MYSQL-008` — where
+  it named MariaDB alone, and the `provider` key's three values where it named
+  two. The supported series of `FR-MYSQL-009` falls under *the server series
+  is not supported*, which the cell already characterised. Nothing a
+  `mariadb` or a `sqlite` entry produces moves; the code set is unchanged and
+  the column still characterises rather than enumerates.
 
   *Amended in the sixty-seventh edition,* for rmp `#314`: the `69` and `74`
   cells name what `FR-LITE-040` adds to their classes. `69` takes a SQLite
@@ -684,6 +693,20 @@ Out of scope: the wording of any individual message.
   joins the list, because it gives a code to every result code the other four
   do not classify. The codes step 6 can end with are unchanged.
 
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the steps hold the conditions they hold for a `mariadb` entry: step 3
+  refuses a `provider` outside its three values, per `FR-CONF-051`; step 5
+  refuses an entry key a `mysql` entry refuses, per `FR-CONF-052`, and the
+  absences of `FR-CONF-040` and `FR-CONF-041`; and step 6 evaluates, in the
+  order the fourth edition fixed, the read-only session of `FR-MYSQL-019`, the
+  product check of `FR-MYSQL-008` and the version check of `FR-MYSQL-009`,
+  from the statements `FR-MYSQL-017` orders. The codes each step can end with
+  are those of a `mariadb` entry, and the order of the steps is unchanged. The
+  sixty-fifth edition's note above counts the values of `provider` as two,
+  which was their number when it was written; they are three, per
+  `FR-CONF-051`, and step 3 refuses a value outside all three, whatever the
+  entry.
+
   *Amended in the sixty-eighth edition,* for rmp `#317`: step 7 reached `77`
   for a named view that does not compile, under `FR-LITE-035`, which is
   withdrawn by the user's decision recorded under `FR-LITE-033`. Such a view
@@ -850,6 +873,12 @@ Out of scope: the wording of any individual message.
   for the check of the file's kind, what the filesystem returned. What the
   library returned is stated in the form `FR-GLOB-018` fixes, and every value
   read from the file within the bound of `FR-ERR-046`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry every row reads as it reads for a `mariadb` entry, with the version
+  probe of `FR-MYSQL-006` as the probe phase of the `69` row and the
+  messages of `FR-MYSQL-008` and `FR-MYSQL-009` as the conditions of the
+  `78` row that name a server.
 
   *Amended in the sixty-seventh edition,* for rmp `#314`: the `69` sentence
   named a lock on every deadline. The catalogue-query deadline can end a
@@ -1490,8 +1519,8 @@ Out of scope: the wording of any individual message.
   character, every C1 control character — U+0080 to U+009F — and every
   [bidirectional formatting character](glossary.md#bidirectional-formatting-character)
   in every value it interpolates into a message — catalogue names, comments,
-  defaults, `--context` values, and the argument vector — for a `mariadb` and
-  a `sqlite` entry alike. A C1 control character and a bidirectional
+  defaults, `--context` values, and the argument vector — for an entry of
+  every provider alike. A C1 control character and a bidirectional
   formatting character SHALL be escaped in the form a C0 control character
   is. This requirement owns escaping in a diagnostic message; `FR-OUT-018`
   owns escaping in the output of a read command, where tab is excepted in
@@ -1571,6 +1600,12 @@ Out of scope: the wording of any individual message.
   category, `Cf`.* It holds characters a script needs in order to be
   written, the zero-width joiner among them, which reorder nothing.
 
+  *Amended in the seventy-third edition,* for rmp `#324`: the rule names an
+  entry of every provider, where it named a `mariadb` and a `sqlite` entry, so
+  that a value a MySQL server returns is escaped as a MariaDB server's is, on
+  the ground the rejected option above gives. Nothing a `mariadb` or a
+  `sqlite` entry writes changes.
+
 - **FR-ERR-046**: A value the system read from a SQLite database file, or
   that the SQLite library returned — an object name, or the library's message
   — SHALL be bounded wherever it is interpolated into a diagnostic line, at
@@ -1628,6 +1663,18 @@ Out of scope: the wording of any individual message.
   carries the same names, and a diagnostic on the `--context` path that names
   one writes it whole. The document is the caller's input, and the bound is
   not extended to it, so that no `--context` diagnostic changes.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The bound does
+  not reach a value a MySQL server returned either: the first sentence
+  confines it to a SQLite database file and its library, and a MySQL server,
+  like a MariaDB one, is a server that admits no name longer than 64
+  characters.
+
+  *Pending observation.* The manual gives 64 characters for a database, a
+  table, a column, an index, a constraint, a stored program and a view, at
+  `https://dev.mysql.com/doc/refman/8.4/en/identifier-length.html`, checked
+  2026-11-04, and no row for a trigger; rmp `#326` observes the limit on every
+  series of `FR-MYSQL-003`.
 
   *Added in the sixty-seventh edition,* for rmp `#314`.
 
@@ -1803,6 +1850,10 @@ no requirement of this file is amended.
   answering, because the library that reads the file runs inside the process;
   every failure the library reports on it carries the code `FR-LITE-040`
   assigns, and none reaches this requirement.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. This requirement
+  also governs a `mysql` entry, whose session with its server can stop
+  answering as a `mariadb` entry's can.
 
 ## Template codes
 

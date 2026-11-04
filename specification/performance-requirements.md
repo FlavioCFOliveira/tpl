@@ -1,8 +1,8 @@
 ---
 title: Performance Requirements
 status: approved
-last-reviewed: 2026-11-03
-related: [server-contract.md, cache-commands.md, cache-documents.md, global-flags.md, catalogue-coverage.md, context-document.md, project-and-discovery.md, glossary.md, sqlite-contract.md]
+last-reviewed: 2026-11-04
+related: [server-contract.md, cache-commands.md, cache-documents.md, global-flags.md, catalogue-coverage.md, context-document.md, project-and-discovery.md, glossary.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Performance Requirements
@@ -124,6 +124,7 @@ have:
 | What is asserted | What the assertion needs | What a run without it does |
 |---|---|---|
 | Everything observed through the server's statement record or its connection record: `NFR-PERF-001`, `NFR-PERF-002`, `NFR-PERF-003`, `NFR-PERF-004`, `NFR-PERF-006`, and the connection clause of `NFR-PERF-005` | The fixture of `scripts/mariadb/` standing | Skips the assertion and states the reason |
+| The same assertions, and `NFR-PERF-008`, for a `mysql` entry, per `FR-MYSQL-042` | The fixture of `scripts/mysql/` standing, per `FR-MYSQL-044` | Skips the assertion and states the reason |
 | The discovery clause and the configuration clause of `NFR-PERF-005`, observed by a differential run | A binary, and nothing else | Runs, on all four targets of `NFR-PERF-018` |
 | The same two clauses observed **as syscalls** | A host that affords the syscall trace, which is the two Linux targets | Skips the assertion and states the reason; the differential run is then the whole of the evidence, which `NFR-PERF-005` states in its own text |
 | `NFR-PERF-004` for a `sqlite` entry, observed as the opens of the database file | A host that affords the syscall trace, which is the two Linux targets | Skips the assertion and states the reason; no other instrument observes it, which `NFR-PERF-004` states in its own text |
@@ -138,6 +139,11 @@ untouched, and the two places where the evidence is genuinely weaker on two
 targets are the file-open observation, which `NFR-PERF-005` names, bounds and
 states the consequence of, and the connection count of a `sqlite` entry, which
 `NFR-PERF-004` does the same for.
+
+*Amended in the seventy-third edition,* for rmp `#324`: the second row of the
+table is new. A `mysql` entry is observed through its server's records as a
+`mariadb` entry is, against the fixture of its own provider; no assertion of a
+`mariadb` or a `sqlite` entry changes, and the evidence is weaker nowhere new.
 
 *Amended in the sixty-seventh edition,* for rmp `#314`: the last two rows of
 the table are new, and the paragraph above names the second place where the
@@ -226,6 +232,13 @@ a summary.
   requirement is withdrawn by the user's decision recorded under
   `FR-LITE-033`, no statement reads the columns of views, and the count of a
   `sqlite` read no longer depends on the objects on any path.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. This requirement
+  holds for a `mysql` entry, with the equality taken over the fixture of
+  `scripts/mysql/` and over a database that holds no object, on every series
+  of `FR-MYSQL-003`, per `FR-MYSQL-042`. The count of eleven above is
+  MariaDB's; a `mysql` read issues its own count, fixed by its statements and
+  not by its objects.
 
 - **NFR-PERF-002**: The number of catalogue queries the system issues to read
   one named object SHALL NOT depend on the number of objects in the database.
@@ -630,6 +643,11 @@ a summary.
   compiles was reported and succeeded. A statement that failed when it was
   prepared was not reported, as `FR-LITE-018` records. The statements of
   `FR-LITE-035` therefore reach the record on the fixture's views.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the count is compared with the statement record of its server, as for
+  a `mariadb` entry, and the comparison needs the fixture of `scripts/mysql/`
+  standing, per `FR-MYSQL-042`.
 
   *Rejected: no instrument for a `sqlite` entry, leaving the count observable
   and unverified.* `FR-GLOB-017` exists to make the count verifiable from

@@ -1,8 +1,8 @@
 ---
 title: Configuration Commands
 status: approved
-last-reviewed: 2026-11-03
-related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md, sqlite-contract.md]
+last-reviewed: 2026-11-04
+related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Configuration Commands
@@ -736,10 +736,19 @@ tpl cfg database test   <name>
   ```
   tpl cfg set database.shop.provider sqlite
   error: cannot give entry 'shop' the provider sqlite
-  cause: entry 'shop' carries host, port, user and database, which only a mariadb entry takes; changing its provider requires removing them
+  cause: entry 'shop' carries host, port, user and database, which only a mariadb or a mysql entry takes; changing its provider requires removing them
   hint:  register the database file as a new entry: tpl cfg database add <name> --provider sqlite --path <path>
   exit:  64 (EX_USAGE)
   ```
+
+  *Note added in the seventy-third edition,* for rmp `#324`. With three
+  providers, *the other provider* is the provider the entry would carry after
+  the write, and the keys the `cause` names are those that provider refuses,
+  per `FR-CONF-052`. A `mysql` entry takes and refuses the keys a `mariadb`
+  entry does, so a write that moves an entry between `mariadb` and `mysql`
+  leaves no key refused and is not refused here. The example's `cause`, which
+  said that only a `mariadb` entry takes the keys, names both server
+  providers. Nothing a `mariadb` or a `sqlite` write is refused for changes.
 
   *Amended in the fiftieth edition,* for rmp `#282`. The `hint` named "the
   `tpl cfg unset` of the field that conflicts, or `tpl cfg database remove`
@@ -995,6 +1004,14 @@ tpl cfg database test   <name>
   needs the order of the connection-start statements reads `FR-SRV-042`, in
   [server-contract.md](server-contract.md).
 
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the four steps are these four, with the MySQL counterpart of each:
+  step 2 enforces and confirms the read-only session of `FR-MYSQL-018`; step 3
+  verifies that the server is a supported MySQL series, per `FR-MYSQL-011`;
+  and step 4 runs the privilege probe of `FR-CFG-044` against one of the
+  tables `FR-MYSQL-015` closes. The order is `FR-MYSQL-017`'s, which is
+  `FR-SRV-042`'s.
+
 - **FR-CFG-043**: IF the server the entry reaches is not a supported MariaDB
   series, THEN `tpl cfg database test` SHALL exit `78` with the message of
   `FR-SRV-030`, whose `cause` states that the connection and the authentication
@@ -1018,6 +1035,13 @@ tpl cfg database test   <name>
   A server newer than the supported window is **not** a failure here: it is read
   under `FR-SRV-031`, so this command exits `0` and reports it, per
   `FR-CFG-039`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the same holds of a MySQL server: one that is not MySQL exits `78`
+  with the message of `FR-MYSQL-008`, a series below the supported set with
+  the message of `FR-MYSQL-009`, and a series newer than it is read under
+  `FR-MYSQL-010` and exits `0`. Every such `cause` states that the connection
+  and the authentication succeeded.
 
 - **FR-CFG-056**: For a `sqlite` entry, the four steps of `FR-CFG-024` SHALL
   be the following, in this order, and the fields of `FR-CFG-039` SHALL report
@@ -1221,12 +1245,13 @@ tpl cfg database test   <name>
      `FR-ERR-006`, and SHALL write nothing. `tpl cfg database add` given
      `--provider sqlite` SHALL also be given `--path`, and IF it is not, THEN
      the system SHALL exit `64` at the same step.
-  2. **No provider, or `--provider mariadb`.** IF `tpl cfg database add` is
-     given `--path` without `--provider sqlite`, THEN the system SHALL exit
-     `64` at argument parsing and SHALL write nothing; `FR-CFG-016` then
-     governs what it requires. IF `tpl cfg database update` is given `--path`
-     together with `--provider mariadb`, or together with any flag of item 1's
-     list, THEN the system SHALL exit `64` at argument parsing.
+  2. **No provider, `--provider mariadb` or `--provider mysql`.** IF
+     `tpl cfg database add` is given `--path` without `--provider sqlite`,
+     THEN the system SHALL exit `64` at argument parsing and SHALL write
+     nothing; `FR-CFG-016` then governs what it requires. IF
+     `tpl cfg database update` is given `--path` together with
+     `--provider mariadb` or `--provider mysql`, or together with any flag of
+     item 1's list, THEN the system SHALL exit `64` at argument parsing.
   3. **The entry after the write.** Every other combination given to
      `tpl cfg database update` is decided against the entry as it would
      stand after the write, per `FR-CFG-048`.
@@ -1243,7 +1268,7 @@ tpl cfg database test   <name>
   ```
   tpl cfg database add ledger --provider sqlite --host db.example.com
   error: --host cannot be given with --provider sqlite
-  cause: a sqlite entry is described by --path alone; --host belongs to a mariadb entry
+  cause: a sqlite entry is described by --path alone; --host belongs to a mariadb or a mysql entry
   hint:  give the database file: tpl cfg database add ledger --provider sqlite --path <path>
   exit:  64 (EX_USAGE)
   ```
@@ -1265,6 +1290,14 @@ tpl cfg database test   <name>
   edition refuses, per `FR-CONF-034`, for no change in meaning.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventy-third edition,* for rmp `#324`: item 2 names
+  `--provider mysql` beside `--provider mariadb`, because a `mysql` entry
+  takes the flags a `mariadb` entry takes, per `FR-CONF-052`; `tpl cfg
+  database add` given `--provider mysql` therefore requires what
+  `FR-CFG-016` requires of any entry not given `--provider sqlite`. The
+  example's `cause` names both server providers. Nothing a `mariadb` or a
+  `sqlite` invocation is refused for changes.
 
 - **FR-CFG-030**: The system SHALL NOT declare a `--password` or `-p` flag on
   any command.
@@ -1344,10 +1377,14 @@ tpl cfg database test   <name>
   state that the value is read as a literal path, that a value containing `${`
   is refused, and that a relative path is resolved against the directory that
   holds the `.tpl` folder and not against the working directory, per
-  `FR-CONF-054`. The help of `--provider` SHALL state its two values, that an
+  `FR-CONF-054`. The help of `--provider` SHALL state its values, that an
   entry with no provider is a `mariadb` entry, and which flags each provider
   takes, per `FR-CFG-055`. A path is not a secret, so neither help carries the
   process-table warning.
+
+  *Amended in the seventy-third edition,* for rmp `#324`: the help of
+  `--provider` states the three values `FR-CONF-051` gives the key, where it
+  stated two.
 
   *Amended in the forty-ninth edition.* The help of `--password-command`, and
   the row of `database.<name>.password_command` in the help of
@@ -1573,6 +1610,11 @@ tpl cfg database test   <name>
   the object of `FR-LITE-002`, `read_only_session` reports the controls and
   limits of `FR-LITE-010` and `FR-LITE-011`, and `FR-CFG-056` states the rest.
 
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry, `server` is the object of `FR-MYSQL-006` and `read_only_session`
+  reports the read-back of `FR-MYSQL-018`; the fields and their order are
+  unchanged.
+
   *Accepted cost.* `can_read_catalogue: true` does not promise that a
   subsequent read is complete. It promises exactly what `FR-CFG-044` says the
   probe proves and no more; completeness is `FR-PRIV-001` and only a full read
@@ -1589,6 +1631,9 @@ tpl cfg database test   <name>
   types, and the validation these commands apply.
 - [sqlite-contract.md](sqlite-contract.md) — the steps `FR-CFG-056` performs
   for a `sqlite` entry.
+- [mysql-contract.md](mysql-contract.md) — the checks the steps of
+  `FR-CFG-024` perform for a `mysql` entry, and the messages of `FR-MYSQL-008`
+  and `FR-MYSQL-009`.
 - [cache-commands.md](cache-commands.md) — why repointing an entry does not
   invalidate the cache, and `FR-CACHE-041`, the clean of a cache left by a
   deleted entry, which `FR-CFG-052` names.

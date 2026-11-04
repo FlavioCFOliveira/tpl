@@ -3204,5 +3204,9 @@ would present.
 ## Open questions
 
 **None.** Every point the provider raised is settled in this file or in the
-files it names, and the index of [open-questions.md](open-questions.md) stays
-empty.
+files it names, and the index of [open-questions.md](open-questions.md) holds
+no entry for it.
+
+*Corrected in the seventy-third edition.* The sentence read that the index
+"stays empty", which stopped being true when that edition opened two entries
+for the `mysql` provider; neither concerns a `sqlite` entry.

@@ -1,8 +1,8 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-11-03
-related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md, sqlite-contract.md]
+last-reviewed: 2026-11-04
+related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Configuration Model
@@ -84,7 +84,7 @@ tls      = "verify-identity"
   | `database.<name>.tls` | TLS mode, see `FR-CONF-013` | `verify-identity` |
   | `database.<name>.ca_file` | path to a certificate file | none |
   | `database.<name>.ca_path` | path to a certificate directory | none |
-  | `database.<name>.provider` | provider, `mariadb` or `sqlite`, see `FR-CONF-051` | `mariadb` |
+  | `database.<name>.provider` | provider, `mariadb`, `mysql` or `sqlite`, see `FR-CONF-051` | `mariadb` |
   | `database.<name>.path` | path to a SQLite database file, see `FR-CONF-054` | none |
 
   *Provenance.* The default port `3306` comes from the root `README.md` and is
@@ -96,6 +96,11 @@ tls      = "verify-identity"
   under `[core]`. Which keys an entry may carry depends on its provider, per
   `FR-CONF-052`: the defaults of `port` and `tls` are defaults of a `mariadb`
   entry, and a `sqlite` entry carries neither key.
+
+  *Amended in the seventy-third edition,* for rmp `#324`. The provider row
+  names the third value, `mysql`. The key space is unchanged at twenty key
+  forms, and the defaults of `port` and `tls` are defaults of a `mysql` entry
+  as they are of a `mariadb` entry, per `FR-CONF-052`.
 
   *Amended in the forty-second edition.* The three rows `core.render_fuel`,
   `core.render_output_limit` and `core.render_memory_limit` are new, as
@@ -326,6 +331,10 @@ tls      = "verify-identity"
   describe a `mariadb` entry. A `sqlite` entry carries none of these keys and
   is described by `path`, per `FR-CONF-052` and `FR-CONF-053`.
 
+  *Note added in the seventy-third edition,* for rmp `#324`. A `mysql` entry
+  is described as a `mariadb` entry is, and this requirement and
+  `FR-CONF-007` govern it unchanged, per `FR-MYSQL-020`.
+
   *Amended in the third edition.* The list of discrete connection fields, and
   the exclusion of `password_command` from it, are new. The first edition said
   "the discrete fields" without enumerating them, which left it unstated
@@ -443,23 +452,24 @@ path     = "data/ledger.sqlite"
 ```
 
 - **FR-CONF-051**: Every database entry SHALL have a **provider**, named by its
-  `provider` key, which SHALL take exactly one of the two values `mariadb` and
-  `sqlite`. An entry that carries no `provider` key SHALL be a `mariadb` entry.
-  The provider SHALL decide how the entry is read: a `mariadb` entry through
-  the server contract of [server-contract.md](server-contract.md), and a
-  `sqlite` entry through the contract of
-  [sqlite-contract.md](sqlite-contract.md).
+  `provider` key, which SHALL take exactly one of the three values `mariadb`,
+  `mysql` and `sqlite`. An entry that carries no `provider` key SHALL be a
+  `mariadb` entry. The provider SHALL decide how the entry is read: a
+  `mariadb` entry through the server contract of
+  [server-contract.md](server-contract.md), a `mysql` entry through the
+  contract of [mysql-contract.md](mysql-contract.md), and a `sqlite` entry
+  through the contract of [sqlite-contract.md](sqlite-contract.md).
 
   1. **On the command line.** IF the value given to `--provider` under
      `FR-CFG-027`, or to `tpl cfg set database.<name>.provider`, is not one of
-     the two values, THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL
+     the three values, THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL
      write nothing to `.tpl/.cfg`.
   2. **In the file.** IF `.tpl/.cfg` declares a `provider` that is not one of
-     the two values, in any entry, THEN the system SHALL exit `78`
+     the three values, in any entry, THEN the system SHALL exit `78`
      (`EX_CONFIG`) at step 3 of `FR-ERR-006`.
 
   In both cases the `cause` SHALL name the key or the flag and SHALL state the
-  two values the key takes. The value found enters the `cause` only under the
+  three values the key takes. The value found enters the `cause` only under the
   set of `FR-ERR-022`; a value outside it is described, not reproduced. On the
   command line the `hint` SHALL show the form with a placeholder, as in
   `--provider <provider>`; in the file it SHALL name the file, the entry and
@@ -469,8 +479,8 @@ path     = "data/ledger.sqlite"
   ```
   tpl cfg set database.ledger.provider postgres
   error: invalid value for database.ledger.provider
-  cause: database.ledger.provider takes mariadb or sqlite; the value given is postgres
-  hint:  give one of the two: tpl cfg set database.ledger.provider <provider>
+  cause: database.ledger.provider takes mariadb, mysql or sqlite; the value given is postgres
+  hint:  give one of the three: tpl cfg set database.ledger.provider <provider>
   exit:  64 (EX_USAGE)
   ```
 
@@ -499,12 +509,25 @@ path     = "data/ledger.sqlite"
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+  *Amended in the seventy-third edition,* for rmp `#324`. The key takes a
+  third value, `mysql`, which selects the contract of
+  [mysql-contract.md](mysql-contract.md), by the user's requirement that MySQL
+  be a provider of its own selected by this key, through the mechanism that
+  distinguishes `mariadb` from `sqlite`. An absent key still means `mariadb`,
+  and every entry, written or absent, keeps the provider it had: the meaning
+  of `mariadb` and of `sqlite` is unchanged, and so are the two codes and the
+  step at which each is decided. The `cause` names three values where it
+  named two. The accepted cost above extends to the value: a binary released
+  before this edition refuses `provider = "mysql"` with `78` at step 3, as a
+  value outside the two it knows.
+
 - **FR-CONF-052**: Each provider SHALL take only its own keys among the keys of
   an entry:
 
   | Provider | Keys it takes | Keys it refuses |
   |---|---|---|
   | `mariadb` | `provider`, `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` | `path` |
+  | `mysql` | `provider`, `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` | `path` |
   | `sqlite` | `provider`, `path` | `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` |
 
   IF the entry an invocation selects carries a key its provider refuses, THEN
@@ -537,6 +560,12 @@ path     = "data/ledger.sqlite"
   invocation found, per `BR-ERR-004`, and shows the caller both.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventy-third edition,* for rmp `#324`. The `mysql` row is
+  new: a `mysql` entry describes a connection to a server as a `mariadb` entry
+  does, so it takes and refuses the same keys, per `FR-MYSQL-020`. The rows of
+  `mariadb` and `sqlite` are unchanged. Changing an entry's provider between
+  `mariadb` and `mysql` therefore leaves no key the new provider refuses.
 
 - **FR-CONF-053**: A `sqlite` entry SHALL name a database file in `path`. IF
   the entry an invocation selects is a `sqlite` entry and carries no `path`,
@@ -647,6 +676,10 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 entry. A `sqlite` entry has no host and no server-side database; the one fact
 it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
 `FR-CONF-041` do not reach it.
+
+*Note added in the seventy-third edition,* for rmp `#324`. This section
+describes a `mysql` entry as it describes a `mariadb` one, per
+`FR-MYSQL-020`.
 
 - **FR-CONF-040**: An entry SHALL name a host. IF the entry an invocation
   selects carries neither `dsn` nor `host`, THEN the system SHALL exit `78`
@@ -833,6 +866,13 @@ it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
 
 - **FR-CONF-010**: The system SHALL accept the schemes `mysql://` and
   `mariadb://`, treating them as equivalent.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The scheme does
+  not select the provider. An entry whose `dsn` begins `mysql://` and which
+  carries no `provider` key is a `mariadb` entry, per `FR-CONF-051`, as it
+  was before this edition, and a `mysql` entry accepts either scheme, per
+  `FR-MYSQL-020`. `FR-MYSQL-001` records why the scheme was rejected as the
+  selector.
 
 - **FR-CONF-011**: A DSN SHALL carry no query parameters. IF a DSN carries a
   `?`, THEN the system SHALL exit `78` (`EX_CONFIG`), whatever follows it.
@@ -1165,6 +1205,13 @@ it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
   `sqlite` entry read is `FR-LITE-038`, in
   [sqlite-contract.md](sqlite-contract.md). TLS does not reach a `sqlite`
   entry, which carries no `tls` key, per `FR-CONF-052`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The five modes
+  reach a `mysql` entry, and `FR-MYSQL-021` fixes their behaviour against a
+  MySQL server in this table's terms. The fixture whose servers make its
+  cells demonstrable for a `mysql` entry is that of `scripts/mysql/`, which
+  `FR-MYSQL-044` obliges as this requirement obliges `scripts/mariadb/`. The
+  obligation on `scripts/mariadb/` is unchanged.
 
   *Amended in the eighth edition: the fixture obligation is a requirement
   rather than a consequence.* The *Observed* note below records that `tpl`

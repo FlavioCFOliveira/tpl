@@ -2,7 +2,7 @@
 title: Upstream Divergences
 status: approved
 last-reviewed: 2026-11-04
-related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md]
+related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md, mysql-contract.md]
 ---
 
 # Upstream Divergences
@@ -20,10 +20,21 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Fifty-eight entries are recorded. As of 2026-11-04, three are due in full,
-fifty-one are discharged, and four are partly discharged.** Seven entries
-still owe something: five owe it to `CLAUDE.md` and two to `README.md`, and no
-entry is in both counts.
+**Sixty entries are recorded. As of 2026-11-04, five are due in full,
+fifty-one are discharged, and four are partly discharged.** Nine entries
+still owe something: six owe it to `CLAUDE.md` and three to `README.md`, and
+no entry is in both counts.
+
+*The counts moved in the seventy-third edition, and two entries moved them.*
+The edition gives `tpl` a third provider, MySQL, and amends `FR-CONF-051`,
+which both root documents paraphrase as two providers, `mariadb` and
+`sqlite`; the root `README.md` also states that MySQL is not a target. Both
+files were read at `e72e299` against the requirements the edition writes and
+amends. `DIV-059` is raised against `README.md` and `DIV-060` against
+`CLAUDE.md`; both join the **due** count, one joins each file's count, and
+both were raised by an amendment to this corpus rather than by an edit to the
+target. No other entry was re-read for status. The counts restated in
+`DIV-032` and `DIV-041` move with this paragraph.
 
 *The counts moved in the seventy-second edition, and two entries moved them.*
 `DIV-057` and `DIV-058`, the two entries the sixty-fifth edition raised, were
@@ -462,6 +473,8 @@ register was opened, and `DIV-025` cites it for a search of the history.
 | [DIV-056](#div-056) | `README.md` | Contradiction | Discharged, `6bc8513` | The `.cfg` key space counted short of the eighteen keys of `FR-CONF-002` |
 | [DIV-057](#div-057) | `README.md` | Contradiction | Discharged, `60bf9df` | MariaDB as the only database, no write outside `.tpl`, and eighteen keys |
 | [DIV-058](#div-058) | `CLAUDE.md` | Contradiction | Discharged, `60bf9df` | MariaDB as the only database, `INFORMATION_SCHEMA` as the only catalogue, and the MariaDB fixture as the only one |
+| [DIV-059](#div-059) | `README.md` | Contradiction | Due | MySQL as no target, and MariaDB and SQLite as the only providers |
+| [DIV-060](#div-060) | `CLAUDE.md` | Contradiction | Due | MariaDB and SQLite as the only providers, and no contract or catalogue rule for a `mysql` entry |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -1150,9 +1163,9 @@ is the one stated above and nothing more.
 in *Estrutura do Projecto*, below the project tree and unchanged since
 `3f65b5f`, through every commit that has touched `CLAUDE.md` since — the three
 most recent of them `3a360d6`, `6a66d14` and `9562fb2`, none of which reaches
-this passage. It is one of the seven entries this register still owes
-something on, and one of the five owed to that file, as counted in the
-seventy-second edition. Re-read on 2026-09-25 at
+this passage. It is one of the nine entries this register still owes
+something on, and one of the six owed to that file, as counted in the
+seventy-third edition. Re-read on 2026-09-25 at
 `c360c80`: `6bc8513`, `390c6c6` and `70661da` touched `CLAUDE.md` since and
 none reaches this passage.
 
@@ -1567,8 +1580,8 @@ sentence.
 **Status**: **due**, re-read on 2026-09-22 at `9562fb2`. The deferral stands
 verbatim under *Plataformas Suportadas*, unmoved by `3a360d6`, `6a66d14` or
 `9562fb2`, and the two rules beside it still restate what `NFR-PERF-018` and
-`NFR-PERF-012` carry. It is one of the seven entries this register still owes
-something on, as counted in the seventy-second edition. Re-read on 2026-09-25
+`NFR-PERF-012` carry. It is one of the nine entries this register still owes
+something on, as counted in the seventy-third edition. Re-read on 2026-09-25
 at `c360c80`: the deferral stands, unmoved by `6bc8513`, `390c6c6` and
 `70661da`.
 
@@ -2895,6 +2908,93 @@ The target was read in its English translation at `6203216`. The headings this
 entry cites are that translation's, and the entries of this register raised
 before it cite the earlier Portuguese headings — a difference this edition
 records and does not correct, because no entry's status turns on it.
+
+## DIV-059
+
+**Target**: `README.md`, the opening paragraph, the note on the three joined
+arms, *Two properties bound the tool*, *Requirements*, the paragraph on
+MySQL below it, and *A database entry and its provider*. **Kind**:
+contradiction.
+
+**Status**: **due**, raised on 2026-11-04 at `e72e299`. No commit has
+discharged any part of it.
+
+*Says*: "`tpl` is a command-line tool that reads the structure — the DDL, or
+schema — of a **MariaDB** database or a **SQLite** database file … Which of
+the two a database entry reads is its provider"; "open one connection to the
+MariaDB server or the SQLite database file the selected entry names"; "a
+MariaDB session is set read-only on every connection, as defence in depth,
+and a SQLite database file is opened read-only and never created"; the
+*Requirements* table has rows for MariaDB, MariaDB privileges and SQLite and
+none for MySQL; "MySQL is not a target. A server that is not MariaDB is
+refused rather than read, because the two diverge in `INFORMATION_SCHEMA` in
+ways that would make the model silently wrong"; and "Every entry has a
+provider, named by its `provider` key: `mariadb` — the provider of an entry
+without the key — or `sqlite`".
+*Specification*: `FR-CONF-051` and `FR-CONF-052` as amended in the
+seventy-third edition, under which the provider is `mariadb`, `mysql` or
+`sqlite`, and a `mysql` entry takes the keys of a `mariadb` entry;
+[mysql-contract.md](mysql-contract.md), which reads a MySQL server through a
+`mysql` entry, supports the series of `FR-MYSQL-002` and `FR-MYSQL-003`, and
+sets a MySQL session read-only under `FR-MYSQL-018`; and `FR-MYSQL-012`,
+under which a `mariadb` entry that reaches a MySQL server is refused as
+before.
+*Correction*: name MySQL as the third provider in the opening paragraph, the
+joined-arms note and the paragraph on providers; name a MySQL session beside
+a MariaDB one as set read-only, or point at
+[mysql-contract.md](mysql-contract.md); give the *Requirements* table a row
+for MySQL that cites `FR-MYSQL-002` for the rule and `FR-MYSQL-003` for the
+current members, as the MariaDB row cites its pair; and replace the paragraph
+on MySQL with one saying that MySQL is read through a `mysql` entry, and that
+a server that is not MariaDB is still refused through a `mariadb` entry. The
+testing section owes nothing yet: `scripts/mysql/`, which `FR-MYSQL-044`
+obliges, does not exist at `e72e299`, and the section describes the fixtures
+that do.
+
+*Raised by an amendment to this corpus, and not by an edit to the target*, the
+direction `DIV-053` first recorded. Every passage was an exact summary of the
+corpus when it was written, and `DIV-057` asked that the paragraph on MySQL
+stay, which it then rightly did.
+
+## DIV-060
+
+**Target**: `CLAUDE.md`, *Overview*, the *Where to look for each subject*
+table, the *Non-Negotiable Rules* table, *Implementation Invariants* item 1,
+and *Testing against MariaDB*. **Kind**: contradiction.
+
+**Status**: **due**, raised on 2026-11-04 at `e72e299`. No commit has
+discharged any part of it.
+
+*Says*: "`tpl` is a **command-line application written in Rust** that reads
+the structure (DDL / schema) of **MariaDB** databases and **SQLite** database
+files — the provider each database entry names"; the subject table has rows
+for `specification/server-contract.md` and
+`specification/sqlite-contract.md` and none for a MySQL contract; the rules
+table and the first implementation invariant read "The catalogue is read
+only through `INFORMATION_SCHEMA` for a `mariadb` entry, and through
+`sqlite_schema` and the pragma functions of `FR-LITE-015` for a `sqlite`
+entry", and "The catalogue is read through `INFORMATION_SCHEMA` for a
+`mariadb` entry, and through `sqlite_schema` and the pragma functions of
+`FR-LITE-015` for a `sqlite` entry"; and the testing section requires "the
+fixture of the provider they read: `scripts/mariadb/` for MariaDB, and
+`scripts/sqlite/` for SQLite".
+*Specification*: `FR-CONF-051` as amended in the seventy-third edition;
+[mysql-contract.md](mysql-contract.md), which reads a MySQL catalogue
+through the twelve `INFORMATION_SCHEMA` tables `FR-MYSQL-015` closes, states
+the read-only promise of a `mysql` entry in `BR-MYSQL-002`, and obliges the
+fixture of `scripts/mysql/` in `FR-MYSQL-044`.
+*Correction*: name MySQL beside MariaDB and SQLite in the overview; add a row
+for `specification/mysql-contract.md` to the subject table; read the
+catalogue rule, in both places, as reading `INFORMATION_SCHEMA` for a
+`mariadb` and a `mysql` entry — for a `mysql` entry, the tables of
+`FR-MYSQL-015` alone — and `sqlite_schema` and the pragma functions of
+`FR-LITE-015` for a `sqlite` entry; and name `scripts/mysql/` as the fixture
+of a test that reads a MySQL server, once that directory exists. The rule
+that `tpl` never writes to the database stands for every provider and stays.
+The *Stack* table and the project tree are not reached: which driver reads
+MySQL is an architecture decision, not a requirement of this corpus.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
 
 ## A candidate read, and not recorded
 

@@ -1,8 +1,8 @@
 ---
 title: Catalogue Coverage
 status: approved
-last-reviewed: 2026-11-03
-related: [context-document.md, schema-commands.md, server-contract.md, privileges-and-completeness.md, sqlite-contract.md]
+last-reviewed: 2026-11-04
+related: [context-document.md, schema-commands.md, server-contract.md, privileges-and-completeness.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Catalogue Coverage
@@ -25,6 +25,14 @@ a `mariadb` read. A `sqlite` read fills the same objects and properties from
 SQLite's schema table and pragmas, and
 [sqlite-contract.md](sqlite-contract.md) states the source, or the absence, of
 each, and the objects a `sqlite` read covers and excludes.
+
+*Note added in the seventy-third edition,* for rmp `#324`. A `mysql` read
+fills the same objects and properties from MySQL's `INFORMATION_SCHEMA`, and
+[mysql-contract.md](mysql-contract.md) maps every field of the twelve tables
+it reads to the model, states which properties MySQL cannot supply and which
+of its fields the model does not carry, and records the divergences between
+the two catalogues that reach the read. The field lists and the observations
+this file records stay MariaDB's, and no property is added to the model.
 
 ## Scope
 
@@ -167,6 +175,12 @@ of any catalogue query, which this specification does not state.
   *Note added in the sixty-fifth edition.* A `sqlite` read carries none, per
   `FR-LITE-034`, which states why and what it costs.
 
+  *Note added in the seventy-third edition,* for rmp `#324`. A `mysql` read
+  carries every constraint, each with its name and its clause and with its
+  level `null`, because MySQL records none, per `FR-MYSQL-034`, which also
+  states that a constraint declared `NOT ENFORCED` is carried as every other
+  is, and what that costs.
+
   *Two observed consequences, both stated under `FR-CAT-037` and
   `FR-CAT-038`.* A column-level constraint is named after the column it
   qualifies, so a constraint name is not guaranteed distinct from a column
@@ -260,6 +274,11 @@ requirement says otherwise; a difference between series is recorded under
   MariaDB does with the clause, and governs a `mariadb` read. SQLite keeps
   and enforces `SET DEFAULT`, and a `sqlite` read reports it, per
   `FR-LITE-031`. Nothing about a `mariadb` read changes.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. This requirement
+  holds for a `mysql` read on another ground: MySQL's InnoDB and NDB engines
+  refuse the clause at DDL time, so no key carries it, per `FR-MYSQL-033`,
+  where that ground is marked pending observation.
 
   *Observed.* `ON DELETE SET DEFAULT ON UPDATE SET DEFAULT` is accepted by all
   four series **without error and without warning**, and the catalogue then
@@ -381,6 +400,11 @@ requirement says otherwise; a difference between series is recorded under
   catalogue is that constraint, so a template cannot otherwise tell a `JSON`
   column from a `LONGTEXT` one.
 
+  *Note added in the seventy-third edition,* for rmp `#324`. This requirement
+  records MariaDB and governs a `mariadb` read. MySQL's `JSON` is a native
+  type, which a `mysql` read carries as `json`, with no implicit constraint,
+  per `FR-MYSQL-028` and `FR-MYSQL-034`.
+
   *Partially closes* `OQ-028`, which `FR-CTX-038`
   closes, and bears on `OQ-072`, which `FR-ENV-046`
   closes: `json` is not a value `data_type` takes, so it is a member of no
@@ -461,6 +485,14 @@ requirement says otherwise.
   of `on_update` and `on_delete` is the five spellings `FR-LITE-031` records,
   and `timing` takes `BEFORE` and `AFTER` alone, per `FR-LITE-032`; a value
   outside either set is carried unchanged under this requirement.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  read, the value sets are those the MySQL manual documents and
+  [mysql-contract.md](mysql-contract.md) records pending observation: the
+  rules of `FR-MYSQL-033`, the events and timings of `FR-MYSQL-038`, and the
+  routine types of `FR-MYSQL-036`; `level` is `null` on every constraint, per
+  `FR-MYSQL-034`. A value outside a set is carried unchanged under this
+  requirement.
 
   **`table_type` is not one of them**, and the difference is the field's job
   rather than its shape. `FR-CAT-001` through `FR-CAT-006` make that value a
@@ -1034,8 +1066,11 @@ requirement says otherwise.
   does not name — which is the one question the index cannot answer about
   itself. **Nothing in this corpus waits on it.** Every property a requirement
   in force gives a table is named above, so no requirement is ambiguous while
-  it stands; it is not an open question and no entry is opened for it, and the
-  index of [open-questions.md](open-questions.md) stays empty.
+  it stands; it is not an open question and no entry is opened for it in the
+  index of [open-questions.md](open-questions.md). *Corrected in the
+  seventy-third edition:* the clause read that the index "stays empty", which
+  stopped being true when that edition opened two entries for the `mysql`
+  provider; neither concerns the table catalogue's field list.
 
   *Rejected.* Writing the catalogue field list from the fields this corpus
   already names — the twelve of `FR-CAT-024`, the table type of `FR-CAT-031`,
@@ -1655,6 +1690,8 @@ that is not written down is an omission.
   shaped as a document.
 - [sqlite-contract.md](sqlite-contract.md) — how a `sqlite` read fills the
   model this file defines.
+- [mysql-contract.md](mysql-contract.md) — how a `mysql` read fills the
+  model this file defines, field by field.
 - [schema-commands.md](schema-commands.md) — the commands that present it, and
   the `--pattern` filter of `FR-SCH-011` through `FR-SCH-015`.
 - [server-contract.md](server-contract.md) — the supported version window of

@@ -2,7 +2,7 @@
 title: Glossary
 status: approved
 last-reviewed: 2026-11-04
-related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md, sqlite-contract.md]
+related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Glossary
@@ -71,6 +71,14 @@ passage.** Three shapes are not definitions and stay where they are:
   writing conventions'. The term is here because it is used away from that
   family: it is one of the three ways an open question leaves the index, and
   [open-questions.md](open-questions.md) is where it had been defined.
+
+  *Amended in the seventy-third edition: a second member is a term.*
+  *Pending observation* is a note shape of the same family, and is used away
+  from it — in the maintenance debt of the [README](README.md#maintenance-debt)
+  and in [open-questions.md](open-questions.md), to say what is owed and what
+  is not an open question — so it has an entry here as *a stated limit* has,
+  and its shape stays the writing conventions'. The sentence above, which
+  called *a stated limit* the one such member, was true when it was written.
 
 *Rejected: no boundary, and the rule read at its widest.* It was the live
 alternative, because the widest reading is the easiest to check. It is
@@ -187,6 +195,10 @@ For a `mariadb` entry the catalogue is MariaDB's `INFORMATION_SCHEMA`; for a
 table-valued functions `FR-LITE-015` names. *Amended in the sixty-fifth
 edition.*
 
+For a `mysql` entry it is MySQL's `INFORMATION_SCHEMA`, of which a read draws
+on the twelve tables `FR-MYSQL-015` names. *Amended in the seventy-third
+edition.*
+
 ## closed / dissolved / closed on a stated limit
 
 The three ways an open question leaves the index of
@@ -220,11 +232,12 @@ incomplete for the other. See `FR-PRIV-001`.
 ## connection
 
 One connection of `tpl` to the database an entry names: to a MariaDB server
-for a `mariadb` entry, or of the SQLite library to the database file for a
-`sqlite` entry, per `FR-LITE-037`. An invocation opens at most one, per
-`NFR-PERF-004`.
+for a `mariadb` entry, to a MySQL server for a `mysql` entry, or of the SQLite
+library to the database file for a `sqlite` entry, per `FR-LITE-037`. An
+invocation opens at most one, per `NFR-PERF-004`.
 
-*Added in the sixty-fifth edition.*
+*Added in the sixty-fifth edition. Amended in the seventy-third edition*: the
+`mysql` entry is new.
 
 ## context
 
@@ -340,6 +353,16 @@ folder is found, within the boundary defined by `FR-PROJ-005`. See
 A single-string connection descriptor stored in the `dsn` key of a database
 entry, in the form `scheme://[user[:password]@]host[:port]/database`. It
 carries no query parameters, per `FR-CONF-011`. See `FR-CONF-009`.
+
+## functional key part
+
+A member of a MySQL index that is an expression rather than a column, written
+in parentheses in the index definition. The index catalogue reports it with no
+column name and with the expression in a field of its own. MariaDB has none,
+per `FR-CAT-042`, and the model has no shape for one, so a `mysql` read does
+not cover an index that holds one, per `FR-MYSQL-024`.
+
+*Added in the seventy-third edition.*
 
 ## group node
 
@@ -459,14 +482,31 @@ through a symbolic link is new, per `FR-CONF-054`.
 
 ## provider
 
-The kind of database an entry is read through: `mariadb` or `sqlite`, named by
-the entry's `provider` key, and `mariadb` where the entry carries none. The
-provider decides which keys the entry takes and which contract reads it —
-[server-contract.md](server-contract.md) or
+The kind of database an entry is read through: `mariadb`, `mysql` or
+`sqlite`, named by the entry's `provider` key, and `mariadb` where the entry
+carries none. The provider decides which keys the entry takes and which
+contract reads it — [server-contract.md](server-contract.md),
+[mysql-contract.md](mysql-contract.md) or
 [sqlite-contract.md](sqlite-contract.md). Fixed by `FR-CONF-051` and
 `FR-CONF-052`; a template reads it as `database.provider`, per `FR-CTX-043`.
 
-*Added in the sixty-fifth edition.*
+*Added in the sixty-fifth edition. Amended in the seventy-third edition*: the
+`mysql` provider is new.
+
+## pending observation
+
+The state of a statement of a database's behaviour that rests on that
+database's published documentation, or on prior art, and has not been
+observed against the project's fixture. Such a statement carries a note
+headed *Pending observation.*, which names its source and the date it was
+checked, and names the observation that would confirm it; the
+[README](README.md#writing-conventions) fixes the note's shape. The marker
+qualifies the ground of a fact, never the force of the requirement that
+states it, and it is discharged by an *Observed* note or by the amendment an
+observation makes necessary. Every statement of MySQL behaviour in
+[mysql-contract.md](mysql-contract.md) carries it, owed to rmp `#326`.
+
+*Added in the seventy-third edition.*
 
 ## project
 
@@ -617,10 +657,36 @@ For a `sqlite` entry the series is that of the SQLite library the binary
 carries, `<major>.<minor>` of its version, and no window applies to it, per
 `FR-LITE-002` and `FR-LITE-003`. *Amended in the sixty-fifth edition.*
 
+For a `mysql` entry a **series** is `<major>.<minor>` of the MySQL version —
+`8.4`, `9.7`, `26.10` — and a **supported series** is one `FR-MYSQL-002`
+admits: the newest series of its major family that Oracle has released, under
+Premier or Extended Support. The supported MySQL series are named by
+`FR-MYSQL-003` alone, per `BR-MYSQL-001`. A MySQL **major family** is a
+release lineage: for a release numbered sequentially, up to `9.7`, its
+leading number, `8` or `9`; for a release numbered by the calendar, from
+`26.7.0`, the compatibility lineage MySQL's manual defines — the
+[Innovation releases](#lts-release--innovation-release) before an LTS release
+and the LTS release that closes them. Whether that reading of a calendar
+release is the one the user meant is `OQ-076`. *Amended in the seventy-third
+edition.*
+
 Version comparison in this specification is always by series, never by point
 release: `10.11.14` and `10.11.2` are the same series, per `FR-SRV-021`. A
 series **below** the window is refused, per `FR-SRV-020`; one **above** it is
 read and marked, per `FR-SRV-031` — see *standing* below.
+
+## LTS release / Innovation release
+
+The two tracks of MySQL's release model. An **LTS release** is a series that
+Oracle supports for five years of Premier Support and three of Extended
+Support from its general availability, and that receives only necessary
+fixes: `8.4`, `9.7`. An **Innovation release** carries new features and
+behaviour changes and is supported until the next Innovation release is
+published: `26.10`. MySQL's manual describes both at
+`https://dev.mysql.com/doc/refman/26.10/en/mysql-releases.html`, checked
+2026-11-04. `FR-MYSQL-002` admits both, while each is supported.
+
+*Added in the seventy-third edition.*
 
 ## schema (the word, two meanings)
 
@@ -648,6 +714,9 @@ or `newer_than_supported`. It is enumerated, always present, and never `null`,
 per `FR-CTX-034`. For a `sqlite` read it is always `supported`, per
 `FR-LITE-003`. A series *below* the window has no value because it never
 reaches a document — `FR-SRV-020` refuses it before the catalogue is read.
+For a `mysql` read it is set against the supported set of `FR-MYSQL-003`,
+under `FR-MYSQL-010`, and a series below it is refused under `FR-MYSQL-009`.
+*Amended in the seventy-third edition.*
 
 ## SQLite table kinds: internal table / virtual table / shadow table
 

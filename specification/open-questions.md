@@ -1,8 +1,8 @@
 ---
 title: Open Questions
 status: approved
-last-reviewed: 2026-09-22
-related: [README.md, catalogue-coverage.md, context-document.md, server-contract.md]
+last-reviewed: 2026-11-04
+related: [README.md, catalogue-coverage.md, context-document.md, server-contract.md, mysql-contract.md]
 ---
 
 # Open Questions
@@ -17,23 +17,41 @@ requirement it produces is written into the owning module and the entry moves
 to the *Closed* table below; its identifier is retired and never reused, per
 the identifier scheme of the [README](README.md#identifier-scheme).
 
-**Nothing is open. The index is empty, and the specification is complete.**
-All seventy-five entries this corpus has raised are closed. The twenty the
+**Two entries are open, both raised by the seventy-third edition for the
+`mysql` provider, and both wait on a decision of the user.** Seventy-seven
+entries have been raised, and seventy-five are closed.
+
+*Amended in the seventy-third edition.* This paragraph read "Nothing is
+open. The index is empty, and the specification is complete. All
+seventy-five entries this corpus has raised are closed." That was true until
+the edition that raised `OQ-076` and `OQ-077`. What follows records how the
+seventy-five closed.
+
+All seventy-five earlier entries are closed. The twenty the
 sixth edition left waiting for a recorded observation were observed against
 all four series of `FR-SRV-015` on 2026-09-10 and written into their owning
 modules; `OQ-075`, the one the evidence itself opened, was settled by the
 product owner; and `OQ-042`, the last to stand, closed on the necessary
 condition of `FR-SRV-041` with its limit written into that requirement.
 
-**Complete means that no point of this specification is waiting on someone.**
-It does not mean the corpus has stopped moving. Three obligations recur and
-none of them is an open question: `FR-SRV-019` requires the supported-series
-table to be re-verified before every release, `NFR-PERF-020` requires a
-measurement point's figure to be recorded when somebody measures it, and any
-requirement resting on the fourth provenance of the
-[README](README.md#provenance) is falsifiable by a later observation. Each is
-work with an owner and a trigger, which is what distinguishes it from an entry
-here.
+**Complete means that no point of this specification is waiting on
+someone**, so the specification is not complete while the two entries above
+are open. Complete never meant that the corpus had stopped moving. Four
+obligations recur or are owed, and none of them is an open question:
+`FR-SRV-019` and `FR-MYSQL-005` require the supported-series tables to be
+re-verified before every release, `NFR-PERF-020` requires a measurement
+point's figure to be recorded when somebody measures it, any requirement
+resting on the fourth provenance of the [README](README.md#provenance) is
+falsifiable by a later observation, and every statement of
+[mysql-contract.md](mysql-contract.md) marked
+[pending observation](glossary.md#pending-observation) is owed an observation
+by rmp `#326`. Each is work with an owner and a trigger, which is what
+distinguishes it from an entry here.
+
+*Amended in the seventy-third edition.* The paragraph counted three
+obligations and stated the specification complete; it names the second
+supported-series table and the observations the new provider owes, and no
+longer calls the specification complete.
 
 If a point of this specification appears unsettled, it is a defect to be
 reported and corrected, or a new question to be raised with the next unused
@@ -41,9 +59,88 @@ identifier — never an old one revived.
 
 ## Index
 
-**Empty.** No question is open. An entry is added here only when this
-specification reaches a point it cannot fix, and it is added with the next
-unused `OQ` number; the last assigned was `OQ-075`.
+Two questions are open. An entry is added here only when this specification
+reaches a point it cannot fix, and it is added with the next unused `OQ`
+number; the last assigned is `OQ-077`.
+
+### OQ-076 — A major family under calendar versioning
+
+**Question.** For the first condition of `FR-MYSQL-002` — the newest series
+of its major family — which MySQL releases numbered by the calendar form one
+major family?
+
+**Where it came from.** The user's rule for the supported MySQL series is
+"only the latest release of each MySQL major series still under Oracle
+support", in the user's words "8.x.x, 9.x.x, …". MySQL numbered its releases
+sequentially up to `9.7`, and numbers them `YY.M.P` from `26.7.0`, per
+`https://dev.mysql.com/doc/refman/26.10/en/mysql-releases.html`, checked
+2026-11-04, so a major series is no longer the leading number by itself.
+
+**Why it cannot be answered now.** The rule is the user's, and its words do
+not settle the case; three readings are faithful to them:
+
+1. **The compatibility lineage** the manual defines — the Innovation releases
+   before an LTS release and the LTS release that closes them. Under
+   sequential versioning that is exactly the leading number: `9.0` to `9.6`
+   and the `9.7` LTS release are one lineage. *Recommended, and the reading
+   [glossary.md](glossary.md#series--supported-series--major-family) and
+   `FR-MYSQL-002` apply*, because it gives a calendar release the meaning a
+   sequential major number had, and keeps an LTS series in the set for as long
+   as Oracle supports it.
+2. **The leading number of the version, which is the year.** It is the
+   user's words read literally. It drops an LTS series from the set as soon
+   as an Innovation release of the same year follows it, while Oracle still
+   supports the LTS series for years.
+3. **Every series under Premier or Extended Support, with no per-family
+   restriction.** It is the simplest rule. It would have admitted `8.0` beside
+   `8.4` until 2026-04-21, which the user's word *latest* excludes.
+
+**What it blocks.** Nothing on 2026-11-04: all three readings select `26.10`,
+`9.7` and `8.4`, the table of `FR-MYSQL-003`. It blocks the re-verification
+of `FR-MYSQL-005` at the first release on which the readings select
+different series — under the second, the first Innovation release published
+after an LTS release in the same calendar year — which no source read dates.
+
+### OQ-077 — Authenticating over a session TLS does not protect
+
+**Question.** WHERE a `mysql` entry's session is not encrypted — `disabled`,
+and `preferred` against a server offering no TLS — and the server must
+perform the full `caching_sha2_password` exchange because it has not cached
+the account, how does `tpl` authenticate?
+
+**Where it came from.** `FR-MYSQL-022`. The default authentication method of
+the supported MySQL series sends the password, on a connection that is not
+secure, encrypted with the server's RSA public key, and "Without a public key,
+an unencrypted login fails", per
+`https://dev.mysql.com/doc/refman/9.7/en/caching-sha2-pluggable-authentication.html`,
+checked 2026-11-04. A client either holds the key or asks the server for it,
+and a key asked for over an unprotected session can be replaced by an active
+intermediary, who then reads the password. MariaDB's default method, which
+this corpus does not record, raised no such question.
+
+**Why it cannot be answered now.** It trades a security property for
+availability on a configuration the caller chose, and that trade is the
+user's:
+
+1. **Never ask the server for its key.** The login of an account the server
+   has not cached fails, with a `cause` saying that the account needs an
+   encrypted session or a cached login. *Recommended*: it is what MySQL's own
+   client does unless told otherwise — it asks for the key only under
+   `--get-server-public-key` — and it keeps the password out of reach of an
+   intermediary under every mode, which is the ground `FR-CONF-013` gives for
+   defaulting to `verify-identity`. Which code the failure carries — `77`, as
+   a refused authentication, or `78`, as a configuration that cannot work —
+   is part of the decision.
+2. **Ask the server for its key.** Every login succeeds, and under
+   `disabled` an intermediary can read the password.
+3. **A configuration key naming the server's public key file.** The most
+   secure plaintext login, at the cost of a key in `FR-CONF-002` and a flag
+   in `FR-CFG-027`.
+
+**What it blocks.** The outcome of a login under `disabled`, and under
+`preferred` against a server offering no TLS, for an account the server has
+not cached, and the test of that cell of `FR-MYSQL-021`. Every login over an
+encrypted session is settled by `FR-MYSQL-022`.
 
 ## Closed
 
