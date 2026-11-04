@@ -20,6 +20,7 @@ procedure whose first step is *write a scanner* does not prevent that.
 | File | Purpose |
 |---|---|
 | `rust-layer.py` | The scanner. Emits the layer; verifies it against the source |
+| `doc-layer.py` | The document-layer scanner. Emits that layer; verifies it against the tree — see [The document layer](#the-document-layer-doc-layerpy) |
 | `.gitignore` | Keeps the interpreter's bytecode cache out of the repository |
 | `README.md` | This file |
 
@@ -231,3 +232,280 @@ Stated so that a later reader does not mistake one for a defect:
 - The scan reads `src/` and `tests/`. `benches/` is not scanned, because the
   repository does not carry that directory yet; adding it is a one-line change
   to `SCANNED`, and `Test.kind` already admits `bench`.
+
+## The document layer: `doc-layer.py`
+
+```sh
+scripts/knowledge/doc-layer.py
+```
+
+The second scanner re-derives the document half of the graph: every node and
+edge `knowledge-model.md` defines that `rust-layer.py` does not emit. It keeps
+the same contract. It emits and never writes; it speaks the model's vocabulary
+without extending it; it stamps every element with `HEAD`, and reports on
+standard error when a covered file has uncommitted changes; and its output has
+the format described under *The output format*, with one `//` section per label
+and per predicate.
+
+```sh
+scripts/knowledge/doc-layer.py --summary        # counts per label and predicate
+scripts/knowledge/doc-layer.py --format json    # the same records, for a diff
+scripts/knowledge/doc-layer.py --commit <hash> --date <YYYY-MM-DD>
+scripts/knowledge/doc-layer.py --verify         # every record, derived twice
+```
+
+There is no `--sample`: the exhaustive check takes under a second.
+
+### What it derives
+
+| Label | Derived from |
+|---|---|
+| `File` | Every tracked file the coverage table below gives a kind. `title` and `status` come from a Markdown file's front matter and are absent where it has none; nothing else is read into the node |
+| `Directory` | Every directory above a covered file; the root is `.` |
+| `Requirement` | A definition site in `specification/`: an `FR`, `NFR` or `BR` bullet `- **ID**:`, a `WL` bullet `- **WL-NNN** —`, a `## UC-NNN — title` heading, an `OQ` row of the table headed `Id`, `Question`, and a bare `## DIV-NNN` heading |
+| `Decision` | A `## OD-NN — title` heading in `docs/spec-technical/`, and the front-matter `id` of a record in `docs/adr/` |
+| `Baseline` | A `## <date> — <subject>` entry of `BENCHMARKS.md` |
+| `Crate` | The `[dependencies]` table of `Cargo.toml`, and that table alone |
+
+| Predicate | Derived from |
+|---|---|
+| `CONTAINS` | The directory tree above the covered files |
+| `DEFINES` | The definition site, carrying its 1-based `line` |
+| `CITES` | An occurrence inside a definition block, from the block's owner, carrying `firstLine` and `path` |
+| `REFERENCES` | An occurrence outside every definition block, from the file, carrying `firstLine` |
+| `TARGETS` | The `**Target**:` field of a divergence record |
+| `RELATED_TO` | A front-matter `related:` entry, resolved against the file's own directory |
+| `DECLARES` | `BENCHMARKS.md` to each baseline it records |
+| `DEPENDS_ON` | The component named after the package, `tpl`, to each crate, carrying `optional` |
+
+The model fixes the set of `File.kind` values but not where each kind lives.
+This table is that mapping; a tracked path no row matches is not covered.
+
+| Path | `kind` |
+|---|---|
+| `specification/**/*.md` | `spec` |
+| `docs/spec-technical/**/*.md` | `techspec` |
+| `docs/adr/**/*.md`, its `README.md` included | `adr` |
+| `CLAUDE.md`, `README.md` | `coordination` |
+| `BENCHMARKS.md`, `benches/**` | `benchmark` |
+| `scripts/mariadb/**`, `scripts/sqlite/**` | `fixture` |
+| `src/**/*.rs` | `source` |
+| `tests/**/*.rs` | `test` |
+| `templates/**` | `template` |
+
+Three rows reach past the layer last loaded: `scripts/sqlite/`, which its own
+`README.md` names the SQLite fixture; `benches/`, which its own `README.md`
+names the benchmark harness; and `templates/`, which does not exist yet.
+
+### What it deliberately does not derive
+
+- **Every other tracked file**: `examples/`, `skill/`, `vendor/`,
+  `release-notes/`, `scripts/knowledge/`, `.github/`, `.cargo/`, and every root
+  file but the three above. No kind in the model names them.
+- **The contents of a `.pem` file.** It gets a node and nothing of it is opened:
+  `knowledge-model.md` names the fixture's private key as the file its
+  no-content rule exists for.
+- **A `Component`.** The one `DEPENDS_ON` binds is the binary `rust-layer.py`
+  emits. This script binds it with `MATCH` and never creates it.
+- **A decision named inside a requirement's block.** The partition makes it a
+  `CITES` from the requirement, and the model defines `CITES` only from a
+  requirement to a requirement and from a decision to either. The occurrence is
+  emitted under no other predicate, and `--verify` counts it. At `099dfba` there
+  is one: `DIV-045` names `ADR-004` at `specification/upstream-divergences.md:1743`.
+- **The removal of a property.** A node is upserted with the properties it has,
+  so a `title` a file no longer declares stays on its node until the
+  `knowledge-authority` skill reconciles it, as it does every record this scan
+  no longer produces.
+
+### How a key and a property are derived
+
+- An identifier is written as found. `ordinal` is its trailing number as an
+  integer, and `area` its middle segment, present for `FR`, `NFR` and `BR`
+  only. A placeholder with no digits — `FR-X`, `OD-nn`, `ADR-NNN` — is not an
+  identifier.
+- `title` is taken verbatim, code spans included, from the source the model
+  names: the `UC` heading after its em dash, the `OQ` row's *Question* cell,
+  the `DIV` index's *Subject* cell, the `OD` heading after its em dash, and the
+  `ADR`'s front-matter `title`. `FR`, `NFR`, `BR` and `WL` carry none.
+- A divergence record's target is the code span its `**Target**:` field opens
+  with; the rest of the field names a section of that file. A field opening
+  with *both* names the two `coordination` files.
+- A baseline's key is `<date>#<slug>`, the slug being the subject lower-cased,
+  backticks dropped, and every run of other characters a single hyphen. Its
+  `target` is every code span of the entry's *Target of record:* clause, in
+  order and without repeats, joined by `; `.
+- A crate's `version` is the requirement as declared, `source` is `crates.io`,
+  and `features` is the declared list joined by `, `, absent where none is
+  declared. `justification` is the crate's *Chosen because* cell in
+  `docs/spec-technical/technology-stack.md`, verbatim. That column states why
+  each crate was chosen; the *What it does here* column beside it is the
+  crate's purpose, from which the model forbids inferring a justification, and
+  it is never read.
+
+### The partition
+
+`CITES` and `REFERENCES` follow the rule `knowledge-model.md` states. A
+definition block is:
+
+- for `FR`, `NFR`, `BR` and `WL`, the bullet and every following line up to the
+  next non-blank line at column 0;
+- for `UC`, `DIV` and `OD`, the `##` section, up to the next heading of level 1
+  or 2;
+- for `OQ`, the row;
+- for an `ADR`, the whole file below its front matter.
+
+A line inside fenced code is read for identifiers, but it can neither end a
+block nor open one. An identifier at its own definition site is the definition,
+not an occurrence, and an occurrence of a block's owner inside that block is a
+self-reference; neither produces an edge. Both edges keep the first occurrence
+of their endpoint pair.
+
+An `ADR`'s front-matter `requirements:` list sits above its block, so each entry
+is a `REFERENCES` from the record's file, where the rule's wording places it. At
+`099dfba` those lists yield 74 references, and the bodies of the records cite
+all but two of the same requirements as well.
+
+### Writing it
+
+Every edge statement binds both endpoints with `MATCH`, `MERGE`s the
+relationship alone, and re-binds it by type before it sets a property:
+
+```cypher
+MATCH (a:File {path: '…'}) MATCH (b:Requirement {id: '…'}) MERGE (a)-[:DEFINES]->(b) WITH DISTINCT a, b MATCH (a)-[e:DEFINES]->(b) SET e.gitCommit = '…', e.gitDate = '…', e.line = 151
+```
+
+A `MATCH` that binds nothing makes the statement a no-op, never a stub. The
+re-bind matters because of the engine trap `knowledge-model.md` records: a
+`MERGE` between a pair already joined by an edge of another type matches that
+edge and creates nothing, and without the re-bind the `SET` would land on that
+other edge. **The trap is live in this layer**: at `099dfba`, 278 `REFERENCES`
+edges share their `(File, identifier)` pair with a `DEFINES` edge. Load those by
+diffing `--format json` against the live set, as the model prescribes.
+
+Every statement is checked against a ceiling of 1 MB before it is printed; the
+longest at `099dfba` is 860 bytes.
+
+### Verifying it
+
+```sh
+scripts/knowledge/doc-layer.py --verify
+```
+
+The verifier derives the whole layer a second time, with code that shares
+nothing with the scan: its own identifier pattern, its own front-matter and
+fence readers, its own definition-site patterns, and blocks walked forward from
+each site rather than assigned by a state machine. It compares the two
+derivations record by record, in both directions, and then reopens every
+`CITES` and `REFERENCES` record at its `file:line` and confirms the line names
+the target. A record emitted wrong, emitted twice, emitted with an endpoint this
+layer does not declare, or not emitted at all, is one mismatch under its own
+name. The one endpoint it accepts from outside the layer is the `Component` of
+`DEPENDS_ON`, for which it confirms that `src/main.rs` exists.
+
+Exit `0` when every record matched, `1` when any did not.
+
+#### What it reported, on 2026-11-04 at `099dfba`
+
+```
+$ scripts/knowledge/doc-layer.py --verify
+checked 15739 records at file:line; 0 mismatched
+0 occurrences name an identifier nothing defines
+1 occurrences inside a requirement's block name a decision, for which the model has no predicate
+
+$ scripts/knowledge/doc-layer.py --summary
+LABEL          NODES
+Baseline       18
+Crate          14
+Decision       51
+Directory      34
+File           246
+Requirement    1069
+
+PREDICATE      EDGES
+CITES          4437
+CONTAINS       279
+DECLARES       18
+DEFINES        1120
+DEPENDS_ON     14
+REFERENCES     8124
+RELATED_TO     238
+TARGETS        77
+
+total          1432 nodes, 14307 edges
+```
+
+The 15 739 records are the 1 432 nodes and 14 307 edges, each read once.
+
+#### That the check is not vacuous
+
+The layer was perturbed in memory and read back each time, against a copy of
+the records and never against the tree. Each perturbation draws the records it
+touches with a seeded generator, from records sorted by identity.
+
+| Perturbation | Records touched | Mismatches reported |
+|---|---|---|
+| none | 0 | `0` |
+| every `DEFINES` `line`, `CITES` `firstLine` and `REFERENCES` `firstLine` moved by one | 13 681 | `13 681` |
+| fifty identifier titles altered | 50 | `50` |
+| fifty identifier ordinals moved by one | 50 | `50` |
+| fifty `File` kinds changed | 50 | `50` |
+| fifty `File` titles removed | 50 | `50` |
+| fifty `REFERENCES` dropped | 50 | `50` |
+| fifty `CITES` given the wrong `path` | 50 | `50` |
+| fifty `RELATED_TO` dropped | 50 | `50` |
+| every `Baseline` target altered | 18 | `18` |
+| every `Crate` version altered | 14 | `14` |
+| every `DEPENDS_ON` made optional | 14 | `14` |
+
+Each figure is the number of records the perturbation touched, and no more. The
+scan itself was then broken in memory, to show that the second derivation does
+not inherit the first one's logic:
+
+| The scan altered so that | Mismatches reported |
+|---|---|
+| a bullet block ends on its own first line | `5 099`: 3 265 `CITES` and 1 834 `REFERENCES` |
+| the `WL` family is not recognised | `120`: the three nodes and their `DEFINES`, 48 `CITES`, 65 `REFERENCES`, and the count of dangling occurrences |
+| fenced code is not recognised | `0` |
+
+The last row is not a pass. No fence in the tree at `099dfba` hides a heading or
+a column-0 line inside a block, so the fence handling changes nothing today: it
+is a guard, and the current tree does not exercise it.
+
+#### Against the Rust layer
+
+Every `File` and `Requirement` that `rust-layer.py` binds with `MATCH` has to be
+a node this layer emits, or the edge that binds it is a silent no-op:
+
+```sh
+rust=$(mktemp) doc=$(mktemp)
+scripts/knowledge/rust-layer.py --format json > "$rust"
+scripts/knowledge/doc-layer.py --format json > "$doc"
+python3 -I - "$rust" "$doc" <<'EOF'
+import json, sys
+rust, doc = (json.load(open(path, encoding="utf-8")) for path in sys.argv[1:])
+declared = {(node["label"], node["key"]) for node in doc["nodes"]}
+bound = {
+    (end["label"], end["key"])
+    for edge in rust["edges"]
+    for end in (edge["source"], edge["target"])
+    if end["label"] in ("File", "Requirement")
+}
+print(f"{len(bound)} endpoints bound; {len(bound - declared)} not declared")
+EOF
+rm -f "$rust" "$doc"
+```
+
+At `099dfba` it printed `664 endpoints bound; 0 not declared`: the 140 files of
+`DECLARES` and `IMPLEMENTED_BY`, and the 524 requirements of `VERIFIES`.
+
+### Known limits
+
+- The 2026-09-11 entry of `BENCHMARKS.md` gives its target as "`aarch64` Linux
+  … on an `aarch64-apple-darwin` host": an architecture and a host, not two
+  target triples. Its `target` reads `aarch64; aarch64-apple-darwin`, which is
+  the clause's code spans as written.
+- A structure the rules cannot place stops the scan with exit `1`, naming the
+  file and line: an identifier defined twice, a definition inside another's
+  block, a divergence record with no target field or a target that is not a
+  coordination file, a `related:` entry that is not a covered file, a baseline
+  with no *Target of record*, and a dependency that is not from `crates.io`.
