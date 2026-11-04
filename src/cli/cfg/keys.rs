@@ -37,10 +37,11 @@ use serde::Serialize;
 
 use super::super::local::Format;
 use super::{Supplied, coherence, form, project};
+use crate::diagnostics::emit::Reach;
 use crate::error::{EntryNameGiven, Error};
 use crate::output::{self, Document, Source};
 use crate::project::config::Configuration;
-use crate::project::config::entry::Written;
+use crate::project::config::entry::{Entry as Block, Written};
 use crate::project::config::keys::{CoreKey, EntryKey, Key, Target, is_entry_name};
 use crate::project::config::redact;
 use crate::project::edit;
@@ -216,7 +217,7 @@ pub(crate) fn set(supplied: &Supplied<'_>, key: &str, value: &str) -> Result<(),
     if let Key::Entry { entry, field } = &parsed
         && field.repoints()
     {
-        crate::diagnostics::emit::entry_repointed(entry);
+        crate::diagnostics::emit::entry_repointed(entry, reach(&configuration, entry, *field));
     }
 
     Ok(())
@@ -273,7 +274,10 @@ pub(crate) fn unset(supplied: &Supplied<'_>, key: &str) -> Result<(), Error> {
                 crate::diagnostics::emit::dsn_unset(entry);
             }
             if field.repoints() {
-                crate::diagnostics::emit::entry_repointed(entry);
+                crate::diagnostics::emit::entry_repointed(
+                    entry,
+                    reach(&configuration, entry, *field),
+                );
             }
         }
         Target::Entry(entry) => crate::diagnostics::emit::entry_removed(entry),
@@ -304,6 +308,25 @@ fn removes_selected_entry(configuration: &Configuration, target: &Target) -> boo
         Target::Databases => configuration.entry(selected).is_some(),
         Target::Core | Target::Key(_) => false,
     }
+}
+
+/// What the line of `FR-CFG-053` says `entry` may now reach after a write or
+/// removal of `field`, per its sixty-fifth edition.
+///
+/// `provider` and `path` read another database whatever the provider. Any
+/// other field leaves the entry's provider as `configuration` holds it, so
+/// that provider decides: an entry `.tpl/.cfg` does not yet declare is a
+/// `mariadb` entry (`FR-CONF-051`).
+fn reach(configuration: &Configuration, entry: &str, field: EntryKey) -> Reach {
+    let provider = configuration
+        .entry(entry)
+        .map(Block::provider)
+        .unwrap_or_default();
+
+    Reach::of(
+        matches!(field, EntryKey::Provider | EntryKey::Path),
+        provider,
+    )
 }
 
 /// `tpl cfg list` (`FR-CFG-013`, `FR-CFG-014`, `FR-CFG-037`).

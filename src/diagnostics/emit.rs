@@ -24,6 +24,7 @@ use std::time::Duration;
 use super::escape;
 use super::verbosity::{Level, emits};
 use crate::deadline::Phase;
+use crate::model::database::Provider;
 
 /// The fixed leading token of the one line per catalogue query.
 ///
@@ -289,6 +290,43 @@ fn entry_removed_line(entry: &str, project: Option<Option<&str>>) -> String {
     )
 }
 
+/// What the line of `FR-CFG-053` says an entry may now reach, which is the one
+/// clause of the line that depends on the provider.
+///
+/// A typed argument rather than text, per `OD-17`, as [`CatalogueSource`] is:
+/// the line written for a connection field of a `mariadb` entry stays
+/// byte-identical, and the line written for a database file says what such
+/// an entry reads instead of a server it never reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Reach {
+    /// Another server: the invocation wrote or removed a connection field,
+    /// and the entry is a `mariadb` entry after the write.
+    Server,
+    /// Another database: the invocation wrote or removed `provider` or
+    /// `path`, or the entry is a `sqlite` entry after the write (the
+    /// sixty-fifth edition).
+    Database,
+}
+
+impl Reach {
+    /// The reach of a write that names `provider` or `path` where
+    /// `provider_or_path` holds, and leaves the entry with `provider`.
+    pub(crate) const fn of(provider_or_path: bool, provider: Provider) -> Self {
+        match (provider_or_path, provider) {
+            (true, _) | (false, Provider::Sqlite) => Self::Database,
+            (false, Provider::Mariadb) => Self::Server,
+        }
+    }
+
+    /// The clause the line states after "may now".
+    const fn clause(self) -> &'static str {
+        match self {
+            Self::Server => "point at another server",
+            Self::Database => "read another database",
+        }
+    }
+}
+
 /// Warns that `tpl cfg database update`, `tpl cfg set` or `tpl cfg unset`
 /// wrote a field that may repoint an entry, and that any data cached for it is
 /// kept (`FR-CFG-053`).
@@ -296,9 +334,11 @@ fn entry_removed_line(entry: &str, project: Option<Option<&str>>) -> String {
 /// It is written after the rewrite succeeded, and after the line of
 /// `FR-CFG-051` or `FR-CFG-050` where the invocation writes both. Nothing under
 /// `.tpl/.cache/` is read to decide it, and no value is compared, so the line
-/// states neither a repoint nor a cache as fact (item 1). The command it
-/// carries carries the caller's `--tpl-dir`, per item 2.
-pub(crate) fn entry_repointed(entry: &str) {
+/// states neither a repoint nor a cache as fact (item 1). `reach` chooses
+/// whether the entry may now point at another server or read another
+/// database. The command it carries carries the caller's `--tpl-dir`, per
+/// item 2.
+pub(crate) fn entry_repointed(entry: &str, reach: Reach) {
     if !emits(Level::Warnings) {
         return;
     }
@@ -306,17 +346,18 @@ pub(crate) fn entry_repointed(entry: &str) {
     let project = super::restate::tpl_dir();
     write_line(&entry_repointed_line(
         entry,
+        reach,
         project.as_ref().map(Option::as_deref),
     ));
 }
 
 /// Composes the line of [`entry_repointed`], unescaped.
-fn entry_repointed_line(entry: &str, project: Option<Option<&str>>) -> String {
+fn entry_repointed_line(entry: &str, reach: Reach, project: Option<Option<&str>>) -> String {
     let (command, placeholder) = clean_command(entry, project);
+    let clause = reach.clause();
     format!(
-        "{WARNING_TOKEN} entry '{entry}' may now point at another server; any data cached for \
-         it under .tpl/.cache/{entry}/ is kept and still served; clear it with: \
-         {command}{placeholder}"
+        "{WARNING_TOKEN} entry '{entry}' may now {clause}; any data cached for it under \
+         .tpl/.cache/{entry}/ is kept and still served; clear it with: {command}{placeholder}"
     )
 }
 
@@ -439,11 +480,12 @@ pub(crate) mod capture {
 #[cfg(test)]
 mod tests {
     use super::{
-        CATALOGUE_QUERY_TOKEN, PHASE_TOKEN, ServerDatabase, WARNING_TOKEN, database_line,
+        CATALOGUE_QUERY_TOKEN, PHASE_TOKEN, Reach, ServerDatabase, WARNING_TOKEN, database_line,
         dsn_unset_line, entry_removed_line, entry_repointed_line, orphan_cache_line, phase_line,
         shadow_line,
     };
     use crate::deadline::Phase;
+    use crate::model::database::Provider;
     use std::path::Path;
     use std::time::Duration;
 
@@ -559,22 +601,42 @@ mod tests {
     #[test]
     fn fr_cfg_053_the_warning_names_the_entry_its_cache_and_the_clean_that_removes_it() {
         assert_eq!(
-            entry_repointed_line("shop", None),
+            entry_repointed_line("shop", Reach::Server, None),
             "warning: entry 'shop' may now point at another server; any data cached for it under \
              .tpl/.cache/shop/ is kept and still served; clear it with: tpl -d shop cache clean"
         );
         // Item 1: nothing the command cannot know is stated as fact.
-        let line = entry_repointed_line("shop", None);
-        assert!(!line.contains("was repointed"), "{line}");
-        assert!(!line.contains("; data cached"), "{line}");
-        assert!(
-            entry_repointed_line("shop", Some(Some("../w/.tpl")))
-                .ends_with("clear it with: tpl --tpl-dir ../w/.tpl -d shop cache clean")
+        for reach in [Reach::Server, Reach::Database] {
+            let line = entry_repointed_line("shop", reach, None);
+            assert!(!line.contains("was repointed"), "{line}");
+            assert!(!line.contains("; data cached"), "{line}");
+            assert!(
+                entry_repointed_line("shop", reach, Some(Some("../w/.tpl")))
+                    .ends_with("clear it with: tpl --tpl-dir ../w/.tpl -d shop cache clean")
+            );
+            assert!(entry_repointed_line("shop", reach, Some(None)).ends_with(
+                "tpl --tpl-dir <path> -d shop cache clean, where <path> is the --tpl-dir this \
+                     invocation was given"
+            ));
+        }
+    }
+
+    #[test]
+    fn fr_cfg_053_a_database_file_may_read_another_database_rather_than_another_server() {
+        // The sixty-fifth edition: `provider` or `path` written or removed,
+        // or a `sqlite` entry after the write, says "another database"; every
+        // other fact of item 1 is the line of a server.
+        assert_eq!(
+            entry_repointed_line("ledger", Reach::Database, None),
+            "warning: entry 'ledger' may now read another database; any data cached for it \
+             under .tpl/.cache/ledger/ is kept and still served; clear it with: tpl -d ledger \
+             cache clean"
         );
-        assert!(entry_repointed_line("shop", Some(None)).ends_with(
-            "tpl --tpl-dir <path> -d shop cache clean, where <path> is the --tpl-dir this \
-                 invocation was given"
-        ));
+
+        assert_eq!(Reach::of(true, Provider::Mariadb), Reach::Database);
+        assert_eq!(Reach::of(true, Provider::Sqlite), Reach::Database);
+        assert_eq!(Reach::of(false, Provider::Sqlite), Reach::Database);
+        assert_eq!(Reach::of(false, Provider::Mariadb), Reach::Server);
     }
 
     #[test]

@@ -31,7 +31,7 @@ use toml_edit::{Item, value};
 
 use super::super::local::Format;
 use super::{Supplied, coherence, form, project};
-use crate::diagnostics::emit::ServerDatabase;
+use crate::diagnostics::emit::{Reach, ServerDatabase};
 use crate::error::{EntryNameGiven, Error};
 use crate::model::database::Provider;
 use crate::output::{self, Collection, Document, Order, Source, Table};
@@ -226,6 +226,17 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
         flags.provider,
     )?;
 
+    // FR-CFG-053, the sixty-fifth edition: the entry as it stands after the
+    // write — the provider given, or the one `.tpl/.cfg` holds — decides
+    // whether it may now point at another server or read another database.
+    let provider = flags.provider.unwrap_or_else(|| {
+        configuration
+            .entry(name)
+            .map(Block::provider)
+            .unwrap_or_default()
+    });
+    let reach = Reach::of(flags.provider.is_some() || flags.path.is_some(), provider);
+
     let mut editor = project.editor()?;
     apply(&mut editor, name, written);
 
@@ -234,7 +245,7 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
     // FR-CFG-053: after the rewrite, and after the line of FR-CFG-051; the
     // cache is not consulted, so the line does not depend on one existing.
     if flags.repoints() {
-        crate::diagnostics::emit::entry_repointed(name);
+        crate::diagnostics::emit::entry_repointed(name, reach);
     }
 
     Ok(())

@@ -1077,8 +1077,9 @@ mod tests {
         assert!(
             tail.starts_with(concat!(
                 r#","context_variables":[{"name":"database","type":"object","bound_by":null,"#,
-                r#""purpose":"The whole database: name, charset, collation, server, tables, "#,
-                r#"views and routines."},{"name":"table","type":"object","bound_by":"--table","#
+                r#""purpose":"The whole database: name, charset, collation, provider, server, "#,
+                r#"tables, views and routines."},"#,
+                r#"{"name":"table","type":"object","bound_by":"--table","#
             )),
             "{tail}"
         );

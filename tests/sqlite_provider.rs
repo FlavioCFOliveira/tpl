@@ -21,7 +21,7 @@
 //! | `FR-CONF-054` | `path` resolves against the project directory, from any working directory, through `--tpl-dir` and through a linked `.tpl`; it is never expanded and never resolved when written |
 //! | `FR-CFG-048` | A write that would leave an entry carrying a key its provider refuses is `64`, and the file is unchanged |
 //! | `FR-CFG-051` | The fifth form of the warning, for an invocation that uses or targets a `sqlite` entry |
-//! | `FR-CFG-053` | A write of `path` or `provider` warns that the entry may point elsewhere |
+//! | `FR-CFG-053` | A write of `path` or `provider`, or of any field of a `sqlite` entry, warns that the entry may now read another database; a connection field of a `mariadb` entry still warns of another server |
 //! | `FR-CFG-055` | The four items, each a refusal at the step it names or a value stored as written |
 //! | `FR-CFG-056` | `tpl cfg database test` of a `sqlite` entry reports the four steps, and exits with the code of the file's fault — the check's `78` over each database it refuses |
 //! | `FR-ERR-024`, `FR-OUT-018` | A C1 control and a bidirectional formatting character read from the file are escaped in `text` output, in `json` output as JSON's own escape, and in a diagnostic; a value carrying neither is written unchanged |
@@ -1033,10 +1033,12 @@ fn fr_cfg_048_a_provider_written_onto_an_entry_carrying_the_other_providers_keys
 
 // --------------------------------------------------- FR-CFG-051, FR-CFG-053 ---
 
-/// The warning of `FR-CFG-053` for the entry `ledger`.
-const MAY_POINT_ELSEWHERE: &str = "warning: entry 'ledger' may now point at another server; any \
-                                   data cached for it under .tpl/.cache/ledger/ is kept and still \
-                                   served; clear it with: tpl -d ledger cache clean";
+/// The warning of `FR-CFG-053` for the entry `ledger`, a `sqlite` entry: it may
+/// now read another database, not point at another server.
+const MAY_READ_ANOTHER_DATABASE: &str = "warning: entry 'ledger' may now read another database; \
+                                         any data cached for it under .tpl/.cache/ledger/ is kept \
+                                         and still served; clear it with: tpl -d ledger cache \
+                                         clean";
 
 #[test]
 fn fr_cfg_051_the_fifth_form_names_path_for_an_invocation_on_a_sqlite_entry() {
@@ -1079,7 +1081,7 @@ fn fr_cfg_051_the_fifth_form_names_path_for_an_invocation_on_a_sqlite_entry() {
         format!(
             "warning: -d/--database has no effect on tpl cfg database update; it selects the \
              entry for commands that connect; the database file of a sqlite entry is set with \
-             --path\n{MAY_POINT_ELSEWHERE}\n"
+             --path\n{MAY_READ_ANOTHER_DATABASE}\n"
         )
     );
 }
@@ -1107,9 +1109,71 @@ fn fr_cfg_053_a_write_of_path_or_provider_warns_that_the_entry_may_point_elsewhe
         assert_eq!(succeeded(&printed, &spelled), "", "{spelled} wrote stdout");
         assert_eq!(
             stderr(&printed),
-            format!("{MAY_POINT_ELSEWHERE}\n"),
+            format!("{MAY_READ_ANOTHER_DATABASE}\n"),
             "{spelled}"
         );
+    }
+}
+
+#[test]
+fn fr_cfg_053_the_provider_after_the_write_decides_between_a_server_and_a_database() {
+    // A `sqlite` entry carrying a key its provider refuses still loads for a
+    // cfg command, the repair path of FR-CONF-052. Removing that key leaves a
+    // `sqlite` entry, so the line says another database although the key is a
+    // connection field.
+    let sandbox = Sandbox::new();
+    sandbox.project(&format!(
+        "{}host = \"db.example.com\"\n",
+        configuration("data/freight.sqlite")
+    ));
+    let printed = sandbox.run(&["cfg", "unset", "database.ledger.host"]);
+    assert_eq!(
+        succeeded(&printed, "cfg unset database.ledger.host"),
+        "",
+        "the unset wrote stdout"
+    );
+    assert_eq!(stderr(&printed), format!("{MAY_READ_ANOTHER_DATABASE}\n"));
+
+    // A `mariadb` entry: a connection field keeps the line of a server, byte
+    // for byte, and a write or removal of `provider` reads another database.
+    let sandbox = Sandbox::new();
+    sandbox.project("[database.shop]\nhost = \"db.example.com\"\n");
+    let server = "warning: entry 'shop' may now point at another server; any data cached for it \
+                  under .tpl/.cache/shop/ is kept and still served; clear it with: tpl -d shop \
+                  cache clean\n";
+    let database = server.replace("point at another server", "read another database");
+
+    for (arguments, expected) in [
+        (
+            &[
+                "cfg",
+                "database",
+                "update",
+                "shop",
+                "--host",
+                "db-staging.example.com",
+            ][..],
+            server,
+        ),
+        (&["cfg", "set", "database.shop.port", "3307"][..], server),
+        (&["cfg", "unset", "database.shop.port"][..], server),
+        (
+            &["cfg", "database", "update", "shop", "--provider", "mariadb"][..],
+            database.as_str(),
+        ),
+        (
+            &["cfg", "set", "database.shop.provider", "mariadb"][..],
+            database.as_str(),
+        ),
+        (
+            &["cfg", "unset", "database.shop.provider"][..],
+            database.as_str(),
+        ),
+    ] {
+        let spelled = arguments.join(" ");
+        let printed = sandbox.run(arguments);
+        assert_eq!(succeeded(&printed, &spelled), "", "{spelled} wrote stdout");
+        assert_eq!(stderr(&printed), expected, "{spelled}");
     }
 }
 
