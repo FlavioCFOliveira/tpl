@@ -187,7 +187,7 @@ pub(crate) fn trigger(name: &'static str) -> Trigger<'static> {
 pub(crate) fn check(name: &'static str) -> CheckConstraint<'static> {
     CheckConstraint {
         name: Cow::Borrowed(name),
-        level: ConstraintLevel::Table,
+        level: Some(ConstraintLevel::Table),
         clause: Cow::Borrowed("char_length(`reference`) > 0"),
     }
 }

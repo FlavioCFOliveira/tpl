@@ -1,7 +1,9 @@
 //! The one connection an invocation opens, and everything settled on it before
 //! a catalogue row is read.
 //!
-//! This module is the only part of `tpl` that speaks to a server. `FR-SRV-007`
+//! This module is the only part of `tpl` that speaks to a MariaDB server, and
+//! `crate::mysql` the only part that speaks to a MySQL server, through the
+//! connection [`connect`] opens for both (`FR-MYSQL-020`). `FR-SRV-007`
 //! admits no statement outside the closed list of `FR-SRV-006` and no external
 //! process at all, and `OD-05` gives that rule a home: nothing above this
 //! module is asynchronous, nothing above it holds a connection, and nothing
@@ -15,8 +17,9 @@
 //! | [`fault`] | Where the driver's error stops and a condition of `FR-ERR-001` begins | `FR-GLOB-018`, `OD-06`, `FR-ERR-034` |
 //! | [`catalogue`] | The fixed repertoire of catalogue queries, and the model their rows fold into | `FR-SRV-006`, `FR-SRV-037`, `NFR-PERF-001`, `NFR-PERF-002`, `FR-CAT-001` … `FR-CAT-053` |
 //!
-//! **The runtime is built here and nowhere else.** `ADR-005` makes the process
-//! synchronous and scopes the asynchronous runtime to this module: it is a
+//! **The runtime of a `mariadb` read is built here and nowhere else.**
+//! `ADR-005` makes the process synchronous and scopes the asynchronous runtime
+//! to this module and to `crate::mysql`, each for its own entries: it is a
 //! current-thread runtime, it comes into existence only when a command
 //! actually reaches [`open`], and `block_on` at this boundary is the one
 //! synchronisation point in the crate. That is what lets `NFR-PERF-005` be
@@ -109,8 +112,11 @@ pub(crate) fn quiescent() -> bool {
 }
 
 /// One unit of a thread's count, held for as long as what it counts exists.
+///
+/// It is `pub(crate)` because `crate::mysql` counts its own connection and
+/// runtime with it, against counts of its own: the behaviour is identical.
 #[derive(Debug)]
-struct Alive {
+pub(crate) struct Alive {
     /// The count this unit belongs to.
     count: &'static LocalKey<Cell<usize>>,
     /// Keeps the unit, and whatever holds it, on the thread it was counted on.
@@ -119,7 +125,7 @@ struct Alive {
 
 impl Alive {
     /// Adds one to `count`.
-    fn of(count: &'static LocalKey<Cell<usize>>) -> Self {
+    pub(crate) fn of(count: &'static LocalKey<Cell<usize>>) -> Self {
         count.with(|held| held.set(held.get().saturating_add(1)));
 
         Self {
@@ -142,16 +148,16 @@ impl Drop for Alive {
 /// the count falls only once the socket is closed or the runtime's threads
 /// have stopped, never while either is still going.
 #[derive(Debug)]
-struct Counted<T> {
+pub(crate) struct Counted<T> {
     /// What is counted.
-    value: T,
+    pub(crate) value: T,
     /// Its unit of count.
-    alive: Alive,
+    pub(crate) alive: Alive,
 }
 
 impl<T> Counted<T> {
     /// `value`, counted in `count`.
-    fn new(value: T, count: &'static LocalKey<Cell<usize>>) -> Self {
+    pub(crate) fn new(value: T, count: &'static LocalKey<Cell<usize>>) -> Self {
         Self {
             value,
             alive: Alive::of(count),
@@ -304,10 +310,16 @@ fn runtime() -> Result<Counted<Runtime>, Error> {
 ///
 /// # Errors
 ///
-/// Returns [`Error::NameNotResolved`], [`Error::ConnectionRefused`],
-/// [`Error::TlsHandshakeFailed`] or [`Error::NetworkDeadlineExceeded`] where
-/// the connection is not opened; [`Error::AuthenticationRefused`] where the
-/// server refuses the credentials; and
+/// Returns [`Error::NameNotResolved`], [`Error::ConnectionRefused`] or
+/// [`Error::TcpConnectFailed`] where the TCP connect fails (`FR-ERR-049`);
+/// [`Error::TlsHandshakeFailed`] where the TLS handshake does;
+/// [`Error::LoginNotCompleted`] or [`Error::PublicKeyRequestRefused`] where
+/// the login does not complete (`FR-ERR-047`);
+/// [`Error::AuthenticationRefused`], [`Error::AccountRefused`],
+/// [`Error::LoginRefused`] or [`Error::SecureTransportRequired`] where the
+/// server refuses the login with an error packet (`FR-ERR-048`);
+/// [`Error::NetworkDeadlineExceeded`] where a budget expires first
+/// (`FR-ERR-027`); and
 /// [`Error::ReadOnlySessionNotEnforced`], [`Error::ServerNotMariaDb`] or
 /// [`Error::SeriesNotSupported`] where a gate of `FR-SRV-002` refuses the
 /// server that answered. On every one of those paths no catalogue statement is

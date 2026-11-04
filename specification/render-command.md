@@ -1,7 +1,7 @@
 ---
 title: Render Command (Third Arm)
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [schema-commands.md, template-commands.md, cache-commands.md, output-formats.md, configuration-model.md, context-document.md]
 ---
 
@@ -201,6 +201,11 @@ tpl render <template> --routine <name>      binds routine
   `database.provider` matches the contract and is read as a `mariadb`
   document; one whose `provider` is neither `mariadb` nor `sqlite` does not,
   and is `65` here, per `FR-CTX-043`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. `FR-CTX-043`
+  gives `provider` a third value, `mysql`: a document naming it matches the
+  contract, and one naming none of `mariadb`, `mysql` and `sqlite` is `65`
+  here.
 
 - **FR-RND-042**: IF the document supplied to `--context` carries a
   `schema_version` other than the one the running binary emits, per

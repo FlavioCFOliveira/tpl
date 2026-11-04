@@ -52,8 +52,15 @@ pub struct CheckConstraint<'a> {
     #[serde(borrow)]
     pub name: Cow<'a, str>,
 
-    /// Whether the constraint is declared on the table or on a column.
-    pub level: ConstraintLevel<'a>,
+    /// Whether the constraint is declared on the table or on a column, or
+    /// [`None`] for a `mysql` read, whose catalogue records no level
+    /// (`FR-MYSQL-034`, `BR-MYSQL-003`).
+    ///
+    /// The key is required in a document all the same, `null` where the level
+    /// is not known: `deserialize_with` is what keeps an absent key a refusal
+    /// rather than a `null`, so the document keeps its shape (`FR-SRV-005`).
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub level: Option<ConstraintLevel<'a>>,
 
     /// The clause, as the catalogue rewrote it: identifiers backtick-quoted
     /// and operators lower-cased.
@@ -68,7 +75,7 @@ impl ToStatic for CheckConstraint<'_> {
     fn to_static(&self) -> Self::Static {
         CheckConstraint {
             name: self.name.to_static(),
-            level: self.level.to_static(),
+            level: self.level.as_ref().map(ToStatic::to_static),
             clause: self.clause.to_static(),
         }
     }
@@ -140,12 +147,12 @@ mod tests {
         // the same table. The model carries what the catalogue gave.
         let implicit = CheckConstraint {
             name: Cow::Borrowed("manifest_payload"),
-            level: ConstraintLevel::Column,
+            level: Some(ConstraintLevel::Column),
             clause: Cow::Borrowed("json_valid(`manifest_payload`)"),
         };
 
         assert_eq!(implicit.name, "manifest_payload");
-        assert_eq!(implicit.level, ConstraintLevel::Column);
+        assert_eq!(implicit.level, Some(ConstraintLevel::Column));
     }
 
     #[test]
@@ -154,7 +161,7 @@ mod tests {
         // The DDL wrote `un_number IS NULL OR (un_number >= 1 AND ...)`.
         let table_level = CheckConstraint {
             name: Cow::Borrowed("ck_cargo_item_un_number"),
-            level: ConstraintLevel::Table,
+            level: Some(ConstraintLevel::Table),
             clause: Cow::Borrowed(
                 "`un_number` is null or `un_number` >= 1 and `un_number` <= 3550",
             ),
@@ -162,5 +169,34 @@ mod tests {
 
         assert!(table_level.clause.contains("is null"));
         assert!(table_level.clause.contains('`'));
+    }
+
+    #[test]
+    fn fr_mysql_034_a_level_is_null_on_a_mysql_read_and_the_key_stays_required() {
+        // FR-MYSQL-034: `level` is `null` where MySQL records none, and the
+        // document keeps its shape (FR-SRV-005): the key is written as `null`,
+        // read back as absent, and a document that omits it is still refused.
+        let mysql = CheckConstraint {
+            name: Cow::Borrowed("chk_voyage_window"),
+            level: None,
+            clause: Cow::Borrowed("(`eta` > `etd`)"),
+        };
+        let written = serde_json::to_string(&mysql).expect("a constraint serialises");
+
+        assert!(written.contains(r#""level":null"#), "{written}");
+        let read: CheckConstraint<'_> =
+            serde_json::from_str(&written).expect("a null level reads back");
+        assert_eq!(read.level, None);
+
+        let mariadb: CheckConstraint<'_> =
+            serde_json::from_str(r#"{"name":"ck","level":"Table","clause":"`a` > 0"}"#)
+                .expect("a recorded level reads back");
+        assert_eq!(mariadb.level, Some(ConstraintLevel::Table));
+
+        assert!(
+            serde_json::from_str::<CheckConstraint<'_>>(r#"{"name":"ck","clause":"`a` > 0"}"#)
+                .is_err(),
+            "a document without the key is refused, as before"
+        );
     }
 }

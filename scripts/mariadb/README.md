@@ -1434,6 +1434,8 @@ fixture's.
 |---|---|---|
 | `root` | `tpl-root` | Everything. Created by the entrypoint from `MARIADB_ROOT_PASSWORD`, and reachable from any host |
 | `tpl_reader` | `tpl-reader-pw` | `SELECT, EXECUTE ON freight.*` and nothing more |
+| `tpl_nopass` | none | `SELECT, EXECUTE ON freight.*`; an account with no password, for `FR-CONF-055` |
+| `tpl_limited` | `tpl-limited-pw` | `SELECT ON freight.*`, `MAX_USER_CONNECTIONS 1`; the second simultaneous login is refused with a limit on connections, for `FR-ERR-048` |
 
 `tpl_reader` exists to make an incomplete catalogue read reproducible without
 breaking anything. It can list every table and read every row, and the routines

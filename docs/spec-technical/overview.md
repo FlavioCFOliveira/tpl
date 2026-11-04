@@ -1,7 +1,7 @@
 ---
 title: Overview
 status: draft
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md, open-decisions.md]
 ---
 
@@ -45,7 +45,7 @@ removed, and what `specification/glossary.md` names.
 
 | Property | How the built system holds it | Forced by |
 |---|---|---|
-| Read-only over the database | Only the statements of the closed list are ever sent, whatever the server would permit; the session setting is defence in depth, confirmed before any catalogue read by a read of `@@session.tx_read_only`, and its failure stops the read; no flag, key or environment condition disables either half. A SQLite database file is opened read-only, sent only its own closed list, and held to `query_only` besides | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001`, `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `FR-SRV-011`, `BR-SRV-002`; `BR-LITE-001` |
+| Read-only over the database | Only the statements of the closed list are ever sent, whatever the server would permit; the session setting is defence in depth, confirmed before any catalogue read by a read of `@@session.tx_read_only` — of `@@session.transaction_read_only` for a MySQL server — and its failure stops the read; no flag, key or environment condition disables either half. A SQLite database file is opened read-only, sent only its own closed list, and held to `query_only` besides | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001`, `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `FR-SRV-011`, `BR-SRV-002`; `BR-MYSQL-002`, `FR-MYSQL-015` … `FR-MYSQL-019`; `BR-LITE-001` |
 | One render per invocation | An invocation yields one result, so the design questions a multi-object render would force are not questions this artefact has to answer | `FR-RND-002` |
 | No file-writing surface | The rendered result goes to stdout and nowhere else, and no destination flag exists; every write the process makes is inside `.tpl`, with two enumerated exceptions — the destination of `tpl init`, and the two files the SQLite library may write beside a database in write-ahead-log mode ([data-model.md](data-model.md#tpl-on-disk-and-its-five-writers)); a read command's only write of its own is the cache | `FR-RND-028`, `BR-RND-003`, `FR-PROJ-024`, `BR-PROJ-002`, `FR-LITE-008` |
 
@@ -58,8 +58,8 @@ scope, the two findings it preserves are re-applied and not re-derived.
 | Not | Because |
 |---|---|
 | A tool that writes to a database | `FR-SRV-007`, `BR-SRV-001` |
-| A reader of table data | The closed list reaches `INFORMATION_SCHEMA` and nothing else (`FR-SRV-006`); for a database file, the schema table and the pragma functions of `FR-LITE-015` |
-| A reader of any database but a MariaDB server or a SQLite database file | `FR-CONF-051`, `FR-SRV-001`, `FR-SRV-003`, `FR-LITE-001` |
+| A reader of table data | The closed list reaches `INFORMATION_SCHEMA` and nothing else (`FR-SRV-006`), and for a MySQL server twelve of its tables (`FR-MYSQL-015`); for a database file, the schema table and the pragma functions of `FR-LITE-015` |
+| A reader of any database but a MariaDB server, a MySQL server or a SQLite database file | `FR-CONF-051`, `FR-SRV-001`, `FR-SRV-003`, `FR-MYSQL-001`, `FR-MYSQL-008`, `FR-LITE-001` |
 | Interactive | No prompt, no pager, no stdin but an explicit `--context -` (`BR-CLI-003`) |
 | Configurable from the environment | The command line and the project decide everything; `${VAR}` inside the configuration file is the single exception (`FR-CLI-021`, `FR-CLI-023`, `BR-CLI-002`) |
 | Terminal-aware | No terminal detection, no colour, no ANSI byte on either stream (`NFR-DET-003`, `NFR-DET-004`) |
@@ -119,7 +119,7 @@ more says so.
 
 | Limit | Stated in | What the built system therefore does not contain |
 |---|---|---|
-| An impostor server | `FR-SRV-041`, with `FR-SRV-003` | Any impostor detection. The product marker is stated there as a condition that is necessary and not sufficient, so the artefact refuses exactly the servers that condition rejects and claims nothing about the rest; no passage of this folder may claim more |
+| An impostor server | `FR-SRV-041`, with `FR-SRV-003`; `FR-MYSQL-007`, `FR-MYSQL-011` | Any impostor detection. The product marker is stated there as a condition that is necessary and not sufficient, so the artefact refuses exactly the servers that condition rejects and claims nothing about the rest; no passage of this folder may claim more |
 | Hidden triggers | `FR-PRIV-020` | Any inference of a reader's privileges from its grants. The unreadable case and the empty case have one representation in the model, so the completeness guarantee of `FR-PRIV-002` cannot hold for such a table and the artefact does not report that it does |
 | Non-exclusive trust material | `FR-CONF-039` | Any claim of exclusive trust. Pinned trust material is additional to the root store rather than a replacement for it, on every path that uses it |
 
@@ -135,6 +135,12 @@ amending the criterion. The built system is therefore written against the
 criterion, and re-verifying the table is a release gate (`FR-SRV-019`), owned by
 `operations.md`. What a difference between two supported series obliges is
 `data-model.md` and `quality-attributes.md`.
+
+For a `mysql` entry the same three roles are `FR-MYSQL-002`, the criterion —
+MySQL's LTS series under Oracle Premier or Extended Support —
+`FR-MYSQL-003`, its instance, and `BR-MYSQL-001`, which keeps the two apart
+and the set of `FR-SRV-015` out of it; re-verifying that table is a release
+gate of its own (`FR-MYSQL-005`).
 
 ## The library API is not a public surface
 

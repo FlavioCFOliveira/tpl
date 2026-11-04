@@ -106,8 +106,23 @@ pub enum NetworkPhase {
     TcpConnect,
     /// Negotiating TLS, per the mode of `FR-CONF-013`.
     TlsHandshake,
+    /// The login: the server's greeting and the authentication, which run
+    /// before and after a TLS handshake (`FR-CONF-005`, `FR-ERR-047`).
+    Login,
     /// Reading `INFORMATION_SCHEMA`.
     CatalogueQuery,
+}
+
+impl NetworkPhase {
+    /// Whether the phase is one of the four connection phases that share the
+    /// budget of `core.connect_timeout` (`FR-CONF-005`).
+    #[must_use]
+    pub const fn connecting(self) -> bool {
+        match self {
+            Self::DnsResolution | Self::TcpConnect | Self::TlsHandshake | Self::Login => true,
+            Self::CatalogueQuery => false,
+        }
+    }
 }
 
 impl fmt::Display for NetworkPhase {
@@ -116,6 +131,7 @@ impl fmt::Display for NetworkPhase {
             Self::DnsResolution => "DNS resolution",
             Self::TcpConnect => "the TCP connect",
             Self::TlsHandshake => "the TLS handshake",
+            Self::Login => "the login",
             Self::CatalogueQuery => "a query reading the database structure",
         };
         f.write_str(name)
@@ -514,6 +530,95 @@ pub enum TlsFault {
     /// The server presented a certificate and it was not accepted: its chain
     /// is not trusted by the trust material, or it does not name the host.
     CertificateRejected,
+}
+
+/// What the operating system reported for a TCP connect that failed, beside
+/// the refusal [`Error::ConnectionRefused`] carries (`FR-ERR-049`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TcpFault {
+    /// `EHOSTUNREACH` or `EHOSTDOWN`: the host is unreachable.
+    HostUnreachable,
+    /// `ENETUNREACH` or `ENETDOWN`: the host's network is unreachable.
+    NetworkUnreachable,
+    /// `ETIMEDOUT`: nothing answered, and the operating system abandoned the
+    /// attempt before the connection budget expired.
+    NoAnswer,
+    /// Any other error, with the number the operating system gave, where it
+    /// gave one.
+    Other(Option<i32>),
+}
+
+/// What a login that did not complete returned, outside the refusal of a
+/// server's error packet, a TLS handshake and a deadline (`FR-ERR-047`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginFault {
+    /// The first outcome: the connection opened and then failed — closed by
+    /// the server, reset, or abandoned by the operating system.
+    ConnectionClosed,
+    /// The second outcome: what answered did not answer the login as a
+    /// server of the entry's provider does.
+    NotAccepted,
+}
+
+/// Why the server refused an account at the login, beside the user or the
+/// password [`Error::AuthenticationRefused`] carries (`FR-ERR-048`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccountRefusal {
+    /// `1130`: the user may not connect from the client's host.
+    HostNotPrivileged,
+    /// `1862`: the password has expired.
+    PasswordExpired,
+    /// MariaDB `4151`, MySQL `3118`: the account is locked.
+    Locked,
+    /// MariaDB `4150`, MySQL `3955`: the account is blocked after failed
+    /// logins.
+    Blocked,
+}
+
+/// Why the server ended a login with an error packet that is about its own
+/// state or the client's host, and not the account (`FR-ERR-048`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginRefusal {
+    /// `1040`: the server has reached its limit on connections.
+    ServerConnectionLimit,
+    /// `1203`: the user has reached its limit on simultaneous connections.
+    UserConnectionLimit,
+    /// `1226`: the account has exceeded a resource limit.
+    ResourceLimit,
+    /// `1129`: the client's host is blocked after connection errors.
+    HostBlocked,
+    /// Any other number, which `tpl` classifies no further.
+    Unclassified,
+}
+
+/// The statement of an open session that failed (`FR-ERR-036`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionStatement {
+    /// The version probe of `FR-SRV-002`, or of `FR-MYSQL-006`.
+    VersionProbe,
+    /// A statement of the catalogue read.
+    CatalogueQuery,
+}
+
+impl fmt::Display for SessionStatement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::VersionProbe => "the version probe",
+            Self::CatalogueQuery => "a query reading the database structure",
+        })
+    }
+}
+
+/// How a statement of an open session failed (`FR-ERR-036`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatementFault {
+    /// The connection failed while the statement was running, a failure of
+    /// the encryption of a session TLS protects included.
+    ConnectionFailed,
+    /// The server's answer did not follow the client-server protocol.
+    OutsideProtocol,
+    /// The server answered with an error packet carrying this number.
+    ServerError(u16),
 }
 
 /// Where an entry name the rule of `FR-CONF-048` refuses was given on the
@@ -1339,12 +1444,16 @@ pub enum Error {
     /// A `cfg` write would leave an entry carrying a key its provider refuses
     /// (`FR-CFG-048`, as amended in the sixty-fifth edition, `FR-CONF-052`).
     /// `.tpl/.cfg` is left unchanged.
-    #[error("cannot give entry '{entry}' {}", provider_write(*.provider, .written))]
+    #[error("cannot give entry '{entry}' {}", provider_write(*.provider, *.own, .written))]
     ProviderIncoherentWrite {
         /// The entry the write would leave in that state.
         entry: String,
-        /// The provider the entry would carry after the write.
+        /// The provider the write turns on: the provider written, or the
+        /// provider the written key belongs to.
         provider: crate::model::database::Provider,
+        /// The provider the entry would carry after the write, which refuses
+        /// a written key that is not the provider (`FR-CONF-052`).
+        own: crate::model::database::Provider,
         /// The key the invocation writes, fully qualified.
         written: String,
         /// Every key the entry would carry that the other provider takes,
@@ -1688,6 +1797,9 @@ pub enum Error {
     /// `verify-identity`.
     #[error("the TLS handshake with {host}:{port} failed, for database entry '{entry}'")]
     TlsHandshakeFailed {
+        /// The provider of the entry, which decides the `hint` of a refused
+        /// handshake (`FR-MYSQL-021`).
+        provider: crate::model::database::Provider,
         /// The database entry the connection was opened for.
         entry: String,
         /// The host attempted.
@@ -1701,7 +1813,8 @@ pub enum Error {
     /// A network phase did not finish within its deadline (`FR-ERR-027`,
     /// `FR-GLOB-013`).
     #[error(
-        "{phase} for {host}:{port} exceeded {bound} of {limit:?}, for database entry '{entry}'"
+        "{phase} for {host}:{port} exceeded {} of {limit:?}, for database entry '{entry}'",
+        bound_name(*.phase, *.bound)
     )]
     NetworkDeadlineExceeded {
         /// The database entry the connection was opened for.
@@ -1719,6 +1832,77 @@ pub enum Error {
         bound: DeadlineBound,
         /// The resolved value of that bound.
         limit: Duration,
+    },
+
+    /// The TCP connect failed with an error the operating system reported
+    /// that is not a refusal (`FR-ERR-049`, outcomes 2 to 4).
+    #[error("cannot reach {host}:{port}, for database entry '{entry}'")]
+    TcpConnectFailed {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn` (`FR-ERR-045`).
+        by_dsn: bool,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// What the operating system reported.
+        fault: TcpFault,
+    },
+
+    /// The TCP connection opened and the login did not complete
+    /// (`FR-ERR-047`, outcomes 1 and 2).
+    #[error("the login to {host}:{port} did not complete, for database entry '{entry}'")]
+    LoginNotCompleted {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn` (`FR-ERR-045`).
+        by_dsn: bool,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// The provider of the entry, whose server the `cause` and the `hint`
+        /// name.
+        provider: crate::model::database::Provider,
+        /// Which of the two outcomes it was.
+        fault: LoginFault,
+    },
+
+    /// The server ended the login with an error packet about its own state or
+    /// the client's host (`FR-ERR-048`: a limit on connections, a blocked
+    /// host, or a number `tpl` classifies no further).
+    #[error("the login to {host}:{port} did not complete, for database entry '{entry}'")]
+    LoginRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// The error number the packet carried, which the `cause` names under
+        /// `FR-GLOB-018`.
+        number: u16,
+        /// The reason its row states.
+        reason: LoginRefusal,
+    },
+
+    /// A statement failed on a session that had opened (`FR-ERR-036`).
+    #[error(
+        "{} did not complete, for database entry '{entry}'",
+        statement_line(*.statement, .host, *.port)
+    )]
+    StatementFailed {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// The host of the session.
+        host: String,
+        /// The port of the session.
+        port: u16,
+        /// The statement that failed.
+        statement: SessionStatement,
+        /// How it failed.
+        fault: StatementFault,
     },
 
     /// A statement on a SQLite connection was ended by a lock, the
@@ -1942,6 +2126,25 @@ pub enum Error {
         user: String,
         /// The host that refused it.
         host: String,
+    },
+
+    /// The server refused the account for a reason that is not the user or
+    /// the password (`FR-ERR-048`).
+    #[error(
+        "the server at '{host}' refused authentication for user '{user}', for database entry '{entry}'"
+    )]
+    AccountRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, for the `hint` that names
+        /// another user (`FR-ERR-045`).
+        by_dsn: bool,
+        /// The user the server refused.
+        user: String,
+        /// The host that refused it.
+        host: String,
+        /// The reason its row states.
+        reason: AccountRefusal,
     },
 
     /// A property of an object requested by name could not be read, so the
@@ -2359,6 +2562,11 @@ pub enum Error {
         by_dsn: bool,
         /// Which of the two conditions of `FR-SRV-010` arose.
         fault: ReadOnlyFault,
+        /// The session variable the read-back reads, as the provider's
+        /// contract names it: `@@session.tx_read_only` for a `mariadb` entry
+        /// (`FR-SRV-009`) and `@@session.transaction_read_only` for a `mysql`
+        /// entry (`FR-MYSQL-018`, `FR-MYSQL-019`).
+        read_back: &'static str,
     },
 
     /// The selected entry does not carry a key the invocation needs
@@ -2500,6 +2708,115 @@ pub enum Error {
         /// table compiled into the binary, and the type admits no other.
         supported: &'static [&'static str],
     },
+
+    /// A `mysql` entry reached a server that is reachable and authenticated
+    /// and is not MySQL (`FR-MYSQL-007`, `FR-MYSQL-008`). The catalogue is not
+    /// read.
+    #[error("the server is not MySQL, for database entry '{entry}'")]
+    ServerNotMysql {
+        /// The entry that reached it.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
+        by_dsn: bool,
+        /// The string the version probe returned, from which the `cause` names
+        /// the product: MariaDB where it carries the marker, and the string
+        /// itself otherwise.
+        reported: String,
+    },
+
+    /// A `mysql` entry reached a MySQL server of a series older than the
+    /// newest series of `FR-MYSQL-003` and not among them (`FR-MYSQL-009`).
+    /// The catalogue is not read.
+    #[error("server series '{series}' is not supported, for database entry '{entry}'")]
+    MysqlSeriesNotSupported {
+        /// The entry that reached it.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
+        by_dsn: bool,
+        /// The string the version probe returned (`FR-MYSQL-006`).
+        version: String,
+        /// The series found, derived from it.
+        series: String,
+        /// The series of `FR-MYSQL-003`, as the table compiled into the binary
+        /// holds them; `BR-MYSQL-001` states the set once, so the window
+        /// travels on the value, as it does for [`Error::SeriesNotSupported`].
+        supported: &'static [&'static str],
+    },
+
+    /// A `mysql` entry's authentication, over a session TLS does not protect,
+    /// needs the server's RSA public key, which `tpl` does not request
+    /// (`FR-MYSQL-045`). The connection is ended before the authentication
+    /// completes, and the catalogue is not read.
+    ///
+    /// For a `mariadb` entry it is the third outcome of `FR-ERR-047`: the same
+    /// facts and command at exit `69`, per the note on `FR-SEC-021`.
+    #[error(
+        "cannot authenticate user '{user}' over an unencrypted session, for database entry '{entry}'"
+    )]
+    PublicKeyRequestRefused {
+        /// The provider of the entry, which decides the code: `78` for a
+        /// `mysql` entry, `69` for a `mariadb` entry.
+        provider: crate::model::database::Provider,
+        /// The entry whose connection it was.
+        entry: String,
+        /// The user the driver presented.
+        user: String,
+        /// The host the connection reached.
+        host: String,
+        /// The port it reached.
+        port: u16,
+        /// The TLS mode in force, as `FR-CONF-013` spells it: `disabled`, or
+        /// `preferred` against a server that offered no TLS.
+        tls: &'static str,
+        /// Whether the server offered no TLS, which the refusal shows under
+        /// `preferred`: it is raised only on a session TLS does not protect,
+        /// and `preferred` leaves one so only where the server offers none.
+        no_tls_offered: bool,
+        /// The authentication method the server asked for, as the driver names
+        /// it — one of the driver's own names, so it is held as the `'static`
+        /// string the driver hands over.
+        method: &'static str,
+    },
+
+    /// The server accepts only encrypted sessions, and the session was not
+    /// encrypted under the entry's mode (`FR-ERR-048`, error `3159`).
+    #[error(
+        "the server at {host}:{port} accepts only encrypted sessions, for database entry '{entry}'"
+    )]
+    SecureTransportRequired {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// The TLS mode in force, as `FR-CONF-013` spells it.
+        tls: &'static str,
+    },
+}
+
+/// The bound a deadline names in its `error` line: the budget the four
+/// connection phases share, for one of them, and the phase's own deadline
+/// for a catalogue query (`FR-ERR-027`, `FR-CONF-005`).
+fn bound_name(phase: NetworkPhase, bound: DeadlineBound) -> &'static str {
+    match bound {
+        DeadlineBound::Phase if phase.connecting() => "the connection budget",
+        DeadlineBound::Phase => "its own deadline",
+        DeadlineBound::Overall => "the overall budget",
+    }
+}
+
+/// The subject of the `error` line of [`Error::StatementFailed`]
+/// (`FR-ERR-036`).
+fn statement_line(statement: SessionStatement, host: &str, port: u16) -> String {
+    match statement {
+        SessionStatement::VersionProbe => format!("the version probe of {host}:{port}"),
+        SessionStatement::CatalogueQuery => {
+            format!("a query reading the database structure from {host}:{port}")
+        }
+    }
 }
 
 /// The `error:` line of [`Error::UnknownCommand`]: the token, and the group it
@@ -2768,7 +3085,9 @@ fn flag_refused(flag: &str, provider: crate::model::database::Provider, given: b
     match (provider, given) {
         (_, true) => format!("{flag} cannot be given with --provider {provider}"),
         (Provider::Sqlite, false) => format!("{flag} cannot be given with --path"),
-        (Provider::Mariadb, false) => format!("{flag} cannot be given without --provider sqlite"),
+        (Provider::Mariadb | Provider::Mysql, false) => {
+            format!("{flag} cannot be given without --provider sqlite")
+        }
     }
 }
 
@@ -2776,20 +3095,18 @@ fn flag_refused(flag: &str, provider: crate::model::database::Provider, given: b
 /// `FR-CFG-048` shows: the provider where the write gives one, and the key
 /// otherwise.
 ///
-/// `provider` is the provider the written key belongs to. Where the write is a
-/// key rather than the provider, the entry's own provider is the other one —
-/// there are two, and the entry's refuses the key — and that is the provider
-/// the line names.
-fn provider_write(provider: crate::model::database::Provider, written: &str) -> String {
-    use crate::model::database::Provider;
-
+/// `provider` is the provider the written key belongs to, and `own` the
+/// provider the entry carries after the write. Where the write is a key rather
+/// than the provider, `own` refuses the key, and that is the provider the line
+/// names.
+fn provider_write(
+    provider: crate::model::database::Provider,
+    own: crate::model::database::Provider,
+    written: &str,
+) -> String {
     if written.ends_with(".provider") {
         format!("the provider {provider}")
     } else {
-        let own = match provider {
-            Provider::Mariadb => Provider::Sqlite,
-            Provider::Sqlite => Provider::Mariadb,
-        };
         format!("the key {written}, which its provider {own} does not take")
     }
 }
@@ -2886,7 +3203,12 @@ impl Error {
             | Self::NetworkDeadlineExceeded { by_dsn, .. }
             | Self::ReadOnlySessionNotEnforced { by_dsn, .. }
             | Self::ServerNotMariaDb { by_dsn, .. }
-            | Self::SeriesNotSupported { by_dsn, .. } => *by_dsn = true,
+            | Self::SeriesNotSupported { by_dsn, .. }
+            | Self::ServerNotMysql { by_dsn, .. }
+            | Self::MysqlSeriesNotSupported { by_dsn, .. }
+            | Self::TcpConnectFailed { by_dsn, .. }
+            | Self::LoginNotCompleted { by_dsn, .. }
+            | Self::AccountRefused { by_dsn, .. } => *by_dsn = true,
             _ => {}
         }
         self
@@ -2982,6 +3304,14 @@ impl Error {
             | Self::ConnectionRefused { .. }
             | Self::TlsHandshakeFailed { .. }
             | Self::NetworkDeadlineExceeded { .. }
+            | Self::TcpConnectFailed { .. }
+            | Self::LoginNotCompleted { .. }
+            | Self::LoginRefused { .. }
+            | Self::StatementFailed { .. }
+            | Self::PublicKeyRequestRefused {
+                provider: crate::model::database::Provider::Mariadb,
+                ..
+            }
             | Self::SqliteUnavailable { .. } => 69,
 
             // 70 EX_SOFTWARE
@@ -3003,7 +3333,9 @@ impl Error {
             | Self::SqliteFileUnreadable { .. } => 74,
 
             // 77 EX_NOPERM
-            Self::AuthenticationRefused { .. } | Self::PropertyNotReadable { .. } => 77,
+            Self::AuthenticationRefused { .. }
+            | Self::AccountRefused { .. }
+            | Self::PropertyNotReadable { .. } => 77,
 
             // 78 EX_CONFIG
             Self::ProjectNotFound { .. }
@@ -3035,6 +3367,10 @@ impl Error {
             | Self::NoDatabaseEntrySelected { .. }
             | Self::ServerNotMariaDb { .. }
             | Self::SeriesNotSupported { .. }
+            | Self::ServerNotMysql { .. }
+            | Self::MysqlSeriesNotSupported { .. }
+            | Self::PublicKeyRequestRefused { .. }
+            | Self::SecureTransportRequired { .. }
             | Self::ProviderRefusesKeys { .. }
             | Self::SqliteNotRegularFile { .. }
             | Self::SqliteFileRefused { .. }
@@ -3058,7 +3394,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 104;
+    const VARIANT_COUNT: usize = 113;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -3486,6 +3822,7 @@ mod tests {
             ),
             (
                 Error::TlsHandshakeFailed {
+                    provider: crate::model::database::Provider::Mariadb,
                     fault: crate::error::TlsFault::Refused,
                     entry: String::from("shop"),
                     host: "db.example.com".to_owned(),
@@ -3760,6 +4097,7 @@ mod tests {
                     by_dsn: false,
                     entry: "shop".to_owned(),
                     fault: ReadOnlyFault::ReadBackDisagreed,
+                    read_back: "@@session.tx_read_only",
                 },
                 78,
             ),
@@ -3798,6 +4136,99 @@ mod tests {
                 },
                 78,
             ),
+            // The `mysql` provider (FR-MYSQL-008, FR-MYSQL-009, FR-MYSQL-045).
+            (
+                Error::ServerNotMysql {
+                    by_dsn: false,
+                    entry: "shop".to_owned(),
+                    reported: "11.8.9-MariaDB-ubu2404".to_owned(),
+                },
+                78,
+            ),
+            (
+                Error::MysqlSeriesNotSupported {
+                    by_dsn: false,
+                    entry: "shop".to_owned(),
+                    version: "8.0.46".to_owned(),
+                    series: "8.0".to_owned(),
+                    supported: WINDOW,
+                },
+                78,
+            ),
+            (
+                Error::PublicKeyRequestRefused {
+                    provider: crate::model::database::Provider::Mysql,
+                    entry: "shop".to_owned(),
+                    user: "reader".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    tls: "disabled",
+                    no_tls_offered: false,
+                    method: "caching_sha2_password",
+                },
+                78,
+            ),
+            // The login and the session (FR-ERR-036, FR-ERR-047 … FR-ERR-049).
+            (
+                Error::TcpConnectFailed {
+                    entry: "shop".to_owned(),
+                    by_dsn: false,
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    fault: crate::error::TcpFault::HostUnreachable,
+                },
+                69,
+            ),
+            (
+                Error::LoginNotCompleted {
+                    entry: "shop".to_owned(),
+                    by_dsn: false,
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    provider: crate::model::database::Provider::Mariadb,
+                    fault: crate::error::LoginFault::ConnectionClosed,
+                },
+                69,
+            ),
+            (
+                Error::LoginRefused {
+                    entry: "shop".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    number: 1040,
+                    reason: crate::error::LoginRefusal::ServerConnectionLimit,
+                },
+                69,
+            ),
+            (
+                Error::StatementFailed {
+                    entry: "shop".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    statement: crate::error::SessionStatement::VersionProbe,
+                    fault: crate::error::StatementFault::ServerError(1927),
+                },
+                69,
+            ),
+            (
+                Error::AccountRefused {
+                    entry: "shop".to_owned(),
+                    by_dsn: false,
+                    user: "reader".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    reason: crate::error::AccountRefusal::Locked,
+                },
+                77,
+            ),
+            (
+                Error::SecureTransportRequired {
+                    entry: "shop".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    tls: "disabled",
+                },
+                78,
+            ),
             // The provider, and the SQLite read (FR-CONF-051 … FR-LITE-040).
             (
                 Error::FlagRefusedByProvider {
@@ -3819,6 +4250,7 @@ mod tests {
                 Error::ProviderIncoherentWrite {
                     entry: "shop".to_owned(),
                     provider: crate::model::database::Provider::Sqlite,
+                    own: crate::model::database::Provider::Sqlite,
                     written: "database.shop.provider".to_owned(),
                     carried: vec!["host", "port"],
                     value: Some("sqlite".to_owned()),
@@ -4022,6 +4454,15 @@ mod tests {
             Error::ProjectDirUnusable { .. } => "ProjectDirUnusable",
             Error::ServerNotMariaDb { .. } => "ServerNotMariaDb",
             Error::SeriesNotSupported { .. } => "SeriesNotSupported",
+            Error::ServerNotMysql { .. } => "ServerNotMysql",
+            Error::MysqlSeriesNotSupported { .. } => "MysqlSeriesNotSupported",
+            Error::PublicKeyRequestRefused { .. } => "PublicKeyRequestRefused",
+            Error::TcpConnectFailed { .. } => "TcpConnectFailed",
+            Error::LoginNotCompleted { .. } => "LoginNotCompleted",
+            Error::LoginRefused { .. } => "LoginRefused",
+            Error::StatementFailed { .. } => "StatementFailed",
+            Error::AccountRefused { .. } => "AccountRefused",
+            Error::SecureTransportRequired { .. } => "SecureTransportRequired",
             Error::FlagRefusedByProvider { .. } => "FlagRefusedByProvider",
             Error::PathRequired { .. } => "PathRequired",
             Error::ProviderIncoherentWrite { .. } => "ProviderIncoherentWrite",

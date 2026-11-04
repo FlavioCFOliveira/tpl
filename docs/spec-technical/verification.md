@@ -305,15 +305,17 @@ magnitude in object count. The workloads are loaded by `seed-bench.sql` through
 `tests/render_command.rs::fr_rnd_040_the_server_records_the_session_ended_before_the_first_byte_of_the_render`
 watches the statement log for the render's `Quit` while the process is still
 running a slow render whose output is held until it ends, on every series. In
-process, `bounded()` refuses to start a render unless `mariadb::quiescent()`
-holds, so
+process, `bounded()` refuses to start a render unless `provider::quiescent()`
+holds, which answers for `mariadb/`, `mysql/` and `sqlite/` together, so
 `tests/render_command.rs::fr_rnd_040_every_server_read_of_a_render_is_closed_before_the_template_evaluates`
 asserts success on all three paths that read the server — `--direct`, a miss,
 and the re-read after an abandoned render — and the count itself is asserted by
 `fr_rnd_040_a_closed_session_leaves_no_connection_and_no_runtime_alive` in
 `src/mariadb/catalogue.rs` and
 `fr_rnd_040_a_runtime_is_counted_until_it_is_shut_down_and_on_its_own_thread`
-in `src/mariadb.rs`.
+in `src/mariadb.rs`; for a `mysql` read, by
+`fr_rnd_040_a_mysql_runtime_and_connection_are_counted_on_their_own_thread` in
+`src/mysql.rs`.
 
 **What rows 28 to 33 reach**, at `19abb1f`. Each test is in
 `src/sqlite/tests.rs` unless another file is named.
@@ -1149,6 +1151,82 @@ apply them.
 | **A statement that fails when it is prepared, or is prepared and never run**, is absent from the record of row 28, while the line of `FR-GLOB-017` for it is written | `FR-LITE-018` and `NFR-PERF-008` state it as the record's limit; `FR-LITE-015` and `FR-LITE-016` bind such a statement all the same |
 | **A file swapped for a FIFO between the lookup and the open** | `FR-LITE-005`'s accepted cost; no test can produce the race deterministically |
 
+## The MySQL provider
+
+What the tests of the `mysql` provider and of the classification of a failed
+server connection assert, and what each needs. **At `cc511e2` a test exists for
+every row below**: the integration tests in `tests/mysql_provider.rs`, eighteen,
+and `tests/login_faults.rs`, six; the unit tests beside each part of `mysql/`
+and in `src/mysql/catalogue/tests.rs`; and the classification's own tests in
+`src/mariadb/fault.rs`.
+
+### The fixture, and the kind of test it admits
+
+A test that reaches a MySQL server is of kind Server. It asks
+`tests/support/mysql.rs`, which is `tests/support/fixture.rs` for
+`scripts/mysql/`: the gate is `status.sh --quiet`, mapped by value as the
+MariaDB gate is — `0` runs the body, `1` skips it with a printed reason, any
+other answer fails the run; the inventory and the accounts are read from
+`status.sh --export` and `series.env`; servers are selected by role — a
+supported series, a supported series offering no TLS, the series outside the
+set; the two server-side instruments are `observe.sh`'s; and the
+authentication cache is set through `auth-cache.sh` before a body whose
+outcome depends on it. No `docker` command is issued from Rust. A body runs on
+every server of its role, and holds the fixture's lock while it does.
+
+Three bodies of `tests/mysql_provider.rs` need no server, and one needs the
+MariaDB fixture beside the MySQL one. In `tests/login_faults.rs`, three bodies
+need no server — what answers at the address is a closed port or a listener
+of the test's own — and three reach a fixture.
+
+### What each part of the contract is verified by
+
+| Requirements | What is asserted | Kind | Test |
+|---|---|---|---|
+| `FR-CONF-051`, `FR-CONF-052`, `FR-CFG-055` | `provider = "mysql"` is read, written and refused as a server entry's keys are; a `mysql` entry carrying `path` is refused at entry resolution | Integration | `tests/mysql_provider.rs` |
+| `FR-MYSQL-006` … `FR-MYSQL-010`, `FR-MYSQL-002`, `FR-MYSQL-003` | The `server` object carries the probe unaltered; a MariaDB string or one outside the form is not MySQL; a series below the set is refused naming the version and the set; a newer one is read and marked; the table is the two LTS series, newest first | Unit | `src/mysql/session.rs`, `src/mysql/window.rs` |
+| `FR-MYSQL-009` | The `8.0` server is refused with `78` | Server | `tests/mysql_provider.rs` |
+| `FR-MYSQL-008`, `FR-MYSQL-012` | A `mysql` entry on a MariaDB server, and a `mariadb` entry on a MySQL server, are both `78` | Server, both fixtures | `tests/mysql_provider.rs` |
+| `FR-MYSQL-015`, `FR-MYSQL-016`, `FR-MYSQL-042` | Each statement reads one table of the closed list and no other; the plan is twelve whatever the database holds; the view statement names no algorithm field | Unit | `src/mysql/catalogue/statements.rs`, `src/mysql/session.rs` |
+| `FR-MYSQL-023` … `FR-MYSQL-039` | Every object kind of the fixture is read into the document; every field of the twelve tables decodes through the driver on every series | Server | `tests/mysql_provider.rs`; `src/mysql/catalogue/tests.rs` |
+| `FR-MYSQL-029`, `FR-MYSQL-030`, `FR-MYSQL-046` | Every row of the default classification by its shape; the outer pair removed once; the phrases of the attribute field in any order; one layer of escaping removed from the observed texts, every other backslash kept | Vector | `src/mysql/catalogue/expression.rs`, `src/mysql/catalogue/fold.rs` |
+| `FR-MYSQL-046`, `FR-MYSQL-027`, `FR-MYSQL-033` | The fixture's expressions carried with one layer removed; the generated invisible primary key and the `SET DEFAULT` rule carried as reported | Server | `tests/mysql_provider.rs` |
+| `FR-MYSQL-041` | The reduced-grant reader reads every object, the short ones marked, no trigger shown, and `77` for a named short object | Server | `tests/mysql_provider.rs` |
+| `FR-MYSQL-021` | The five modes against a server offering TLS and one offering none | Server | `tests/mysql_provider.rs` |
+| `FR-MYSQL-045` | The uncached login over an unencrypted session ends with `78`, the cache emptied first | Server | `tests/mysql_provider.rs` |
+| `FR-PROJ-021` | The starter template renders against every table of the fixture, on both series | Server | `tests/mysql_provider.rs` |
+| `FR-CFG-024`, `FR-CTX-043`, `FR-ENV-049` | `tpl cfg database test` reports a MySQL server and its probe; a dump renders through `--context`; `json` is `textual` and `geomcollection` and `vector` are in no family | Server; Vector | `tests/mysql_provider.rs`; `src/render/predicate.rs` |
+| `FR-MYSQL-034` | A `null` level is written as `null`, read back, and a document without the key is still refused | Unit | `src/model/check_constraint.rs` |
+| `FR-RND-040`, `ADR-005` | A `mysql` runtime and connection are counted on their own thread; the runtime is a current-thread one | Unit | `src/mysql.rs` |
+| `FR-CONF-055`, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 5 | An account with no password logs in, with `password = ""` and with no password key, on every MariaDB server and on every MySQL server, the authentication cache emptied before each MySQL login; each source of the empty password reaches the driver as the empty string | Server; Unit | `tests/login_faults.rs`; `src/mariadb/connect.rs` |
+| `FR-ERR-049` | A refused TCP connect carries the first outcome word for word, for both providers; every operating-system report is its own outcome; an I/O error outside the TCP connect is not classified as one | Integration; Unit | `tests/login_faults.rs`; `src/mariadb/fault.rs` |
+| `FR-ERR-047`, `FR-CONF-005`, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 6 | A connection closed in the login and an answer outside the protocol are the login's first two outcomes; the phase is the one the driver recorded; a `mariadb` entry whose login needs the server's RSA public key ends at `69` | Integration; Unit; Server | `tests/login_faults.rs`; `src/mariadb/fault.rs`; `src/mysql/catalogue/tests.rs` |
+| `FR-ERR-048` | Every row of the table, for each provider; a second login beyond the account's limit is `69` on every series of both fixtures | Unit; Server | `src/mariadb/fault.rs`; `src/mysql/catalogue/tests.rs` |
+| `FR-ERR-036`, `FR-ERR-050` | A statement fails in one of three ways; every failure while the TLS handshake runs is that phase | Unit | `src/mariadb/fault.rs` |
+| [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 4 | A configuration error of another origin is not the refusal | Unit | `src/mysql/fault.rs` |
+
+### The verifications `FR-MYSQL-043` reapplies
+
+| Requirement it reapplies | Test | Kind |
+|---|---|---|
+| `FR-SRV-012`: the closed list, observed on the server, in the order of `FR-MYSQL-017` | `tests/mysql_provider.rs::fr_mysql_043_the_server_receives_the_closed_list_in_the_order_of_fr_mysql_017` | Server, observed on the server |
+| `FR-SRV-013`: the read-back's confirming outcome on every series, and its failing outcome through the seam it authorises | The test of `FR-SRV-012` above, whose read completes after the read-back of `@@session.transaction_read_only` on every series and asserts that spelling; `src/mysql/catalogue/tests.rs::fr_mysql_043_a_read_back_that_does_not_confirm_is_refused_before_the_catalogue` | Server; Unit, through the seam |
+| `FR-SRV-014`: the connection count | `tests/mysql_provider.rs::fr_mysql_042_an_invocation_opens_one_connection_and_a_cache_hit_opens_none` | Server, observed on the server |
+| `FR-SRV-029`: equivalence across the set, and the refusal outside it | `tests/mysql_provider.rs::fr_mysql_013_identical_ddl_yields_identical_documents_on_every_series`; `fr_mysql_009_a_series_outside_the_set_and_older_than_its_newest_is_refused_with_78` | Server |
+| `FR-SRV-035`: the marked read, through the seam it authorises | `src/mysql/catalogue/tests.rs::fr_mysql_043_a_series_newer_than_the_window_is_read_and_marked_through_the_seam`; `src/mysql/window.rs::fr_mysql_043_the_seam_of_fr_srv_035_narrows_the_mysql_window_too` | Unit, through the seam |
+| The product refusal of `FR-MYSQL-008`, against a MariaDB server | `tests/mysql_provider.rs::fr_mysql_008_a_mysql_entry_on_a_mariadb_server_is_refused_with_78` | Server, both fixtures |
+
+### The requirements of form, for a `mysql` entry
+
+`FR-MYSQL-042` verifies them from the server's records, on every series of
+`FR-MYSQL-003`.
+
+| Requirement | Instrument | Test |
+|---|---|---|
+| `NFR-PERF-001`, `NFR-PERF-002`, `NFR-PERF-008` | The server's statement record, over `freight`, `freight_empty` and a named read, against the per-query lines | `tests/mysql_provider.rs::fr_mysql_042_the_statement_count_is_the_same_over_freight_freight_empty_and_a_named_read`; in process, `src/mysql/catalogue/tests.rs::fr_mysql_042_a_read_issues_the_twelve_statements_of_the_plan_and_nothing_else` |
+| `NFR-PERF-003`, `NFR-PERF-004` | The connections the server accepts | `tests/mysql_provider.rs::fr_mysql_042_an_invocation_opens_one_connection_and_a_cache_hit_opens_none` |
+| `NFR-PERF-005`, `NFR-PERF-006` | Unchanged: no command that needs no catalogue reaches `provider.rs` | As for a `mariadb` entry |
+
 ## What this document defers, and to what
 
 | Subject | Where |
@@ -1157,6 +1235,7 @@ apply them.
 | Every measured figure, every dispersion, and the conditions a reading was taken under | `BENCHMARKS.md` |
 | The validation pipeline, the release gates and the fixture's operational standing | [operations.md](operations.md) |
 | The fixture's contents, its credentials, its deliberate omissions, the harness scripts and their recorded output, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
+| The same for the MySQL fixture: its five servers, its pinned images, its accounts, its harness and the authentication cache | `scripts/mysql/README.md` |
 | The record of every difference observed between the series — fourteen | `FR-SRV-038` |
 | The privilege detections as built, the diagnostic renderer, the emitter and the help surface | [interfaces.md](interfaces.md) |
 | The engine construction the seams and the vectors run against | [architecture.md](architecture.md) |

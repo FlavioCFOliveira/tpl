@@ -48,7 +48,7 @@ pub(crate) struct Series {
 
 impl Series {
     /// A series, written as its two numbers.
-    const fn new(major: u16, minor: u16) -> Self {
+    pub(crate) const fn new(major: u16, minor: u16) -> Self {
         Self { major, minor }
     }
 
@@ -156,7 +156,14 @@ pub(crate) fn standing(series: Series) -> Option<Standing> {
 /// It is the one comparison, written once, so that the window a test narrows
 /// the reader to is answered by the rule the real window is answered by rather
 /// than by a second copy of it.
-fn against(series: Series, newest: Series, holds: impl Fn(Series) -> bool) -> Option<Standing> {
+///
+/// `crate::mysql::window` answers its own table by it too: the comparison of
+/// `FR-MYSQL-002` is the comparison of `FR-SRV-021`.
+pub(crate) fn against(
+    series: Series,
+    newest: Series,
+    holds: impl Fn(Series) -> bool,
+) -> Option<Standing> {
     if holds(series) {
         return Some(Standing::Supported);
     }
@@ -165,8 +172,11 @@ fn against(series: Series, newest: Series, holds: impl Fn(Series) -> bool) -> Op
 }
 
 /// The window this thread has been narrowed to, or [`None`] where it has not.
+///
+/// `crate::mysql::window` consults the same seam, which `FR-MYSQL-043` applies
+/// to the marked read of `FR-MYSQL-010` through `FR-SRV-035`.
 #[cfg(test)]
-fn narrowed() -> Option<Series> {
+pub(crate) fn narrowed() -> Option<Series> {
     NARROWED.with(std::cell::Cell::get)
 }
 

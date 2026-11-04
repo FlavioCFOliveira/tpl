@@ -37,6 +37,7 @@ use std::borrow::Cow;
 use super::super::layout::{Cell, PROPERTY, Sections, count, emit, flag, optional, text};
 use crate::cache::{Listed, Summary};
 use crate::error::Error;
+use crate::model::check_constraint::ConstraintLevel;
 use crate::model::document::shape::TableDocument;
 use crate::model::routine::Routine;
 use crate::model::view::View;
@@ -321,7 +322,7 @@ pub(super) fn table<W: std::io::Write>(out: W, table: &TableDocument<'_>) -> Res
         .map(|check| {
             [
                 text(&check.name),
-                text(check.level.name()),
+                optional(check.level.as_ref().map(ConstraintLevel::name)),
                 text(&check.clause),
             ]
         })

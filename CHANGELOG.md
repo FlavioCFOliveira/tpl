@@ -50,8 +50,9 @@ workflow, before it closes.
 - **`--provider` and `--path` on `tpl cfg database add` and `update`**, and
   the keys `database.<name>.provider` and `database.<name>.path` for
   `tpl cfg set`, `get` and `unset`. Each of these exits `64`, writing
-  nothing: a provider other than `mariadb` or `sqlite`; `--path` beside a
-  MariaDB flag, or given to `add` without `--provider sqlite`; an empty
+  nothing: a provider other than `mariadb`, `mysql` or `sqlite`; `--path`
+  beside a server flag or beside `--provider mariadb` or `--provider mysql`,
+  or given to `add` without `--provider sqlite`; an empty
   `--path` or one holding `${`; and a write that would leave an entry carrying
   a key its provider does not take. Writing or removing `provider` or `path`
   keeps the entry's cache and warns, as writing or removing a connection key
@@ -59,13 +60,13 @@ workflow, before it closes.
   write names `provider` or `path` or leaves a `sqlite` entry, and that it may
   now point at another server otherwise.
 - **`database.provider` in every document.** The `database` object of the
-  JSON documents and of the render context carries `provider`, `mariadb` or
-  `sqlite`; a cache-served read carries the provider of the read that filled
-  the cache. A `--context` document without the key is read as `mariadb`, and
-  one with any other value exits `65`. `schema_version` and `cache_format`
-  stay at `1`.
+  JSON documents and of the render context carries `provider`, `mariadb`,
+  `mysql` or `sqlite`; a cache-served read carries the provider of the read
+  that filled the cache. A `--context` document without the key is read as
+  `mariadb`, and one with any other value exits `65`. `schema_version` and
+  `cache_format` stay at `1`.
 - **A `provider` row in `tpl schema info`.** The text output carries it
-  between `collation` and `server`, for both providers.
+  between `collation` and `server`, for every provider.
 - **The exit codes of a `sqlite` entry.** `74` when the path names nothing or
   the file cannot be opened or read; `78` when the path names something other
   than a regular file, the file is not a SQLite database, is damaged or holds
@@ -81,13 +82,54 @@ workflow, before it closes.
   `data_type` values `integer`, `numeric` and `real`, and `primary_key` and
   `unique` answer from the table's `primary_key`, so a SQLite rowid key, which
   has no index, satisfies both. No answer over a MariaDB document changes.
+- **MySQL as a third database provider.** An entry whose `provider` is
+  `mysql` reads a MySQL server. It takes the keys of a `mariadb` entry —
+  `dsn` or the discrete fields, `password` or `password_command`, `tls`,
+  `ca_file` and `ca_path` — and refuses `path`; neither DSN scheme selects
+  the provider. The eight `schema` subcommands, `tpl cache load`,
+  `tpl render` and `tpl cfg database test` read its catalogue from twelve
+  `INFORMATION_SCHEMA` tables, in a session set read-only and confirmed by
+  reading `@@session.transaction_read_only` back. The supported series are
+  MySQL's LTS series under Oracle Premier or Extended Support — `8.4` and
+  `9.7` in this release — and no Innovation release.
+- **`--provider mysql`** on `tpl cfg database add` and `update`, with the
+  flags of a `mariadb` entry, and the value `mysql` for
+  `tpl cfg set database.<name>.provider`. Every document a `mysql` read
+  produces carries `database.provider` `mysql`, and a `--context` document
+  carrying it is accepted.
+- **The exit codes of a `mysql` entry.** `78` when the server reached is not
+  MySQL, a MariaDB server included; when its series is older than the newest
+  supported one and not supported, such as `8.0`; when the session cannot be
+  made read-only; and when a login over an unencrypted session — `tls`
+  `disabled`, or `preferred` against a server that offers no TLS — needs the
+  server's RSA public key, which `tpl` never requests, with the `hint`
+  `encrypt the session: tpl cfg database update <entry> --tls verify-identity`.
+  A series newer than every supported one is read and marked
+  `newer_than_supported`, at exit `0`. A `mariadb` entry that reaches a MySQL
+  server is refused with `78`, as before.
+- **What a `mysql` read carries.** A `CHECK` constraint's `level` and a
+  view's `algorithm` are `null`, because MySQL records neither. The three
+  `data_type` values only MySQL reports — `json`, `geomcollection` and
+  `vector` — are decomposed like any other type; `json` satisfies the
+  `textual` test, and the other two satisfy no family test. An expression
+  default, a generated column's expression and a check clause are carried
+  with one layer of MySQL's backslash escaping removed. An index with a
+  functional key part is not carried.
+- **An empty password for a `mysql` entry.** An entry whose password is the
+  empty string — `password = ""`, a DSN whose password part is empty, or a
+  `password_command` that prints nothing — and an entry that supplies no
+  password log in to a MySQL account that has no password, as MySQL's own
+  client does, whether or not TLS protects the session.
 
 ### Changed
 
 - **Help text.** `tpl help cfg database add` and `update` document
   `--provider` and `--path`, with a SQLite example, and name `--path` among
-  the flags each MariaDB flag excludes; `tpl help cfg set` lists the two new
-  keys; `tpl help cfg database test` states what its four answers mean for a
+  the flags each MariaDB flag excludes; the help of `--provider` names
+  `mariadb`, `mysql` and `sqlite`, and `tpl help cfg database add` states that
+  a MySQL entry needs what a MariaDB entry needs; `tpl help cfg set` lists the
+  two new keys, the provider's three values among them;
+  `tpl help cfg database test` states what its four answers mean for a
   `sqlite` entry; the exit codes of the `schema` subcommands, `tpl render`,
   `tpl cache load` and `tpl cfg database test` name the conditions of a
   `sqlite` entry; and `tpl render --help` and the `context_variables` of
@@ -95,12 +137,89 @@ workflow, before it closes.
   database: name, charset, collation, provider, server, tables, views and
   routines."
 - **Library API.** `tpl::Error` gained twelve variants, for the SQLite
-  provider and its configuration. `tpl::model` gained
-  `database::Provider`, `index::PrimaryKey` and the field
+  provider and its configuration, and nine for the MySQL provider and the
+  classification of a failed server connection; `TlsHandshakeFailed` gained
+  `provider`, `ReadOnlySessionNotEnforced` gained `read_back`,
+  `ProviderIncoherentWrite` gained `own`, and `error::NetworkPhase` gained
+  `Login`. `tpl::model` gained `database::Provider`, with the values
+  `Mariadb`, `Mysql` and `Sqlite`, `index::PrimaryKey` and the field
   `Database::provider`; `Table::primary_key` now returns a `PrimaryKey`
-  rather than an `Index`; and fields a SQLite read cannot fill became
-  `Option`, among them `Database::collation` and every view field but `name`
-  and `definition`. The library carries no stability promise (`DIV-032`).
+  rather than an `Index`; and fields a SQLite or a MySQL read cannot fill
+  became `Option`, among them `Database::collation`, every view field but
+  `name` and `definition`, and `CheckConstraint::level`. The library carries
+  no stability promise (`DIV-032`).
+- **A login that does not complete is reported as one.** For a `mariadb`
+  entry, a connection that opens and fails before the login completes, and
+  an answer that is not the MariaDB protocol, exited `69` with the message of
+  a refused TCP connect. Both still exit `69`, now with
+  `error: the login to <host>:<port> did not complete, for database entry '<entry>'`
+  and a `cause` that names the login and which of the two happened. A login
+  that needs the server's RSA public key over an unencrypted session also
+  still exits `69`, now with
+  `error: cannot authenticate user '<user>' over an unencrypted session, for database entry '<entry>'`,
+  a `cause` naming the `tls` mode and the authentication method, and the
+  `hint` `encrypt the session: tpl cfg database update <entry> --tls verify-identity`.
+- **A failure after the session opened names that phase.** A version probe
+  or a catalogue query that fails on an open session exited `69` with the
+  message of a refused TCP connect, or of a failed TLS handshake where the
+  TLS layer failed. It still exits `69`, now with
+  `error: the version probe of <host>:<port> did not complete, …` or
+  `error: a query reading the database structure from <host>:<port> did not complete, …`,
+  a `cause` stating that the session was open and whether the connection
+  failed, the answer did not follow the protocol, or the server answered
+  with an error — naming its number — and the `hint`
+  `the operation is read-only and can be run again; check the connection with: tpl cfg database test <entry>`.
+- **A failed TCP connect names what the operating system reported.** Only a
+  refusal, `ECONNREFUSED`, keeps
+  `error: the server at <host>:<port> refused the connection, …` and its
+  `cause` and `hint`, word for word. An unreachable host or network, a
+  connect the operating system abandoned with no answer, and any other error
+  now read `error: cannot reach <host>:<port>, for database entry '<entry>'`,
+  with a `cause` naming which of those happened, or the error number, and a
+  `hint` to check that the host is reachable or to change the address. Exit
+  `69` throughout.
+- **A failed TLS handshake is decided by the phase the connection reached.**
+  Its two messages — a certificate that was not accepted, and a handshake
+  refused before any certificate was checked — are unchanged. Every failure
+  while the TLS handshake runs, a connection closed or reset during it
+  included, is now reported as one of them; an I/O error outside the
+  handshake no longer reads as a certificate not accepted; and a failure of
+  the TLS layer on an open session is now a failed statement, above. Exit
+  `69` throughout.
+- **An error packet during the login is classified by its number.** Every
+  packet but `1044` and `1049` on a connection naming a database exited `77`
+  as a refused user or password. Now `1045` and `1698` keep that message;
+  `1130`, `1862`, `4151` and `4150` (`3118` and `3955` for a `mysql` entry)
+  exit `77` with a `cause` naming the reason — the client's host, an expired
+  password, a locked account, an account blocked after failed logins — and a
+  `hint` for it. **`3159` exits `78`, not `77`**: the server accepts only
+  encrypted sessions, and the `hint` is
+  `encrypt the session: tpl cfg database update <entry> --tls verify-identity`.
+  **`1040`, `1203`, `1226` and `1129` exit `69`, not `77`**, with a `cause`
+  naming the number and the limit on connections or the blocked host it
+  reports; so does **every other number, and `1044` or `1049` on a connection
+  that names no database**, as `tpl cfg database test` opens, with a `cause`
+  stating that `tpl` does not classify the number further. `1044` and `1049`
+  on a connection naming a database keep their `77` and message.
+- **`core.connect_timeout` bounds four phases, the login included.** An
+  expired connection budget is reported against the phase the connection had
+  reached — DNS resolution, the TCP connect, the TLS handshake or the login —
+  where every expiry after DNS resolution was reported as the TCP connect.
+  The `error` line reads
+  `<phase> for <host>:<port> exceeded the connection budget of <value>, for database entry '<entry>'`,
+  where it read `exceeded its own deadline of <value>`, and the `cause` states
+  that DNS resolution, the TCP connect, the TLS handshake and the login share
+  that budget. Exit `69`, unchanged.
+
+### Fixed
+
+- **An account with no password logs in with an empty password.** A
+  `mariadb` entry whose password is the empty string — `password = ""`, a DSN
+  whose password part is empty, or a `password_command` that prints nothing —
+  was refused by such an account with `77`, because `tpl` sent a scramble
+  computed from the empty string. It is now presented as MariaDB's and
+  MySQL's own clients present an empty password, and so is an entry that
+  supplies no password when the server switches the authentication method.
 
 ### Security
 
@@ -109,7 +228,7 @@ workflow, before it closes.
   from U+0080 to U+009F, and each of the twelve characters Unicode marks
   `Bidi_Control`, is now written as `\u{…}`, as a C0 control already was; in
   JSON output it is written as `\u` and four hexadecimal digits. This holds
-  for both providers, so a name in a catalogue can no longer reorder what a
+  for every provider, so a name in a catalogue can no longer reorder what a
   terminal shows.
 - **Dependencies moved to releases with security fixes.** `rustls` 0.23.46,
   `rustls-webpki` 0.103.16, `webpki-roots` 1.0.10 and `tokio` 1.53.3,

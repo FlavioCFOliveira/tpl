@@ -242,14 +242,14 @@ fn yes(row: &MySqlRow, field: &str) -> Result<bool, Error> {
 /// byte-wise comparison `NFR-DET-002` fixes. It is a lookup and not a
 /// presented collection, so it goes through [`Ord`] rather than through
 /// `order::compare`; nothing a caller sees is ordered by it.
-struct Positions<K: Ord + Copy> {
+pub(crate) struct Positions<K: Ord + Copy> {
     /// The key of each object, with its position in the collection.
     entries: Vec<(K, usize)>,
 }
 
 impl<K: Ord + Copy> Positions<K> {
     /// The lookup `entries` describes.
-    fn of(mut entries: Vec<(K, usize)>) -> Self {
+    pub(crate) fn of(mut entries: Vec<(K, usize)>) -> Self {
         entries.sort_unstable_by_key(|entry| entry.0);
 
         Self { entries }
@@ -257,7 +257,7 @@ impl<K: Ord + Copy> Positions<K> {
 
     /// Where the object `key` names stands, or [`None`] where the fold carries
     /// no object of that key.
-    fn find(&self, key: K) -> Option<usize> {
+    pub(crate) fn find(&self, key: K) -> Option<usize> {
         self.entries
             .binary_search_by(|(carried, _)| carried.cmp(&key))
             .ok()
@@ -267,7 +267,11 @@ impl<K: Ord + Copy> Positions<K> {
 }
 
 /// The covered tables, and the lookup that attaches a member row to one.
-struct Tables<'a> {
+///
+/// It is `pub(crate)`, with [`foreign_keys`] and [`assemble`], because a
+/// `mysql` read attaches its keys and assembles its tables exactly as a
+/// `mariadb` read does (`FR-MYSQL-033`, `FR-MYSQL-032`).
+pub(crate) struct Tables<'a> {
     /// The tables, in the order the table read returned them.
     parts: Vec<TableParts<'a>>,
 
@@ -276,6 +280,15 @@ struct Tables<'a> {
 }
 
 impl<'a> Tables<'a> {
+    /// The covered tables `parts` describes, in that order, and the lookup
+    /// over the names `positions` pairs with their places.
+    pub(crate) fn new(parts: Vec<TableParts<'a>>, positions: Vec<(&'a str, usize)>) -> Self {
+        Self {
+            parts,
+            positions: Positions::of(positions),
+        }
+    }
+
     /// Where the table `name` names stands, or [`None`] where it is not
     /// covered.
     ///
@@ -283,12 +296,12 @@ impl<'a> Tables<'a> {
     /// side: a row whose owning object the model does not carry is presented
     /// nowhere. It is answered before the rest of the row is decoded, so an
     /// uncovered object's rows cost one lookup each and nothing more.
-    fn position(&self, name: &str) -> Option<usize> {
+    pub(crate) fn position(&self, name: &str) -> Option<usize> {
         self.positions.find(name)
     }
 
     /// The table at `position`, which [`Tables::position`] answered.
-    fn at(&mut self, position: usize) -> Option<&mut TableParts<'a>> {
+    pub(crate) fn at(&mut self, position: usize) -> Option<&mut TableParts<'a>> {
         self.parts.get_mut(position)
     }
 }
@@ -615,7 +628,7 @@ fn index<'a>(row: &'a MySqlRow, name: &'a str, first: IndexColumn<'a>) -> Result
 /// `FR-CAT-057` excludes a key whose referenced table lives in another schema,
 /// and the referenced-schema field of the key-column row is the only place
 /// either read says where that table is.
-fn foreign_keys<'a>(
+pub(crate) fn foreign_keys<'a>(
     rules: &'a [MySqlRow],
     key_columns: &'a [MySqlRow],
     schema: &str,
@@ -800,7 +813,7 @@ fn checks<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Error
         let constraint = CheckConstraint {
             name: Cow::Borrowed(text(row, "CONSTRAINT_NAME")?),
             // FR-CAT-055: a third level is carried as the catalogue wrote it.
-            level: ConstraintLevel::from_catalogue(text(row, "LEVEL")?),
+            level: Some(ConstraintLevel::from_catalogue(text(row, "LEVEL")?)),
             clause: Cow::Borrowed(text(row, "CHECK_CLAUSE")?),
         };
 
@@ -862,7 +875,7 @@ fn trigger(row: &MySqlRow) -> Result<Trigger<'_>, Error> {
 /// own `ORDER BY` already produced, and it is one of the six exceptions the
 /// requirement names. Neither is an index's column list, a foreign key's, or a
 /// routine's parameters.
-fn assemble(tables: Tables<'_>) -> Result<Vec<Table<'_>>, Error> {
+pub(crate) fn assemble(tables: Tables<'_>) -> Result<Vec<Table<'_>>, Error> {
     let mut assembled = Vec::with_capacity(tables.parts.len());
 
     for mut parts in tables.parts {

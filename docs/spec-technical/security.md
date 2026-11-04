@@ -41,7 +41,7 @@ raw.
 | 1 | The argument vector | `cli/` | Parsed and classified before any filesystem access; a rejected token leaves the parser as a typed value in an error, never as text the parser rendered | `FR-ERR-006`, `FR-CLI-006`, [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
 | 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised; the file is opened without following a link and without blocking, and its type and both trust checks are judged on that descriptor as a **precondition** of reading it; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal | `FR-PROJ-009`, `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004` |
 | 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-SEC-007` |
-| 4 | Catalogue values | `mariadb/` | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006` |
+| 4 | Catalogue values | `mariadb/`, or `mysql/` for a `mysql` entry | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006`, `FR-MYSQL-015` |
 | 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
 | 6 | Files under the template root | `render/` | Reached only through the one resolution function, which is where containment is enforced; the three `template` subcommands that resolve without the engine call the same function | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023`, `FR-TMPL-024`, `FR-TMPL-025`, `FR-TMPL-026` |
 | 7 | A SQLite database file | `sqlite/` | Its kind is established without opening it; it is opened read-only and never created, and the library is confirmed hardened before any statement reads it; a schema table that could forge the catalogue is refused before any statement reads through a pragma function, and that check and every catalogue statement read one snapshot; its values are converted and coverage applied at that one boundary, and none reaches a statement | `FR-SEC-028`, `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` … `FR-LITE-017`, `FR-LITE-041`, `FR-LITE-042`, `FR-OUT-017` |
@@ -115,7 +115,7 @@ belongs here is the disclosure property of each.
 |---|---|---|
 | The directed key read | Unredacted and unexpanded, by decision, because the caller asked for one key by name | `FR-SEC-004`, `BR-CFG-002` |
 | The whole-file listing, and one entry shown | Redacted, with a variable reference emitted verbatim, so what the variable holds is never disclosed by either command | `FR-SEC-003`, `FR-CFG-021` |
-| The resolution a connection uses | Never reaches stdout at all; its only consumer is `mariadb/`, and the credential inside it is carried in the type above | `FR-CONF-004`, `FR-CONF-029`, `FR-GLOB-018` |
+| The resolution a connection uses | Never reaches stdout at all; its only consumer is the connection code of `mariadb/`, which opens a `mysql` entry's connection too, and the credential inside it is carried in the type above | `FR-CONF-004`, `FR-CONF-029`, `FR-GLOB-018`, `FR-MYSQL-020` |
 
 The third row is what makes *the resolved DSN* a category a diagnostic cannot
 write: the value exists only between `project/settings.rs` and `mariadb/`, and
@@ -137,10 +137,10 @@ which keeps the forbidden values out of the error type.
 | # | Category | Why it has no home | Forbidden by |
 |---|---|---|---|
 | 1 | The argument vector | No emission function takes a formatted message, so the vector cannot be dumped; what `cli/` hands `diagnostics/` is a typed rejection, not the invocation | `FR-GLOB-018`, `FR-SEC-005`, with [`OD-17`](open-decisions.md#od-17--observability) and [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
-| 2 | The resolved DSN | It is produced by the third read path above and consumed by `mariadb/`; no variant of the error type carries it | `FR-GLOB-018`, `FR-SEC-005`, `BR-ERR-003`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) |
+| 2 | The resolved DSN | It is produced by the third read path above and consumed by `mariadb/`, for both server providers; no variant of the error type carries it | `FR-GLOB-018`, `FR-SEC-005`, `BR-ERR-003`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) |
 | 3 | The `password_command` | Nothing emits it as diagnostic content; the stored array is named in the `cause` of a child failure, which `FR-CONF-033` obliges and admits because `FR-CONF-017` keeps that array unexpanded | `FR-GLOB-018`, `FR-SEC-005` |
 | 4 | The child's standard error | It is directed to the null device, so the bytes never exist in the process to be written | `FR-GLOB-018`, `FR-SEC-005`, `FR-CONF-032`, `FR-SEC-024` |
-| 5 | The raw driver error | It is classified at the `mariadb/` or the `sqlite/` boundary and the original value is dropped; with no subscriber installed, what the driver itself emits is discarded before it exists. For a `sqlite` entry the result code's name and the library's message are not the raw driver error, and a `cause` obliged to state them carries them ([`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify)) | `FR-GLOB-018`, `FR-SEC-005`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-17`](open-decisions.md#od-17--observability) |
+| 5 | The raw driver error | It is classified at the `mariadb/` or the `sqlite/` boundary and the original value is dropped; with no subscriber installed, what the driver itself emits is discarded before it exists. For a server entry, the error number of a server's error packet and the operating system's error number for the TCP connect are not the raw driver error, and a `cause` obliged to name one carries it ([interfaces.md](interfaces.md#a-server-connection-that-fails)); for a `sqlite` entry the result code's name and the library's message are not, and a `cause` obliged to state them carries them ([`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify)) | `FR-GLOB-018`, `FR-SEC-005`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-17`](open-decisions.md#od-17--observability) |
 | 6 | The contents of `.tpl/.cfg` | The reader hands `error.rs` the key and the position of a fault, never the text of the file. For the two keys whose value may itself be a credential it hands on the value's **type** where it would otherwise hand on the value, and the choice is made from the key space rather than at the call site | `FR-GLOB-018`, `FR-SEC-005`, `FR-CONF-034`, `FR-CONF-035`, `FR-ERR-013` |
 
 Two prohibitions bound the whole set rather than one category: no credential
@@ -459,12 +459,14 @@ by a crafted file cannot flood the line a calling agent reads (`FR-SEC-028`,
 
 `FR-SEC-021` fixes which mode a connection takes when nobody chose one, and
 `BR-CONF-001` fixes where the authority over encryption sits. The first and the
-fourth rows below are the two limits `FR-SEC-021` carries as observed rather
+sixth rows below are the two limits `FR-SEC-021` carries as observed rather
 than reasoned, and both bear on the build.
 
 | Property | How the build holds it | Forced by |
 |---|---|---|
-| `mariadb/` sets the mode on **every** connection it opens, whichever mode it is | The driver's own default is never the operative one. What an inherited default would amount to is [`ADR-002`](../adr/adr-002-tls-mode-mapping.md)'s consequence and is not restated | `FR-CONF-037`, `FR-SEC-021` |
+| `mariadb/` sets the mode on **every** connection it opens, whichever mode it is, a `mysql` entry's included | The driver's own default is never the operative one. What an inherited default would amount to is [`ADR-002`](../adr/adr-002-tls-mode-mapping.md)'s consequence and is not restated | `FR-CONF-037`, `FR-SEC-021`, `FR-MYSQL-020`, `FR-MYSQL-021` |
+| The server's RSA public key is never requested over a session TLS does not protect | The vendored driver returns a typed refusal before the request is written, on both paths that would write it; `tpl` recognises it by its type and reports it with the method the server asked for — `78` for a `mysql` entry, `69` for a `mariadb` entry. The patch, its two guards and the condition that retires it are [`ADR-014`](../adr/adr-014-mysql-provider-driver.md)'s, points 3, 4 and 7 | `FR-MYSQL-045`, `FR-ERR-047`, the note on `FR-SEC-021` |
+| An empty password, and an entry that supplies none, are sent as the server's own clients send an empty password | The vendored driver sends the fixed response for the method instead of a scramble of the empty string, at the first response and at every switch of the method, and requests no key for it ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 5) | `FR-CONF-055`, `FR-MYSQL-047` |
 | The mode-to-driver mapping lives in exactly one place | Recorded in [`ADR-002`](../adr/adr-002-tls-mode-mapping.md), which `FR-CONF-038` requires and rule R3 of [`docs/adr/`](../adr/README.md) obliges; this document cites it and carries none of it | `FR-CONF-038`, `FR-CONF-013` |
 | The mode set is an admission test over the dependency table | Carried by [technology-stack.md](technology-stack.md#the-database-driver-and-the-five-tls-modes), where the criterion belongs to the stack rather than to this subject | `FR-CONF-036` |
 | Pinned trust material joins the root store rather than replacing it | A property of how the store is assembled, not a choice available here: pinning therefore enlarges what passes verification instead of restricting it, and no output or document may describe it as exclusive | `FR-CONF-039`, `FR-CONF-014`, [`OD-16`](open-decisions.md#od-16--the-tls-backend-and-the-root-store) |
@@ -475,7 +477,7 @@ The trust anchors themselves, the rejection of the platform store and the
 consequence for reproducibility across hosts are
 [`ADR-002`](../adr/adr-002-tls-mode-mapping.md)'s and are not restated. The
 third limit of [overview.md](overview.md#the-three-limits-the-system-states-rather-than-overcomes)
-is the fourth row above, stated where a reader would otherwise assume more.
+is the sixth row above, stated where a reader would otherwise assume more.
 
 **A symbolic link has four dispositions in this crate, and no component decides
 for another.** `render/` refuses one at every component below the template root,
@@ -485,7 +487,7 @@ path to the cache with `78`, never reads through one at an object file — a
 miss — or at `meta.json` or `database.json` — an unusable record — and
 replaces one at a write target — the first
 two are the tables of *Template containment* and *Project discovery* above, the
-third is the fifth row of this one, and the fourth is
+third is the seventh row of this one, and the fourth is
 [data-model.md](data-model.md#tplcache)'s (`FR-CACHE-030`, `FR-CACHE-033`,
 `FR-CACHE-042`, `FR-CACHE-044`, `FR-CDOC-017`, `FR-SEC-026`). There is no shared path-policy helper: each disposition is written
 where its own requirement applies, and a single helper would have to carry the
@@ -504,7 +506,7 @@ belongs here is which half does what, and where each sits.
 
 | Part | What it is in the build | What it does | Forced by |
 |---|---|---|---|
-| The closed statement list | Every statement `mariadb/` can send is written into the crate; no component composes one elsewhere, and no external process is run to read structure | **Prevents.** Nothing outside the list leaves the process, whatever grants the session carries | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001` |
+| The closed statement list | Every statement `mariadb/` can send for a `mariadb` entry is written into the crate; no component composes one elsewhere, and no external process is run to read structure | **Prevents.** Nothing outside the list leaves the process, whatever grants the session carries | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001` |
 | The read-only session | Stages 2 and 3 of the connection lifecycle: applied once at connection start, confirmed immediately by reading `@@session.tx_read_only` and no other spelling of it, and a failure of either half refuses the connection before any catalogue statement | **Detects.** Defence in depth over the first part, which is what `BR-SRV-002` states it is and all it states it is | `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `BR-SRV-002` |
 
 Neither half is disableable by a flag, a configuration key or an environment
@@ -514,6 +516,20 @@ produce, are
 [architecture.md](architecture.md#the-connection-lifecycle)'s. Describing the
 session setting as prevention overstates it, and no passage of this folder may
 (`BR-SRV-002`).
+
+### For a `mysql` entry, the same two parts
+
+`BR-MYSQL-002` gives a `mysql` entry the two parts of a `mariadb` entry, on the
+same terms.
+
+| Part | What it is in the build | What it does | Forced by |
+|---|---|---|---|
+| The closed statement list | The three connection-start statements in `mysql/session.rs` and the twelve statements of `mysql/catalogue/statements.rs`, each a constant of the crate; each of the twelve reads one table of `FR-MYSQL-015`, with the database name bound as a parameter | **Prevents** | `FR-MYSQL-015`, `FR-MYSQL-016` |
+| The read-only session | Applied once, then confirmed by reading `@@session.transaction_read_only` — the one spelling a supported MySQL series carries — and accepting the integer `1` alone, decoded whatever its signedness; a failure of either half refuses the connection before any catalogue statement | **Detects** | `FR-MYSQL-018`, `FR-MYSQL-019` |
+
+Neither is disableable (`FR-MYSQL-019`). A `mariadb` entry that reaches a MySQL
+server fails at its own read-back, whose variable MySQL does not carry, before
+any catalogue statement (`FR-MYSQL-012`).
 
 ### For a `sqlite` entry, three parts
 

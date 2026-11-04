@@ -1,8 +1,8 @@
 ---
 title: The Template Environment
 status: approved
-last-reviewed: 2026-11-03
-related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md, catalogue-coverage.md, sqlite-contract.md]
+last-reviewed: 2026-11-04
+related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md, catalogue-coverage.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # The Template Environment
@@ -654,13 +654,20 @@ row is a case the implementation SHALL satisfy.
   | none of the three | `binary`, `blob`, `geometry`, `geometrycollection`, `inet4`, `inet6`, `linestring`, `longblob`, `mediumblob`, `multilinestring`, `multipoint`, `multipolygon`, `point`, `polygon`, `tinyblob`, `uuid`, `varbinary` |
 
   A `data_type` value that appears in none of the four rows, nor in the table
-  of `FR-ENV-048`, SHALL satisfy none of the three tests, per `FR-ENV-042`,
-  and SHALL NOT fail the render.
+  of `FR-ENV-048` or of `FR-ENV-049`, SHALL satisfy none of the three tests,
+  per `FR-ENV-042`, and SHALL NOT fail the render.
 
   *Amended in the sixty-fifth edition,* for rmp `#314`. The clause *nor in the
   table of `FR-ENV-048`* is new. The four rows record what a MariaDB server
   returns and are unchanged; the `data_type` values a `sqlite` read produces
   are placed by that requirement.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The clause names
+  `FR-ENV-049`, which places the three `data_type` values a `mysql` read
+  produces and no series of `FR-SRV-015` was observed to produce. Every other
+  value a `mysql` read produces is one of the values of the four rows, and is
+  placed by them. The four rows are unchanged, and so is the answer of every
+  test for a column of a `mariadb` or a `sqlite` read, per `FR-ENV-049`.
 
   *Observed.* The fixture's 301 columns yielded **exactly 39 distinct
   `data_type` values**, byte-identical on all four series, and the four rows
@@ -692,6 +699,15 @@ row is a case the implementation SHALL satisfy.
   requirement's fall-through. Neither may be assigned to a family without an
   observation.
 
+  *Amended in the seventy-fifth edition,* for rmp `#326`, on the bounded
+  claim. A `mysql` read was observed producing the value `vector`, and
+  `FR-ENV-049` places that value in none of the three. What a MariaDB server
+  reports for a `VECTOR` column is still not recorded, so no MariaDB
+  observation assigns the type a family. The placement changes no MariaDB
+  answer whatever that report is: a value `vector` satisfies none of the
+  three tests, which is what the fall-through gives it, and any other value
+  is not one `FR-ENV-049` names.
+
 - **FR-ENV-048**: The five `data_type` values a `sqlite` read produces, which
   are the type affinities of `FR-LITE-026`, SHALL belong to the families of
   `FR-ENV-041` as follows:
@@ -717,6 +733,81 @@ row is a case the implementation SHALL satisfy.
   `numeric`. A template that needs the declared type reads `column_type`.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+- **FR-ENV-049**: The three `data_type` values a `mysql` read produces and no
+  series of `FR-SRV-015` was observed to produce, per `FR-MYSQL-028`, SHALL
+  belong to the families of `FR-ENV-041` as follows:
+
+  | Family | `data_type` values |
+  |---|---|
+  | `numeric` | none |
+  | `temporal` | none |
+  | `textual` | `json` |
+  | none of the three | `geomcollection`, `vector` |
+
+  *Observed.* The fixture's columns yield 37 distinct `data_type` values on
+  both series of `FR-MYSQL-003`. Thirty-five are values the four rows of
+  `FR-ENV-046` place, and the other two are `json` and `geomcollection`. A
+  scratch column declared `VECTOR(3)` on `9.7` yields `vector`. No other
+  value a `mysql` read was observed to produce lacks a family.
+
+  *Each value is placed by analogy with what MariaDB reports for the same
+  declaration*, as the user decided on 2026-11-04.
+
+  - `json`: MariaDB reports a column declared `JSON` as `longtext`, which is
+    **textual**, per `FR-CAT-038` and `FR-ENV-046`, so the declaration
+    satisfies `textual` on both providers. MySQL's manual describes the type
+    as holding JSON documents, and states that MySQL handles a string in
+    JSON context in the `utf8mb4` character set (`refman/8.4/en/json.html`,
+    checked 2026-11-04). The catalogue reports no length, character set or
+    collation for a `json` column, per `FR-MYSQL-028`. The textual row of
+    `FR-ENV-046` is drawn from the MariaDB types that report a character
+    set, and that ground is MariaDB's alone: a `sqlite` read's `text` is
+    textual with every part `null` too, per `FR-ENV-048` and `FR-LITE-026`.
+  - `geomcollection`: it is MySQL's spelling of the type MariaDB reports as
+    `geometrycollection`, per `FR-MYSQL-028`, which `FR-ENV-046` places in
+    none of the three with the other geometry types.
+  - `vector`: what MariaDB reports for a `VECTOR` column is not recorded,
+    per difference 14 of `FR-SRV-038`, so the analogy is drawn from the
+    parts the column populates. They are those of the binary and blob types
+    — the two length fields, and no precision, scale, character set or
+    collation, per `FR-MYSQL-028` — which `FR-ENV-046` places in none of
+    the three. The 9.7 manual files the type among the string data types,
+    states that a cast to `BINARY` yields "a binary string with the same
+    contents", and bars it from the numeric functions and operators
+    (`refman/9.7/en/vector.html`, checked 2026-11-04). *Rejected:
+    `numeric`.* A vector is a list of numbers and not a number, and a
+    template that branches on `numeric` to emit a scalar type would emit
+    the wrong one; the numeric row's ground is a populated numeric
+    precision, which a `vector` column does not have. *Rejected:
+    `textual`.* A vector is not a character string, and the column reports
+    no character set.
+
+  *No answer for a column of a `mariadb` or a `sqlite` read changes.* The
+  tests answer from `data_type` alone, per `FR-ENV-041`, so this table holds
+  for the three values whatever read produced them. It changes an answer for
+  one of them alone, `json`. `geomcollection` and `vector` satisfy none of
+  the three tests, which is what the fall-through of `FR-ENV-046` already
+  gave them, so no column that carries either answers differently — a
+  MariaDB `VECTOR` column included, whatever its catalogue reports, as the
+  bounded claim of that requirement records. No `sqlite` read produces
+  `json`, and no `mariadb` read was observed producing it. A `sqlite` read's
+  `data_type` is one of the five affinities of `FR-LITE-026`, so a column
+  declared `JSON`, `VECTOR` or `GEOMCOLLECTION` has `numeric` affinity, by
+  the fifth of that requirement's rules, and is placed by `FR-ENV-048`. A
+  `mariadb` read was
+  observed producing neither `json` nor `geomcollection` on any series of
+  `FR-SRV-015`: its 39 values are those of `FR-ENV-046`, and it reports a
+  column declared `JSON` as `longtext`.
+
+  *Consequence, stated plainly.* On a `mysql` read a `json` column satisfies
+  `textual` with its `length`, `charset` and `collation` `null`, where a
+  `mariadb` read carries all three for the same declaration. A template that
+  reads them under `textual` must allow `null`, as it already must for a
+  `sqlite` read's `text` column.
+
+  *Added in the seventy-fifth edition,* for rmp `#326`, by the user's
+  decision of 2026-11-04.
 
 - **FR-ENV-043**: `primary_key` and `unique` SHALL fail the render with `65`
   WHEN the table named by the operand's `table_name` is absent from the render
@@ -915,6 +1006,8 @@ row is a case the implementation SHALL satisfy.
   test, or a function is given the wrong thing.
 - [context-document.md](context-document.md) — the material the filters and
   tests act on.
+- [mysql-contract.md](mysql-contract.md) — `FR-MYSQL-028`, which records the
+  `data_type` values a `mysql` read produces that `FR-ENV-049` places.
 - [help-and-version.md](help-and-version.md) — `FR-HELP-017`, which fixes the
   name and the position of `data.template_surface`, the JSON document's key in
   which the three groups are published.

@@ -1,8 +1,8 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-11-03
-related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md, sqlite-contract.md]
+last-reviewed: 2026-11-04
+related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Configuration Model
@@ -25,8 +25,9 @@ what an entry must describe for a
 connection and a read to be possible, DSN grammar, the five TLS modes and the
 behaviour by which they are distinguished, the trust material the two
 verifying modes read and how the directory holding it is resolved, timeouts,
-the keys that set the render bounds, `${VAR}` expansion, and `password_command`
-execution and its failure modes.
+the keys that set the render bounds, `${VAR}` expansion, `password_command`
+execution and its failure modes, and how an empty password is presented to
+the server.
 
 Out of scope: the commands that read and write the file, which belong to
 [cfg-commands.md](cfg-commands.md); and the ownership and permission checks
@@ -84,7 +85,7 @@ tls      = "verify-identity"
   | `database.<name>.tls` | TLS mode, see `FR-CONF-013` | `verify-identity` |
   | `database.<name>.ca_file` | path to a certificate file | none |
   | `database.<name>.ca_path` | path to a certificate directory | none |
-  | `database.<name>.provider` | provider, `mariadb` or `sqlite`, see `FR-CONF-051` | `mariadb` |
+  | `database.<name>.provider` | provider, `mariadb`, `mysql` or `sqlite`, see `FR-CONF-051` | `mariadb` |
   | `database.<name>.path` | path to a SQLite database file, see `FR-CONF-054` | none |
 
   *Provenance.* The default port `3306` comes from the root `README.md` and is
@@ -96,6 +97,11 @@ tls      = "verify-identity"
   under `[core]`. Which keys an entry may carry depends on its provider, per
   `FR-CONF-052`: the defaults of `port` and `tls` are defaults of a `mariadb`
   entry, and a `sqlite` entry carries neither key.
+
+  *Amended in the seventy-third edition,* for rmp `#324`. The provider row
+  names the third value, `mysql`. The key space is unchanged at twenty key
+  forms, and the defaults of `port` and `tls` are defaults of a `mysql` entry
+  as they are of a `mariadb` entry, per `FR-CONF-052`.
 
   *Amended in the forty-second edition.* The three rows `core.render_fuel`,
   `core.render_output_limit` and `core.render_memory_limit` are new, as
@@ -125,7 +131,7 @@ tls      = "verify-identity"
   points at it rather than implying a key per phase.
 
 - **FR-CONF-005**: The system SHALL apply a deadline to every blocking phase:
-  DNS resolution, TCP connect, TLS handshake, catalogue query,
+  DNS resolution, TCP connect, TLS handshake, the login, catalogue query,
   `password_command`, and render. Each phase SHALL take its deadline from the
   key named beside it:
 
@@ -134,17 +140,28 @@ tls      = "verify-identity"
   | DNS resolution | `core.connect_timeout` |
   | TCP connect | `core.connect_timeout` |
   | TLS handshake | `core.connect_timeout` |
+  | The [login](glossary.md#login) | `core.connect_timeout` |
   | Catalogue query | `core.query_timeout` |
   | `password_command` | `core.password_timeout` |
   | Render | `core.render_timeout` |
 
-  The three connection phases SHALL share **one** budget of the resolved value
+  The four connection phases SHALL share **one** budget of the resolved value
   of `core.connect_timeout`, measured from the start of the first of them that
   runs and consumed by them in the order they run. The system SHALL NOT give
-  each of the three a budget of that value. The other three phases each have a
+  each of the four a budget of that value. The other three phases each have a
   budget of their own. IF the shared budget expires, THEN the system SHALL
   report the failure against the phase that was in progress when it expired,
-  per `FR-ERR-034`.
+  per `FR-ERR-034` and `FR-ERR-027`.
+
+  The connection phases run in this order: DNS resolution, the TCP connect,
+  the server's greeting, the TLS handshake where the mode of `FR-CONF-013`
+  negotiates one, and the authentication. The greeting and the
+  authentication are the login, which is therefore in progress both before
+  and after a TLS handshake. The phase in progress SHALL be decided by what
+  the connection had completed when the budget expired or the failure
+  arrived, and SHALL NOT be decided by the call that was running: a
+  connection opened and logged in by one call to a driver is reported by the
+  phase it had reached, exactly as one opened phase by phase.
 
   *Note added in the fortieth edition.* Under `FR-CACHE-038` the files a render
   reads lazily are read within the render phase and under its deadline. A
@@ -182,6 +199,24 @@ tls      = "verify-identity"
   which code a failure produces changes, and the obligation that no phase run
   unbounded held under either reading. `FR-GLOB-012` composes the shared budget
   with `--timeout` exactly as it composes the other three.
+
+  *Amended in the seventy-seventh edition,* for rmp `#336`: the login is a
+  fourth connection phase, its order among the others is stated, and so is
+  how the phase in progress is decided. The login has always run inside the
+  connection, under the shared budget, which bounded it without naming it,
+  and the implementation reported every expiry inside the one driver call
+  that opens the connection as an expiry of the TCP connect, a stalled TLS
+  handshake and a stalled login included, against the requirement's sentence
+  on the phase in progress. That sentence is unchanged save the citation of
+  `FR-ERR-027`; what is new is that it reaches the login, and that the call
+  running is not the measure of the phase. The budget, its key and its value
+  are unchanged, and so is what the ninth edition settled: one budget, of the
+  value the caller set, for everything connecting takes.
+
+  *Rejected: a budget of its own for the login.* A caller who writes
+  `connect_timeout = 10` states how long connecting may take, as the ninth
+  edition reasoned, and a login is part of connecting; a second budget would
+  let connecting take longer than the value written.
 
 - **FR-CONF-045**: The system SHALL resolve the render fuel of `FR-RND-036`
   from `core.render_fuel`, the render output limit of `FR-RND-037` from
@@ -326,6 +361,10 @@ tls      = "verify-identity"
   describe a `mariadb` entry. A `sqlite` entry carries none of these keys and
   is described by `path`, per `FR-CONF-052` and `FR-CONF-053`.
 
+  *Note added in the seventy-third edition,* for rmp `#324`. A `mysql` entry
+  is described as a `mariadb` entry is, and this requirement and
+  `FR-CONF-007` govern it unchanged, per `FR-MYSQL-020`.
+
   *Amended in the third edition.* The list of discrete connection fields, and
   the exclusion of `password_command` from it, are new. The first edition said
   "the discrete fields" without enumerating them, which left it unstated
@@ -443,23 +482,24 @@ path     = "data/ledger.sqlite"
 ```
 
 - **FR-CONF-051**: Every database entry SHALL have a **provider**, named by its
-  `provider` key, which SHALL take exactly one of the two values `mariadb` and
-  `sqlite`. An entry that carries no `provider` key SHALL be a `mariadb` entry.
-  The provider SHALL decide how the entry is read: a `mariadb` entry through
-  the server contract of [server-contract.md](server-contract.md), and a
-  `sqlite` entry through the contract of
-  [sqlite-contract.md](sqlite-contract.md).
+  `provider` key, which SHALL take exactly one of the three values `mariadb`,
+  `mysql` and `sqlite`. An entry that carries no `provider` key SHALL be a
+  `mariadb` entry. The provider SHALL decide how the entry is read: a
+  `mariadb` entry through the server contract of
+  [server-contract.md](server-contract.md), a `mysql` entry through the
+  contract of [mysql-contract.md](mysql-contract.md), and a `sqlite` entry
+  through the contract of [sqlite-contract.md](sqlite-contract.md).
 
   1. **On the command line.** IF the value given to `--provider` under
      `FR-CFG-027`, or to `tpl cfg set database.<name>.provider`, is not one of
-     the two values, THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL
+     the three values, THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL
      write nothing to `.tpl/.cfg`.
   2. **In the file.** IF `.tpl/.cfg` declares a `provider` that is not one of
-     the two values, in any entry, THEN the system SHALL exit `78`
+     the three values, in any entry, THEN the system SHALL exit `78`
      (`EX_CONFIG`) at step 3 of `FR-ERR-006`.
 
   In both cases the `cause` SHALL name the key or the flag and SHALL state the
-  two values the key takes. The value found enters the `cause` only under the
+  three values the key takes. The value found enters the `cause` only under the
   set of `FR-ERR-022`; a value outside it is described, not reproduced. On the
   command line the `hint` SHALL show the form with a placeholder, as in
   `--provider <provider>`; in the file it SHALL name the file, the entry and
@@ -469,8 +509,8 @@ path     = "data/ledger.sqlite"
   ```
   tpl cfg set database.ledger.provider postgres
   error: invalid value for database.ledger.provider
-  cause: database.ledger.provider takes mariadb or sqlite; the value given is postgres
-  hint:  give one of the two: tpl cfg set database.ledger.provider <provider>
+  cause: database.ledger.provider takes mariadb, mysql or sqlite; the value given is postgres
+  hint:  give one of the three: tpl cfg set database.ledger.provider <provider>
   exit:  64 (EX_USAGE)
   ```
 
@@ -499,12 +539,25 @@ path     = "data/ledger.sqlite"
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+  *Amended in the seventy-third edition,* for rmp `#324`. The key takes a
+  third value, `mysql`, which selects the contract of
+  [mysql-contract.md](mysql-contract.md), by the user's requirement that MySQL
+  be a provider of its own selected by this key, through the mechanism that
+  distinguishes `mariadb` from `sqlite`. An absent key still means `mariadb`,
+  and every entry, written or absent, keeps the provider it had: the meaning
+  of `mariadb` and of `sqlite` is unchanged, and so are the two codes and the
+  step at which each is decided. The `cause` names three values where it
+  named two. The accepted cost above extends to the value: a binary released
+  before this edition refuses `provider = "mysql"` with `78` at step 3, as a
+  value outside the two it knows.
+
 - **FR-CONF-052**: Each provider SHALL take only its own keys among the keys of
   an entry:
 
   | Provider | Keys it takes | Keys it refuses |
   |---|---|---|
   | `mariadb` | `provider`, `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` | `path` |
+  | `mysql` | `provider`, `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` | `path` |
   | `sqlite` | `provider`, `path` | `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` |
 
   IF the entry an invocation selects carries a key its provider refuses, THEN
@@ -537,6 +590,12 @@ path     = "data/ledger.sqlite"
   invocation found, per `BR-ERR-004`, and shows the caller both.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventy-third edition,* for rmp `#324`. The `mysql` row is
+  new: a `mysql` entry describes a connection to a server as a `mariadb` entry
+  does, so it takes and refuses the same keys, per `FR-MYSQL-020`. The rows of
+  `mariadb` and `sqlite` are unchanged. Changing an entry's provider between
+  `mariadb` and `mysql` therefore leaves no key the new provider refuses.
 
 - **FR-CONF-053**: A `sqlite` entry SHALL name a database file in `path`. IF
   the entry an invocation selects is a `sqlite` entry and carries no `path`,
@@ -647,6 +706,10 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 entry. A `sqlite` entry has no host and no server-side database; the one fact
 it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
 `FR-CONF-041` do not reach it.
+
+*Note added in the seventy-third edition,* for rmp `#324`. This section
+describes a `mysql` entry as it describes a `mariadb` one, per
+`FR-MYSQL-020`.
 
 - **FR-CONF-040**: An entry SHALL name a host. IF the entry an invocation
   selects carries neither `dsn` nor `host`, THEN the system SHALL exit `78`
@@ -833,6 +896,13 @@ it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
 
 - **FR-CONF-010**: The system SHALL accept the schemes `mysql://` and
   `mariadb://`, treating them as equivalent.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The scheme does
+  not select the provider. An entry whose `dsn` begins `mysql://` and which
+  carries no `provider` key is a `mariadb` entry, per `FR-CONF-051`, as it
+  was before this edition, and a `mysql` entry accepts either scheme, per
+  `FR-MYSQL-020`. `FR-MYSQL-001` records why the scheme was rejected as the
+  selector.
 
 - **FR-CONF-011**: A DSN SHALL carry no query parameters. IF a DSN carries a
   `?`, THEN the system SHALL exit `78` (`EX_CONFIG`), whatever follows it.
@@ -1165,6 +1235,13 @@ it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
   `sqlite` entry read is `FR-LITE-038`, in
   [sqlite-contract.md](sqlite-contract.md). TLS does not reach a `sqlite`
   entry, which carries no `tls` key, per `FR-CONF-052`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The five modes
+  reach a `mysql` entry, and `FR-MYSQL-021` fixes their behaviour against a
+  MySQL server in this table's terms. The fixture whose servers make its
+  cells demonstrable for a `mysql` entry is that of `scripts/mysql/`, which
+  `FR-MYSQL-044` obliges as this requirement obliges `scripts/mariadb/`. The
+  obligation on `scripts/mariadb/` is unchanged.
 
   *Amended in the eighth edition: the fixture obligation is a requirement
   rather than a consequence.* The *Observed* note below records that `tpl`
@@ -1830,6 +1907,126 @@ it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
   requirement confirms, and it names no signal, which this requirement now
   obliges it to.
 
+## An empty password
+
+- **FR-CONF-055**: WHERE the password the configuration supplies for a
+  `mariadb` or a `mysql` entry is the empty string, or the configuration
+  supplies no password for it, the system SHALL present the entry to the
+  server as the server's own clients present an empty password: at every
+  step of the authentication that carries the password — the first response
+  of the login, and the response to every request of the server to switch
+  the authentication method — the system SHALL send the following response,
+  and SHALL NOT send a [scramble](glossary.md#scramble) computed from the
+  empty string, nor request the server's RSA public key:
+
+  | Authentication method | Response for an empty password |
+  |---|---|
+  | `mysql_native_password` | An empty response |
+  | `caching_sha2_password` | A single zero byte |
+  | `sha256_password` | A single zero byte |
+  | `mysql_clear_password` | A single zero byte |
+
+  WHERE the server names no method at the first response, that response
+  SHALL be empty.
+
+  The configuration supplies the empty string in three ways, each read under
+  the requirement that governs its source; the first two hold it as written
+  or after the expansion of `FR-CONF-015`:
+
+  | Source | Example | Read under |
+  |---|---|---|
+  | `password`, holding the empty string | `password = ""` | `FR-CONF-006` |
+  | A `dsn` whose password part is present and empty | `mysql://reader:@db.example.com/shop` | `FR-CONF-009` |
+  | A `password_command` whose trimmed standard output is empty | a helper that prints nothing and exits `0` | `FR-CONF-027` |
+
+  An entry supplies no password where it has no `password` key, a `dsn` with
+  no password part, and no `password_command`.
+
+  *Prior art: what the server's own clients send.* MySQL's client library,
+  at the public source of `mysql/mysql-server`, branch `8.4`, commit
+  `8a180268`, read on 2026-11-04: `native_password_auth_client`, in
+  `sql-common/mysql_native_authentication_client.cc`, sends a scramble only
+  `if (mysql->passwd[0])`, and otherwise an empty packet, commented
+  `/* no password */`; `caching_sha2_password_auth_client` and
+  `sha256_password_auth_client`, in `sql-common/client_authentication.cc`,
+  test `mysql->passwd[0] != 0` and, where it is false, send a single zero
+  byte, commented `/* We're not using a password */`. MariaDB Connector/C,
+  which the `mariadb` command-line client is built on, at the public source
+  of `mariadb-corporation/mariadb-connector-c`, branch `3.4`, commit
+  `6a1cd082`, read on the same date: `native_password_auth_client`, in
+  `plugins/auth/my_auth.c`, sends a scramble only
+  `if (mysql && mysql->passwd[0])`, and otherwise an empty packet,
+  `/* no password */`; and the `caching_sha2_password` client, in
+  `plugins/auth/caching_sha2_pw.c`, sends an empty packet,
+  `/* send empty packet if no password was provided */`. Both libraries turn
+  a password not given into the empty string before the login, in
+  `mysql_real_connect` (`sql-common/client.cc` and
+  `libmariadb/mariadb_lib.c`), so to a server an empty password and no
+  password are one login.
+
+  *Why a zero byte for `caching_sha2_password`.* The two libraries differ
+  for that method alone: MySQL's sends a single zero byte, and Connector/C
+  an empty packet. The user chose MySQL's on 2026-11-04, as the project's
+  decision records hold, for `caching_sha2_password` and for
+  `sha256_password`, the two methods MySQL's library answers that way; the
+  libraries agree on an empty response for `mysql_native_password`; and
+  `mysql_clear_password` sends the password as text ended by a zero byte,
+  which for the empty string is the zero byte alone.
+
+  *Rationale.* The server's own clients are the reference for what a server
+  is built to receive, and none of them sends a scramble of the empty string.
+  A scramble is a password presented, which a server compares with the
+  account's; an empty password is what a caller writes for an account that
+  has none, and a server refuses the login of such an account when the empty
+  string reaches it as a scramble, as observed below. Presenting it as those
+  clients do sends what they send.
+
+  *Observed, through `tpl`, on 2026-11-04.* Both fixtures carry an account,
+  `tpl_nopass`, created with no password — on MariaDB with no `IDENTIFIED`
+  clause, so the server's default method, and on MySQL `IDENTIFIED BY ''`,
+  so `caching_sha2_password` with an empty credential. The tests
+  `fr_conf_055_an_account_with_no_password_logs_in_on_every_mariadb_series`
+  and `fr_conf_055_an_account_with_no_password_logs_in_on_every_mysql_server`,
+  in `tests/login_faults.rs`, ran `tpl schema info --direct --no-cache` as
+  that account, once with `password = ""` and once with no `password` key,
+  and every run exited `0`: on every MariaDB server of the fixture — the
+  four series of `FR-SRV-015` and the server offering no TLS — under
+  `disabled`; and on the MySQL servers of `8.4` and `9.7` under
+  `verify-identity` and `disabled`, and on the two offering no TLS under
+  `disabled`, with the server's authentication cache emptied before each
+  run, which shows that the login needs no RSA public key. Before the
+  change, the same login with `password = ""` exited `77` on MariaDB, the
+  server refusing the scramble, and `78` on MySQL over a session TLS does not
+  protect, per `FR-MYSQL-045`.
+
+  *What it does not settle.* Whether a server accepts the empty string for
+  an account that has a password is the server's answer, and a refusal is an
+  authentication refused, `77` (`EX_NOPERM`), per `FR-ERR-048`. That
+  answer is not observed. The configuration is unchanged: each of the three
+  sources is a password source under `FR-CONF-007`, beside which a second one
+  is refused.
+
+  *Rejected: presenting the empty string through the exchange of the
+  authentication method exactly as a password of any other value*, which
+  `FR-MYSQL-047` required of a `mysql` entry in the seventy-sixth edition and
+  the implementation did for both providers. The exchange computes a
+  scramble from the password, and from the empty string it computes one the
+  server's own clients never send. *Rejected, with it: telling an empty
+  password from no password at the server*, which the same requirement did
+  in requiring that the entry never be presented as one that supplies no
+  password. The server's own clients make the two one login, as above, and
+  so does this requirement: an entry that supplies no password is presented
+  as one whose password is the empty string, at every step. The
+  implementation had sent an empty first response for such an entry and a
+  scramble of the empty string in response to a switch of the method, which
+  is the same divergence on a second path.
+
+  *Provenance.* rmp `#334`, of sprint 28, which the user decided on
+  2026-11-04 to fix in that sprint, for both providers; the prior art above
+  settles what is sent.
+
+  *Added in the seventy-seventh edition,* for rmp `#334`.
+
 ## Precedence
 
 - **FR-CONF-029**: The system SHALL resolve every setting through exactly two
@@ -1873,6 +2070,8 @@ it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
 - [sqlite-contract.md](sqlite-contract.md) — how a `sqlite` entry is read,
   which `FR-CONF-051` selects by its provider, and the file `FR-CONF-054`
   names.
+- [mysql-contract.md](mysql-contract.md) — `FR-MYSQL-047`, which holds
+  `FR-CONF-055` for a `mysql` entry.
 
 ## Open questions
 

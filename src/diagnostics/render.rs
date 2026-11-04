@@ -1353,6 +1353,7 @@ mod tests {
                 port: 3306,
             },
             Error::TlsHandshakeFailed {
+                provider: crate::model::database::Provider::Mariadb,
                 fault: crate::error::TlsFault::Refused,
                 entry: String::from("shop"),
                 host: hostile(),
@@ -1564,6 +1565,7 @@ mod tests {
                 by_dsn: false,
                 entry: hostile(),
                 fault: ReadOnlyFault::NotApplied,
+                read_back: "@@session.tx_read_only",
             },
             Error::NoDatabaseEntrySelected {
                 file: hostile_path(),
@@ -1581,6 +1583,57 @@ mod tests {
                 supported: &[HOSTILE],
             },
         ]
+    }
+
+    /// The three conditions of the `mysql` provider, with hostile values in
+    /// every field a value reaches the line from.
+    fn mysql_samples() -> Vec<Error> {
+        let hostile = || HOSTILE.to_owned();
+
+        vec![
+            Error::ServerNotMysql {
+                by_dsn: false,
+                entry: hostile(),
+                reported: hostile(),
+            },
+            Error::MysqlSeriesNotSupported {
+                by_dsn: false,
+                entry: hostile(),
+                version: hostile(),
+                series: hostile(),
+                supported: &[HOSTILE],
+            },
+            Error::PublicKeyRequestRefused {
+                provider: crate::model::database::Provider::Mysql,
+                entry: hostile(),
+                user: hostile(),
+                host: hostile(),
+                port: 3306,
+                tls: "preferred",
+                no_tls_offered: true,
+                method: HOSTILE,
+            },
+        ]
+    }
+
+    #[test]
+    fn fr_err_024_the_mysql_conditions_render_four_escaped_lines_and_their_code() {
+        // FR-MYSQL-008, FR-MYSQL-009 and FR-MYSQL-045, each `78`, rendered as
+        // the four labelled lines of FR-ERR-008 with every interpolated value
+        // escaped under FR-ERR-024, as every other condition is.
+        for error in mysql_samples() {
+            let rendered = render(&error);
+            let lines: Vec<&str> = rendered.lines().collect();
+
+            assert_eq!(lines.len(), 4, "{rendered:?}");
+            assert_eq!(error.exit_code(), 78, "{rendered:?}");
+            assert!(lines[3].contains("78 (EX_CONFIG)"), "{rendered:?}");
+            assert!(!rendered.contains(HOSTILE), "{rendered:?}");
+            assert!(rendered.contains(HOSTILE_ESCAPED), "{rendered:?}");
+            for line in &lines {
+                assert!(!line.chars().any(char::is_control), "{line:?}");
+            }
+        }
     }
 
     #[test]
@@ -1826,6 +1879,7 @@ mod tests {
     #[test]
     fn br_err_004_a_network_hint_names_the_entry_and_the_remedy_for_what_failed() {
         let tls = |fault| Error::TlsHandshakeFailed {
+            provider: crate::model::database::Provider::Mariadb,
             entry: "shop".to_owned(),
             host: "db.example.com".to_owned(),
             port: 3306,
@@ -2265,6 +2319,462 @@ mod tests {
         assert!(
             !line(&rendered, Label::Cause).contains("takes its password"),
             "{rendered}"
+        );
+    }
+
+    // ------------------------------------- the seventy-seventh edition, word for word ---
+
+    /// One example of the specification, as the four lines it shows.
+    fn example(lines: [&str; 4]) -> String {
+        let mut joined = lines.join("\n");
+        joined.push('\n');
+        joined
+    }
+
+    /// The host, port and entry every example of these requirements names.
+    const EXAMPLE_HOST: &str = "db.example.com";
+
+    #[test]
+    fn fr_err_027_the_four_deadline_examples_render_word_for_word() {
+        use crate::error::DeadlineBound;
+
+        let deadline = |phase, bound, seconds| Error::NetworkDeadlineExceeded {
+            by_dsn: false,
+            entry: "shop".to_owned(),
+            phase,
+            host: EXAMPLE_HOST.to_owned(),
+            port: 3306,
+            bound,
+            limit: Duration::from_secs(seconds),
+        };
+
+        assert_eq!(
+            render(&deadline(
+                NetworkPhase::TlsHandshake,
+                DeadlineBound::Phase,
+                10
+            )),
+            example([
+                "error: the TLS handshake for db.example.com:3306 exceeded the connection budget of 10s, for database entry 'shop'",
+                "cause: the TLS handshake for db.example.com:3306 had not finished when the connection budget of 10s expired; core.connect_timeout sets that budget, which DNS resolution, the TCP connect, the TLS handshake and the login share",
+                "hint:  raise the deadline with: tpl cfg set core.connect_timeout <seconds>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&deadline(NetworkPhase::Login, DeadlineBound::Phase, 10)),
+            example([
+                "error: the login for db.example.com:3306 exceeded the connection budget of 10s, for database entry 'shop'",
+                "cause: the login for db.example.com:3306 had not finished when the connection budget of 10s expired; core.connect_timeout sets that budget, which DNS resolution, the TCP connect, the TLS handshake and the login share",
+                "hint:  raise the deadline with: tpl cfg set core.connect_timeout <seconds>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&deadline(
+                NetworkPhase::TcpConnect,
+                DeadlineBound::Phase,
+                10
+            )),
+            example([
+                "error: the TCP connect for db.example.com:3306 exceeded the connection budget of 10s, for database entry 'shop'",
+                "cause: the TCP connect for db.example.com:3306 had not finished when the connection budget of 10s expired; core.connect_timeout sets that budget, which DNS resolution, the TCP connect, the TLS handshake and the login share",
+                "hint:  check that the host and port named above are the server's address and that it is reachable from here, or change them with: tpl cfg database update shop --host <host> --port <port>; to wait longer, raise the deadline with: tpl cfg set core.connect_timeout <seconds>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&deadline(NetworkPhase::Login, DeadlineBound::Overall, 5)),
+            example([
+                "error: the login for db.example.com:3306 exceeded the overall budget of 5s, for database entry 'shop'",
+                "cause: the login for db.example.com:3306 had not finished when the overall budget of 5s expired; that budget is measured from process start and bounds every phase together",
+                "hint:  raise the overall budget: run the same command again with a larger --timeout <seconds>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+    }
+
+    #[test]
+    fn fr_err_049_the_three_tcp_connect_examples_render_word_for_word() {
+        use crate::error::TcpFault;
+
+        let failed = |fault| Error::TcpConnectFailed {
+            entry: "shop".to_owned(),
+            by_dsn: false,
+            host: EXAMPLE_HOST.to_owned(),
+            port: 3306,
+            fault,
+        };
+
+        assert_eq!(
+            render(&Error::ConnectionRefused {
+                by_dsn: false,
+                entry: "shop".to_owned(),
+                host: EXAMPLE_HOST.to_owned(),
+                port: 3306,
+            }),
+            example([
+                "error: the server at db.example.com:3306 refused the connection, for database entry 'shop'",
+                "cause: the TCP connect to db.example.com:3306 did not open a session: the host refused it, or nothing is listening on that port",
+                "hint:  check that the server is running and listening on port 3306, or change the address with: tpl cfg database update shop --host <host> --port <port>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&failed(TcpFault::HostUnreachable)),
+            example([
+                "error: cannot reach db.example.com:3306, for database entry 'shop'",
+                "cause: the TCP connect to db.example.com:3306 failed: the network reports the host unreachable",
+                "hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&failed(TcpFault::Other(Some(13)))),
+            example([
+                "error: cannot reach db.example.com:3306, for database entry 'shop'",
+                "cause: the TCP connect to db.example.com:3306 failed: the operating system reported error 13",
+                "hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+
+        // The other two outcomes: what the cause states, and the hint of the
+        // second; a dsn entry is repointed inside its dsn (FR-ERR-045).
+        let network = render(&failed(TcpFault::NetworkUnreachable));
+        assert!(
+            network.contains("the network reports the host's network unreachable"),
+            "{network}"
+        );
+        let no_answer = render(&failed(TcpFault::NoAnswer));
+        assert!(
+            no_answer.contains("nothing answered, and the operating system abandoned the attempt"),
+            "{no_answer}"
+        );
+        for rendered in [&network, &no_answer] {
+            assert!(!rendered.contains("refused"), "{rendered}");
+            assert!(!rendered.contains("listening"), "{rendered}");
+        }
+        let by_dsn = render(&Error::TcpConnectFailed {
+            entry: "shop".to_owned(),
+            by_dsn: true,
+            host: EXAMPLE_HOST.to_owned(),
+            port: 3306,
+            fault: TcpFault::NoAnswer,
+        });
+        assert!(
+            by_dsn.contains("tpl cfg database update shop --dsn <url>"),
+            "{by_dsn}"
+        );
+    }
+
+    #[test]
+    fn fr_err_047_the_three_login_examples_render_word_for_word() {
+        use crate::error::LoginFault;
+        use crate::model::database::Provider;
+
+        let login = |provider, fault| Error::LoginNotCompleted {
+            entry: "shop".to_owned(),
+            by_dsn: false,
+            host: EXAMPLE_HOST.to_owned(),
+            port: 3306,
+            provider,
+            fault,
+        };
+
+        assert_eq!(
+            render(&login(Provider::Mariadb, LoginFault::ConnectionClosed)),
+            example([
+                "error: the login to db.example.com:3306 did not complete, for database entry 'shop'",
+                "cause: the TCP connect to db.example.com:3306 succeeded, and the connection failed before the login completed: the server closed it, it was reset, or the operating system abandoned it",
+                "hint:  check that db.example.com:3306 is the address of a running MariaDB server, then run the command again, or change the address with: tpl cfg database update shop --host <host> --port <port>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&login(Provider::Mariadb, LoginFault::NotAccepted)),
+            example([
+                "error: the login to db.example.com:3306 did not complete, for database entry 'shop'",
+                "cause: what answered the login at db.example.com:3306 did not answer as a MariaDB server does: it does not speak the MariaDB protocol, or it asked for a step tpl does not implement, such as an authentication method",
+                "hint:  check that db.example.com:3306 is the address of a MariaDB server, or change it with: tpl cfg database update shop --host <host> --port <port>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&Error::PublicKeyRequestRefused {
+                provider: Provider::Mariadb,
+                entry: "shop".to_owned(),
+                user: "reader".to_owned(),
+                host: EXAMPLE_HOST.to_owned(),
+                port: 3306,
+                tls: "disabled",
+                no_tls_offered: false,
+                method: "caching_sha2_password",
+            }),
+            example([
+                "error: cannot authenticate user 'reader' over an unencrypted session, for database entry 'shop'",
+                "cause: connected to db.example.com:3306 as user 'reader' under tls 'disabled', so the session is not encrypted; the authentication was not completed: the server asks for the full caching_sha2_password exchange, which needs its RSA public key, and tpl does not request that key over a session TLS does not protect",
+                "hint:  encrypt the session: tpl cfg database update shop --tls verify-identity",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+
+        // A mysql entry: the same outcomes name a MySQL server, and the
+        // refusal of ADR-014 is FR-MYSQL-045's 78.
+        let mysql = render(&login(Provider::Mysql, LoginFault::NotAccepted));
+        assert!(
+            mysql.contains("as a MySQL server does: it does not speak the MySQL protocol"),
+            "{mysql}"
+        );
+        assert!(mysql.contains("the address of a MySQL server"), "{mysql}");
+        assert!(!mysql.contains("refused the connection"), "{mysql}");
+        assert_eq!(
+            Error::PublicKeyRequestRefused {
+                provider: Provider::Mysql,
+                entry: "shop".to_owned(),
+                user: "reader".to_owned(),
+                host: EXAMPLE_HOST.to_owned(),
+                port: 3306,
+                tls: "disabled",
+                no_tls_offered: false,
+                method: "caching_sha2_password",
+            }
+            .exit_code(),
+            78
+        );
+    }
+
+    #[test]
+    fn fr_err_048_the_five_login_refusal_examples_render_word_for_word() {
+        use crate::error::{AccountRefusal, LoginRefusal};
+
+        assert_eq!(
+            render(&Error::AuthenticationRefused {
+                entry: "shop".to_owned(),
+                user: "reader".to_owned(),
+                host: EXAMPLE_HOST.to_owned(),
+            }),
+            example([
+                "error: the server at 'db.example.com' refused authentication for user 'reader', for database entry 'shop'",
+                "cause: the server at 'db.example.com' rejected the user 'reader' or its password; the refusal came from the server",
+                "hint:  check the user and the password of the entry (password, password_command, or the password inside dsn), then test it with: tpl cfg database test shop",
+                "exit:  77 (EX_NOPERM)",
+            ])
+        );
+        assert_eq!(
+            render(&Error::AccountRefused {
+                entry: "shop".to_owned(),
+                by_dsn: false,
+                user: "reader".to_owned(),
+                host: EXAMPLE_HOST.to_owned(),
+                reason: AccountRefusal::Locked,
+            }),
+            example([
+                "error: the server at 'db.example.com' refused authentication for user 'reader', for database entry 'shop'",
+                "cause: the server at 'db.example.com' refused the user 'reader' because its account is locked; the refusal came from the server",
+                "hint:  ask the server's administrator to unlock the account, then test it with: tpl cfg database test shop",
+                "exit:  77 (EX_NOPERM)",
+            ])
+        );
+        assert_eq!(
+            render(&Error::SecureTransportRequired {
+                entry: "shop".to_owned(),
+                host: EXAMPLE_HOST.to_owned(),
+                port: 3306,
+                tls: "disabled",
+            }),
+            example([
+                "error: the server at db.example.com:3306 accepts only encrypted sessions, for database entry 'shop'",
+                "cause: the server at db.example.com:3306 refused the login with server error 3159: it accepts only encrypted sessions, and the session was not encrypted under tls 'disabled'",
+                "hint:  encrypt the session: tpl cfg database update shop --tls verify-identity",
+                "exit:  78 (EX_CONFIG)",
+            ])
+        );
+        let refused = |number, reason| Error::LoginRefused {
+            entry: "shop".to_owned(),
+            host: EXAMPLE_HOST.to_owned(),
+            port: 3306,
+            number,
+            reason,
+        };
+        assert_eq!(
+            render(&refused(1040, LoginRefusal::ServerConnectionLimit)),
+            example([
+                "error: the login to db.example.com:3306 did not complete, for database entry 'shop'",
+                "cause: the server at db.example.com:3306 refused the login with server error 1040: it has reached its limit on connections",
+                "hint:  the operation is read-only and can be run again once the server has a connection free; check the connection with: tpl cfg database test shop",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&refused(1053, LoginRefusal::Unclassified)),
+            example([
+                "error: the login to db.example.com:3306 did not complete, for database entry 'shop'",
+                "cause: the server at db.example.com:3306 ended the login with server error 1053, which tpl does not classify further",
+                "hint:  the operation is read-only and can be run again; check the connection with: tpl cfg database test shop",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+
+        // The rows the examples do not show: each reason, no error number in
+        // a 77, and the step each calls for.
+        for (reason, said, step) in [
+            (
+                AccountRefusal::HostNotPrivileged,
+                "it may not connect from this client's host",
+                "tpl cfg database update shop --user <user>",
+            ),
+            (
+                AccountRefusal::PasswordExpired,
+                "its password has expired",
+                "a client that supports expired passwords, which tpl is not",
+            ),
+            (
+                AccountRefusal::Blocked,
+                "its account is blocked after failed logins",
+                "ask the server's administrator to unblock the account",
+            ),
+        ] {
+            let rendered = render(&Error::AccountRefused {
+                entry: "shop".to_owned(),
+                by_dsn: false,
+                user: "reader".to_owned(),
+                host: EXAMPLE_HOST.to_owned(),
+                reason,
+            });
+            assert!(rendered.contains(said), "{rendered}");
+            assert!(rendered.contains(step), "{rendered}");
+            assert!(
+                rendered.contains("tpl cfg database test shop"),
+                "{rendered}"
+            );
+            assert!(rendered.ends_with("exit:  77 (EX_NOPERM)\n"), "{rendered}");
+        }
+        for (number, reason, said) in [
+            (
+                1203,
+                LoginRefusal::UserConnectionLimit,
+                "limit on simultaneous connections",
+            ),
+            (
+                1226,
+                LoginRefusal::ResourceLimit,
+                "exceeded a resource limit",
+            ),
+            (
+                1129,
+                LoginRefusal::HostBlocked,
+                "blocks this client's host after connection errors",
+            ),
+        ] {
+            let rendered = render(&refused(number, reason));
+            assert!(
+                rendered.contains(&format!("server error {number}: ")),
+                "{rendered}"
+            );
+            assert!(rendered.contains(said), "{rendered}");
+            assert!(
+                rendered.ends_with("exit:  69 (EX_UNAVAILABLE)\n"),
+                "{rendered}"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_err_036_the_two_statement_examples_render_word_for_word() {
+        use crate::error::{SessionStatement, StatementFault};
+
+        let failed = |statement, fault| Error::StatementFailed {
+            entry: "shop".to_owned(),
+            host: EXAMPLE_HOST.to_owned(),
+            port: 3306,
+            statement,
+            fault,
+        };
+
+        assert_eq!(
+            render(&failed(
+                SessionStatement::CatalogueQuery,
+                StatementFault::ConnectionFailed
+            )),
+            example([
+                "error: a query reading the database structure from db.example.com:3306 did not complete, for database entry 'shop'",
+                "cause: the session with db.example.com:3306 was open, and the connection failed while a query reading the database structure was running: the server closed it, it was reset, or the operating system abandoned it",
+                "hint:  the operation is read-only and can be run again; check the connection with: tpl cfg database test shop",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&failed(
+                SessionStatement::VersionProbe,
+                StatementFault::ServerError(1927)
+            )),
+            example([
+                "error: the version probe of db.example.com:3306 did not complete, for database entry 'shop'",
+                "cause: the session with db.example.com:3306 was open, and the server answered the version probe with server error 1927",
+                "hint:  the operation is read-only and can be run again; check the connection with: tpl cfg database test shop",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        let outside = render(&failed(
+            SessionStatement::VersionProbe,
+            StatementFault::OutsideProtocol,
+        ));
+        assert!(
+            outside.contains(
+                "the server's answer to the version probe did not follow the client-server protocol"
+            ),
+            "{outside}"
+        );
+        assert!(!outside.contains("refused the connection"), "{outside}");
+    }
+
+    #[test]
+    fn fr_srv_030_the_example_renders_word_for_word() {
+        // rmp #333: the specification now matches the implementation, and
+        // this pins the whole message.
+        assert_eq!(
+            render(&Error::SeriesNotSupported {
+                by_dsn: false,
+                entry: "shop".to_owned(),
+                series: "10.6".to_owned(),
+                supported: &crate::mariadb::window::SUPPORTED,
+            }),
+            example([
+                "error: server series '10.6' is not supported, for database entry 'shop'",
+                "cause: database entry 'shop' connected and authenticated, and the server reports series '10.6', which is outside the supported window; tpl supports 12.3, 11.8, 11.4 and 10.11",
+                "hint:  repoint the entry at a supported server: tpl cfg database update shop --host <host>",
+                "exit:  78 (EX_CONFIG)",
+            ])
+        );
+    }
+
+    #[test]
+    fn fr_mysql_021_a_refused_handshake_of_a_mysql_entry_names_no_mode_that_does_not_encrypt() {
+        use crate::error::TlsFault;
+        use crate::model::database::Provider;
+
+        let refused = |provider| Error::TlsHandshakeFailed {
+            provider,
+            entry: "shop".to_owned(),
+            host: EXAMPLE_HOST.to_owned(),
+            port: 3306,
+            fault: TlsFault::Refused,
+        };
+
+        assert_eq!(
+            render(&refused(Provider::Mysql)),
+            example([
+                "error: the TLS handshake with db.example.com:3306 failed, for database entry 'shop'",
+                "cause: the TLS handshake with db.example.com:3306 was refused before any certificate was checked: the server offers no TLS, or the negotiation failed",
+                "hint:  check that the server offers TLS, and enable TLS on the server where it does not",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        // The mariadb hint is unchanged.
+        assert!(
+            hint_of(&refused(Provider::Mariadb))
+                .ends_with("tpl cfg set database.shop.tls preferred")
         );
     }
 }

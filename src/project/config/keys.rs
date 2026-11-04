@@ -83,7 +83,7 @@ impl ValueType {
             Self::Tls => "one of disabled, preferred, required, verify-ca, verify-identity",
             Self::ArgumentArray => "an array of arguments",
             Self::Path => "a filesystem path",
-            Self::Provider => "one of mariadb, sqlite",
+            Self::Provider => "one of mariadb, mysql, sqlite",
             Self::DatabasePath => {
                 "the path of a SQLite database file, read literally and never expanded"
             }
@@ -274,9 +274,9 @@ impl EntryKey {
     /// Whether the provider `provider` takes this key (`FR-CONF-052`).
     pub(crate) const fn taken_by(self, provider: Provider) -> bool {
         match (self, provider) {
-            (Self::Provider, Provider::Mariadb | Provider::Sqlite)
+            (Self::Provider, Provider::Mariadb | Provider::Mysql | Provider::Sqlite)
             | (Self::Path, Provider::Sqlite) => true,
-            (Self::Path, Provider::Mariadb) => false,
+            (Self::Path, Provider::Mariadb | Provider::Mysql) => false,
             (
                 Self::Dsn
                 | Self::Host
@@ -289,7 +289,7 @@ impl EntryKey {
                 | Self::CaFile
                 | Self::CaPath,
                 provider,
-            ) => matches!(provider, Provider::Mariadb),
+            ) => provider.reads_a_server(),
         }
     }
 

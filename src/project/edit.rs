@@ -452,7 +452,7 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
             }
             value(supplied)
         }
-        // FR-CONF-051 item 1: exactly one of the two values, compared exactly.
+        // FR-CONF-051 item 1: exactly one of the three values, compared exactly.
         ValueType::Provider => {
             let provider = Provider::from_name(supplied).ok_or_else(refused)?;
             value(provider.name())

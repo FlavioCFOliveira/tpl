@@ -1,8 +1,8 @@
 ---
 title: Open Questions
 status: approved
-last-reviewed: 2026-09-22
-related: [README.md, catalogue-coverage.md, context-document.md, server-contract.md]
+last-reviewed: 2026-11-04
+related: [README.md, catalogue-coverage.md, context-document.md, server-contract.md, mysql-contract.md]
 ---
 
 # Open Questions
@@ -17,23 +17,77 @@ requirement it produces is written into the owning module and the entry moves
 to the *Closed* table below; its identifier is retired and never reused, per
 the identifier scheme of the [README](README.md#identifier-scheme).
 
-**Nothing is open. The index is empty, and the specification is complete.**
-All seventy-five entries this corpus has raised are closed. The twenty the
+**Nothing is open. The index is empty.** Seventy-eight entries have been
+raised, and all seventy-eight are closed. The last three were raised for the
+`mysql` provider and closed on the user's decisions: `OQ-076` and `OQ-077`,
+raised by the seventy-third edition and closed by the seventy-fourth, and
+`OQ-078`, raised and closed by the seventy-fifth.
+
+*Amended in the seventy-third edition.* This paragraph read "Nothing is
+open. The index is empty, and the specification is complete. All
+seventy-five entries this corpus has raised are closed." That was true until
+the edition that raised `OQ-076` and `OQ-077`. What follows records how the
+seventy-five closed.
+
+*Amended in the seventy-fourth edition,* for rmp `#331`. The paragraph read
+that two entries were open and that seventy-five of seventy-seven were
+closed. The user decided both on 2026-11-04, and the decisions are
+`FR-MYSQL-002` as amended and `FR-MYSQL-045`, in
+[mysql-contract.md](mysql-contract.md).
+
+*Amended in the seventy-fifth edition,* for rmp `#326`. The paragraph
+counted seventy-seven entries, all closed. It counts `OQ-078`, which the
+observation of the `mysql` provider raised and which the user decided on
+2026-11-04; the decision is `FR-MYSQL-046`, in
+[mysql-contract.md](mysql-contract.md).
+
+All seventy-five earlier entries are closed. The twenty the
 sixth edition left waiting for a recorded observation were observed against
 all four series of `FR-SRV-015` on 2026-09-10 and written into their owning
 modules; `OQ-075`, the one the evidence itself opened, was settled by the
 product owner; and `OQ-042`, the last to stand, closed on the necessary
 condition of `FR-SRV-041` with its limit written into that requirement.
 
-**Complete means that no point of this specification is waiting on someone.**
-It does not mean the corpus has stopped moving. Three obligations recur and
-none of them is an open question: `FR-SRV-019` requires the supported-series
-table to be re-verified before every release, `NFR-PERF-020` requires a
-measurement point's figure to be recorded when somebody measures it, and any
+**Complete means that no point of this specification is waiting on
+someone**, and with the index empty again no point is: the specification is
+complete. Complete never meant that the corpus had stopped moving. Four
+obligations recur or are owed, and none of them is an open question:
+`FR-SRV-019` and `FR-MYSQL-005` require the supported-series
+tables to be re-verified before every release, `NFR-PERF-020` requires a
+measurement point's figure to be recorded when somebody measures it, any
 requirement resting on the fourth provenance of the
-[README](README.md#provenance) is falsifiable by a later observation. Each is
-work with an owner and a trigger, which is what distinguishes it from an entry
-here.
+[README](README.md#provenance) is falsifiable by a later observation, and
+each of the three statements of [mysql-contract.md](mysql-contract.md) still
+marked [pending observation](glossary.md#pending-observation) is owed an
+observation the project's fixture cannot make, and names what would make it.
+Each is work with an owner and a trigger, which is what distinguishes it from
+an entry here.
+
+*Amended in the seventy-third edition.* The paragraph counted three
+obligations and stated the specification complete; it names the second
+supported-series table and the observations the new provider owes, and no
+longer calls the specification complete.
+
+*Amended in the seventy-fourth edition,* for rmp `#331`. The first sentence
+read that the specification was not complete while the two entries the
+seventy-third edition raised were open. Both are closed, and the four
+obligations are unchanged: none of them is an entry here, so the
+specification is complete by the definition this paragraph gives.
+
+*Amended in the seventy-fifth edition,* for rmp `#326`. The paragraph said
+that every statement of [mysql-contract.md](mysql-contract.md) marked
+pending observation was owed an observation by rmp `#326`. That observation
+was made and discharged all but six, each of which names what would observe
+it. It also raised `OQ-078`, which the user's decision closed in the same
+edition, so the specification is complete by the definition this paragraph
+gives.
+
+*Amended in the seventy-seventh edition,* for two follow-ups of rmp `#329`.
+The paragraph counted six statements still marked pending observation. The
+tests of the `mysql` provider observed two of them, and the observation of
+`FR-CONF-039` discharges a third, on trust material, which was owed to the
+driver rather than to the fixture. No question is raised, and the
+specification is complete by the same definition.
 
 If a point of this specification appears unsettled, it is a defect to be
 reported and corrected, or a new question to be raised with the next unused
@@ -43,7 +97,21 @@ identifier — never an old one revived.
 
 **Empty.** No question is open. An entry is added here only when this
 specification reaches a point it cannot fix, and it is added with the next
-unused `OQ` number; the last assigned was `OQ-075`.
+unused `OQ` number; the last assigned is `OQ-078`.
+
+*Amended in the seventy-fifth edition,* for rmp `#326`. The index named
+`OQ-077` as the last identifier assigned. `OQ-078` was raised and closed in
+this edition and is listed under [Closed](#closed), and the reasoning the
+entry carried — the question, the options and the recommendation — is kept
+beside the requirement that answered it: in `FR-MYSQL-046`, in
+[mysql-contract.md](mysql-contract.md), under its *Rejected* notes.
+
+*Amended in the seventy-fourth edition,* for rmp `#331`. The index held
+`OQ-076` and `OQ-077`. Both are closed and listed under [Closed](#closed),
+and the reasoning each entry carried — the readings and the options, with the
+recommendation — is kept beside the requirement that answered it: in
+`FR-MYSQL-002` and in `FR-MYSQL-045`, in
+[mysql-contract.md](mysql-contract.md), under their *Rejected* notes.
 
 ## Closed
 
@@ -151,6 +219,9 @@ to come here.
 | OQ-042 | How MariaDB is distinguished from a server reporting a MariaDB-compatible version string | `FR-SRV-040`, and `FR-SRV-041` — the necessary condition, closed **on a stated limit**: a server determined to pass as MariaDB will pass | Seventh edition |
 | OQ-072 | The membership of the three type families | `FR-ENV-046` | Seventh edition |
 | OQ-075 | A field whose value differs because the servers' defaults differ | `FR-SRV-039`, with `BR-SRV-006` and `FR-SRV-026` as amended | Seventh edition |
+| OQ-076 | A major family under calendar versioning, for the supported MySQL series | `FR-MYSQL-002` as amended, by the user's decision — LTS series under Oracle Premier or Extended Support, and no Innovation release; the compatibility-lineage and calendar-year readings rejected — with `FR-MYSQL-003` and `FR-MYSQL-004` as amended | Seventy-fourth edition |
+| OQ-077 | Authenticating over a session TLS does not protect | `FR-MYSQL-045`, by the user's decision — the server's RSA public key is never requested over such a session, and a login that needs it ends with `78`; an opt-in configuration key allowing the request rejected | Seventy-fourth edition |
+| OQ-078 | The extra escaping layer of a MySQL expression | `FR-MYSQL-046`, by the user's decision — exactly one layer of backslash escaping removed from an expression default, a generated column's expression and a `CHECK` clause of a `mysql` read, and the introducers kept; carrying each text as written, removing the introducers too, and carrying both texts rejected — with `FR-MYSQL-029`, `FR-MYSQL-031` and `FR-MYSQL-034` as amended | Seventy-fifth edition |
 
 **Ten rows above name requirements the thirty-sixth edition withdrew or
 renamed, and each still records what closed its question.** `OQ-051` through

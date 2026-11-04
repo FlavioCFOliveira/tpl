@@ -2,7 +2,7 @@
 title: Security Rules Across the Surface
 status: approved
 last-reviewed: 2026-11-04
-related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md, sqlite-contract.md]
+related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Security Rules Across the Surface
@@ -80,6 +80,13 @@ states the rule that answers it.
   code and the message the SQLite library returns are not the raw driver
   error, and a `cause` line a requirement obliges to state them carries them
   escaped; `FR-GLOB-018` states it.
+
+  *Note added in the seventy-seventh edition,* for rmp `#335`, `#337` and
+  `#338`. For a `mariadb` or a `mysql` entry, the error number of a server's
+  error packet and the error number the operating system reports for the
+  connection are not the raw driver error, and a `cause` line a requirement
+  obliges to name one carries it; the packet's message stays barred.
+  `FR-GLOB-018` states it.
 
   *The threat this leaves open is stated where it is created*, in
   `FR-CONF-033`: `${VAR}` cannot put a secret into the array, per
@@ -414,6 +421,52 @@ states the rule that answers it.
   hostname check of `verify-identity`, which is the default, is what carries
   the guarantee an operator pinning a CA is usually reaching for.
 
+  *Note added in the seventy-fifth edition,* for rmp `#326`. A `mysql` entry
+  set to a mode that leaves the session unencrypted — `disabled`, or
+  `preferred` against a server offering no TLS — meets one more path to the
+  password. The default authentication method of every supported MySQL
+  series sends the password, over such a session, encrypted with the
+  server's RSA public key, and a key the client requests over that session
+  can be replaced by an active intermediary, who then reads the password.
+  `FR-MYSQL-045` closes the path: the system never requests the key over a
+  session TLS does not protect, and ends a login that needs it with `78`,
+  whose `hint` names `verify-identity`. See
+  [mysql-contract.md](mysql-contract.md), which owns the requirement.
+
+  *Note added in the seventy-sixth edition,* for rmp `#329`. A `mariadb`
+  entry can meet the same path, and its outcome does not change. MariaDB's
+  documentation describes a server-side `caching_sha2_password` plugin,
+  "available from these versions: MariaDB Community Server 11.4.9 / 11.8.4 /
+  12.1", in the library `auth_mysql_sha2`, not installed by default, and
+  calls it MySQL-compatible
+  (`https://mariadb.com/docs/server/reference/plugins/authentication-plugins/authentication-plugin-caching_sha2_password`,
+  checked 2026-11-04). No server of the fixture of `scripts/mariadb/` offers
+  it, and nothing in this corpus has observed whether its login asks for the
+  server's RSA public key as MySQL's does. WHERE the login of a `mariadb`
+  entry, over a session TLS does not protect, needs that key, the system does
+  not request it, as it does not for a `mysql` entry, and the login ends at
+  exit `69` (`EX_UNAVAILABLE`), under the third outcome of `FR-ERR-047`: its
+  `cause` names the facts `FR-MYSQL-045` names for a `mysql` entry, and its
+  `hint` names `verify-identity`. `FR-MYSQL-045` and its `78` govern a
+  `mysql` entry alone. *Rejected, by the user on 2026-11-04:* exit `78` for a
+  `mariadb` entry too. It would change the code a `mariadb` entry exits with,
+  and the user's requirement for the `mysql` provider is that nothing about
+  MariaDB support changes, per the provenance of `FR-MYSQL-001`.
+
+  *Amended in the seventy-seventh edition,* for rmp `#332`. The note read
+  that the login ended at `69` "with the message the project's decision
+  records give the same login before the `mysql` provider existed", that the
+  system gave the condition no message of its own, and that it amended no
+  requirement of a `mariadb` entry. That message was the one of a refused TCP
+  connect, whose `cause` says that the host refused the connection or that
+  nothing listens on the port: false of this login, which `FR-ERR-034` bans.
+  By the user's decision of 2026-11-04 to fix it in sprint 28, the message
+  changes and the code does not, and `FR-ERR-047` now states both. The
+  rejection of `78` stands. The project's decision records were amended the
+  same day and state this outcome, which `FR-ERR-047` records as observed
+  with a MySQL server standing in for a MariaDB server offering
+  `caching_sha2_password`; no fixture stages the latter.
+
 ## Availability
 
 - **FR-SEC-022**: Every blocking phase SHALL have a deadline. See `FR-CONF-005`
@@ -506,6 +559,13 @@ states the rule that answers it.
   `FR-LITE-015`, and `query_only` beside them. `BR-LITE-001` states it, and
   `FR-LITE-008` states the files the library itself may create beside a
   database in write-ahead-log mode.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the promise has the two parts it has for a `mariadb` entry: the closed
+  lists of `FR-MYSQL-015` and `FR-MYSQL-016`, which prevent, and the read-only
+  session of `FR-MYSQL-018`, read back under `@@session.transaction_read_only`
+  and refused with `78` where it does not hold, per `FR-MYSQL-019`.
+  `BR-MYSQL-002` states it.
 
 ## Dependencies
 

@@ -263,13 +263,15 @@ impl FileSettings {
 /// The settings an entry resolves to, by its provider (`FR-CONF-051`,
 /// `OD-35`).
 ///
-/// It is a closed enumeration whose `mariadb` arm holds the server fields
-/// resolved as before and whose `sqlite` arm holds the absolute path; the
-/// entry name and the deadlines are common to both.
+/// It is a closed enumeration whose `mariadb` and `mysql` arms hold the server
+/// fields, resolved alike (`FR-MYSQL-020`), and whose `sqlite` arm holds the
+/// absolute path; the entry name and the deadlines are common to all three.
 #[derive(Debug)]
 pub(crate) enum Resolved {
     /// A `mariadb` entry.
     Mariadb(Settings),
+    /// A `mysql` entry (`FR-MYSQL-001`).
+    Mysql(Settings),
     /// A `sqlite` entry.
     Sqlite(FileSettings),
 }
@@ -278,7 +280,7 @@ impl Resolved {
     /// The entry these settings came from.
     pub(crate) fn entry(&self) -> &str {
         match self {
-            Self::Mariadb(settings) => settings.entry(),
+            Self::Mariadb(settings) | Self::Mysql(settings) => settings.entry(),
             Self::Sqlite(settings) => settings.entry(),
         }
     }
@@ -286,7 +288,7 @@ impl Resolved {
     /// The four phase deadlines.
     pub(crate) const fn deadlines(&self) -> Deadlines {
         match self {
-            Self::Mariadb(settings) => settings.deadlines(),
+            Self::Mariadb(settings) | Self::Mysql(settings) => settings.deadlines(),
             Self::Sqlite(settings) => settings.deadlines(),
         }
     }
@@ -296,7 +298,16 @@ impl Resolved {
     pub(crate) fn into_mariadb(self) -> Option<Settings> {
         match self {
             Self::Mariadb(settings) => Some(settings),
-            Self::Sqlite(_) => None,
+            Self::Mysql(_) | Self::Sqlite(_) => None,
+        }
+    }
+
+    /// The server settings, where the entry is a `mysql` entry.
+    #[cfg(test)]
+    pub(crate) fn into_mysql(self) -> Option<Settings> {
+        match self {
+            Self::Mysql(settings) => Some(settings),
+            Self::Mariadb(_) | Self::Sqlite(_) => None,
         }
     }
 }
@@ -382,6 +393,9 @@ where
     match entry.provider() {
         Provider::Mariadb => resolve_server(configuration, name, entry, selection, clock, lookup)
             .map(Resolved::Mariadb),
+        // FR-MYSQL-020: a `mysql` entry is resolved exactly as a `mariadb` one.
+        Provider::Mysql => resolve_server(configuration, name, entry, selection, clock, lookup)
+            .map(Resolved::Mysql),
         Provider::Sqlite => resolve_file(configuration, name, entry).map(Resolved::Sqlite),
     }
 }

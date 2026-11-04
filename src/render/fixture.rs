@@ -91,6 +91,19 @@ pub(super) fn column_of_type(data_type: &str) -> Value {
     })
 }
 
+/// A column of a `mysql` read whose `data_type` is `data_type`, which may be
+/// one of the three values only a `mysql` read produces (`FR-MYSQL-028`).
+pub(super) fn column_of_mysql_type(data_type: &str) -> Value {
+    Value::from_serialize(&Column {
+        column_type: ColumnType::decompose_mysql(&CatalogueType {
+            column_type: data_type,
+            data_type,
+            ..CatalogueType::default()
+        }),
+        ..plain()
+    })
+}
+
 /// A column of a `sqlite` read whose `data_type` is the type affinity
 /// `affinity` (`FR-LITE-026`).
 pub(super) fn column_of_affinity(affinity: &'static str) -> Value {

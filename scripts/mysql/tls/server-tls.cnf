@@ -1,0 +1,23 @@
+# Server-side TLS for the `tpl` MySQL fixture.
+#
+# Copied by the Dockerfile to /etc/mysql/conf.d/90-tls.cnf, which the image's
+# /etc/my.cnf includes last, so these three settings replace the defaults: a
+# MySQL server left to itself serves the self-signed certificate it generates in
+# its data directory at initialisation, and that certificate names no host a
+# `verify-identity` session could match.
+#
+# [mysqld] is the group every MySQL series of the fixture reads.
+#
+# require_secure_transport is deliberately absent. Two cells of the
+# FR-MYSQL-021 mode table — `disabled` and `preferred` against a server offering
+# TLS — expect a plaintext connection to be accepted, and requiring transport
+# security here would turn both into connection failures.
+#
+# The servers that offer no TLS are started from the same image with
+# `--tls-version=` on the command line, which disables encrypted connections on
+# the main interface whatever this file says; see README.md.
+
+[mysqld]
+ssl_ca   = /etc/mysql/tls/ca.pem
+ssl_cert = /etc/mysql/tls/server-cert.pem
+ssl_key  = /etc/mysql/tls/server-key.pem

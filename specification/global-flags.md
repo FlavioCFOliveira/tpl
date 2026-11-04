@@ -1,7 +1,7 @@
 ---
 title: Global Flags
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-04
 related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md, project-and-discovery.md, render-command.md, sqlite-contract.md]
 ---
 
@@ -374,6 +374,17 @@ which belongs to that command's module.
   driver's error value. Outside
   such a line, this requirement bars the two facts with the raw driver error.
 
+  For a `mariadb` or a `mysql` entry, the raw driver error is the error value
+  of the driver through which `tpl` reaches the server, in any rendering of
+  it, and the message and the SQLSTATE of an error packet the server sends
+  are part of it. Two numbers are not it: the error number of such a packet,
+  and the error number the operating system reports for the connection.
+  WHERE a requirement of this specification obliges a `cause` line to name
+  one — `FR-ERR-036`, `FR-ERR-048` and `FR-ERR-049` — the line SHALL carry
+  that number, and SHALL NOT carry the packet's message, its SQLSTATE, or the
+  driver's error value. Outside such a line, this requirement bars the two
+  numbers with the raw driver error.
+
   *Amended in the sixty-seventh edition,* for rmp `#314`: the paragraph on a
   `sqlite` entry is new. `FR-LITE-007` and `FR-LITE-035` oblige the `cause` to
   carry what the library returned, including the object and the reason, and
@@ -396,6 +407,17 @@ which belongs to that command's module.
   exception to the list.* It would admit the driver's value and then have to
   bound it, where stating what the list bars admits only the two facts the
   requirements oblige.
+
+  *Amended in the seventy-seventh edition,* for rmp `#335`, `#337` and
+  `#338`: the paragraph on a `mariadb` or a `mysql` entry is new.
+  `FR-ERR-036`, `FR-ERR-048` and `FR-ERR-049` oblige a `cause` to name what
+  the server or the operating system returned where no class the system
+  names fits it, and the number is the one instance available. A number is
+  neither a credential nor a content of `.tpl/.cfg`, and needs no escaping.
+  The packet's message stays barred, because it is the server's rendering,
+  can carry the names of the user and the host, and is not needed beside the
+  number and the class the system states. Nothing a `sqlite` entry writes
+  changes.
 
   *Amended in the thirty-first edition: the one exception is stated, because
   three requirements in force contradicted this one.* `FR-CONF-033` requires

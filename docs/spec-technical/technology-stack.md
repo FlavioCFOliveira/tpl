@@ -72,7 +72,7 @@ excludes dev-dependencies. Every crate below is a direct dependency of it.
 | `clap` | 4.6.6 | crates.io crate index, `clap`, `max_stable_version` | 2026-09-11 |
 | `minijinja` | The pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) | That record | 2026-09-11 |
 | `minijinja-contrib` | The pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) | That record | 2026-09-11 |
-| `sqlx-core`, `sqlx-mysql` | The pin of [`ADR-003`](../adr/adr-003-database-driver.md), consumed as two crates rather than through the facade `sqlx` (`ADR-003` as amended, with [`ADR-013`](../adr/adr-013-sqlite-driver.md) point 4) | That record | 2026-11-03 |
+| `sqlx-core`, `sqlx-mysql` | The pin of [`ADR-003`](../adr/adr-003-database-driver.md), consumed as two crates rather than through the facade `sqlx` (`ADR-003` as amended, with [`ADR-013`](../adr/adr-013-sqlite-driver.md) point 4), and serving both server providers ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 1) | That record | 2026-11-04 |
 | `rusqlite` | The pin of [`ADR-013`](../adr/adr-013-sqlite-driver.md) | That record | 2026-11-03 |
 | `tokio` | The pin of [`ADR-003`](../adr/adr-003-database-driver.md) | That record | 2026-09-11 |
 | `serde` | 1.0.229 | crates.io crate index, `serde`, `max_stable_version` | 2026-09-11 |
@@ -94,9 +94,9 @@ rejected option and cites the argument rather than reproducing it.
 | `cap` | The process's `#[global_allocator]`, wrapping `std::alloc::System`, whose count of live heap bytes the render memory limit of `FR-RND-039` reads; installed by the binary, no features, hard limit unset | [`ADR-011`](../adr/adr-011-render-memory-accounting.md) | [`ADR-011`](../adr/adr-011-render-memory-accounting.md): an allocator of this crate's own, `setrlimit`, resident-set polling, the crate's hard limit, and six other crates |
 | `minijinja` | Compiles and renders a template at run time, per `FR-TMPL-004` and `CLAUDE.md` *Invariantes de Implementação*; with its `fuel` feature, counts the render fuel of `FR-RND-036` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md); every compile-time engine is excluded by `CLAUDE.md` *Invariantes de Implementação* |
 | `minijinja-contrib` | Adds utility filters and globals, all of them group 3 of `FR-ENV-019` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md) |
-| `sqlx-core`, `sqlx-mysql` | Connect to MariaDB and issue the closed statement list of `FR-SRV-006`, for a `mariadb` entry | [`ADR-003`](../adr/adr-003-database-driver.md) — settled by `FR-CONF-036`, not by the measurement; the form is [`ADR-013`](../adr/adr-013-sqlite-driver.md)'s point 4 | [`ADR-003`](../adr/adr-003-database-driver.md); for the form, [`ADR-013`](../adr/adr-013-sqlite-driver.md) |
+| `sqlx-core`, `sqlx-mysql` | Connect to MariaDB and issue the closed statement list of `FR-SRV-006`, for a `mariadb` entry; connect to MySQL and issue that of `FR-MYSQL-015`, for a `mysql` entry | [`ADR-003`](../adr/adr-003-database-driver.md) — settled by `FR-CONF-036`, not by the measurement; the form is [`ADR-013`](../adr/adr-013-sqlite-driver.md)'s point 4; for a `mysql` entry, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) | [`ADR-003`](../adr/adr-003-database-driver.md); for the form, [`ADR-013`](../adr/adr-013-sqlite-driver.md); for a `mysql` entry, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md), `mysql_async` among them |
 | `rusqlite` | Opens a SQLite database file read-only, applies and reads back the hardening of `FR-LITE-010` and `FR-LITE-011`, and issues the closed list of `FR-LITE-015`, for a `sqlite` entry; carries the SQLite library itself, compiled in (`FR-LITE-001`) | [`ADR-013`](../adr/adr-013-sqlite-driver.md) — selected by the rule of `FR-LITE-004` | [`ADR-013`](../adr/adr-013-sqlite-driver.md): the crate `sqlite`, the SQLite driver of `sqlx`, `turso`, a patched `rusqlite`, and `rusqlite` 0.39.0 |
-| `tokio` | The current-thread runtime the asynchronous driver requires, and the timers four of the six deadlines use; never built for a `sqlite` entry | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
+| `tokio` | The current-thread runtime the asynchronous driver requires, for a `mariadb` and a `mysql` entry, and the timers of the connection budget and the catalogue query; never built for a `sqlite` entry | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
 | `serde` | The derive that fixes the key order of `FR-OUT-013` in the type. It is **not** how `.tpl/.cfg` is read: [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) records why a derive cannot answer `FR-CONF-034` or `FR-CONF-035` | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | A bespoke writer, and a distinct type per absence rule ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
 | `serde_json` | Encodes the seventeen payload shapes and the envelope of `FR-OUT-024`; its pretty printer answers `FR-OUT-008`; its `Formatter` trait is where `tpl` escapes what `FR-OUT-018` adds past C0 | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | `preserve_order`, and with it `indexmap`, which would contradict `NFR-DET-002` ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
 | `toml` | The read path over `.tpl/.cfg`, through its document tree — spanned keys and spanned values — rather than through a `serde` derive | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml_edit` for both paths, which would put an editing document on the path that reads untrusted input; and a `serde` derive, which cannot name the offending key or its position |
@@ -128,6 +128,11 @@ and enter, the six the change adds, its lock-file count, its MSRV consequence
 and its advisory reading are that record's and are not restated. At
 `19abb1f` the manifest declares `sqlx-core`, `sqlx-mysql` and `rusqlite` and no
 facade, and its `[dependencies]` table holds the fourteen.
+
+**[`ADR-014`](../adr/adr-014-mysql-provider-driver.md) adds no crate.** The
+`mysql` provider reads through the crates above, and the graph is unchanged
+but for the source of `sqlx-mysql`, below. At `cc511e2` the
+`[dependencies]` table still holds the fourteen.
 
 ## The template engine
 
@@ -232,13 +237,22 @@ The driver, the rule that settled it and the candidate it disqualified are
 is restated. What belongs here is the criterion as a property of this stack, and
 the feature selection that realises the two records.
 
-**One crate of the driver is read from inside this repository rather than from
-the index.** A `[patch.crates-io]` entry redirects `sqlx-core` to a vendored
-copy, on the terms [`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) sets:
-that record holds the defect, the patch, the obligations the vendored tree
-carries and the condition that retires it, and it states that the copy is not a
-new dependency and does not enter the budget below. The pin is unchanged and
-remains [`ADR-003`](../adr/adr-003-database-driver.md)'s.
+**Both crates of the driver are read from inside this repository rather than
+from the index.** Two `[patch.crates-io]` entries redirect each to a vendored
+copy. `sqlx-core`'s is on the terms
+[`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) sets: that record holds
+the defect, the patch, the obligations the vendored tree carries and the
+condition that retires it, and it states that the copy is not a new dependency
+and does not enter the budget below. `sqlx-mysql`'s is on the terms
+[`ADR-014`](../adr/adr-014-mysql-provider-driver.md) sets, which apply
+`ADR-010`'s form to a second tree: its patch refuses the RSA public-key request
+over a session TLS does not protect, presents an empty or absent password as
+the server's own clients do, and records the phase a connection reached, and
+that record holds each part, its scope and the condition that retires it. The
+pin is unchanged and remains
+[`ADR-003`](../adr/adr-003-database-driver.md)'s. A path patch removes the
+crate's registry source from `Cargo.lock`, so `cargo audit` no longer matches
+either crate; the compensating lookup each record owes is that record's.
 
 **`FR-CONF-036` is an admission criterion, not a preference.** A driver that
 cannot express all five modes of `FR-CONF-013` distinctly is disqualified, and
@@ -257,7 +271,7 @@ three remain the decisions each traces to:
 
 | Facade feature | Required by | Realised in the two-crate form as | Source |
 |---|---|---|---|
-| `mysql` | The product `FR-SRV-001` fixes | The crate `sqlx-mysql` itself | `Cargo.toml` at tag `v0.9.0`; `ADR-003` |
+| `mysql` | The product `FR-SRV-001` fixes, and the protocol a `mysql` entry speaks (`FR-MYSQL-020`) | The crate `sqlx-mysql` itself | `Cargo.toml` at tag `v0.9.0`; `ADR-003`; `ADR-014` point 1 |
 | `runtime-tokio` | The runtime of [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | The `sqlx-core` feature it forwards to, listed in `ADR-003` | `Cargo.toml` at tag `v0.9.0`; `ADR-003` |
 | `tls-rustls-ring-webpki` | The bundled root store of [`ADR-002`](../adr/adr-002-tls-mode-mapping.md). It resolves to `sqlx-core/_tls-rustls-ring-webpki`, which is defined as `["_tls-rustls", "rustls/ring", "webpki-roots"]`; its sibling `tls-rustls-ring-native-roots` resolves to `rustls-native-certs` instead and is the platform trust store that record rejects | That `sqlx-core` feature, enabled directly | `Cargo.toml` and `sqlx-core/Cargo.toml` at tag `v0.9.0`; `ADR-003` |
 
@@ -271,7 +285,7 @@ the release `ADR-013` names; both are those records' and are not restated.
 flags*, consulted 2026-09-11), so three are added rather than subtracted: `rt`,
 which "Enables `tokio::spawn`, the current-thread scheduler, and non-scheduler
 utilities" ([`ADR-005`](../adr/adr-005-async-runtime-scope.md)); `time`, which
-enables the types the four runtime-enforced deadlines use
+enables the types the runtime-enforced deadlines use
 ([`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced)); and
 `net`, which
 [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) already
@@ -282,7 +296,7 @@ records as the gate on the name resolution `tpl` performs itself.
 unless `default-features = false` was set. Under the two-crate form the macro
 side has left the graph (`ADR-013`), and `ADR-003` carries onto the two crates
 the effective set the facade's defaults gave them. `tpl` issues a fixed
-statement list against one product, runs no migration and uses no compile-time
+statement list against each of two products, runs no migration and uses no compile-time
 checked query, so none of those features answers a requirement; turning them
 off is a decision under the dependency budget, and this document records the
 question rather than settling it.

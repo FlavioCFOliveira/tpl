@@ -21,9 +21,10 @@
 use std::borrow::Cow;
 
 use crate::error::{
-    ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
-    KeyAbsence, Missing, PasswordCommandFault, ReadOnlyFault, ReferenceFault, RefusedKind,
-    RenderReason, SqliteEnd, TlsFault, TplDirFault, Unresolved, context_name, password_pair,
+    AccountRefusal, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair,
+    Error, KeyAbsence, LoginFault, LoginRefusal, Missing, PasswordCommandFault, ReadOnlyFault,
+    ReferenceFault, RefusedKind, RenderReason, SqliteEnd, StatementFault, TcpFault, TlsFault,
+    TplDirFault, Unresolved, context_name, password_pair,
 };
 use crate::model::database::Provider;
 
@@ -74,6 +75,27 @@ const DATABASE_IS_NOT_A_FIELD_OF_ANY_FORM: &str = "; -d/--database was given, an
                                                    with --schema, or is the path part of --dsn \
                                                    for an entry defined by dsn; the database \
                                                    file of a sqlite entry is set with --path";
+
+/// The product whose server an entry of `provider` reads, as a `cause` or a
+/// `hint` names it (`FR-ERR-047`).
+pub(super) const fn server_name(provider: Provider) -> &'static str {
+    match provider {
+        Provider::Mariadb => "MariaDB",
+        Provider::Mysql => "MySQL",
+        Provider::Sqlite => "SQLite",
+    }
+}
+
+/// The entries that take a key of one provider family (`FR-CONF-052`): the
+/// keys of a server, which a `mariadb` and a `mysql` entry take alike, or
+/// `path`, which a `sqlite` entry alone takes.
+const fn takers(server: bool) -> &'static str {
+    if server {
+        "a mariadb or a mysql entry"
+    } else {
+        "a sqlite entry"
+    }
+}
 
 /// The content of the `cause` line for `error`, without its label.
 ///
@@ -285,16 +307,16 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{value}' was supplied for '{parameter}', which takes {expected}; a ${{VAR}} may \
              stand for one part of the URL, never for the whole of it"
         )),
-        // FR-CONF-051 item 1: the key and the two values; the value given is
+        // FR-CONF-051 item 1: the key and the three values; the value given is
         // reproduced only under the set of FR-ERR-022, and described otherwise.
         Error::MalformedValue {
             parameter, value, ..
         } if is_provider(parameter) => {
             Cow::Owned(if crate::project::config::keys::is_entry_name(value) {
-                format!("{parameter} takes mariadb or sqlite; the value given is {value}")
+                format!("{parameter} takes mariadb, mysql or sqlite; the value given is {value}")
             } else {
                 format!(
-                    "{parameter} takes mariadb or sqlite; the value given holds characters \
+                    "{parameter} takes mariadb, mysql or sqlite; the value given holds characters \
                      outside letters, digits and underscores, or is longer than 64"
                 )
             })
@@ -675,7 +697,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             name,
             entry,
             database,
-            provider: Provider::Mariadb,
+            provider: Provider::Mariadb | Provider::Mysql,
             ..
         } => Cow::Owned(format!(
             "no row of INFORMATION_SCHEMA matches {kind} '{name}' in database '{database}', read \
@@ -777,6 +799,107 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "the TCP connect to {host}:{port} did not open a session: the host refused it, or \
              nothing is listening on that port"
         )),
+        // FR-ERR-049, outcomes 2 to 4: what the operating system reported, by
+        // its POSIX name, or its number where tpl names none.
+        Error::TcpConnectFailed {
+            host, port, fault, ..
+        } => match fault {
+            TcpFault::HostUnreachable => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: the network reports the host unreachable"
+            )),
+            TcpFault::NetworkUnreachable => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: the network reports the host's network \
+                 unreachable"
+            )),
+            TcpFault::NoAnswer => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: nothing answered, and the operating \
+                 system abandoned the attempt"
+            )),
+            TcpFault::Other(Some(number)) => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: the operating system reported error \
+                 {number}"
+            )),
+            TcpFault::Other(None) => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed, and the operating system reported no \
+                 error number"
+            )),
+        },
+        // FR-ERR-047, outcomes 1 and 2: the login, the host and port, and
+        // what it returned; never the TCP connect as the phase that failed.
+        Error::LoginNotCompleted {
+            host,
+            port,
+            provider,
+            fault,
+            ..
+        } => match fault {
+            LoginFault::ConnectionClosed => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} succeeded, and the connection failed before the \
+                 login completed: the server closed it, it was reset, or the operating system \
+                 abandoned it"
+            )),
+            LoginFault::NotAccepted => {
+                let server = server_name(*provider);
+                Cow::Owned(format!(
+                    "what answered the login at {host}:{port} did not answer as a {server} server \
+                     does: it does not speak the {server} protocol, or it asked for a step tpl \
+                     does not implement, such as an authentication method"
+                ))
+            }
+        },
+        // FR-ERR-048: a limit, a blocked host or a number tpl classifies no
+        // further, each with the number under FR-GLOB-018.
+        Error::LoginRefused {
+            host,
+            port,
+            number,
+            reason,
+            ..
+        } => Cow::Owned(match reason {
+            LoginRefusal::ServerConnectionLimit => format!(
+                "the server at {host}:{port} refused the login with server error {number}: it \
+                 has reached its limit on connections"
+            ),
+            LoginRefusal::UserConnectionLimit => format!(
+                "the server at {host}:{port} refused the login with server error {number}: the \
+                 user has reached its limit on simultaneous connections"
+            ),
+            LoginRefusal::ResourceLimit => format!(
+                "the server at {host}:{port} refused the login with server error {number}: the \
+                 account has exceeded a resource limit"
+            ),
+            LoginRefusal::HostBlocked => format!(
+                "the server at {host}:{port} refused the login with server error {number}: it \
+                 blocks this client's host after connection errors"
+            ),
+            LoginRefusal::Unclassified => format!(
+                "the server at {host}:{port} ended the login with server error {number}, which \
+                 tpl does not classify further"
+            ),
+        }),
+        // FR-ERR-036: the statement, the host and port, and which of the
+        // three ways it failed.
+        Error::StatementFailed {
+            host,
+            port,
+            statement,
+            fault,
+            ..
+        } => Cow::Owned(match fault {
+            StatementFault::ConnectionFailed => format!(
+                "the session with {host}:{port} was open, and the connection failed while \
+                 {statement} was running: the server closed it, it was reset, or the operating \
+                 system abandoned it"
+            ),
+            StatementFault::OutsideProtocol => format!(
+                "the session with {host}:{port} was open, and the server's answer to {statement} \
+                 did not follow the client-server protocol"
+            ),
+            StatementFault::ServerError(number) => format!(
+                "the session with {host}:{port} was open, and the server answered {statement} \
+                 with server error {number}"
+            ),
+        }),
         Error::TlsHandshakeFailed {
             host, port, fault, ..
         } => match fault {
@@ -797,6 +920,14 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             limit,
             ..
         } => match bound {
+            // FR-ERR-027 with FR-CONF-005: the four connection phases share
+            // one budget, and the cause says so rather than that it bounds the
+            // phase alone.
+            DeadlineBound::Phase if phase.connecting() => Cow::Owned(format!(
+                "{phase} for {host}:{port} had not finished when the connection budget of \
+                 {limit:?} expired; core.connect_timeout sets that budget, which DNS resolution, \
+                 the TCP connect, the TLS handshake and the login share"
+            )),
             DeadlineBound::Phase => Cow::Owned(format!(
                 "{phase} for {host}:{port} had not finished when its own deadline of {limit:?} \
                  expired; that deadline bounds this phase alone"
@@ -874,6 +1005,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         Error::AuthenticationRefused { user, host, .. } => Cow::Owned(format!(
             "the server at '{host}' rejected the user '{user}' or its password; the refusal came \
              from the server"
+        )),
+        // FR-ERR-048: the reason the row states, and no error number.
+        Error::AccountRefused {
+            user, host, reason, ..
+        } => Cow::Owned(format!(
+            "the server at '{host}' refused the user '{user}' because {}; the refusal came from \
+             the server",
+            match reason {
+                AccountRefusal::HostNotPrivileged => "it may not connect from this client's host",
+                AccountRefusal::PasswordExpired => "its password has expired",
+                AccountRefusal::Locked => "its account is locked",
+                AccountRefusal::Blocked => "its account is blocked after failed logins",
+            }
         )),
         Error::PropertyNotReadable {
             kind,
@@ -1187,14 +1331,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              trusts",
             path.display()
         )),
-        Error::ReadOnlySessionNotEnforced { entry, fault, .. } => match fault {
+        Error::ReadOnlySessionNotEnforced {
+            entry,
+            fault,
+            read_back,
+            ..
+        } => match fault {
             ReadOnlyFault::NotApplied => Cow::Owned(format!(
                 "the session opened for database entry '{entry}' did not accept the read-only \
                  setting, so tpl cannot guarantee that the session issues no write"
             )),
             ReadOnlyFault::ReadBackDisagreed => Cow::Owned(format!(
                 "the session opened for database entry '{entry}' accepted the read-only setting \
-                 and the read-back of @@session.tx_read_only did not confirm it"
+                 and the read-back of {read_back} did not confirm it"
             )),
         },
         // FR-CONF-040 and FR-CONF-041: the cause names the file, the entry and
@@ -1272,6 +1421,69 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              '{series}', which is outside the supported window; tpl supports {}",
             listed(supported)
         )),
+        // FR-MYSQL-008: the connection and the authentication succeeded, the
+        // product the server reported — MariaDB where the string carries the
+        // marker, and the string itself otherwise — and that a mysql entry
+        // reads MySQL only.
+        Error::ServerNotMysql { reported, .. } => Cow::Owned(
+            if reported.contains(crate::mysql::session::MARIADB_MARKER) {
+                format!(
+                    "connected and authenticated; the server reports {reported}, which is \
+                     MariaDB, and a mysql entry reads MySQL only"
+                )
+            } else {
+                format!(
+                    "connected and authenticated; the server reports '{reported}', which is not \
+                     a MySQL version string, and a mysql entry reads MySQL only"
+                )
+            },
+        ),
+        // FR-MYSQL-009: the connection and the authentication succeeded, why
+        // the series is not supported — the criterion of FR-MYSQL-002 it fails
+        // — and the series that are.
+        Error::MysqlSeriesNotSupported {
+            version,
+            series,
+            supported,
+            ..
+        } => Cow::Owned(format!(
+            "connected and authenticated; the server reports {version}, and {series} is not a \
+             MySQL LTS series under Oracle Premier or Extended Support, and is older than the \
+             newest that is. A mysql entry supports {}",
+            listed(supported)
+        )),
+        // FR-ERR-048, error 3159: the host and port, the number, and the mode
+        // under which the session was not encrypted.
+        Error::SecureTransportRequired {
+            host, port, tls, ..
+        } => Cow::Owned(format!(
+            "the server at {host}:{port} refused the login with server error 3159: it accepts \
+             only encrypted sessions, and the session was not encrypted under tls '{tls}'"
+        )),
+        // FR-MYSQL-045, and FR-ERR-047 outcome 3 for a mariadb entry: the
+        // connection succeeded and the authentication was not completed; the user, the host and the port, the tls mode in force and,
+        // under `preferred`, that the server offered no TLS; the method the
+        // server asked for; and that tpl does not request the key over a
+        // session TLS does not protect.
+        Error::PublicKeyRequestRefused {
+            user,
+            host,
+            port,
+            tls,
+            no_tls_offered,
+            method,
+            ..
+        } => Cow::Owned(format!(
+            "connected to {host}:{port} as user '{user}' under tls '{tls}'{}, so the session is \
+             not encrypted; the authentication was not completed: the server asks for the full \
+             {method} exchange, which needs its RSA public key, and tpl does not request that \
+             key over a session TLS does not protect",
+            if *no_tls_offered {
+                " and the server offered no TLS"
+            } else {
+                ""
+            }
+        )),
 
         // ---------------------------------------------- the provider ---
         // FR-CFG-055: the flags that cannot stand together, and the provider
@@ -1281,51 +1493,57 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             provider: Provider::Sqlite,
             ..
         } => Cow::Owned(format!(
-            "a sqlite entry is described by --path alone; {flag} belongs to a mariadb entry"
+            "a sqlite entry is described by --path alone; {flag} belongs to a mariadb or a mysql \
+             entry"
         )),
+        // FR-CFG-055 item 2, for either server provider: `--provider mysql`
+        // takes the flags `--provider mariadb` takes (FR-CONF-052).
         Error::FlagRefusedByProvider {
             flag,
-            provider: Provider::Mariadb,
+            provider: provider @ (Provider::Mariadb | Provider::Mysql),
             given,
             ..
-        } => Cow::Owned(format!(
-            "{flag} belongs to a sqlite entry, and {}",
-            if *given {
-                "--provider mariadb makes this a mariadb entry"
-            } else {
-                "without --provider sqlite the entry is a mariadb entry"
-            }
-        )),
+        } => Cow::Owned(if *given {
+            format!(
+                "{flag} belongs to a sqlite entry, and --provider {provider} makes this a {provider} entry"
+            )
+        } else {
+            format!(
+                "{flag} belongs to a sqlite entry, and without --provider sqlite the entry is a {provider} entry"
+            )
+        }),
         Error::PathRequired { .. } => Cow::Borrowed(
             "a sqlite entry names its database file with --path, and the invocation gave none",
         ),
         // FR-CFG-048 as amended: the provider, the key written, every key
         // the entry carries that the other provider takes, and that a change
         // of provider requires removing them.
+        // The cfg-commands note of the seventy-third edition: with three
+        // providers, the keys are named by the providers that take them, and
+        // a `mysql` entry takes exactly the keys a `mariadb` entry takes.
         Error::ProviderIncoherentWrite {
             entry,
             provider,
+            own,
             written,
             carried,
             ..
         } => {
-            let other = match provider {
-                Provider::Mariadb => Provider::Sqlite,
-                Provider::Sqlite => Provider::Mariadb,
-            };
             let leaf = written.rsplit('.').next().unwrap_or(written);
             if leaf == "provider" {
                 Cow::Owned(format!(
-                    "entry '{entry}' carries {}, which only a {other} entry takes; changing its \
-                     provider requires removing them",
-                    conjoined(carried)
+                    "entry '{entry}' carries {}, which only {} takes; changing its provider \
+                     requires removing them",
+                    conjoined(carried),
+                    takers(!provider.reads_a_server())
                 ))
             } else {
                 Cow::Owned(format!(
-                    "entry '{entry}' is a {other} entry and carries {}, which only a {other} entry \
-                     takes, and {leaf} belongs to a {provider} entry; changing its provider \
-                     requires removing them",
-                    conjoined(carried)
+                    "entry '{entry}' is a {own} entry and carries {}, which only {} takes, and \
+                     {leaf} belongs to {}; changing its provider requires removing them",
+                    conjoined(carried),
+                    takers(own.reads_a_server()),
+                    takers(provider.reads_a_server())
                 ))
             }
         }

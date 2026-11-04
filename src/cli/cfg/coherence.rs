@@ -166,6 +166,7 @@ fn by_provider(
     Err(Error::ProviderIncoherentWrite {
         entry: name.to_owned(),
         provider: target,
+        own: combination.provider(),
         written: qualified(name, key),
         carried,
         value,
