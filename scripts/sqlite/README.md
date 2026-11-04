@@ -9,14 +9,25 @@ there is no container, no harness and no script to run.
 |---|---|
 | `freight.sql` | The main database: a freight operator's carriers, vessels, voyages, consignments and customs records, exercising items 1 to 13 of `FR-LITE-038`; each object carries a comment naming the item it exercises |
 | `internal.sql` | The database whose only objects are the internal tables `sqlite_sequence` and `sqlite_stat1` |
+| `pragma_view.sql` | A database whose schema holds a view named `pragma_table_list` |
+| `pragma_table.sql` | A database whose schema holds a table named `PRAGMA_TABLE_XINFO` |
+| `blob_view_sql.sql` | A database whose schema table holds the `sql` of a view as a BLOB, written under `writable_schema` |
+| `blob_trigger_type.sql` | A database whose schema table holds the `type` of a trigger as a BLOB, written under `writable_schema` |
+| `rootpage_zero.sql` | A database whose schema table holds a `CREATE TABLE` row at root page `0`, written under `writable_schema` |
+| `rootpage_virtual.sql` | A database whose schema table holds a `CREATE VIRTUAL TABLE` row at a root page other than `0`, written under `writable_schema` |
+| `fts5_view.sql` | A database holding an `fts5` table, a view over it that compiles, and no view that does not |
 
 ## How the tests build it
 
 `tests/support/sqlite.rs` builds every artefact into a temporary directory of
 the test's own, through `rusqlite` — the SQLite library the binary carries —
 on a plain connection with none of `tpl`'s controls, so that the `CHECK` of
-item 9 is written under `trusted_schema` on. Beside the two databases above it
-makes the artefacts that are not SQL:
+item 9 is written under `trusted_schema` on. The four databases written under
+`writable_schema` are built on a connection whose defensive mode the builder
+sets off and reads back, because defensive mode refuses
+`PRAGMA writable_schema=ON`; that connection is the builder's own, and nothing
+of `tpl` relaxes a control. Beside the databases above it makes the artefacts
+that are not SQL:
 
 - a copy of the main database in write-ahead-log mode;
 - an empty file, a text file, and the main database cut to its first 100

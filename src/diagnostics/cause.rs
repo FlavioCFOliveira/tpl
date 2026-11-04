@@ -22,8 +22,8 @@ use std::borrow::Cow;
 
 use crate::error::{
     ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
-    KeyAbsence, Missing, PasswordCommandFault, ReadOnlyFault, ReferenceFault, RenderReason,
-    SqliteEnd, TlsFault, TplDirFault, Unresolved, context_name, password_pair,
+    KeyAbsence, Missing, PasswordCommandFault, ReadOnlyFault, ReferenceFault, RefusedKind,
+    RenderReason, SqliteEnd, TlsFault, TplDirFault, Unresolved, context_name, password_pair,
 };
 use crate::model::database::Provider;
 
@@ -1373,6 +1373,40 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "{at} of {} failed: the library returned {report}",
             path.display()
         )),
+        // FR-LITE-041: the path, the check, the row's type and name, and the
+        // kind of row — what SQLite does with the name, the column and the
+        // class it holds, or the root page and what the text creates.
+        Error::SqliteSchemaRefused { path, row, .. } => {
+            let refused = format!(
+                "the check of the schema table main.sqlite_schema of {} refused the row of type \
+                 '{}' named '{}'",
+                path.display(),
+                row.row_type,
+                row.name
+            );
+            Cow::Owned(match row.kind {
+                RefusedKind::PragmaName => format!(
+                    "{refused}: SQLite reads a table or a view so named in place of the pragma \
+                     table-valued function of that name"
+                ),
+                RefusedKind::StorageClass { column, class } => format!(
+                    "{refused}: its {column} holds a value of the storage class {class}, which the \
+                     schema table's contract excludes"
+                ),
+                RefusedKind::RootPage {
+                    rootpage,
+                    creates_virtual,
+                } => format!(
+                    "{refused}: its root page is {} and its text {} a virtual table",
+                    rootpage.map_or_else(|| "NULL".to_owned(), |page| page.to_string()),
+                    if creates_virtual {
+                        "creates"
+                    } else {
+                        "does not create"
+                    }
+                ),
+            })
+        }
         // The note on FR-ERR-034 for a `sqlite` entry: the path, the statement
         // and what ended it, naming a lock only on the library's word.
         Error::SqliteUnavailable {

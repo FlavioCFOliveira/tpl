@@ -12,14 +12,16 @@
 //! | `harden` | Each control and limit, set and read back, and the comparison of the two | `FR-LITE-010` … `FR-LITE-012` |
 //! | `watch` | The watchdog that bounds every statement | `FR-LITE-009`, `OD-36` |
 //! | `fault` | Where the library's result becomes a condition of `FR-ERR-001` | `FR-LITE-040`, `OD-38` |
-//! | `catalogue` | The plan, the read that owns its values, and the fold | `FR-LITE-015`, `FR-LITE-019` … `FR-LITE-037` |
+//! | `catalogue` | The check, the read transaction, the plan, the read that owns its values, and the fold | `FR-LITE-015`, `FR-LITE-019` … `FR-LITE-037`, `FR-LITE-041`, `FR-LITE-042` |
 //!
 //! **The one route to a connection is [`open`]**, and it runs the six stages
 //! of `FR-LITE-017` in order and behind no condition: the kind of the file,
 //! the read-only open, the statement bound, the build, the other controls and
-//! the limits, and the version probe — the first statement that reads the
-//! file. No flag, key or environment condition reaches any of them
-//! (`FR-LITE-014`).
+//! the limits — views disabled among them — and the version probe, the first
+//! statement that reads the file. No flag, key or environment condition
+//! reaches any of them (`FR-LITE-014`). The check of `FR-LITE-041` follows
+//! the probe: inside the read transaction of `FR-LITE-042` on a read
+//! ([`read`]), and alone on `tpl cfg database test` ([`Session::check`]).
 //!
 //! **No asynchronous runtime is built.** `rusqlite` is synchronous, so a
 //! command that reads a `sqlite` entry builds no runtime and reaches nothing
@@ -39,7 +41,7 @@ use std::cell::Cell;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::thread::LocalKey;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use rusqlite::config::DbConfig;
 use rusqlite::limits::Limit;
@@ -55,7 +57,7 @@ use crate::project::settings::FileSettings;
 pub(crate) use catalogue::{Catalogue, read};
 pub(crate) use fault::name as code_name;
 
-use catalogue::statements;
+use catalogue::{check, statements};
 use fault::{Place, Stage, Timing};
 use watch::Watchdog;
 
@@ -143,8 +145,20 @@ enum Failed {
 enum Unread {
     /// The library failed while stepping.
     Library(rusqlite::Error),
-    /// A field held a value of a class the library does not document for it.
+    /// The row's reader refused what it read.
+    Misread(Misread),
+}
+
+/// What the reader of one row refuses, and the condition each is.
+#[derive(Debug)]
+pub(crate) enum Misread {
+    /// A field held a value of a class the library does not document for it
+    /// — the `70` of `FR-ERR-030`.
     Shape(&'static str),
+    /// A row the check of `FR-LITE-041` refuses, or a value of the schema
+    /// table of a class the check refuses read by a later statement — the
+    /// `78` of that requirement (`FR-LITE-040`, its paragraph on values).
+    Refused(Box<crate::error::RefusedRow>),
 }
 
 impl From<rusqlite::Error> for Unread {
@@ -161,6 +175,23 @@ const STORAGE_CLASS: &str =
 /// The invariant a version without two dot-separated parts breaks.
 const VERSION_FORM: &str =
     "the version the carried library reports has the form <major>.<minor>.<patch>";
+
+/// The longest busy timeout the library takes, `i32::MAX` milliseconds:
+/// `sqlite3_busy_timeout` takes an `int`, and `rusqlite`'s `busy_timeout`
+/// ends its conversion with `.expect("too big")` past it (`OD-36`, as amended
+/// for rmp `#317`).
+const BUSY_CEILING: Duration = Duration::from_millis(2_147_483_647);
+
+/// The busy timeout handed to the library for a statement whose bound has
+/// `remaining` left: the smaller of the two, so that a `core.query_timeout`
+/// past the ceiling neither panics nor waits past its bound (`FR-LITE-009`,
+/// `OD-36`). The watchdog keeps the whole bound.
+fn busy_timeout(remaining: Duration) -> Duration {
+    remaining.min(BUSY_CEILING)
+}
+
+/// How the check is named in a `cause`.
+const CHECK: &str = "the check of the schema table main.sqlite_schema";
 
 /// Opens the database file `settings` names, through the six stages of
 /// `FR-LITE-017`, in their order and behind no condition.
@@ -257,25 +288,45 @@ impl Session {
         }
     }
 
-    /// The catalogue probe of `FR-CFG-056`, step 4: one `SELECT` against
-    /// `sqlite_schema` of `main`, whose rows are not read as model content.
+    /// The check of `FR-LITE-041`: one statement against `main.sqlite_schema`,
+    /// every row judged as it is stepped by [`check::verdict`], and only a
+    /// refused row kept. It is the first statement of the read transaction of
+    /// every read, and the whole of step 4 of `tpl cfg database test`, which
+    /// issues it alone and opens no transaction (`FR-CFG-056`,
+    /// `FR-LITE-042`); its rows are never read as model content.
+    ///
+    /// # Errors
+    ///
+    /// Returns the `78` of `FR-LITE-041` for the first row it refuses, after
+    /// which no further statement reads the file; and the code `FR-LITE-040`
+    /// gives what the library returned.
+    pub(crate) fn check(&self) -> Result<(), Error> {
+        let stage = Stage::Catalogue(CHECK);
+        let answered = self.rows(stage, statements::CHECK, true, |row| {
+            let value = |at: usize| row.get_ref(at).map_err(|_| Misread::Shape(STORAGE_CLASS));
+            let values = [value(0)?, value(1)?, value(2)?, value(3)?, value(4)?];
+
+            match check::verdict(values) {
+                None => Ok(()),
+                Some(refused) => Err(Misread::Refused(Box::new(refused))),
+            }
+        });
+
+        self.answered(stage, answered).map(drop)
+    }
+
+    /// One statement of the read transaction of `FR-LITE-042` — `BEGIN
+    /// DEFERRED` or `COMMIT` — under the bound every statement runs under.
+    /// Neither is a catalogue statement, so neither writes the line of
+    /// `FR-GLOB-017` (`FR-LITE-015`, `FR-LITE-037`).
     ///
     /// # Errors
     ///
     /// Returns the code `FR-LITE-040` gives what the library returned.
-    pub(crate) fn probe(&self) -> Result<(), Error> {
-        let answered = self.rows(
-            Stage::Catalogue("the catalogue probe of tpl cfg database test"),
-            statements::CATALOGUE_PROBE,
-            true,
-            |_| Ok(()),
-        );
+    pub(crate) fn transaction(&self, stage: Stage, sql: &str) -> Result<(), Error> {
+        let answered = self.rows(stage, sql, false, |_| Ok(()));
 
-        self.answered(
-            Stage::Catalogue("the catalogue probe of tpl cfg database test"),
-            answered,
-        )
-        .map(drop)
+        self.answered(stage, answered).map(drop)
     }
 
     /// Where a failure on this connection arose.
@@ -325,6 +376,17 @@ impl Session {
             .db_config(DbConfig::SQLITE_DBCONFIG_TRUSTED_SCHEMA)
             .map_err(control)?;
         harden::flag("trusted_schema", "off", false, trusted).map_err(refused)?;
+
+        // Views disabled, as defence in depth beside FR-LITE-015 and
+        // FR-LITE-041: a statement that named a view would fail rather than
+        // expand it (FR-LITE-010, the ninth control).
+        connection
+            .set_db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_VIEW, false)
+            .map_err(control)?;
+        let views = connection
+            .db_config(DbConfig::SQLITE_DBCONFIG_ENABLE_VIEW)
+            .map_err(control)?;
+        harden::flag("views", "disabled", false, views).map_err(refused)?;
 
         // The four controls a statement applies, each set and read back.
         for (name, set, set_statement, read_statement, expected) in [
@@ -447,7 +509,7 @@ impl Session {
         mut read: F,
     ) -> Result<Vec<T>, Failed>
     where
-        F: FnMut(&Row<'_>) -> Result<T, &'static str>,
+        F: FnMut(&Row<'_>) -> Result<T, Misread>,
     {
         let bound = self.clock.bound(self.query);
         if bound.expired() {
@@ -462,7 +524,7 @@ impl Session {
         let started = Instant::now();
         let timing = |spent: bool| Timing { bound, spent };
 
-        if let Err(error) = connection.busy_timeout(bound.remaining()) {
+        if let Err(error) = connection.busy_timeout(busy_timeout(bound.remaining())) {
             return Err(Failed::Library(error, timing(false)));
         }
 
@@ -482,7 +544,7 @@ impl Session {
             let mut rows = statement.query([])?;
             let mut collected = Vec::new();
             while let Some(row) = rows.next()? {
-                collected.push(read(row).map_err(Unread::Shape)?);
+                collected.push(read(row).map_err(Unread::Misread)?);
             }
             Ok(collected)
         })();
@@ -495,8 +557,15 @@ impl Session {
 
         outcome.map_err(|unread| match unread {
             Unread::Library(error) => Failed::Library(error, timing(took >= bound.remaining())),
-            Unread::Shape(invariant) => {
+            Unread::Misread(Misread::Shape(invariant)) => {
                 Failed::Condition(fault::defect(self.place(), stage, invariant, None))
+            }
+            Unread::Misread(Misread::Refused(row)) => {
+                Failed::Condition(Error::SqliteSchemaRefused {
+                    entry: self.entry.clone(),
+                    path: self.path.clone(),
+                    row,
+                })
             }
         })
     }
@@ -509,29 +578,79 @@ impl Session {
 
 /// A text field, read through its storage class and converted with U+FFFD
 /// substituted, at this boundary and nowhere else (`FR-OUT-017`).
-fn text(row: &Row<'_>, at: usize) -> Result<String, &'static str> {
+fn text(row: &Row<'_>, at: usize) -> Result<String, Misread> {
     match row.get_ref(at) {
         Ok(ValueRef::Text(bytes)) => Ok(String::from_utf8_lossy(bytes).into_owned()),
-        _ => Err(STORAGE_CLASS),
+        _ => Err(Misread::Shape(STORAGE_CLASS)),
     }
 }
 
 /// A text field that may be SQL `NULL`, kept distinct from every value
 /// (`FR-LITE-004`, step 2).
-fn text_or_null(row: &Row<'_>, at: usize) -> Result<Option<String>, &'static str> {
+fn text_or_null(row: &Row<'_>, at: usize) -> Result<Option<String>, Misread> {
     match row.get_ref(at) {
         Ok(ValueRef::Text(bytes)) => Ok(Some(String::from_utf8_lossy(bytes).into_owned())),
         Ok(ValueRef::Null) => Ok(None),
-        _ => Err(STORAGE_CLASS),
+        _ => Err(Misread::Shape(STORAGE_CLASS)),
     }
 }
 
 /// An integer field, never coerced from another class.
-fn integer(row: &Row<'_>, at: usize) -> Result<i64, &'static str> {
+fn integer(row: &Row<'_>, at: usize) -> Result<i64, Misread> {
     match row.get_ref(at) {
         Ok(ValueRef::Integer(value)) => Ok(value),
-        _ => Err(STORAGE_CLASS),
+        _ => Err(Misread::Shape(STORAGE_CLASS)),
     }
+}
+
+/// A value of the schema table read by a statement after the check, which
+/// selects the row's `type` at column `0` and its `name` at column `1`
+/// (`catalogue::statements`): the value where its class is one `admitted`
+/// takes, and otherwise the `78` of the check — a value of the schema table of
+/// a class the check refuses is a condition of the file, never a defect of
+/// `tpl` (`FR-LITE-040`, its paragraph on values).
+fn schema_value<'r, T>(
+    row: &'r Row<'_>,
+    at: usize,
+    column: &'static str,
+    admitted: impl FnOnce(ValueRef<'r>) -> Option<T>,
+) -> Result<T, Misread> {
+    let value = row.get_ref(at).map_err(|_| Misread::Shape(STORAGE_CLASS))?;
+
+    admitted(value).ok_or_else(|| {
+        Misread::Refused(Box::new(check::excluded(
+            row.get_ref(0).ok(),
+            row.get_ref(1).ok(),
+            column,
+            value,
+        )))
+    })
+}
+
+/// A text value of the schema table: its `type`, `name` or `tbl_name`.
+fn schema_text(row: &Row<'_>, at: usize, column: &'static str) -> Result<String, Misread> {
+    schema_value(row, at, column, |value| match value {
+        ValueRef::Text(bytes) => Some(String::from_utf8_lossy(bytes).into_owned()),
+        _ => None,
+    })
+}
+
+/// The `sql` of the schema table: a text or SQL `NULL`.
+fn schema_sql(row: &Row<'_>, at: usize) -> Result<Option<String>, Misread> {
+    schema_value(row, at, "sql", |value| match value {
+        ValueRef::Text(bytes) => Some(Some(String::from_utf8_lossy(bytes).into_owned())),
+        ValueRef::Null => Some(None),
+        _ => None,
+    })
+}
+
+/// The `rootpage` of the schema table: an integer or SQL `NULL`.
+fn schema_rootpage(row: &Row<'_>, at: usize) -> Result<Option<i64>, Misread> {
+    schema_value(row, at, "rootpage", |value| match value {
+        ValueRef::Integer(page) => Some(Some(page)),
+        ValueRef::Null => Some(None),
+        _ => None,
+    })
 }
 
 /// The statement record of `FR-LITE-018`, taken in process through the

@@ -16,6 +16,12 @@
 //! `` `…` ``, `[…]` and `'…'`, each doubling its closing quote to escape it,
 //! except the bracket — and the header under SQLite's comment syntax, `--` to
 //! the end of the line and `/* … */`.
+//!
+//! **The reading of the comment syntax is shared with the check** of
+//! `FR-LITE-041`, which reads the first word after `CREATE` of a table's
+//! stored text to learn whether it creates a virtual table: [`word_after_create`]
+//! reads it with the same tokens, so one reading of SQLite's comment syntax
+//! serves both (architecture, *The SQLite reader*).
 
 /// What the header states.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,6 +153,22 @@ pub(crate) fn header(sql: &str) -> Option<Header> {
         timing: timing.unwrap_or(Timing::Before),
         event: event?,
     })
+}
+
+/// The first word after the keyword `CREATE` of a stored `CREATE` statement,
+/// read under SQLite's comment syntax, as written (`FR-LITE-041`, its third
+/// kind).
+///
+/// [`None`] where the text does not begin with `CREATE`, or where the token
+/// after it is not a bare word.
+pub(super) fn word_after_create(sql: &str) -> Option<&str> {
+    let mut tokens = Tokens { rest: sql };
+
+    expect_word(&mut tokens, "CREATE")?;
+    match tokens.next()? {
+        Token::Word(word) => Some(word),
+        _ => None,
+    }
 }
 
 /// Records `value` in `slot`, or [`None`] where the slot is already filled.
@@ -324,6 +346,40 @@ mod tests {
                 }),
                 "{sql}"
             );
+        }
+    }
+
+    #[test]
+    fn fr_lite_041_the_word_after_create_is_read_under_the_comment_syntax() {
+        use super::word_after_create;
+
+        for (sql, word) in [
+            ("CREATE TABLE t(a)", Some("TABLE")),
+            (
+                "CREATE VIRTUAL TABLE cargo_note USING fts5(body)",
+                Some("VIRTUAL"),
+            ),
+            (
+                "create virtual table v using rtree(id, x0, x1)",
+                Some("virtual"),
+            ),
+            (
+                "CREATE /* note */ VIRTUAL TABLE v USING fts5(b)",
+                Some("VIRTUAL"),
+            ),
+            (
+                "CREATE -- a line comment\n VIRTUAL TABLE v USING fts5(b)",
+                Some("VIRTUAL"),
+            ),
+            ("CREATE TABLE \"virtual\"(a)", Some("TABLE")),
+            ("  CREATE\tTABLE t(a)", Some("TABLE")),
+            ("CREATE \"VIRTUAL\" TABLE t(a)", None),
+            ("CREATE", None),
+            ("CREATE /* unclosed VIRTUAL", None),
+            ("SELECT 1", None),
+            ("", None),
+        ] {
+            assert_eq!(word_after_create(sql), word, "{sql}");
         }
     }
 

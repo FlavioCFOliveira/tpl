@@ -37,8 +37,12 @@ pub(crate) enum Stage {
     Control,
     /// The version probe (stage 6).
     Probe,
-    /// A catalogue statement, described as the `cause` names it.
+    /// A catalogue statement — the check of `FR-LITE-041` among them —
+    /// described as the `cause` names it.
     Catalogue(&'static str),
+    /// `BEGIN DEFERRED` or `COMMIT`, the read transaction of `FR-LITE-042`,
+    /// described as the `cause` names it. Neither is a catalogue statement.
+    Transaction(&'static str),
 }
 
 impl Stage {
@@ -49,7 +53,9 @@ impl Stage {
             Self::Build => SqliteAt::Statement("PRAGMA compile_options"),
             Self::Control => SqliteAt::Statement("a hardening control of the connection"),
             Self::Probe => SqliteAt::Statement("the version probe SELECT sqlite_version()"),
-            Self::Catalogue(statement) => SqliteAt::Statement(statement),
+            Self::Catalogue(statement) | Self::Transaction(statement) => {
+                SqliteAt::Statement(statement)
+            }
         }
     }
 
@@ -455,7 +461,12 @@ mod tests {
     use rusqlite::ffi;
 
     /// Every stage outside step 1: neither the build nor a control.
-    const ORDINARY: [Stage; 3] = [Stage::Open, Stage::Probe, Stage::Catalogue("statement 3")];
+    const ORDINARY: [Stage; 4] = [
+        Stage::Open,
+        Stage::Probe,
+        Stage::Catalogue("statement 3"),
+        Stage::Transaction("the COMMIT of the read transaction"),
+    ];
 
     #[test]
     fn fr_lite_012_any_code_at_the_build_or_a_control_is_a_control_not_in_effect() {

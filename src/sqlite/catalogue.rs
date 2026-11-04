@@ -1,26 +1,40 @@
 //! The catalogue plan of a `sqlite` read, and the values it owns
-//! (`FR-LITE-015`, `FR-LITE-037`).
+//! (`FR-LITE-015`, `FR-LITE-037`, `FR-LITE-041`, `FR-LITE-042`).
 //!
-//! **The plan is a constant**: six statements follow the probe, fixed before
-//! the first is sent, each joining `pragma_table_list` to the function it reads
-//! through, so the count does not depend on the number of objects, and no path
-//! adds a statement (`FR-LITE-037`, `NFR-PERF-001`).
+//! **The read is one read transaction.** `BEGIN DEFERRED` is issued
+//! immediately before the check of `FR-LITE-041`, and `COMMIT` immediately
+//! after the last catalogue statement, so that the check and every catalogue
+//! statement read one snapshot of the file: a table or a view another
+//! connection adds after the check is never read through (`FR-LITE-042`). A
+//! read that ends early — the check refuses the file, a statement fails, a
+//! deadline ends one — issues no `COMMIT`; the transaction ends with the
+//! connection, which the library rolls back when it closes.
 //!
-//! **The read compiles no view.** A view is read from statement 2, which names
-//! it, and statement 6, which holds its stored text; no statement reads from a
-//! view or passes a view's name to a pragma function, so a view whose
-//! definition does not compile is read as every other view is, and nothing is
-//! marked (`FR-LITE-015`, `FR-LITE-033`, `FR-LITE-036`).
+//! **The plan is a constant**: the check, then six statements, fixed before
+//! the first is sent, each joining `main.sqlite_schema` to the function it
+//! reads through, so the count does not depend on the number of objects, and
+//! no path adds a statement (`FR-LITE-037`, `NFR-PERF-001`). No statement
+//! invokes `pragma_table_list`.
+//!
+//! **The read compiles no view and connects no virtual table.** A view is
+//! read from statement 2, which names it, and statement 6, which holds its
+//! stored text; no statement reads from a view or passes a view's or a virtual
+//! table's name to a pragma function, so a view whose definition does not
+//! compile is read as every other view is, and nothing is marked
+//! (`FR-LITE-015`, `FR-LITE-033`, `FR-LITE-036`).
 //!
 //! **The read owns its values.** A row borrows its statement, so every value is
 //! copied out as it is read, through its storage class and never coerced, a
 //! SQL `NULL` kept apart from every value (`FR-LITE-004`, step 2); a field of
-//! a class the library does not document for it is the `70` of `FR-ERR-030`.
+//! a pragma function of a class the library does not document for it is the
+//! `70` of `FR-ERR-030`, and a value of the schema table of a class the check
+//! refuses is the `78` of the check (`FR-LITE-040`, its paragraph on values).
 //! Text is converted with U+FFFD substituted at this boundary and nowhere else
 //! (`FR-OUT-017`).
 
 pub(crate) mod statements;
 
+pub(super) mod check;
 mod fold;
 mod trigger;
 
@@ -29,23 +43,25 @@ use std::path::PathBuf;
 use rusqlite::Row;
 
 use super::fault::Stage;
-use super::{Session, integer, text, text_or_null};
+use super::{
+    Misread, Session, integer, schema_rootpage, schema_sql, schema_text, text, text_or_null,
+};
 use crate::error::Error;
 use crate::model::database::Database;
 use crate::model::server::Server;
 
-/// One object `pragma_table_list` reports in `main`.
+/// One row of `main.sqlite_schema` of type `table` or `view`.
 #[derive(Debug, Clone)]
 struct Object {
     /// Its name.
     name: String,
-    /// Its type: `table`, `view`, `virtual`, `shadow`, or another the carried
-    /// library reports.
+    /// Its type: `table` or `view`.
     kind: String,
-    /// Whether it is a `WITHOUT ROWID` table — the `wr` field.
+    /// Its root page: `0` for a virtual table, which `FR-LITE-021` excludes.
+    rootpage: Option<i64>,
+    /// Whether `pragma_index_info` returned a row for its name: a
+    /// `WITHOUT ROWID` table (`FR-LITE-020`).
     without_rowid: bool,
-    /// Whether it is a `STRICT` table.
-    strict: bool,
 }
 
 /// One row of `pragma_table_xinfo`, for a table.
@@ -164,7 +180,11 @@ impl Catalogue {
     }
 }
 
-/// How each catalogue statement is named in a `cause`.
+/// How each statement of the read is named in a `cause`.
+const BEGIN: &str = "the BEGIN DEFERRED of the read transaction";
+/// See [`BEGIN`].
+const COMMIT: &str = "the COMMIT of the read transaction";
+/// See [`BEGIN`].
 const ENCODING: &str = "the catalogue statement reading the encoding of main";
 /// See [`ENCODING`].
 const OBJECTS: &str = "the catalogue statement reading the objects of main";
@@ -177,13 +197,22 @@ const FOREIGN_KEYS: &str = "the catalogue statement reading the foreign keys of 
 /// See [`ENCODING`].
 const STORED: &str = "the catalogue statement reading the stored text of every view and trigger";
 
-/// Reads the catalogue of the open session: the six statements of the plan,
-/// and no other (`FR-LITE-015`, `FR-LITE-037`).
+/// Reads the catalogue of the open session in one read transaction:
+/// `BEGIN DEFERRED`, the check, the six statements of the plan, and `COMMIT`,
+/// and no other statement (`FR-LITE-015`, `FR-LITE-017`, `FR-LITE-037`,
+/// `FR-LITE-041`, `FR-LITE-042`).
 ///
 /// # Errors
 ///
-/// Returns the code `FR-LITE-040` gives the first statement that fails.
+/// Returns the `78` of the check for a file it refuses, and the code
+/// `FR-LITE-040` gives the first statement that fails. Either way no `COMMIT`
+/// is issued, and the transaction ends with the connection.
 pub(crate) fn read(session: &Session) -> Result<Catalogue, Error> {
+    session.transaction(Stage::Transaction(BEGIN), statements::BEGIN)?;
+    session.check()?;
+    #[cfg(test)]
+    race::after_check();
+
     let encoding = issue(
         session,
         Stage::Catalogue(ENCODING),
@@ -196,10 +225,10 @@ pub(crate) fn read(session: &Session) -> Result<Catalogue, Error> {
         statements::OBJECTS,
         |row| {
             Ok(Object {
-                name: text(row, 0)?,
-                kind: text(row, 1)?,
-                without_rowid: integer(row, 2)? != 0,
-                strict: integer(row, 3)? != 0,
+                kind: schema_text(row, 0, "type")?,
+                name: schema_text(row, 1, "name")?,
+                rootpage: schema_rootpage(row, 2)?,
+                without_rowid: integer(row, 3)? != 0,
             })
         },
     )?;
@@ -215,15 +244,15 @@ pub(crate) fn read(session: &Session) -> Result<Catalogue, Error> {
         statements::INDEXES,
         |row| {
             Ok(IndexRow {
-                table: text(row, 0)?,
-                index: text(row, 1)?,
-                unique: integer(row, 2)? != 0,
-                origin: text(row, 3)?,
-                seqno: integer(row, 4)?,
-                cid: integer(row, 5)?,
-                name: text_or_null(row, 6)?,
-                descending: integer(row, 7)? != 0,
-                key: integer(row, 8)? != 0,
+                table: schema_text(row, 1, "name")?,
+                index: text(row, 2)?,
+                unique: integer(row, 3)? != 0,
+                origin: text(row, 4)?,
+                seqno: integer(row, 5)?,
+                cid: integer(row, 6)?,
+                name: text_or_null(row, 7)?,
+                descending: integer(row, 8)? != 0,
+                key: integer(row, 9)? != 0,
             })
         },
     )?;
@@ -233,15 +262,15 @@ pub(crate) fn read(session: &Session) -> Result<Catalogue, Error> {
         statements::FOREIGN_KEYS,
         |row| {
             Ok(KeyRow {
-                table: text(row, 0)?,
-                id: integer(row, 1)?,
-                seq: integer(row, 2)?,
-                referenced: text(row, 3)?,
-                from: text(row, 4)?,
-                to: text_or_null(row, 5)?,
-                on_update: text(row, 6)?,
-                on_delete: text(row, 7)?,
-                matched: text(row, 8)?,
+                table: schema_text(row, 1, "name")?,
+                id: integer(row, 2)?,
+                seq: integer(row, 3)?,
+                referenced: text(row, 4)?,
+                from: text(row, 5)?,
+                to: text_or_null(row, 6)?,
+                on_update: text(row, 7)?,
+                on_delete: text(row, 8)?,
+                matched: text(row, 9)?,
             })
         },
     )?;
@@ -251,13 +280,17 @@ pub(crate) fn read(session: &Session) -> Result<Catalogue, Error> {
         statements::STORED,
         |row| {
             Ok(StoredRow {
-                kind: text(row, 0)?,
-                name: text(row, 1)?,
-                table: text(row, 2)?,
-                sql: text_or_null(row, 3)?,
+                kind: schema_text(row, 0, "type")?,
+                name: schema_text(row, 1, "name")?,
+                table: schema_text(row, 2, "tbl_name")?,
+                sql: schema_sql(row, 3)?,
             })
         },
     )?;
+
+    // Every catalogue statement completed: the transaction ends here, and on
+    // no other path (FR-LITE-042).
+    session.transaction(Stage::Transaction(COMMIT), statements::COMMIT)?;
     let (entry, path) = session.origin();
 
     Ok(Catalogue {
@@ -278,23 +311,51 @@ fn issue<T>(
     session: &Session,
     stage: Stage,
     sql: &str,
-    read: impl FnMut(&Row<'_>) -> Result<T, &'static str>,
+    read: impl FnMut(&Row<'_>) -> Result<T, Misread>,
 ) -> Result<Vec<T>, Error> {
     let answered = session.rows(stage, sql, true, read);
     session.answered(stage, answered)
 }
 
-/// One row of statement 3: the table's name, then the fields of
+/// One row of statement 3: the table's type and name, then the fields of
 /// `pragma_table_xinfo`.
-fn column_row(row: &Row<'_>) -> Result<ColumnRow, &'static str> {
+fn column_row(row: &Row<'_>) -> Result<ColumnRow, Misread> {
     Ok(ColumnRow {
-        table: text(row, 0)?,
-        cid: integer(row, 1)?,
-        name: text(row, 2)?,
-        declared: text(row, 3)?,
-        not_null: integer(row, 4)? != 0,
-        default: text_or_null(row, 5)?,
-        pk: integer(row, 6)?,
-        hidden: integer(row, 7)?,
+        table: schema_text(row, 1, "name")?,
+        cid: integer(row, 2)?,
+        name: text(row, 3)?,
+        declared: text(row, 4)?,
+        not_null: integer(row, 5)? != 0,
+        default: text_or_null(row, 6)?,
+        pk: integer(row, 7)?,
+        hidden: integer(row, 8)?,
     })
+}
+
+/// A seam of the test configuration alone, between the check and the first
+/// statement after it, where a test makes another connection write the file
+/// (`FR-LITE-042`). It is compiled into no other build, like the statement
+/// record of `FR-LITE-018` (`FR-ERR-031`, `OD-21`).
+#[cfg(test)]
+pub(crate) mod race {
+    use std::cell::RefCell;
+
+    thread_local! {
+        /// What runs on this thread once the check has read.
+        static AFTER_CHECK: RefCell<Option<Box<dyn FnOnce()>>> = RefCell::new(None);
+    }
+
+    /// Runs `writer` on this thread after the check of the next read, inside
+    /// its read transaction.
+    pub(crate) fn after_the_check(writer: impl FnOnce() + 'static) {
+        AFTER_CHECK.with(|slot| *slot.borrow_mut() = Some(Box::new(writer)));
+    }
+
+    /// Runs what [`after_the_check`] set, once.
+    pub(super) fn after_check() {
+        let writer = AFTER_CHECK.with(|slot| slot.borrow_mut().take());
+        if let Some(writer) = writer {
+            writer();
+        }
+    }
 }

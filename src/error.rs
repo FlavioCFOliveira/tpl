@@ -694,6 +694,45 @@ pub enum SqliteEnd {
     },
 }
 
+/// A row of the schema table `main.sqlite_schema` that the check of
+/// `FR-LITE-041` refuses: its `type` and its `name`, as values of the file,
+/// and the kind of row it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefusedRow {
+    /// The row's `type`: a text or a BLOB as its bytes read as text with
+    /// U+FFFD substituted, an integer or a real in digits, `NULL` as `NULL`.
+    pub row_type: FileValue,
+    /// The row's `name`, written as its `type` is.
+    pub name: FileValue,
+    /// Why the check refuses it.
+    pub kind: RefusedKind,
+}
+
+/// The three kinds of row the check of `FR-LITE-041` refuses, in the order of
+/// that requirement's table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RefusedKind {
+    /// A table or a view named in the namespace of the pragma table-valued
+    /// functions: SQLite reads it in place of the function of that name.
+    PragmaName,
+    /// A value of a storage class the schema table's contract excludes.
+    StorageClass {
+        /// The column of the schema table that holds it.
+        column: &'static str,
+        /// The storage class it holds: `NULL`, `INTEGER`, `REAL`, `TEXT` or
+        /// `BLOB`.
+        class: &'static str,
+    },
+    /// A table whose root page contradicts its text.
+    RootPage {
+        /// The root page, or [`None`] for `NULL`.
+        rootpage: Option<i64>,
+        /// Whether the text creates a virtual table.
+        creates_virtual: bool,
+    },
+}
+
 /// Every condition `tpl` reports as a failure.
 ///
 /// One variant per distinct condition the specification names, each carrying
@@ -2389,6 +2428,22 @@ pub enum Error {
         report: LibraryReport,
     },
 
+    /// The schema table of the file a `sqlite` entry names holds a row the
+    /// check of `FR-LITE-041` refuses: a table or a view named like a pragma
+    /// table-valued function, a value of a storage class the table's contract
+    /// excludes, or a table whose root page contradicts its text. No further
+    /// statement reads the file.
+    #[error("{} holds a schema tpl refuses to read, for database entry '{entry}'", .path.display())]
+    SqliteSchemaRefused {
+        /// The entry.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The row refused, boxed so that [`enum@Error`] stays within the size
+        /// `clippy::result_large_err` admits.
+        row: Box<RefusedRow>,
+    },
+
     /// The server is reachable and authenticated and is not MariaDB
     /// (`FR-SRV-003`). The catalogue is not read.
     #[error("the server reached by database entry '{entry}' is not MariaDB")]
@@ -2962,7 +3017,8 @@ impl Error {
             | Self::SeriesNotSupported { .. }
             | Self::ProviderRefusesKeys { .. }
             | Self::SqliteNotRegularFile { .. }
-            | Self::SqliteFileRefused { .. } => 78,
+            | Self::SqliteFileRefused { .. }
+            | Self::SqliteSchemaRefused { .. } => 78,
         }
     }
 }
@@ -2982,7 +3038,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 103;
+    const VARIANT_COUNT: usize = 104;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -3826,6 +3882,18 @@ mod tests {
                 },
                 78,
             ),
+            (
+                Error::SqliteSchemaRefused {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    row: Box::new(super::RefusedRow {
+                        row_type: super::FileValue::new("view"),
+                        name: super::FileValue::new("pragma_table_list"),
+                        kind: super::RefusedKind::PragmaName,
+                    }),
+                },
+                78,
+            ),
         ]
     }
 
@@ -3945,6 +4013,7 @@ mod tests {
             Error::ProviderRefusesKeys { .. } => "ProviderRefusesKeys",
             Error::SqliteNotRegularFile { .. } => "SqliteNotRegularFile",
             Error::SqliteFileRefused { .. } => "SqliteFileRefused",
+            Error::SqliteSchemaRefused { .. } => "SqliteSchemaRefused",
         }
     }
 

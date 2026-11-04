@@ -19,9 +19,9 @@
 //! | Submodule | Subject | Forced by |
 //! |---|---|---|
 //! | [`envelope`] | The three keys, the four values of `source`, and the collection shape | `FR-OUT-024` … `FR-OUT-032`, `FR-OUT-035` |
-//! | [`json`] | The two forms, and the only call into `serde_json` | `FR-OUT-007`, `FR-OUT-008`, `FR-OUT-013`, `OD-18` |
+//! | [`json`] | The two forms, the only call into `serde_json`, and JSON's own escape for the characters past C0 | `FR-OUT-007`, `FR-OUT-008`, `FR-OUT-013`, `FR-OUT-018`, `OD-18` |
 //! | [`text`] | The aligned columns under a header row, and the ordering applied to them | `FR-OUT-004`, `FR-OUT-006`, `FR-OUT-034`, `NFR-DET-002` |
-//! | [`escape`] | The C0 rule of the `text` path, tab excepted | `FR-OUT-018`, `FR-OUT-019` |
+//! | [`escape`] | The rule of the `text` path — C0, C1 and the bidirectional formatting characters, tab excepted — and the one predicate the three paths share past C0 | `FR-OUT-018`, `FR-OUT-019`, `FR-ERR-024` |
 //! | [`writer`] | The buffered writer, and the `0`-or-`74` distinction | `FR-ERR-025`, `FR-ERR-026`, `FR-OUT-020`, `FR-OUT-021` |
 //!
 //! Key order is stated in the types and nowhere else. `OD-18` settles
@@ -63,6 +63,7 @@ use crate::error::Error;
 use writer::Writer;
 
 pub(crate) use envelope::{Collection, Document, SCHEMA_VERSION, Source};
+pub(crate) use escape::{escaped_past_c0, may_hold_past_c0};
 pub(crate) use json::Form;
 pub(crate) use text::{Order, Table};
 
@@ -171,7 +172,8 @@ pub(crate) fn emit_verbatim<W: std::io::Write>(stream: W, text: &str) -> Result<
 /// header row to sit under, so the aligned columns of [`text`] are not the
 /// shape it takes.
 ///
-/// The C0 controls of `FR-OUT-018` are escaped on the way out, tab excepted,
+/// The characters of `FR-OUT-018` — C0, C1 and the bidirectional formatting
+/// characters — are escaped on the way out, tab excepted,
 /// because `FR-OUT-019` reaches every value interpolated into `text` output
 /// whatever its source — "the catalogue, a `--context` document, or the
 /// argument vector" — and exempts two outputs, neither of which is this one.

@@ -23,7 +23,9 @@
 //! | `FR-CFG-051` | The fifth form of the warning, for an invocation that uses or targets a `sqlite` entry |
 //! | `FR-CFG-053` | A write of `path` or `provider` warns that the entry may point elsewhere |
 //! | `FR-CFG-055` | The four items, each a refusal at the step it names or a value stored as written |
-//! | `FR-CFG-056` | `tpl cfg database test` of a `sqlite` entry reports the four steps, and exits with the code of the file's fault |
+//! | `FR-CFG-056` | `tpl cfg database test` of a `sqlite` entry reports the four steps, and exits with the code of the file's fault — the check's `78` over each database it refuses |
+//! | `FR-ERR-024`, `FR-OUT-018` | A C1 control and a bidirectional formatting character read from the file are escaped in `text` output, in `json` output as JSON's own escape, and in a diagnostic; a value carrying neither is written unchanged |
+//! | `FR-ERR-046` | A value of the file in a `cause` is written whole at 256 characters and cut past them, never inside an escape; a name from the argument vector is written whole |
 //! | `FR-LITE-005`, `FR-SEC-028` | A directory, a FIFO, a socket and a character device are `78` and never opened; a link is followed |
 //! | `FR-LITE-006`, `FR-LITE-007` | A path naming nothing stays naming nothing; each file that cannot be read is refused with its code, and an empty file is an empty database |
 //! | `FR-LITE-008`, `FR-LITE-018`, `BR-LITE-001` | A read leaves a rollback-journal database and every file outside `.tpl` as found; a write-ahead-log read adds at most the two files of the mode |
@@ -59,10 +61,16 @@ const LABELS: [&str; 4] = ["error:", "cause:", "hint:", "exit:"];
 const LISTING: &str = "{{ database.provider }} {{ database.name }}\n\
                        {% for table in database.tables %}{{ table.name }}\n{% endfor %}";
 
-/// What [`LISTING`] renders from the main fixture database: the fifteen tables
-/// `FR-LITE-020` covers, in the order of `FR-CTX-013`.
+/// What [`LISTING`] renders from the main fixture database: the twenty tables
+/// `FR-LITE-020` covers — the five shadow tables of the fts5 table of item 12
+/// among them, since the sixty-ninth edition — in the order of `FR-CTX-013`.
 const LISTED: &str = "sqlite main\n\
                       berth\n\
+                      cargo_note_config\n\
+                      cargo_note_content\n\
+                      cargo_note_data\n\
+                      cargo_note_docsize\n\
+                      cargo_note_idx\n\
                       carrier\n\
                       consignment\n\
                       container_size\n\
@@ -1142,6 +1150,22 @@ fn fr_cfg_056_the_test_of_a_sqlite_entry_reports_the_four_steps() {
             &database.display().to_string(),
         );
     }
+
+    // FR-CFG-056 as amended in the sixty-ninth edition: the catalogue probe is
+    // the check of FR-LITE-041, so a file every read refuses is not reported
+    // as readable — each of the six databases of row 33 is the check's 78.
+    for (database, kind) in built.refused_by_the_check() {
+        repoint(&sandbox, database);
+        let written = refused(
+            &sandbox.run(&["cfg", "database", "test", ENTRY]),
+            78,
+            &database.display().to_string(),
+        );
+        let cause = line(&written, "cause:");
+        assert!(cause.contains("main.sqlite_schema"), "{written}");
+        assert!(cause.contains(kind), "{kind}: {written}");
+        assert!(line(&written, "hint:").contains(REPOINT), "{written}");
+    }
 }
 
 // ----------------------------------------------- FR-LITE-005, FR-SEC-028 ---
@@ -1462,4 +1486,235 @@ fn nfr_perf_004_a_sqlite_invocation_opens_the_database_file_once() {
             "tpl {arguments} opened the database file {opened} times:\n{trace}"
         );
     }
+}
+
+// ------------------------------------------------- FR-ERR-024, FR-OUT-018 ---
+
+/// The name of the table [`hostile`] builds: U+202E, which shows the rest of
+/// the name reversed, and U+009B, the one-character control sequence
+/// introducer.
+const HOSTILE_TABLE: &str = "manifest\u{202e}fdp.exe\u{9b}31m";
+
+/// Builds, in `sandbox`, a database whose table name, column name and column
+/// default carry a C1 control and a bidirectional formatting character, and
+/// points the entry at it.
+fn hostile(sandbox: &Sandbox) {
+    let path = sandbox.path("data/hostile.sqlite");
+    let connection = rusqlite::Connection::open(&path).expect("the database opens");
+    connection
+        .execute_batch(&format!(
+            "CREATE TABLE \"{HOSTILE_TABLE}\" (\
+                 line_id INTEGER PRIMARY KEY, \
+                 \"note\u{200f}\u{2066}x\" TEXT DEFAULT 'a\u{9b}b\u{202e}c\u{61c}d', \
+                 plain TEXT DEFAULT 'caf\u{e9} \u{2014} \u{6e2f}');"
+        ))
+        .expect("the database builds");
+    connection.close().expect("the database closes");
+    repoint(sandbox, &path);
+}
+
+/// Whether `written` carries a C1 control or a bidirectional formatting
+/// character raw.
+fn carries_the_set_raw(written: &str) -> bool {
+    written.chars().any(|character| {
+        matches!(
+            character,
+            '\u{80}'..='\u{9f}'
+                | '\u{61c}'
+                | '\u{200e}'
+                | '\u{200f}'
+                | '\u{202a}'..='\u{202e}'
+                | '\u{2066}'..='\u{2069}'
+        )
+    })
+}
+
+#[test]
+fn fr_out_018_a_c1_control_and_a_bidirectional_character_of_the_file_are_escaped_in_text() {
+    // FR-OUT-018 as amended in the sixty-ninth edition, `text`: each is
+    // written in the form of a C0 escape, and a value carrying neither is
+    // written unchanged.
+    let sandbox = project("data/freight.sqlite");
+    hostile(&sandbox);
+
+    let tables = succeeded(
+        &sandbox.run(&["schema", "tables", "--direct", "--no-cache"]),
+        "tpl schema tables",
+    );
+    assert!(
+        tables.contains("manifest\\u{202e}fdp.exe\\u{9b}31m"),
+        "{tables:?}"
+    );
+    assert!(!carries_the_set_raw(&tables), "{tables:?}");
+
+    let table = succeeded(
+        &sandbox.run(&["schema", "table", HOSTILE_TABLE, "--direct", "--no-cache"]),
+        "tpl schema table",
+    );
+    assert!(table.contains("note\\u{200f}\\u{2066}x"), "{table:?}");
+    assert!(table.contains("a\\u{9b}b\\u{202e}c\\u{61c}d"), "{table:?}");
+    assert!(table.contains("caf\u{e9} \u{2014} \u{6e2f}"), "{table:?}");
+    assert!(!carries_the_set_raw(&table), "{table:?}");
+}
+
+#[test]
+fn fr_out_018_a_c1_control_and_a_bidirectional_character_of_the_file_take_json_s_escape() {
+    // FR-OUT-018 as amended in the sixty-ninth edition, `json`: JSON's own
+    // `\u` and four lowercase hexadecimal digits, so the parsed document
+    // holds the characters the file holds; a value carrying neither is
+    // written unchanged.
+    let sandbox = project("data/freight.sqlite");
+    hostile(&sandbox);
+
+    for pretty in [false, true] {
+        let mut arguments = vec![
+            "schema",
+            "table",
+            HOSTILE_TABLE,
+            "--format",
+            "json",
+            "--direct",
+            "--no-cache",
+        ];
+        if pretty {
+            arguments.push("--pretty");
+        }
+        let written = succeeded(&sandbox.run(&arguments), "tpl schema table --format json");
+
+        assert!(
+            written.contains("manifest\\u202efdp.exe\\u009b31m"),
+            "{written}"
+        );
+        assert!(written.contains("note\\u200f\\u2066x"), "{written}");
+        assert!(written.contains("a\\u009bb\\u202ec\\u061cd"), "{written}");
+        assert!(written.contains("caf\u{e9} \u{2014} \u{6e2f}"), "{written}");
+        assert!(!carries_the_set_raw(&written), "{written:?}");
+
+        let document: serde_json::Value =
+            serde_json::from_str(&written).expect("the output is JSON");
+        let table = &document["data"]["table"];
+        assert_eq!(
+            table["name"], HOSTILE_TABLE,
+            "the parsed name is the file's"
+        );
+        let columns = table["columns"].as_array().expect("the columns");
+        assert!(
+            columns
+                .iter()
+                .any(|column| column["name"] == "note\u{200f}\u{2066}x"),
+            "{written}"
+        );
+    }
+}
+
+#[test]
+fn fr_err_024_a_c1_control_and_a_bidirectional_character_are_escaped_in_a_diagnostic() {
+    // FR-ERR-024 as amended in the sixty-ninth edition: a name carrying both,
+    // given on the command line and not found, comes back escaped in the
+    // `error` and `cause` lines, in the form of a C0 escape.
+    let sandbox = project("data/freight.sqlite");
+    let missing = "orders\u{202e}gpj.exe\u{9b}31m";
+
+    let written = refused(
+        &sandbox.run(&["schema", "table", missing, "--direct", "--no-cache"]),
+        66,
+        "a missing table carrying the set",
+    );
+    for label in ["error:", "cause:"] {
+        assert!(
+            line(&written, label).contains("orders\\u{202e}gpj.exe\\u{9b}31m"),
+            "{label} {written:?}"
+        );
+    }
+    assert!(!carries_the_set_raw(&written), "{written:?}");
+}
+
+// ----------------------------------------------------------- FR-ERR-046 ---
+
+#[test]
+fn fr_err_046_a_value_of_the_file_is_bounded_in_a_cause_and_never_cut_inside_an_escape() {
+    // FR-ERR-046 through a SQLite path: the name of a row the check refuses is
+    // a value of the file, interpolated into the `cause`. 256 characters as
+    // escaped are written whole; 257 are cut to 128 and 128 around the marker
+    // counting what was left out; a cut that would fall inside an escape —
+    // of C0, C1 or a bidirectional formatting character — keeps the escape
+    // whole outside the kept part.
+    let sandbox = project("data/freight.sqlite");
+    let build = |name: &str| {
+        let path = sandbox.path("data/long.sqlite");
+        let _ = std::fs::remove_file(&path);
+        let connection = rusqlite::Connection::open(&path).expect("the database opens");
+        connection
+            .execute_batch(&format!(
+                "CREATE TABLE \"{}\" (a)",
+                name.replace('"', "\"\"")
+            ))
+            .expect("the database builds");
+        connection.close().expect("the database closes");
+        repoint(&sandbox, &path);
+        let written = refused(
+            &sandbox.run(&["schema", "tables", "--direct", "--no-cache"]),
+            78,
+            "a table named pragma_",
+        );
+        line(&written, "cause:")
+    };
+
+    // 256 escaped characters: whole.
+    let whole = format!("pragma_{}", "w".repeat(249));
+    assert!(build(&whole).contains(&format!("named '{whole}'")));
+
+    // 257: both ends kept, one character counted out.
+    let cut = format!("pragma_{}", "c".repeat(250));
+    let cause = build(&cut);
+    let expected = format!(
+        "named '{}[... 1 characters omitted ...]{}'",
+        &cut[..128],
+        &cut[cut.len() - 128..]
+    );
+    assert!(cause.contains(&expected), "{cause}");
+
+    // An escape where a cut would fall, at each end.
+    for (character, form) in [
+        ('\n', "\\n"),
+        ('\u{1}', "\\u{01}"),
+        ('\u{9b}', "\\u{9b}"),
+        ('\u{202e}', "\\u{202e}"),
+    ] {
+        let name: String = "pragma_"
+            .chars()
+            .chain("x".repeat(120).chars())
+            .chain(std::iter::once(character))
+            .chain("y".repeat(300).chars())
+            .chain(std::iter::once(character))
+            .chain("z".repeat(127).chars())
+            .collect();
+        let cause = build(&name);
+        let head = format!("named 'pragma_{}[... ", "x".repeat(120));
+        let tail = format!(" characters omitted ...]{}'", "z".repeat(127));
+        assert!(cause.contains(&head), "{form}: {cause}");
+        assert!(cause.contains(&tail), "{form}: {cause}");
+        let omitted = 2 * form.chars().count() + 300;
+        assert!(
+            cause.contains(&format!("[... {omitted} characters omitted ...]")),
+            "{form}: {cause}"
+        );
+    }
+}
+
+#[test]
+fn fr_err_046_a_name_from_the_argument_vector_is_written_whole_on_a_sqlite_path() {
+    // FR-ERR-046: the bound reaches a value of the file and never the
+    // argument vector, which FR-ERR-034 echoes as written — over a `sqlite`
+    // entry as over a `mariadb` one.
+    let sandbox = project("data/freight.sqlite");
+    let long = "a".repeat(300);
+
+    let written = refused(
+        &sandbox.run(&["schema", "table", &long, "--direct", "--no-cache"]),
+        66,
+        "a long missing table",
+    );
+    assert!(line(&written, "cause:").contains(&long), "{written}");
+    assert!(!written.contains("characters omitted"), "{written}");
 }

@@ -20,6 +20,12 @@
 //! no interrupt is ever issued against a closed connection, which the same
 //! page states is not safe.
 //!
+//! **The deadline arithmetic saturates.** A `core.query_timeout` the
+//! configuration admits can lie past what an [`Instant`] can represent from
+//! now; such a bound arms the watchdog with no instant at all, so the statement
+//! is never interrupted and nothing panics (`OD-36`, as amended for rmp
+//! `#317`).
+//!
 //! The thread is not speculative parallelism, on the ground `OD-12` gives the
 //! render's watchdog: it performs no work of the invocation and exists only on
 //! the path that opens a database file.
@@ -35,8 +41,10 @@ use rusqlite::InterruptHandle;
 enum State {
     /// No statement is running under it.
     Idle,
-    /// A statement is running, and must be interrupted at this instant.
-    Armed(Instant),
+    /// A statement is running, and must be interrupted at this instant —
+    /// or never, where its bound lies past every instant the clock can
+    /// represent.
+    Armed(Option<Instant>),
     /// The statement it was armed for was interrupted.
     Fired,
     /// The connection is about to close; the thread ends.
@@ -94,9 +102,12 @@ impl Watchdog {
     }
 
     /// Arms the watchdog for a statement that may run for `remaining`.
+    ///
+    /// The instant is `Instant::checked_add`'s: a bound past what the clock
+    /// can represent arms the watchdog with none, and never panics.
     pub(crate) fn arm(&self, remaining: Duration) {
         let mut state = self.shared.lock();
-        *state = State::Armed(Instant::now() + remaining);
+        *state = State::Armed(Instant::now().checked_add(remaining));
         self.shared.changed.notify_all();
     }
 
@@ -146,13 +157,15 @@ fn watch(shared: &Shared, handle: &InterruptHandle) {
     loop {
         match *state {
             State::Stopped => return,
-            State::Idle | State::Fired => {
+            // A bound past every representable instant is never reached: the
+            // statement runs until it returns, and the thread waits as idle.
+            State::Idle | State::Fired | State::Armed(None) => {
                 state = shared
                     .changed
                     .wait(state)
                     .unwrap_or_else(PoisonError::into_inner);
             }
-            State::Armed(at) => {
+            State::Armed(Some(at)) => {
                 let now = Instant::now();
                 if now >= at {
                     // The interrupt is issued under the lock disarm takes, so
@@ -212,6 +225,27 @@ mod tests {
             .expect("the next statement answers");
         assert_eq!(after, 2);
         assert!(!watchdog.disarm());
+
+        watchdog.stop();
+    }
+
+    #[test]
+    fn fr_lite_009_a_bound_past_every_representable_instant_arms_without_panicking() {
+        // OD-36 as amended for rmp #317: a core.query_timeout the
+        // configuration admits can lie past what an Instant can represent;
+        // arming with it neither panics nor interrupts the statement.
+        let connection = Connection::open_in_memory().expect("a memory database opens");
+        let watchdog =
+            Watchdog::start(connection.get_interrupt_handle()).expect("the thread starts");
+
+        for remaining in [Duration::MAX, Duration::from_secs(u64::MAX / 2)] {
+            watchdog.arm(remaining);
+            let answered: i64 = connection
+                .query_row("SELECT 3", [], |row| row.get(0))
+                .expect("the statement answers");
+            assert_eq!(answered, 3);
+            assert!(!watchdog.disarm(), "the watchdog fired");
+        }
 
         watchdog.stop();
     }

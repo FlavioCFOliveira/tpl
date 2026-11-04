@@ -1737,12 +1737,12 @@ fn bare(error: &Error) -> Cow<'static, str> {
 
         // ------------------------------------------------ the SQLite file ---
         // FR-LITE-005, FR-LITE-007: the command that repoints the entry.
-        Error::SqliteNotRegularFile { entry, .. } | Error::SqliteFileRefused { entry, .. } => {
-            Cow::Owned(format!(
-                "point the entry at a SQLite database file: {}",
-                repoint_file(entry)
-            ))
-        }
+        Error::SqliteNotRegularFile { entry, .. }
+        | Error::SqliteFileRefused { entry, .. }
+        | Error::SqliteSchemaRefused { entry, .. } => Cow::Owned(format!(
+            "point the entry at a SQLite database file: {}",
+            repoint_file(entry)
+        )),
         Error::SqliteFileLookup { entry, .. } | Error::SqliteFileUnreadable { entry, .. } => {
             Cow::Owned(format!(
                 "check that the file and its directory are readable, and that the host has free \

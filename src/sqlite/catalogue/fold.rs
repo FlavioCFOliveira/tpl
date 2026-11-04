@@ -7,10 +7,10 @@
 //!
 //! | Fact | Rule | Forced by |
 //! |---|---|---|
-//! | The covered set | `main`; `table` and `view` as `pragma_table_list` reports them; internal tables excluded by the `sqlite_` prefix, ignoring ASCII case | `FR-LITE-019` … `FR-LITE-021` |
-//! | `data_type` | The five affinity rules, in order, over the declared type; `blob` for a `STRICT` column declared `ANY` | `FR-LITE-026` |
+//! | The covered set | `main`; the rows of `main.sqlite_schema` of type `table` whose root page is not `0` — a shadow table among them — and of type `view`; a virtual table, at root page `0`, excluded; internal tables excluded by the `sqlite_` prefix, ignoring ASCII case | `FR-LITE-019` … `FR-LITE-021` |
+//! | `data_type` | The five affinity rules, in order, over the declared type, for every column — a `STRICT` column declared `ANY` among them, which takes `numeric` | `FR-LITE-026` |
 //! | A column default | The eight ordered rows over `dflt_value` and the column's nullability | `FR-LITE-027` |
-//! | The rowid alias | Not `WITHOUT ROWID`, one `pk` column, and no index of origin `pk` | `FR-LITE-028` |
+//! | The rowid alias | Not `WITHOUT ROWID` — `pragma_index_info` returned no row for the table's name — one `pk` column, and no index of origin `pk` | `FR-LITE-028` |
 //! | The primary key | The `pk` columns in order of `pk`, named after the index of origin `pk` or unnamed | `FR-LITE-029` |
 //! | The indexes | Those `pragma_index_list` reports, less an index with an expression member | `FR-LITE-030`, `FR-LITE-021` |
 //! | The foreign keys | One per `id`, unnamed; `to` `NULL` read as the parent's primary key; a key whose parent is not columns of a covered table excluded | `FR-LITE-031`, `FR-LITE-021` |
@@ -23,11 +23,24 @@
 //! tables ignoring ASCII case and carried under the name the table itself
 //! carries, so that the byte-wise lookups of the document find it
 //! (`NFR-DET-002`).
+//!
+//! **The fold indexes before it looks up.** Every collection the fold reads
+//! by a name — the column, index and key rows by their table, an index's
+//! members by their index, the stored rows by their name, the covered tables
+//! and a table's columns by name, exactly and ignoring ASCII case — is grouped
+//! once into a map keyed by that name, and no object is found by scanning
+//! another collection. The fold runs after the last statement, outside every
+//! statement's bound, so a lookup that scanned would let a file of many
+//! objects cost time growing with their square where the statements' grows
+//! with their number (architecture, *The SQLite reader*; `FR-LITE-009`,
+//! *Consequence*; `FR-LITE-020`, *Provenance*). The maps are only looked up,
+//! never iterated, so no order of a document depends on them.
 
 use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
 
 use super::trigger::{self, Event, Timing};
-use super::{Catalogue, ColumnRow, IndexRow, KeyRow, Object};
+use super::{Catalogue, ColumnRow, IndexRow, KeyRow, Object, StoredRow};
 use crate::error::Error;
 use crate::model::column::{Column, Generated, GeneratedStorage};
 use crate::model::column_default::ColumnDefault;
@@ -47,14 +60,17 @@ use crate::sqlite::fault::{self, Place, Stage};
 /// (`FR-LITE-021`).
 const INTERNAL: &str = "sqlite_";
 
-/// The type `pragma_table_list` gives an ordinary table.
+/// The type the schema table gives a table, ordinary, shadow or virtual.
 const TABLE: &str = "table";
 
 /// The type it gives a view.
 const VIEW: &str = "view";
 
-/// The type `sqlite_schema` gives a trigger.
+/// The type it gives a trigger.
 const TRIGGER: &str = "trigger";
+
+/// The root page the schema table gives a virtual table (`FR-LITE-020`).
+const VIRTUAL_ROOT: i64 = 0;
 
 /// The origin `pragma_index_list` gives the index of a primary key.
 const PRIMARY_ORIGIN: &str = "pk";
@@ -78,6 +94,75 @@ const KEY_COLUMN: &str = "every key a sqlite read folds names columns of its own
 /// The stage a fold failure is reported at.
 const FOLD: Stage = Stage::Catalogue("the fold of the catalogue the statements returned");
 
+/// Names looked up exactly, then ignoring ASCII case, the first carried
+/// winning — as SQLite resolves an identifier.
+#[derive(Debug, Default)]
+struct Names<'c> {
+    /// Each name, exactly.
+    exact: HashMap<&'c str, usize>,
+    /// Each name with its ASCII letters lower-cased.
+    folded: HashMap<String, usize>,
+}
+
+impl<'c> Names<'c> {
+    /// The names, each at its position in `names`.
+    fn of(names: impl Iterator<Item = &'c str>) -> Self {
+        let mut found = Self::default();
+        for (at, name) in names.enumerate() {
+            found.exact.entry(name).or_insert(at);
+            found.folded.entry(name.to_ascii_lowercase()).or_insert(at);
+        }
+        found
+    }
+
+    /// The position of the name `name` names, exactly and then ignoring ASCII
+    /// case.
+    fn position(&self, name: &str) -> Option<usize> {
+        self.exact
+            .get(name)
+            .or_else(|| self.folded.get(&name.to_ascii_lowercase()))
+            .copied()
+    }
+}
+
+/// Every row the fold reads by a table's or an index's name, grouped once.
+#[derive(Debug, Default)]
+struct Grouped<'c> {
+    /// The column rows of each table, in the order of `cid`.
+    columns: HashMap<&'c str, Vec<&'c ColumnRow>>,
+    /// The index rows of each table, member by member.
+    indexes: HashMap<&'c str, Vec<&'c IndexRow>>,
+    /// The key rows of each table, pair by pair.
+    keys: HashMap<&'c str, Vec<&'c KeyRow>>,
+    /// The stored row of each view, by its name.
+    views: HashMap<&'c str, &'c StoredRow>,
+}
+
+impl<'c> Grouped<'c> {
+    /// Groups every row of `catalogue` by the name it is read by.
+    fn of(catalogue: &'c Catalogue) -> Self {
+        let mut grouped = Self::default();
+        for row in &catalogue.columns {
+            grouped.columns.entry(&row.table).or_default().push(row);
+        }
+        for row in &catalogue.indexes {
+            grouped.indexes.entry(&row.table).or_default().push(row);
+        }
+        for row in &catalogue.keys {
+            grouped.keys.entry(&row.table).or_default().push(row);
+        }
+        for row in catalogue.stored.iter().filter(|row| row.kind == VIEW) {
+            grouped.views.entry(&row.name).or_insert(row);
+        }
+        grouped
+    }
+
+    /// The rows of `table` in `map`, or none.
+    fn of_table<'m, T>(map: &'m HashMap<&'c str, Vec<&'c T>>, table: &str) -> &'m [&'c T] {
+        map.get(table).map_or(&[], Vec::as_slice)
+    }
+}
+
 /// Folds the catalogue into the model.
 ///
 /// # Errors
@@ -88,28 +173,40 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
         entry: &catalogue.entry,
         path: &catalogue.path,
     };
+    let grouped = Grouped::of(catalogue);
 
     // FR-LITE-019 … FR-LITE-021: coverage, before anything is folded.
     let tables: Vec<&Object> = catalogue
         .objects
         .iter()
-        .filter(|object| object.kind == TABLE && !internal(&object.name))
+        .filter(|object| covered_table(object))
         .collect();
-    let names: Vec<&str> = tables.iter().map(|table| table.name.as_str()).collect();
+    let names = Names::of(tables.iter().map(|table| table.name.as_str()));
+    let columns: Vec<Names<'_>> = tables
+        .iter()
+        .map(|table| {
+            Names::of(
+                Grouped::of_table(&grouped.columns, &table.name)
+                    .iter()
+                    .map(|row| row.name.as_str()),
+            )
+        })
+        .collect();
 
     let mut parts: Vec<TableParts<'static>> = Vec::with_capacity(tables.len());
     for table in &tables {
-        parts.push(self::table(catalogue, table));
+        parts.push(self::table(&grouped, table));
     }
 
     // FR-LITE-031: the keys, once every table's columns and key are known.
     let mut incoming: Vec<(usize, IncomingForeignKey<'static>)> = Vec::new();
     for (at, table) in tables.iter().enumerate() {
-        for key in keys(catalogue, &table.name, &names, &parts) {
+        let rows = Grouped::of_table(&grouped.keys, &table.name);
+        for key in keys(rows, at, &tables, &names, &columns, &parts) {
             if let Some(referenced) = key
                 .referenced_table
                 .as_deref()
-                .and_then(|referenced| position(&names, referenced))
+                .and_then(|referenced| names.position(referenced))
             {
                 incoming.push((
                     referenced,
@@ -132,7 +229,7 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
 
     // FR-LITE-032: the triggers on covered tables.
     for row in catalogue.stored.iter().filter(|row| row.kind == TRIGGER) {
-        let Some(at) = position(&names, &row.table) else {
+        let Some(at) = names.position(&row.table) else {
             // A trigger on a view, or on an object the model does not cover.
             continue;
         };
@@ -195,10 +292,17 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
         provider: Provider::Sqlite,
         server: catalogue.server.clone(),
         tables: assembled,
-        views: views(catalogue),
+        views: views(catalogue, &grouped),
         // FR-LITE-022: SQLite has no stored routines.
         routines: Vec::new(),
     })
+}
+
+/// Whether `object` is a covered table: a row of type `table` whose root page
+/// is not `0` — a shadow table among them — and whose name is no internal
+/// table's (`FR-LITE-020`, `FR-LITE-021`).
+fn covered_table(object: &Object) -> bool {
+    object.kind == TABLE && object.rootpage != Some(VIRTUAL_ROOT) && !internal(&object.name)
 }
 
 /// Whether `name` is an internal table's (`FR-LITE-021`).
@@ -207,39 +311,19 @@ fn internal(name: &str) -> bool {
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case(INTERNAL))
 }
 
-/// The position of the covered table `name` names, ignoring ASCII case.
-fn position(names: &[&str], name: &str) -> Option<usize> {
-    names
-        .iter()
-        .position(|carried| *carried == name)
-        .or_else(|| {
-            names
-                .iter()
-                .position(|carried| carried.eq_ignore_ascii_case(name))
-        })
-}
-
 /// One table's parts: its columns, its primary key and its indexes
 /// (`FR-LITE-024` … `FR-LITE-030`).
-fn table(catalogue: &Catalogue, object: &Object) -> TableParts<'static> {
-    let rows: Vec<&ColumnRow> = catalogue
-        .columns
-        .iter()
-        .filter(|row| row.table == object.name)
-        .collect();
-    let index_rows: Vec<&IndexRow> = catalogue
-        .indexes
-        .iter()
-        .filter(|row| row.table == object.name)
-        .collect();
+fn table(grouped: &Grouped<'_>, object: &Object) -> TableParts<'static> {
+    let rows = Grouped::of_table(&grouped.columns, &object.name);
+    let indexes = by_index(Grouped::of_table(&grouped.indexes, &object.name));
 
     // FR-LITE-029: the primary key's columns, in ascending order of `pk`.
     let mut key_rows: Vec<&ColumnRow> = rows.iter().copied().filter(|row| row.pk > 0).collect();
     key_rows.sort_by_key(|row| row.pk);
-    let origin = index_rows
+    let origin = indexes
         .iter()
-        .find(|row| row.origin == PRIMARY_ORIGIN)
-        .map(|row| row.index.as_str());
+        .find(|(_, members)| members.iter().any(|row| row.origin == PRIMARY_ORIGIN))
+        .map(|(name, members)| (*name, members.as_slice()));
 
     // FR-LITE-028: the rowid alias.
     let alias = (!object.without_rowid && key_rows.len() == 1 && origin.is_none())
@@ -248,32 +332,33 @@ fn table(catalogue: &Catalogue, object: &Object) -> TableParts<'static> {
 
     let columns: Vec<Column<'static>> = rows
         .iter()
-        .map(|row| {
-            column(
-                row,
-                &object.name,
-                object.strict,
-                alias == Some(row.name.as_str()),
-            )
-        })
+        .map(|row| column(row, &object.name, alias == Some(row.name.as_str())))
         .collect();
 
-    let primary_key = (!key_rows.is_empty()).then(|| PrimaryKey {
-        name: origin.map(|name| Cow::Owned(name.to_owned())),
-        unique: origin.is_none_or(|name| {
-            index_rows
+    // The direction of each member of the index of origin `pk`, by its name.
+    let descending: HashMap<&str, bool> = origin
+        .map(|(_, members)| {
+            members
                 .iter()
-                .find(|row| row.index == name)
-                .is_none_or(|row| row.unique)
-        }),
+                .filter(|row| row.key)
+                .filter_map(|row| row.name.as_deref().map(|name| (name, row.descending)))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let primary_key = (!key_rows.is_empty()).then(|| PrimaryKey {
+        name: origin.map(|(name, _)| Cow::Owned(name.to_owned())),
+        unique: origin.is_none_or(|(_, members)| members.first().is_none_or(|row| row.unique)),
         columns: key_rows
             .iter()
             .map(|row| IndexColumn {
                 name: Cow::Owned(row.name.clone()),
                 direction: Some(match origin {
-                    Some(name) => direction_of(&index_rows, name, &row.name),
+                    Some(_) if descending.get(row.name.as_str()) == Some(&true) => {
+                        SortDirection::Descending
+                    }
                     // A rowid alias is the table's B-tree key, ascending.
-                    None => SortDirection::Ascending,
+                    _ => SortDirection::Ascending,
                 }),
                 prefix_length: None,
             })
@@ -287,43 +372,36 @@ fn table(catalogue: &Catalogue, object: &Object) -> TableParts<'static> {
         engine: None,
         collation: None,
         columns,
-        indexes: indexes(&index_rows),
+        indexes: self::indexes(&indexes),
         primary_key,
         ..TableParts::new(Cow::Owned(object.name.clone()), TableType::Base)
     }
 }
 
-/// The direction of the member `column` of the index `index`.
-fn direction_of(rows: &[&IndexRow], index: &str, column: &str) -> SortDirection {
-    let descending = rows
-        .iter()
-        .find(|row| row.index == index && row.key && row.name.as_deref() == Some(column))
-        .is_some_and(|row| row.descending);
-
-    if descending {
-        SortDirection::Descending
-    } else {
-        SortDirection::Ascending
+/// The rows of one table's indexes, grouped by index, each index in the order
+/// it first appears and its rows in theirs.
+fn by_index<'c>(rows: &[&'c IndexRow]) -> Vec<(&'c str, Vec<&'c IndexRow>)> {
+    let mut at: HashMap<&'c str, usize> = HashMap::new();
+    let mut grouped: Vec<(&'c str, Vec<&'c IndexRow>)> = Vec::new();
+    for row in rows {
+        let slot = *at.entry(row.index.as_str()).or_insert_with(|| {
+            grouped.push((row.index.as_str(), Vec::new()));
+            grouped.len() - 1
+        });
+        if let Some((_, members)) = grouped.get_mut(slot) {
+            members.push(row);
+        }
     }
+    grouped
 }
 
 /// The indexes of one table, less those with an expression member
 /// (`FR-LITE-030`, `FR-LITE-021`).
-fn indexes(rows: &[&IndexRow]) -> Vec<Index<'static>> {
-    let mut names: Vec<&str> = Vec::new();
-    for row in rows {
-        if !names.contains(&row.index.as_str()) {
-            names.push(&row.index);
-        }
-    }
-
-    names
-        .into_iter()
-        .filter_map(|name| {
-            let mut members: Vec<&&IndexRow> = rows
-                .iter()
-                .filter(|row| row.index == name && row.key)
-                .collect();
+fn indexes(grouped: &[(&str, Vec<&IndexRow>)]) -> Vec<Index<'static>> {
+    grouped
+        .iter()
+        .filter_map(|(name, rows)| {
+            let mut members: Vec<&IndexRow> = rows.iter().copied().filter(|row| row.key).collect();
             if members
                 .iter()
                 .any(|row| row.cid == EXPRESSION || row.name.is_none())
@@ -334,7 +412,7 @@ fn indexes(rows: &[&IndexRow]) -> Vec<Index<'static>> {
             let unique = members.first().is_some_and(|row| row.unique);
 
             Some(Index {
-                name: Cow::Owned(name.to_owned()),
+                name: Cow::Owned((*name).to_owned()),
                 unique,
                 columns: members
                     .iter()
@@ -357,7 +435,7 @@ fn indexes(rows: &[&IndexRow]) -> Vec<Index<'static>> {
 }
 
 /// One column of a table (`FR-LITE-025` … `FR-LITE-028`).
-fn column(row: &ColumnRow, table: &str, strict: bool, alias: bool) -> Column<'static> {
+fn column(row: &ColumnRow, table: &str, alias: bool) -> Column<'static> {
     let nullable = !row.not_null;
 
     Column {
@@ -366,7 +444,7 @@ fn column(row: &ColumnRow, table: &str, strict: bool, alias: bool) -> Column<'st
         position: u64::try_from(row.cid).unwrap_or_default() + 1,
         column_type: ColumnType::affinity(
             Cow::Owned(row.declared.clone()),
-            affinity(&row.declared, strict),
+            affinity(&row.declared),
         ),
         nullable,
         default: default(row.default.as_deref(), nullable),
@@ -389,13 +467,13 @@ fn column(row: &ColumnRow, table: &str, strict: bool, alias: bool) -> Column<'st
 }
 
 /// The type affinity of a declared type, by the five rules of section 3.1 of
-/// `https://sqlite.org/datatype3.html`, in their order (`FR-LITE-026`).
-pub(super) fn affinity(declared: &str, strict: bool) -> &'static str {
+/// `https://sqlite.org/datatype3.html`, in their order, for every column — a
+/// column of a `STRICT` table included (`FR-LITE-026`, as amended in the
+/// sixty-ninth edition): no statement reports that a table is `STRICT`, so a
+/// column declared `ANY` takes `numeric`, the fifth rule's.
+pub(super) fn affinity(declared: &str) -> &'static str {
     let upper = declared.to_ascii_uppercase();
 
-    if strict && upper == "ANY" {
-        return "blob";
-    }
     if upper.contains("INT") {
         "integer"
     } else if upper.contains("CHAR") || upper.contains("CLOB") || upper.contains("TEXT") {
@@ -492,35 +570,34 @@ fn blob(written: &str) -> bool {
         .is_some_and(|hex| hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
-/// The outgoing keys of `table`, less those `FR-LITE-021` excludes
-/// (`FR-LITE-031`).
+/// The outgoing keys of the covered table at `own`, from its key rows, less
+/// those `FR-LITE-021` excludes (`FR-LITE-031`).
 fn keys(
-    catalogue: &Catalogue,
-    table: &str,
-    names: &[&str],
+    rows: &[&KeyRow],
+    own: usize,
+    tables: &[&Object],
+    names: &Names<'_>,
+    columns: &[Names<'_>],
     parts: &[TableParts<'static>],
 ) -> Vec<ForeignKey<'static>> {
-    let rows: Vec<&KeyRow> = catalogue
-        .keys
-        .iter()
-        .filter(|row| row.table == table)
-        .collect();
-    let mut ids: Vec<i64> = rows.iter().map(|row| row.id).collect();
-    ids.sort_unstable();
-    ids.dedup();
+    // One key per `id`, in ascending order of `id`, its pairs in order of
+    // `seq`.
+    let mut by_id: BTreeMap<i64, Vec<&KeyRow>> = BTreeMap::new();
+    for row in rows {
+        by_id.entry(row.id).or_default().push(row);
+    }
 
-    let own = position(names, table).and_then(|at| parts.get(at));
-
-    ids.into_iter()
-        .filter_map(|id| {
-            let mut pairs: Vec<&&KeyRow> = rows.iter().filter(|row| row.id == id).collect();
+    by_id
+        .into_values()
+        .filter_map(|mut pairs| {
             pairs.sort_by_key(|row| row.seq);
             let first = pairs.first()?;
 
             // FR-LITE-021: the parent must be a covered table.
-            let parent_at = position(names, &first.referenced)?;
+            let parent_at = names.position(&first.referenced)?;
             let parent = parts.get(parent_at)?;
-            let parent_name = names.get(parent_at)?;
+            let parent_name = &tables.get(parent_at)?.name;
+            let parent_columns = columns.get(parent_at)?;
 
             // `to` NULL on every pair: the parent's primary key, in its order.
             let referenced: Vec<String> = if pairs.iter().all(|row| row.to.is_none()) {
@@ -532,31 +609,37 @@ fn keys(
             } else {
                 pairs
                     .iter()
-                    .map(|row| row.to.as_deref().and_then(|to| carried(parent, to)))
+                    .map(|row| {
+                        row.to
+                            .as_deref()
+                            .and_then(|to| carried(parent, parent_columns, to))
+                    })
                     .collect::<Option<Vec<String>>>()?
             };
             if referenced.len() != pairs.len() {
                 return None;
             }
 
+            let own_part = parts.get(own);
+            let own_columns = columns.get(own);
             let columns = pairs
                 .iter()
                 .zip(referenced)
-                .map(|(row, referenced)| {
-                    let column = own
-                        .and_then(|own| carried(own, &row.from))
-                        .unwrap_or_else(|| row.from.clone());
-                    Some(ForeignKeyColumn {
-                        column: Cow::Owned(column),
-                        referenced_column: Cow::Owned(referenced),
-                    })
+                .map(|(row, referenced)| ForeignKeyColumn {
+                    column: Cow::Owned(
+                        own_part
+                            .zip(own_columns)
+                            .and_then(|(part, names)| carried(part, names, &row.from))
+                            .unwrap_or_else(|| row.from.clone()),
+                    ),
+                    referenced_column: Cow::Owned(referenced),
                 })
-                .collect::<Option<Vec<_>>>()?;
+                .collect();
 
             Some(ForeignKey {
                 name: None,
                 columns,
-                referenced_table: Some(Cow::Owned((*parent_name).to_owned())),
+                referenced_table: Some(Cow::Owned(parent_name.clone())),
                 referenced_key: None,
                 match_option: Cow::Owned(first.matched.clone()),
                 on_update: ReferentialAction::from_catalogue_owned(first.on_update.clone()),
@@ -566,34 +649,27 @@ fn keys(
         .collect()
 }
 
-/// The name a column of `table` carries, matched as SQLite matches it.
-fn carried(table: &TableParts<'_>, column: &str) -> Option<String> {
-    table
-        .columns
-        .iter()
-        .find(|carried| carried.name == column)
-        .or_else(|| {
-            table
-                .columns
-                .iter()
-                .find(|carried| carried.name.eq_ignore_ascii_case(column))
-        })
+/// The name a column of `table` carries, matched as SQLite matches it,
+/// through the table's column names grouped once.
+fn carried(table: &TableParts<'_>, names: &Names<'_>, column: &str) -> Option<String> {
+    names
+        .position(column)
+        .and_then(|at| table.columns.get(at))
         .map(|carried| carried.name.to_string())
 }
 
 /// The views: each one's name and whole stored statement, and nothing a view
 /// whose definition does not compile could lack (`FR-LITE-033`,
 /// `FR-LITE-036`).
-fn views(catalogue: &Catalogue) -> Vec<View<'static>> {
+fn views(catalogue: &Catalogue, grouped: &Grouped<'_>) -> Vec<View<'static>> {
     let mut views: Vec<View<'static>> = catalogue
         .objects
         .iter()
         .filter(|object| object.kind == VIEW)
         .map(|object| {
-            let definition = catalogue
-                .stored
-                .iter()
-                .find(|row| row.kind == VIEW && row.name == object.name)
+            let definition = grouped
+                .views
+                .get(object.name.as_str())
                 .and_then(|row| row.sql.clone())
                 .unwrap_or_default();
 
@@ -618,7 +694,7 @@ fn views(catalogue: &Catalogue) -> Vec<View<'static>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{affinity, default, internal, number};
+    use super::{Names, affinity, default, internal, number};
     use crate::model::column_default::ColumnDefault;
     use std::borrow::Cow;
 
@@ -647,12 +723,10 @@ mod tests {
             ("DATETIME", "numeric"),
             ("STRING", "numeric"),
             ("ANY", "numeric"),
+            ("any", "numeric"),
         ] {
-            assert_eq!(affinity(declared, false), expected, "{declared}");
+            assert_eq!(affinity(declared), expected, "{declared}");
         }
-        // A STRICT column declared ANY stores a value as received.
-        assert_eq!(affinity("ANY", true), "blob");
-        assert_eq!(affinity("INTEGER", true), "integer");
     }
 
     #[test]
@@ -716,5 +790,17 @@ mod tests {
         for name in ["sqlit", "my_sqlite_table", "sqlitex"] {
             assert!(!internal(name), "{name}");
         }
+    }
+
+    #[test]
+    fn fr_lite_031_a_name_is_found_exactly_then_ignoring_ascii_case_the_first_winning() {
+        let names = Names::of(["Port", "port_call", "PORT"].into_iter());
+
+        assert_eq!(names.position("Port"), Some(0));
+        assert_eq!(names.position("PORT"), Some(2));
+        assert_eq!(names.position("port"), Some(0), "the first carried wins");
+        assert_eq!(names.position("PORT_CALL"), Some(1));
+        assert_eq!(names.position("p\u{f6}rt"), None, "ASCII case alone");
+        assert_eq!(names.position("berth"), None);
     }
 }

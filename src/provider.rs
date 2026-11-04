@@ -106,9 +106,11 @@ pub(crate) struct Tested {
 /// For a `mariadb` entry they are those of `FR-CFG-024`, the connection
 /// carrying no default schema and the probe restricted to `database`; for a
 /// `sqlite` entry, those of `FR-CFG-056`: the kind check and the open, every
-/// control and limit, the version probe, and one `SELECT` against
-/// `sqlite_schema` whose rows are not read — `can_read_catalogue` is true
-/// whenever it is answered.
+/// control and limit, the version probe, and the check of `FR-LITE-041` —
+/// one `SELECT` against `sqlite_schema` whose rows are judged and never read
+/// as model content, issued alone and outside any transaction
+/// (`FR-LITE-042`); `can_read_catalogue` is true whenever it is answered and
+/// refuses no row, and a row it refuses is its `78`.
 ///
 /// # Errors
 ///
@@ -129,7 +131,7 @@ pub(crate) fn test(source: Source<'_>, clock: &Clock) -> Result<Tested, Error> {
         }
         Source::File(settings) => {
             let session = sqlite::open(settings, clock)?;
-            let probed = session.probe();
+            let probed = session.check();
             let server = session.server().clone();
             session.close();
             probed?;
