@@ -37,9 +37,17 @@ unmarked. No requirement of this file changes.
 *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
 entry every rule of this file applies as it applies to a `mariadb` entry, per
 `FR-MYSQL-041`. The shapes `FR-PRIV-018` records are MariaDB's, observed on
-its four series; which shape MySQL gives each absence is pending observation
-in that requirement, and the cross-checks apply in MariaDB's shapes until it
-is recorded. No requirement of this file changes.
+its four series. No requirement of this file changes.
+
+*Amended in the seventy-fifth edition,* for rmp `#326`. The note read that
+which shape MySQL gives each absence was pending observation in
+`FR-MYSQL-041`, and that the cross-checks applied in MariaDB's shapes until
+it was recorded. It is recorded there. A MySQL reader without the privilege
+receives a view's definition as the empty string and a routine's body as
+SQL `NULL`, which are the shapes `FR-PRIV-011` and `FR-PRIV-017` detect, and
+no trigger row, which is `FR-PRIV-020`'s limit; unlike a MariaDB reader, it
+keeps every row of the constraint tables, so `FR-PRIV-019` finds nothing to
+detect over the fixture. No requirement of this file changes.
 
 ## Scope
 

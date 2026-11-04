@@ -69,12 +69,22 @@ changes on account of this file.
 - **Oracle's support policy for MySQL**, the external authority the supported
   set follows and which no party to this specification controls.
 
-## Sources, and the pending-observation marker
+## Sources, the observation, and the pending-observation marker
 
-Every statement this file makes about MySQL's behaviour rests on one of two
-grounds, and **neither of them is an observation**:
+Every statement this file makes about MySQL's behaviour rests on one of three
+grounds:
 
-1. **MySQL's own documentation**, a published external authority in the sense
+1. **An observation of the fixture of `FR-MYSQL-044`**, the fourth provenance
+   of the [README](README.md#provenance). rmp `#326` made it on 2026-11-04,
+   through `scripts/mysql/` at `1b3ff53`, operated by its harness alone,
+   against five servers: `8.4.13` and `9.7.4`, one of each series of
+   `FR-MYSQL-003`, each offering TLS; a server of each of the same two
+   releases offering none; and `8.0.46`, of a series outside the set. A
+   statement it grounds carries an *Observed* note. The note names the series
+   it was seen on; where it names none, the fact was seen on `8.4` and on
+   `9.7` and was the same on both. Every difference between the two series is
+   recorded under `FR-MYSQL-014`.
+2. **MySQL's own documentation**, a published external authority in the sense
    of the third provenance of the [README](README.md#provenance), checked on
    2026-11-04: the reference manuals of the two supported series, at
    `https://dev.mysql.com/doc/refman/8.4/en/` and
@@ -88,26 +98,64 @@ grounds, and **neither of them is an observation**:
    at `https://dev.mysql.com/downloads/mysql/`; the end-of-life notices, at
    `https://www.mysql.com/support/eol-notice.html`; and the support tiers, at
    `https://www.mysql.com/support/`. A page is cited below by its path under
-   the manual of the series named, as `refman/8.4/en/<page>.html`.
-2. **Prior art**, which informs how and never what: the MySQL inspector of
+   the manual of the series named, as `refman/8.4/en/<page>.html`. It grounds
+   the statements still marked pending observation, below, and is cited
+   beside an observation where it states the same fact or a different one.
+   **Where the servers contradict their manual, both are written down**: the
+   manual's words, cited by page, and what the servers did, in a note headed
+   *Observed, and the manual contradicted.* The observation governs.
+3. **Prior art**, which informs how and never what: the MySQL inspector of
    `ariga/atlas`, `sql/mysql/inspect.go` and `sql/mysql/driver.go` at the
    public source of its default branch, and
    `sql/mysql/internal/mysqlversion/mysqlversion.go` at tag `v0.21.1`, read on
    2026-11-04. It is cited where it bears on a choice this file makes, and it
    establishes no fact here.
 
-**No statement of MySQL behaviour in this file has been observed.** The
-fixture of `FR-MYSQL-044` does not exist yet, and rmp `#326` observes each
-statement on every series of `FR-MYSQL-003` through it. Every such statement
-carries a note headed ***Pending observation.***, the marker the
+**The conditions of observation**, recorded once for every *Observed* note
+of this file, per the fourth validation rule of the
+[README](README.md#maintenance-debt). Every server ran with
+`lower_case_table_names` `0`,
+`show_gipk_in_create_table_and_information_schema` `ON` and
+`sql_generate_invisible_primary_key` `OFF`, the servers' own defaults, which
+the fixture does not change. The three servers offering TLS presented the
+fixture's own certificate, valid from 2026-11-04 to 2036-11-01; the two others
+offered none, with `tls_version` set to the empty string. On both series
+`information_schema_stats_expiry` read `86400`,
+`restrict_fk_on_non_standard_key` `ON` and `authentication_policy` `*,,`;
+`gtid_mode` and `enforce_gtid_consistency` read `OFF` on `8.4` and `ON` on
+`9.7`, which is difference 6 of `FR-MYSQL-014`. Every statement was issued by
+the stock `mysql` client of the server's own image, in the character set
+`utf8mb4`, as `root` and as the reduced-grant reader of item 16 of
+`FR-MYSQL-044`. Every statement that read the catalogue ran in a session set
+read only, exited `0` and drew no warning. Every write the observation needed
+was made in a scratch schema and with scratch accounts, all dropped before
+the fixture was stopped, and no object of the fixture was changed. One build
+of each release was read, the image the fixture pins, and nothing was
+observed of another build or another release of either series.
+
+**What a substitute client cannot show.** The stock client stood in for the
+driver `tpl` will read MySQL with. What a server does is observed through it;
+an exit code or a message of `tpl` is not, and is verified by the tests
+`FR-MYSQL-043` requires once the provider is implemented. Where a requirement
+rests on the driver meeting a server as the stock client met it, its note
+says so.
+
+**Six statements remain marked pending observation**, each with a note
+headed ***Pending observation.***, the marker the
 [README](README.md#writing-conventions) defines and
-[glossary.md](glossary.md#pending-observation) names: the note says what the
-documentation states, cites the page, and says what observation discharges it.
-A table whose rows are documented facts carries one such note for all of its
-rows. The marker qualifies the ground of a fact and not the force of a
-requirement: every requirement here is in force, and a requirement whose
-marked fact an observation contradicts is amended, as a requirement resting on
-the fourth provenance is amended by a second observation.
+[glossary.md](glossary.md#pending-observation) names. Each note says what the
+documentation states, why this fixture cannot observe it, and what would. The
+marker qualifies the ground of a fact and not the force of a requirement:
+every requirement here is in force.
+
+| Note on | The statement | Why this fixture cannot observe it |
+|---|---|---|
+| `FR-MYSQL-021` | The `69` of three cells of the mode table | It is a code of `tpl`, and the stock client stood in for `tpl` |
+| `FR-MYSQL-021` | That a server generates TLS material at startup, and whether the certificate names a host | Every server of the fixture is given its TLS material, so none generated a certificate |
+| `FR-MYSQL-021` | Whether trust material stays additional to the public roots | It is a property of the driver, which the stock client does not share |
+| `FR-MYSQL-030` | The `MASKING POLICY` phrase of the attribute field | It needs a component the Community images do not carry |
+| `FR-MYSQL-040` | The MySQL cell of row 24 | It restates the second statement above |
+| `FR-MYSQL-045` | The `78` and the message of a login that needs the server's key | It is a code of `tpl`, and the stock client stood in for `tpl` |
 
 What this file states about MariaDB is cited from the requirement of this
 corpus that records it, every one of them an observation of the fixture of
@@ -121,6 +169,22 @@ user's decision recorded under `FR-MYSQL-002`, and its manual stays a source
 for the release model and as corroboration only. A *Pending observation* note
 owes an observation on the series of `FR-MYSQL-003` alone, so no note of this
 file owes one of `26.10`.
+
+*Amended in the seventy-fifth edition,* for rmp `#326`. The section read that
+no statement of MySQL behaviour in this file had been observed, because the
+fixture of `FR-MYSQL-044` did not exist, and that every such statement carried
+a *Pending observation* note. The fixture exists, and rmp `#326` observed the
+thirty statements so marked — twenty-nine in this file and one on
+`FR-ERR-046` in [errors-and-exit-codes.md](errors-and-exit-codes.md). Sixteen
+were confirmed, ten refined and four contradicted. A confirmed statement now
+carries an *Observed* note, a refined one is rewritten as observed, and a
+contradicted requirement is amended where it stands, each with a note saying
+what it read. The section now names the observation as the first ground, so
+the documentation, which the note above calls the first source, is the
+second; it records the conditions of the observation once, and lists the six
+statements that remain pending. The observation's evidence is kept in a directory the repository
+does not version, so every *Observed* note carries what was seen rather than
+citing a file.
 
 ## The provider
 
@@ -383,14 +447,29 @@ file owes one of `26.10`.
   {"server":{"version":"8.4.13","series":"8.4","standing":"supported"}}
   ```
 
-  *Pending observation.* The manual states that the `version` variable is
-  "The version number for the server. The value might also include a suffix
+  *Observed.* The probe answered `8.4.13` on `8.4`, `9.7.4` on `9.7` and
+  `8.0.46` on `8.0`, verbatim: three integers and no suffix, which is the
+  string the example above shows for `8.4`. `@@version` returned the same
+  string as the probe on all three servers, and `@@version_comment` returned
+  `MySQL Community Server - GPL`. The manual's description of the value — "The
+  version number for the server. The value might also include a suffix
   indicating server build or configuration information. `-debug` indicates
   that the server was built with debugging support enabled"
-  (`refman/8.4/en/server-system-variables.html`). The example above is the
-  form the manual describes for the latest `8.4` release, not a string any
-  server was seen to return. rmp `#326` records the probe's answer, verbatim,
-  on every series of `FR-MYSQL-003`.
+  (`refman/8.4/en/server-system-variables.html`) — admits the suffix, and no
+  server of the fixture carried one.
+
+  *Consequence, stated plainly: `version` carries three parts.* Both manuals
+  document a second variable, `version_with_update`, "The complete server
+  version in MAJOR.MINOR.PATCH.UPDATE form. The update component is always
+  present, including when its value is 0"; it answered `8.4.13.0` on `8.4`
+  and `9.7.4.0` on `9.7`, and reading it on `8.0` failed with `ERROR 1193`.
+  The 9.7 manual calls `version` "The three-part compatibility version for
+  the server" and adds that "The update component is not included; use
+  version_with_update to obtain the exact four-part release identity"
+  (`refman/9.7/en/server-system-variables.html`). The closed list of
+  `FR-MYSQL-015` reads the probe and no other variable, so an update
+  component never reaches `server.version`. `series` is derived from the
+  first two parts and is unaffected.
 
   *Added in the seventy-third edition,* for rmp `#324`.
 
@@ -399,6 +478,12 @@ file owes one of `26.10`.
   introduced. They applied to `26.10` alone, which is no longer a supported
   series, per `FR-MYSQL-002`, and is owed no observation by rmp `#326`. The
   requirement is unchanged.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note, which quoted the manual and said that the example was the
+  form the manual describes rather than a string any server returned, is
+  replaced by the *Observed* note above, and the consequence note on
+  `version_with_update` is new. The requirement is unchanged.
 
 - **FR-MYSQL-007**: IF the version string the probe returns contains the
   product marker `MariaDB`, or does not begin with three decimal integers
@@ -413,12 +498,13 @@ file owes one of `26.10`.
   entry reaches with its read-only pair confirmed; `FR-MYSQL-012` states the
   case of a MariaDB server whose read-back fails first.
 
-  *Pending observation.* That no supported MySQL series reports the marker,
-  and that each begins with the three integers, rests on the manual's
-  description quoted under `FR-MYSQL-006`. The reference inspector separates
-  the two products on the same marker: its `Maria()` reports whether the
-  version string contains `MariaDB`, in
-  `sql/mysql/internal/mysqlversion/mysqlversion.go` at tag `v0.21.1`.
+  *Observed, on MySQL.* No answer of the probe on `8.4`, `9.7` or `8.0`
+  contains the marker, and each begins with three integers separated by dots,
+  per `FR-MYSQL-006`. The condition therefore passes every MySQL server of the
+  fixture. The reference inspector separates the two products on the same
+  marker: its `Maria()` reports whether the version string contains
+  `MariaDB`, in `sql/mysql/internal/mysqlversion/mysqlversion.go` at tag
+  `v0.21.1`.
 
   *A stated limit, adopted.* **A server determined to pass as MySQL will
   pass.** It is the limit `FR-SRV-041` states for MariaDB, applied to MySQL in
@@ -430,6 +516,10 @@ file owes one of `26.10`.
   and is not a fourth member of it.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note on MySQL is replaced by the *Observed* note above. The
+  requirement is unchanged.
 
 - **FR-MYSQL-008**: IF the server a `mysql` entry reaches is not MySQL under
   `FR-MYSQL-007`, THEN the system SHALL exit `78` (`EX_CONFIG`) and SHALL NOT
@@ -584,17 +674,23 @@ file owes one of `26.10`.
   `@@session.transaction_read_only` with `ERROR 1193 (HY000)` and the other
   three series answer it, per difference 12 of `FR-SRV-038`.
 
-  *Pending observation.* That a supported MySQL series answers a read of
-  `@@session.tx_read_only` with an error, so that a `mariadb` entry is refused
-  at its read-back before its product check, rests on the manual: "The
+  *Observed, on MySQL.* A read of `@@session.tx_read_only` fails with
+  `ERROR 1193`, `Unknown system variable 'tx_read_only'`, on `8.4`, on `9.7`,
+  on both servers offering no TLS and on `8.0`, so a `mariadb` entry that
+  reaches any of them is refused at its read-back, before its product check.
+  The variable lists of the 8.4 and 9.7 manuals carry `transaction_read_only`
+  and no `tx_read_only`, and the 8.0 manual records the removal: "The
   `tx_isolation` and `tx_read_only` system variables have been removed. Use
   `transaction_isolation` and `transaction_read_only` instead"
-  (`refman/8.0/en/mysql-nutshell.html`); the 8.4 list of system variables
-  carries `transaction_read_only` and no `tx_read_only`. Where the read-back
-  refuses first, the `cause` names the read-only session and not the
-  product, which is the cost `FR-SRV-042` states and accepts.
+  (`refman/8.0/en/mysql-nutshell.html`). Because the read-back refuses first,
+  the `cause` names the read-only session and not the product, which is the
+  cost `FR-SRV-042` states and accepts.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note is replaced by the *Observed* note above. The table and
+  the requirement are unchanged.
 
 ## Differences between the supported series
 
@@ -623,27 +719,54 @@ file owes one of `26.10`.
   SHALL be registered as `FR-SRV-027` and `FR-SRV-036` require, in a table of
   this section.
 
-  **The record holds no observed difference**, because no MySQL server has
-  been observed. The register holds no row. The documentation names three
-  candidates, recorded so that the observation that settles them knows where
-  to look:
+  **The record holds ten differences, and the register holds no row.** rmp
+  `#326` compared `8.4.13` and `9.7.4` on 2026-11-04: the twelve tables of
+  `FR-MYSQL-015`, their field lists and the declared type of every field, and
+  every row they return for the fixture's three schemas, as the privileged and
+  as the reduced-grant reader; and, in a scratch schema, each of the three
+  candidates the seventy-third edition named from the documentation. Their
+  rows differed in wall-clock times alone — the creation and update times of
+  the table catalogue, the creation and alteration times of the routine
+  catalogue and the creation time of the trigger catalogue, all excluded by
+  `FR-CAT-024` — and in the one value of difference 5. Every field the model
+  carries returned the same value on both series.
 
-  | Candidate | `8.4` | `9.7` | What it would oblige |
-  |---|---|---|---|
-  | The column-attribute field lists `MASKING POLICY` | not in the manual's list | in the list | Nothing for the model, which has no property for it; `FR-MYSQL-030` reads past it |
-  | The `VECTOR` type | not checked | documented, `refman/9.7/en/vector.html` | What the shared DDL of `FR-MYSQL-044` may declare, as difference 14 of `FR-SRV-038` did for MariaDB |
-  | JSON duality views and their four `INFORMATION_SCHEMA` tables | not in the manual's index of `INFORMATION_SCHEMA` tables | in the index | Whether a duality view is a row of the table catalogue, and so a covered view, per `FR-MYSQL-023` |
+  | # | Observed | `8.4` | `9.7` | What it obliges |
+  |---|---|---|---|---|
+  | 1 | A `VECTOR` column at DDL time | refused, `ERROR 1064 (42000)`, a syntax error at `VECTOR(3)` | accepted with no warning; `DATA_TYPE` `vector`, `COLUMN_TYPE` `vector(3)`, `CHARACTER_MAXIMUM_LENGTH` and `CHARACTER_OCTET_LENGTH` `12`, every other part SQL `NULL` | The shared DDL of `FR-MYSQL-044` declares no `VECTOR` column. A `VECTOR` column of a `9.7` database is a column of a covered table, carried under `FR-MYSQL-028`. No register row: no database both series hold carries one |
+  | 2 | JSON duality views, and six `INFORMATION_SCHEMA` tables: `JSON_DUALITY_VIEWS`, `JSON_DUALITY_VIEW_COLUMNS`, `JSON_DUALITY_VIEW_LINKS`, `JSON_DUALITY_VIEW_TABLES`, `LIBRARIES` and `ROUTINE_LIBRARIES` | `CREATE JSON RELATIONAL DUALITY VIEW` refused, `ERROR 1064`; none of the six tables | accepted; the view is a row of the table catalogue with `TABLE_TYPE` `VIEW`, `ENGINE` `NULL` and `TABLE_COMMENT` `VIEW`, a row of the view catalogue with `CHECK_OPTION` `NONE`, `IS_UPDATABLE` `YES` and its `select` as `VIEW_DEFINITION`, and one row of the column catalogue; the six tables exist | A duality view is a covered view, per `FR-MYSQL-023`. None of the six tables is among the twelve of `FR-MYSQL-015`, so none is read. No register row |
+  | 3 | The declared type of `ROUTINE_TYPE`, in the routine and the parameter catalogues | `enum('FUNCTION','PROCEDURE')` | `enum('FUNCTION','PROCEDURE','LIBRARY')`; the 9.7 manual still describes the field as `PROCEDURE` or `FUNCTION` | `FR-MYSQL-023` does not cover a row of type `LIBRARY`, because a library is not a routine in the sense of `FR-CAT-008`. No row of the fixture carries it, and no register row |
+  | 4 | The declared type of `SQL_MODE`, in the routine and the trigger catalogues | a set of 33 members | the same set with a 34th member, `INTERPRET_UTF8_AS_UTF8MB4` | `sql_mode` is carried as the server returns it, per `FR-MYSQL-036` and `FR-MYSQL-038`, so the member reaches a document WHERE a routine or a trigger of a `9.7` database was created under it. No row of the fixture carries it, and no register row |
+  | 5 | The text of a functional key part, `STATISTICS.EXPRESSION` of `uq_customer_vat_normalised`, on an `ascii` column | ``upper(replace(`vat_number`,_ascii\' \',_utf8mb4\'\'))`` | ``upper(replace(`vat_number`,_ascii\' \',_ascii\'\'))`` | Nothing: an index with a functional key part is excluded, per `FR-MYSQL-024`, and the field is not carried, per `FR-MYSQL-032`. The same expression in a generated column reads `_utf8mb4` for both literals on both series. It is the one row value, of the twelve tables, that differs and is not a wall-clock time |
+  | 6 | GTID consistency, by default | `gtid_mode` and `enforce_gtid_consistency` `OFF` | both `ON`; an insert into an InnoDB table whose `AFTER INSERT` trigger writes a MyISAM table is refused with `ERROR 1785`, "Statement violates GTID consistency", and `Warning 6414`, "Combining the storage engines MyISAM and InnoDB is deprecated" | What the fixture may hold: its MyISAM table is written on its own, per `FR-MYSQL-044`. It reaches no read, because `tpl` writes nothing |
+  | 7 | `FLUSH PRIVILEGES` | no warning | `Warning 1681`, deprecated | Nothing for `tpl`, which never issues it. It empties the authentication cache on both, which is how a test of `FR-MYSQL-045` sets that cache |
+  | 8 | `CREATE MASKING POLICY` | refused, `ERROR 1064` | parsed, and refused with `ERROR 6561 (HY000)`, "MASKING POLICY component error: component is unavailable" | Nothing the fixture can show of the read: the phrase of `FR-MYSQL-030` stays pending observation there |
+  | 9 | The version, as each manual describes it | "The version number for the server" | "The three-part compatibility version for the server" | Nothing: both servers answer the probe in three parts, and both carry `version_with_update`, which the closed list does not read, per `FR-MYSQL-006`. The difference is the manual's, not the servers' |
+  | 10 | The size of the server-wide catalogue | 176 base tables, 105 views, 78 system views | 179 base tables, 105 views, 84 system views | Nothing: a read covers one database, per `FR-MYSQL-023` |
 
-  *Pending observation.* Every cell of the table is the documentation, cited
-  in each row, in `FR-MYSQL-030`, or, for the duality views, in the index of
-  `INFORMATION_SCHEMA` tables of each manual,
-  `refman/8.4/en/information-schema-table-reference.html` and
-  `refman/9.7/en/information-schema-table-reference.html`, checked
-  2026-11-04; "not checked" means that no page was read for that series.
-  rmp `#326` compares the catalogue of the fixture of `FR-MYSQL-044` across
-  the series of `FR-MYSQL-003`, as the passes recorded under `FR-SRV-038` did
-  across MariaDB's, and moves every difference it finds into this record and,
-  where it reaches the model, into the register.
+  *Why the register holds no row.* `FR-SRV-036` fixes a row as a field of the
+  model, its treatment, and what each series returned, and no difference above
+  supplies all three. Differences 1 to 4 are in what each series can hold or
+  declares: no database both series hold yields a different value, because
+  the fixture holds none of the four, and each is carried, where a `9.7`
+  database holds one, under a requirement that already reaches it. Difference
+  5 is in a field the model does not carry, so it is the case difference 12 of
+  `FR-SRV-038` records for MariaDB, and the equivalence `FR-SRV-026` requires
+  of identical DDL across the series is not reached. Differences 6 to 10
+  reach the fixture, the harness or the manual, and not the read.
+
+  *How the three candidates of the seventy-third edition were settled.* The
+  attribute phrase `MASKING POLICY` is difference 8, and is pending
+  observation under `FR-MYSQL-030`; the `VECTOR` type is difference 1; and the
+  duality views are difference 2, which places a duality view among the
+  covered views. The "not checked" cell of the `VECTOR` candidate is filled:
+  the 8.4 manual's page for the type, `refman/8.4/en/vector.html`, redirects
+  to the 9.7 page.
+
+  *Bounded claim.* One build of each series was compared, under the
+  conditions recorded in the section on sources. The comparison covers the
+  objects of the fixture and the scratch objects named above; a difference in
+  what a series reports for an object neither holds was not observable.
 
   *Added in the seventy-third edition,* for rmp `#324`.
 
@@ -653,6 +776,15 @@ file owes one of `26.10`.
   each remaining manual, read on 2026-11-04: the 9.7 manual lists the four
   tables and the 8.4 manual lists none of them. The note names the series of
   `FR-MYSQL-003` where it counted three.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The paragraph read
+  that the record held no observed difference, because no MySQL server had
+  been observed, and the table held three candidates the documentation named,
+  under a *Pending observation* note. The record now holds the ten differences
+  rmp `#326` observed, and the three candidates are settled among them. The
+  register still holds no row, now because no observed difference reaches a
+  field of the model for a database both series hold. The requirement is
+  unchanged.
 
 ## The closed statement list
 
@@ -703,12 +835,26 @@ file owes one of `26.10`.
   map to the model. The list is a ceiling on what a read may touch; the
   statements a read issues against it are fixed in number by `FR-MYSQL-042`.
 
-  *Pending observation.* That every table and every field named in this file
-  exists, with the name given, on every series of `FR-MYSQL-003`, rests on the
-  manual pages cited in each mapping requirement. `FR-SRV-037` governs a field
-  that turns out to be present on some series and not on others.
+  *Observed.* Each of the twelve tables was read with `SELECT *`, restricted
+  to the fixture's schemas, as the privileged and as the reduced-grant
+  reader, on `8.4` and on `9.7`. Every table and every field this file names
+  exists by that name on both series, and the two field lists of each table
+  are identical in name and in order: `SCHEMATA` 6 fields, `TABLES` 21,
+  `COLUMNS` 22, `STATISTICS` 18, `KEY_COLUMN_USAGE` 12,
+  `REFERENTIAL_CONSTRAINTS` 11, `TABLE_CONSTRAINTS` 7, `CHECK_CONSTRAINTS` 4,
+  `VIEWS` 10, `ROUTINES` 31, `PARAMETERS` 16 and `TRIGGERS` 22. Every
+  character field is declared `utf8mb3`. The declared types differ between
+  the series in two fields alone, differences 3 and 4 of `FR-MYSQL-014`.
+  `FR-SRV-037` therefore has nothing to govern for a `mysql` read today. The
+  version probe, the read-only session statement and the read-back were each
+  accepted on all five servers of the fixture, with no warning.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note, which rested the existence of every table and field on
+  the manual pages cited in the mapping requirements, is replaced by the
+  *Observed* note above. The requirement is unchanged.
 
 - **FR-MYSQL-016**: The system SHALL NOT issue any other statement for a
   `mysql` entry. It SHALL issue no DDL, no DML, no `SHOW`, no `SET` other than
@@ -722,14 +868,26 @@ file owes one of `26.10`.
   governs what the catalogue returns, and none needs to for the fields the
   model carries.
 
-  *Pending observation.* The manual states that the table catalogue's
-  statistics "hold cached values" under the `information_schema_stats_expiry`
-  variable (`refman/8.4/en/information-schema-tables-table.html`); every
-  statistics field the cache governs is excluded as volatile by
-  `FR-CAT-024`, so none reaches the model. rmp `#326` confirms that no field
-  the model carries moves with the variable.
+  *Observed.* The manual states that "Columns in TABLES that represent table
+  statistics hold cached values" under the `information_schema_stats_expiry`
+  variable (`refman/8.4/en/information-schema-tables-table.html`). On a
+  scratch table holding 20 rows inserted after it was created, with no
+  `ANALYZE TABLE`, the cached read returned `TABLE_ROWS` `0`,
+  `AUTO_INCREMENT` and `UPDATE_TIME` SQL `NULL` and `CARDINALITY` `0`, and a
+  read with the variable at `0` returned `20`, `21`, a timestamp, and `15` on
+  `8.4` and `16` on `9.7`. No field the model carries moved: the table's name,
+  type, engine, collation and comment, and every field of the index catalogue
+  but `CARDINALITY`, read the same under both settings. Every field that moved
+  is one `FR-CAT-024` excludes as volatile. The server-variable page of the
+  same manual adds that the cache is not updated "When the server is in …
+  transaction_read_only … mode" (`refman/8.4/en/server-system-variables.html`),
+  which is the session `FR-MYSQL-018` opens.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note is replaced by the *Observed* note above, which confirms
+  it. The requirement is unchanged.
 
 - **FR-MYSQL-017**: WHEN the system opens a connection for a `mysql` entry, it
   SHALL issue the three connection-start statements of `FR-MYSQL-015` in the
@@ -759,17 +917,33 @@ file owes one of `26.10`.
 - **FR-MYSQL-018**: The system SHALL set the session read-only on every
   connection it opens for a `mysql` entry, SHALL read
   `@@session.transaction_read_only` back, and SHALL confirm that the setting
-  took effect. It SHALL read that variable and no other spelling of it.
+  took effect. It SHALL read that variable and no other spelling of it. The
+  setting SHALL be confirmed WHERE the read-back returns the integer `1`, and
+  SHALL NOT be confirmed by any other value.
 
-  *Pending observation.* The manual states that the session access mode is
-  set by `SET SESSION transaction_read_only = value` or by
-  `SET SESSION TRANSACTION READ ONLY`, which correspond to each other, and
-  that the variable's value is `OFF` for read/write and `ON` for read only
-  (`refman/8.4/en/server-system-variables.html`). rmp `#326` records, on every
-  series of `FR-MYSQL-003`, the value the read-back returns before and after
-  the setting, as `FR-SRV-006` records it for MariaDB.
+  *Observed.* `SET SESSION TRANSACTION READ ONLY` was accepted with no
+  warning on all five servers of the fixture, and so was
+  `SET SESSION transaction_read_only = ON`. The read-back returned the
+  integer `0` before any setting, `1` after either statement, and `0` again
+  after `= OFF`, on all five; its wire type is an integer, `LONGLONG`, and not
+  text. A write issued in the read-only session was refused with
+  `ERROR 1792 (25006)`, "Cannot execute statement in a READ ONLY
+  transaction.", and created nothing. These are the values `FR-SRV-006`
+  records of MariaDB's read-back, `0` and then `1`.
+
+  *Why the requirement names the value.* The manual states that "The value
+  can be OFF (read/write; the default) or ON (read only)"
+  (`refman/8.4/en/server-system-variables.html`), which are the values an
+  assignment accepts and not what a read returns. A read-back compared with
+  the text `ON` would confirm nothing on any server of the fixture, and every
+  `mysql` read would end with `78` under `FR-MYSQL-019`.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The last sentence
+  of the requirement is new: the requirement said the read-back confirms the
+  setting and named no value. The *Pending observation* note, which reported
+  the manual's `OFF` and `ON`, is replaced by the *Observed* note above.
 
 - **FR-MYSQL-019**: IF the setting of `FR-MYSQL-018` cannot be applied, or the
   read-back does not confirm it, THEN the system SHALL exit `78` and SHALL NOT
@@ -801,9 +975,13 @@ file owes one of `26.10`.
   be the same, and the configuration is where a caller meets them first. That
   a MySQL server honours each of them as a MariaDB server does is what the
   cells of `FR-MYSQL-021` and the logins of `FR-MYSQL-022` hold it to, and is
-  pending observation there.
+  observed there, save the three statements `FR-MYSQL-021` keeps pending.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the rationale said
+  that the server side was pending observation in those two requirements. The
+  requirement is unchanged.
 
 - **FR-MYSQL-021**: The five modes of `FR-CONF-013` SHALL be distinguishable
   by observed behaviour against a MySQL server, and their behaviour SHALL be
@@ -841,17 +1019,70 @@ file owes one of `26.10`.
      main interface", and names no `have_ssl` variable on that page; the
      right-hand column is therefore staged by configuration, where MariaDB
      `10.11` offers it unconfigured, per difference 3 of `FR-SRV-038`.
+     *Observed*: the two servers of the fixture started so, one of each
+     series, report their TLS channel as not enabled, and every client mode
+     that requires TLS fails against them.
 
-  *Pending observation.* Every cell of the table, against servers of every
-  series of `FR-MYSQL-003`, with encryption read from the live session; the
-  three controls `FR-CONF-038` records — `verify-ca` without trust material
-  fails, `preferred` without trust material connects encrypted, `required`
-  ignores supplied trust material; whether a certificate the server generates
-  carries a `subjectAltName`; and whether trust material stays additional to
-  the public roots, as `FR-CONF-039` records of the driver, against a MySQL
-  server.
+  *Observed, through the stock client.* The reduced-grant reader logged in
+  under each mode, with the server's authentication cache filled, and the
+  encryption of each session was read from the session's own status:
+
+  | Client mode | `8.4` and `9.7`, offering TLS | `8.4` and `9.7`, offering none |
+  |---|---|---|
+  | `DISABLED` | plaintext | plaintext |
+  | `PREFERRED` | encrypted, `TLS_AES_128_GCM_SHA256` over `TLSv1.3` | plaintext |
+  | `REQUIRED` | encrypted | refused: `ERROR 2026`, "SSL is required but the server doesn't support it" |
+  | `VERIFY_CA`, with the fixture's root | encrypted | refused, `ERROR 2026` |
+  | `VERIFY_IDENTITY`, with the fixture's root | encrypted | refused, `ERROR 2026` |
+
+  Each cell is the server side of the cell of the same mode in the table
+  above. The three controls `FR-CONF-038` records held: `VERIFY_CA` without
+  trust material failed before any handshake, "CA certificate is required if
+  ssl-mode is VERIFY_CA or VERIFY_IDENTITY"; `PREFERRED` without trust
+  material connected encrypted; and `REQUIRED` with trust material that does
+  not match connected encrypted, warning that no verification of the server
+  certificate would be done. Two further controls held: `VERIFY_CA` with
+  trust material that does not match failed with "certificate verify
+  failed", and `VERIFY_IDENTITY` to a host name the certificate does not
+  carry failed the same way while `VERIFY_CA` to that name connected.
+
+  *Pending observation.* The code of three cells. The observation above is
+  of the stock client, which stood in for the driver `tpl` will read MySQL
+  with: it shows that the server offers no TLS, and that a client requiring
+  TLS ends the connection there. How the server meets that driver, and so
+  the `69` of the three cells of the right-hand column, which is a code of
+  `tpl`, cannot be observed until the `mysql` provider exists. The tests
+  `FR-MYSQL-043` requires observe it, against the servers of the fixture
+  that offer no TLS.
+
+  *Pending observation.* A server's own TLS material. The manual states that
+  a MySQL server built with OpenSSL "can generate missing certificate and key
+  files automatically at startup"
+  (`refman/8.4/en/using-encrypted-connections.html`), the first item above,
+  and says nothing of whether that certificate names a host. No server of the
+  fixture generated a certificate: each server offering TLS is given the
+  fixture's own, and the data directory of every server held the RSA key pair
+  of `FR-MYSQL-045`, `private_key.pem` and `public_key.pem`, and no
+  certificate. A server started with TLS enabled and no material configured
+  would observe both, and the fixture of `FR-MYSQL-044` stages none.
+
+  *Pending observation.* Trust material beside the public roots. Whether
+  trust material supplied under `FR-CONF-014` stays additional to the public
+  root bundle, as `FR-CONF-039` records of the driver that reads MariaDB, is
+  a property of the driver and not of the server, and the stock client does
+  not share it. It is observed once the driver that reads MySQL is chosen,
+  under `FR-CONF-036`, as `FR-CONF-039` observed it of the driver that reads
+  MariaDB.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. One *Pending
+  observation* note covered every cell, the three controls, a generated
+  certificate and the public roots. The server side of every cell and every
+  control is now observed, and the second item above records what was
+  observed of the servers that offer no TLS. Three notes remain, one for each
+  statement this fixture cannot observe. The requirement and its table are
+  unchanged.
 
 - **FR-MYSQL-022**: The system SHALL authenticate a `mysql` entry through the
   default authentication method of every series of `FR-MYSQL-003`, which is
@@ -870,10 +1101,14 @@ file owes one of `26.10`.
   "Authentication requires secure connection"
   (`refman/9.7/en/caching-sha2-pluggable-authentication.html`).
 
-  *Pending observation.* The default method on `8.4`, the page above having
-  been read for `9.7` alone; and, on every series, a login of the fixture's
-  reader under each TLS mode, before and after the server has cached the
-  account.
+  *Observed.* `authentication_policy` read `*,,` on `8.4` and on `9.7`, and
+  every account of the fixture — `root` and the reduced-grant reader, on both
+  servers of each series — reports `caching_sha2_password`, which the 8.4
+  manual names as the default in the same words as the 9.7 manual
+  (`refman/8.4/en/caching-sha2-pluggable-authentication.html`). With the
+  server's cache emptied, the reduced-grant reader authenticated under every
+  client mode that yields an encrypted session; the logins that do not are
+  `FR-MYSQL-045`'s.
 
   *Rationale.* `FR-CONF-036` makes the modes normative over the driver; a
   driver that connects in every mode and cannot authenticate the account a
@@ -887,6 +1122,11 @@ file owes one of `26.10`.
   no requirement of this file settled it; the user's decision is
   `FR-MYSQL-045`. The *Pending observation* note named `26.10` beside `8.4`,
   and `26.10` is no longer a supported series, per `FR-MYSQL-002`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note, which owed the default method on `8.4` and a login under
+  each mode, is replaced by the *Observed* note above. The requirement is
+  unchanged.
 
 - **FR-MYSQL-045**: The system SHALL NOT request a MySQL server's RSA public
   key over a session that is not encrypted — under `disabled`, and under
@@ -972,26 +1212,45 @@ file owes one of `26.10`.
   `FLUSH PRIVILEGES`, or when the account changes — with nothing in
   `.tpl/.cfg` changed.
 
-  *Pending observation.* The manual states that "When the cache can be used,
-  the server uses a challenge-response mechanism that does not use cleartext
-  password transmission and does not require a secure connection"; that "If
-  the connection is not secure, an RSA key pair is used. This applies to TCP
-  connections not encrypted using TLS and named-pipe connections"; that "the
-  server does not send the RSA public key to clients by default. Clients can
-  use a client-side copy of the required public key, or request the public key
-  from the server"; and that the server empties the cache "at server
-  shutdown" and when `FLUSH PRIVILEGES` runs, and clears the entry of "any
-  account that is renamed or dropped, or any account for which the
-  credentials or authentication plugin are changed"
-  (`refman/9.7/en/caching-sha2-pluggable-authentication.html`, checked
-  2026-11-04). rmp `#326` records, on every series of `FR-MYSQL-003`, a login
-  of the fixture's reader under `disabled`, and under `preferred` against the
-  server offering no TLS, before and after the server has cached the account,
-  with the exit code and the message of each.
+  *Observed, through the stock client.* With the server's cache emptied, a
+  login of the reduced-grant reader under `DISABLED`, against every server of
+  both series, and under `PREFERRED` against both servers offering no TLS,
+  failed with `ERROR 2061 (HY000)`, "Authentication plugin
+  'caching_sha2_password' reported error: Authentication requires secure
+  connection.", and the client exited `1`. With the cache filled, the same
+  logins succeeded, in plaintext. The server sent its RSA public key only when
+  the client asked for it, which is how the fixture's harness fills the cache
+  over a session TLS does not protect. Four events emptied the cache: a
+  server start, `FLUSH PRIVILEGES`, `ALTER USER … IDENTIFIED BY` with the same
+  password, and `RENAME USER`. These are the events the manual names — "the
+  server does not send the RSA public key to clients by default", and the
+  cache is cleared for "any account that is renamed or dropped, or any account
+  for which the credentials or authentication plugin are changed", by
+  `FLUSH PRIVILEGES` and at "server shutdown"
+  (`refman/9.7/en/caching-sha2-pluggable-authentication.html`, and the same
+  on the 8.4 page) — and they are the moments the accepted cost above names.
+
+  *Pending observation.* The code and the message of `tpl`. The failing
+  logins above are the condition this requirement turns into `78`, and the
+  stock client, which stood in for the driver `tpl` will read MySQL with,
+  ended them with an error of its own. How the server meets that driver —
+  that it asks for the full exchange in the same circumstances — and so
+  whether `tpl` ends the connection without requesting the key, exits `78`
+  and writes the `cause` and the `hint` this requirement fixes, cannot be
+  observed until the `mysql` provider exists. The tests `FR-MYSQL-043`
+  requires observe it, against the servers of the fixture with the cache
+  emptied by its harness.
 
   *Closes* `OQ-077`, now listed under [Closed](open-questions.md#closed).
 
   *Added in the seventy-fourth edition,* for rmp `#331`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The *Pending
+  observation* note quoted the manual and owed a login under `disabled`, and
+  under `preferred` against a server offering no TLS, before and after the
+  cache was filled, with the exit code and the message of each. The server's
+  side is observed above; the code and the message, which are `tpl`'s, remain
+  pending in the note above. The requirement is unchanged.
 
 ## The part of the database a read covers
 
@@ -1003,20 +1262,63 @@ file owes one of `26.10`.
   every routine of the database, per `FR-CAT-008`. A row whose table type is
   any other value SHALL NOT be covered. The coverage SHALL be a filter on the
   table type, per `FR-CAT-032`, and SHALL be applied to the column read as
-  well, per `FR-CAT-052`.
+  well, per `FR-CAT-052`. A row of the routine catalogue whose routine type is
+  `LIBRARY` SHALL NOT be covered, and nor SHALL the rows of the parameter
+  catalogue that belong to it.
 
-  *Pending observation.* The manual gives the table type as "`BASE TABLE` for
-  a table, `VIEW` for a view, or `SYSTEM VIEW` for an `INFORMATION_SCHEMA`
-  table", and states that the table catalogue "does not list `TEMPORARY`
-  tables" (`refman/8.4/en/information-schema-tables-table.html`, and the
-  same on `refman/26.10/en/information-schema-tables-table.html`). MySQL has
-  no system-versioned tables and no sequences, so `SYSTEM VERSIONED` and
-  `SEQUENCE`, which `FR-CAT-031` records for MariaDB, are expected never to
-  appear, and `table_type` to take `BASE TABLE` alone. rmp `#326` records the
-  table types every series emits, after a `CREATE TEMPORARY TABLE` in the
-  reading session as well, as `FR-CAT-031` and `FR-CAT-032` record them.
+  *Observed.* The table-type field is declared
+  `enum('BASE TABLE','VIEW','SYSTEM VIEW')` on both series. Server-wide, `8.4`
+  holds 176 rows of `BASE TABLE`, 105 of `VIEW` and 78 of `SYSTEM VIEW`, and
+  `9.7` 179, 105 and 84, and no row of any other type. A table created with
+  `CREATE TEMPORARY TABLE` in the reading session appears in none of the
+  table, column and index catalogues, as the manual states: "The TABLES table
+  does not list TEMPORARY tables"
+  (`refman/8.4/en/information-schema-tables-table.html`). `table_type`
+  therefore takes `BASE TABLE` alone on a `mysql` read. `SYSTEM VERSIONED` and
+  `SEQUENCE`, which `FR-CAT-031` records for MariaDB, are outside the declared
+  set, per `FR-MYSQL-039`.
+
+  *A JSON duality view is a covered view.* On `9.7` a duality view is a row of
+  the table catalogue whose table type is `VIEW`, and a row of the view
+  catalogue, per difference 2 of `FR-MYSQL-014`, so this requirement covers it
+  as it covers every view, and `FR-MYSQL-035` carries it. Nothing that marks
+  it as a duality view is read: the tables that describe it are outside the
+  closed list of `FR-MYSQL-015`. *Consequence, stated plainly.* A duality view
+  is presented as an ordinary view, with its `select` as its definition, and a
+  template that writes `CREATE VIEW` from that definition does not recreate a
+  duality view. Excluding it instead would need a thirteenth table, which
+  `FR-MYSQL-015` closes against.
+
+  *Why a `LIBRARY` row is not covered.* `FR-CAT-008` covers routines as
+  stored procedures and stored functions, and `FR-CAT-016` requires a routine
+  read from a `supported` server to carry one of those two kinds. `9.7`
+  declares a third routine type, `LIBRARY`, per difference 3 of
+  `FR-MYSQL-014`, and creates a library by a statement of its own, apart from
+  the statements that create a procedure and a function, per the statement
+  index of the 9.7 manual, `refman/9.7/en/sql-data-definition-statements.html`.
+  A library is therefore not a routine in the sense of `FR-CAT-008`, and
+  covering it would break `FR-CAT-016` on a supported server. The last
+  sentence of the requirement names the one routine type this corpus knows
+  not to be a routine, and no other: a routine type outside all three, which
+  a series newer than the set could declare, is still carried unchanged,
+  under `FR-CAT-055`, as it is for a `mariadb` read.
+
+  *Bounded claim.* No row of the fixture carries the routine type `LIBRARY`,
+  and the fixture creates no library, so what the routine and parameter
+  catalogues return for one was not observed; the 9.7 manual's description of
+  the field still names `PROCEDURE` and `FUNCTION` alone
+  (`refman/9.7/en/information-schema-routines-table.html`).
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The last sentence
+  of the requirement is new: `FR-MYSQL-014` records that `9.7` declares a
+  routine type that is not a procedure or a function, and the requirement read
+  "every routine" without saying whether a row of that type is one. The
+  *Pending observation* note, which quoted the manual and expected
+  `table_type` to take `BASE TABLE` alone, is replaced by the *Observed* note
+  above, which confirms it, and the notes on a duality view and a library are
+  new.
 
 - **FR-MYSQL-024**: The enumerated exclusions of
   [catalogue-coverage.md](catalogue-coverage.md#enumerated-exclusions) —
@@ -1041,17 +1343,30 @@ file owes one of `26.10`.
   `UNIQUE` index with a functional key part enforces a uniqueness the model
   does not show.
 
-  *Pending observation.* The manual states that "For a functional key part,
-  `COLUMN_NAME` column is `NULL` and `EXPRESSION` indicates the expression for
-  the key part" (`refman/8.4/en/information-schema-statistics-table.html`),
-  that functional indexes "are implemented as hidden virtual generated
-  columns", and that "primary keys cannot include functional key parts"
-  (`refman/8.4/en/create-index.html`). rmp `#326` records the rows of every
-  index of that kind in the fixture, a multi-valued index among them, and
-  whether its hidden column appears in the column catalogue, which
-  `FR-CAT-052` would then have to filter.
+  *Observed.* Every functional key part of the fixture reports `COLUMN_NAME`
+  SQL `NULL` and its expression in `EXPRESSION`, with `INDEX_TYPE` `BTREE`,
+  `COLLATION` `A` and `NULLABLE` `YES`, as the manual states: "For a
+  functional key part, `COLUMN_NAME` column is `NULL` and `EXPRESSION`
+  indicates the expression for the key part"
+  (`refman/8.4/en/information-schema-statistics-table.html`). The fixture's
+  multi-valued index is reported as a functional key part,
+  ``cast(json_extract(`preferences`,_utf8mb4\'$.milestone_alerts\') as char(20) array)``,
+  so this requirement excludes it. An index mixing a column and an
+  expression, `(id, (LOWER(u_utf8)))`, reports `id` at sequence 1 and a
+  functional key part at sequence 2, so the whole index is excluded. The
+  hidden column that implements a functional key part, "implemented as hidden
+  virtual generated columns" (`refman/8.4/en/create-index.html`), does not
+  appear in the column catalogue: `customer` reports 24 columns, the largest
+  position is 24, and no column carries the server's name for such a column,
+  so `FR-CAT-052` has nothing to filter. The expression's text differs
+  between the series for one index, per difference 5 of `FR-MYSQL-014`, and
+  reaches no document.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note is replaced by the *Observed* note above, which confirms
+  it. The requirement is unchanged.
 
 ## How the catalogue fills the model
 
@@ -1092,13 +1407,22 @@ file owes one of `26.10`.
   `provider` SHALL be `mysql`, per `FR-CTX-043`, and the `server` object that
   of `FR-MYSQL-006`.
 
-  *Pending observation.* Every row, from
-  `refman/8.4/en/information-schema-schemata-table.html`. MariaDB's schema
-  catalogue also has six fields, the sixth a schema comment, per
-  `FR-CTX-036`; MySQL's sixth is the encryption default. Neither reaches the
-  model.
+  *Observed.* The six fields, by the names above, on both series. The
+  fixture's schemas returned `CATALOG_NAME` `def`, `SQL_PATH` SQL `NULL` and
+  `DEFAULT_ENCRYPTION` `NO`. `freight`, which declares its character set and
+  collation, returned `utf8mb4` and `utf8mb4_unicode_520_ci`; `masterdata`,
+  which declares no collation, returned `utf8mb4_0900_ai_ci` on both series.
+  The column headed *The manual says* is what
+  `refman/8.4/en/information-schema-schemata-table.html` states, and no field
+  returned anything else. MariaDB's schema catalogue also has six fields, the
+  sixth a schema comment, per `FR-CTX-036`; MySQL's sixth is the encryption
+  default. Neither reaches the model.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note is replaced by the *Observed* note above, which confirms
+  it. The requirement is unchanged.
 
 - **FR-MYSQL-026**: For a `mysql` read, a table SHALL carry the properties of
   `FR-CAT-053` from the following sources, and the fields of the table
@@ -1119,17 +1443,37 @@ file owes one of `26.10`.
   `FR-MYSQL-032`; `foreign_keys` and `referenced_by` `FR-MYSQL-033`; its
   triggers `FR-MYSQL-038`; and its `CHECK` constraints `FR-MYSQL-034`.
 
-  *Pending observation.* The 21 fields and their descriptions, from
-  `refman/8.4/en/information-schema-tables-table.html` and
-  `refman/26.10/en/information-schema-tables-table.html`, which list the same
-  21. "For views, most `TABLES` columns are 0 or `NULL` except that
-  `TABLE_NAME` indicates the view name, `CREATE_TIME` indicates the creation
-  time, and `TABLE_COMMENT` says `VIEW`", so `FR-CAT-040` reaches a MySQL view
-  as it reaches a MariaDB one. What `TABLE_COMMENT` holds for a table with no
-  comment — the empty string, as `FR-CAT-039` records for MariaDB, or
-  another value — is not stated, and rmp `#326` records it.
+  *Observed.* The 21 fields, by the names above, on both series. A view's row
+  carries `TABLE_COMMENT` `VIEW`, and SQL `NULL` in `ENGINE`, `VERSION`,
+  `ROW_FORMAT`, `TABLE_ROWS`, `TABLE_COLLATION` and `CREATE_OPTIONS`, as the
+  manual states — "For views, most `TABLES` columns are 0 or `NULL` except
+  that `TABLE_NAME` indicates the view name, `CREATE_TIME` indicates the
+  creation time, and `TABLE_COMMENT` says `VIEW`"
+  (`refman/8.4/en/information-schema-tables-table.html`) — so `FR-CAT-040`
+  reaches a MySQL view as it reaches a MariaDB one. **An object with no
+  comment carries the empty string, never SQL `NULL`**: a table's comment, a
+  column's, an index's and a routine's each read as zero-length text, which
+  is what `FR-CAT-039` records for MariaDB. The fixture's partitioned table
+  reports `CREATE_OPTIONS` `partitioned`, which is not carried.
+
+  *A comment loses every character outside the basic multilingual plane, as
+  on MariaDB.* The catalogue declares every comment field `utf8mb3`. A table,
+  column, index, function and procedure comment written with U+20BB7 was
+  accepted with `Warning 1300`, "Cannot convert string … from utf8mb4 to
+  utf8mb3", and returned `?`, byte `3F`, in the character's place, on both
+  series; `SHOW CREATE TABLE` showed the same `?`, so the character is lost
+  when the definition is stored and not when it is read. A character inside
+  the plane, such as `港`, survives. `FR-CAT-036` therefore holds for a `mysql`
+  read in its terms. The one difference from MariaDB is the warning, which
+  MariaDB does not raise, per `FR-CAT-036`, and which reaches no read.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note, which left the comment of a table with none to be
+  observed, is replaced by the *Observed* note above, and the note on
+  characters outside the basic multilingual plane is new. The requirement is
+  unchanged.
 
 - **FR-MYSQL-027**: For a `mysql` read, a table's columns SHALL be the rows of
   the column catalogue, `COLUMNS`, for that table, in the order of
@@ -1158,21 +1502,49 @@ file owes one of `26.10`.
   | `GENERATION_EXPRESSION` | the expression of a generated column, per `FR-MYSQL-031` |
   | `SRS_ID` | not carried — spatial reference identifiers are excluded, `FR-CAT-023` |
 
-  *Pending observation.* The 22 fields, from
-  `refman/8.4/en/information-schema-columns-table.html`, with the same 22 on
-  the 9.7 and 26.10 pages. MariaDB's column catalogue carries an
-  is-generated field MySQL's does not, per `FR-CAT-051`, and two
-  system-versioning fields on three of its series, per difference 5 of
-  `FR-SRV-038`; every field `FR-CTX-040` and `FR-CTX-041` read on MariaDB is
-  in MySQL's list. The manual
-  states that information about a generated invisible primary key "is
-  visible in this table by default" and is hidden by setting
-  `show_gipk_in_create_table_and_information_schema` off; a server so
-  configured presents such a table with neither the column nor the key, and
-  the fixture records the setting it reads under, per the fourth validation
-  rule of the [README](README.md#maintenance-debt).
+  The order SHALL be taken from the values of `ORDINAL_POSITION`, and the
+  system SHALL NOT assume that the first column of a table is at position `1`
+  or that the positions are contiguous.
+
+  *Observed.* The 22 fields, by the names above, on both series, and no
+  is-generated field. MariaDB's column catalogue carries an is-generated
+  field MySQL's does not, per `FR-CAT-051`, and two system-versioning fields
+  on three of its series, per difference 5 of `FR-SRV-038`; every field
+  `FR-CTX-040` and `FR-CTX-041` read on MariaDB is in MySQL's list.
+
+  *Observed: a generated invisible primary key.* A table created with no
+  primary key while `sql_generate_invisible_primary_key` is `ON` reports, at
+  position 1, a column `my_row_id` of type `bigint unsigned` whose `EXTRA` is
+  `auto_increment INVISIBLE`, and the index catalogue reports it as the index
+  `PRIMARY`. The read carries both as the catalogue reports them: an
+  invisible auto-incremental column, and the table's primary key, under
+  `FR-MYSQL-030` and `FR-MYSQL-032`. With
+  `show_gipk_in_create_table_and_information_schema` set `OFF`, the column,
+  its row of the index catalogue and its row of the table-constraint catalogue
+  all disappear, **and the next column keeps position 2**, so the table's
+  positions start at 2. The read then carries the table with no such column
+  and no primary key. The manual describes both settings
+  (`refman/8.4/en/create-table-gipks.html`). The fixture's servers run with
+  the first setting `OFF` and the second `ON`, per the conditions recorded in
+  the section on sources, so no table of the fixture has a generated key, and
+  this was observed on a scratch table.
+
+  *Consequence, stated plainly.* What a `mysql` read presents for a table with
+  a generated invisible primary key depends on a setting of the reading
+  session that no statement of `FR-MYSQL-015` reads or sets, per
+  `FR-MYSQL-016`: the same table is read with an invisible column and a
+  primary key, or with neither, as the server's default for the setting
+  decides. Nothing in the document says which.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The paragraph
+  that fixes the order by the values of the position, and not by a count
+  from `1`, is new: a hidden generated invisible primary key leaves the
+  positions starting at 2. The *Pending observation* note, which listed the
+  fields from the manual and quoted it on a generated invisible primary key,
+  is replaced by the two *Observed* notes above, and the consequence note is
+  new.
 
 - **FR-MYSQL-028**: For a `mysql` read, a column's type SHALL be decomposed
   as `FR-CTX-014` through `FR-CTX-018` and `FR-CTX-038` through `FR-CTX-041`
@@ -1183,38 +1555,82 @@ file owes one of `26.10`.
   recognise, per `FR-CTX-018`. The grammar of `column_type` SHALL be taken to
   differ from MariaDB's as follows:
 
-  | MariaDB, observed under `FR-CTX-038` | MySQL, as documented |
+  | MariaDB, observed under `FR-CTX-038` | MySQL, observed |
   |---|---|
-  | Every integer type carries a display width, `int(10)` | An integer type carries none, `int`, save `tinyint(1)` and a type with `ZEROFILL` |
+  | Every integer type carries a display width, `int(10)` | An integer type carries none, `int`, save `tinyint(1)` and a type with `ZEROFILL`, `smallint(4) unsigned zerofill` |
   | A column declared `JSON` reports `longtext` | A column declared `JSON` reports `json`, a native type |
+  | A column declared `GEOMETRYCOLLECTION` reports `geometrycollection`, per `FR-ENV-046` | It reports `geomcollection` |
   | `inet4`, `inet6` and `uuid` are types | MySQL has none of the three |
-  | `VECTOR` on `11.8` and `12.3` | `VECTOR(N)` on `9.7`, per `FR-MYSQL-014` |
+  | `VECTOR` on `11.8` and `12.3` | `vector(N)` on `9.7` alone, per difference 1 of `FR-MYSQL-014` |
 
-  A `data_type` value no MariaDB read produces — `json` and `vector` among
-  them — SHALL take the family `FR-ENV-046` gives an unplaced value, which is
-  none of the three, until an observation places it.
+  The three `data_type` values a `mysql` read produces and no series of
+  `FR-SRV-015` was observed to produce — `json`, `geomcollection` and
+  `vector` — SHALL belong to the families `FR-ENV-049` gives them, and every
+  other value a `mysql` read produces to the family `FR-ENV-046` gives it.
 
-  *Pending observation.* The display width: "now statements that include data
-  type definitions in their output no longer show the display width for
-  integer types", save "`TINYINT(1)`" and a type that "includes the
-  `ZEROFILL` attribute", a change that "affects the output from `SHOW CREATE`
-  and `DESCRIBE` statements, and from `INFORMATION_SCHEMA` tables"
-  (`relnotes/mysql/8.0/en/news-8-0-19.html`). JSON: "MySQL supports a native
-  `JSON` (JavaScript Object Notation) data type" (`refman/8.4/en/json.html`).
-  `VECTOR`: `refman/9.7/en/vector.html`. rmp `#326` records, on every series,
-  every distinct `column_type` and `data_type` the fixture produces, the
-  parts populated for each type family as `FR-CTX-040` records them, the
-  escaping of an apostrophe and a comma in an `ENUM` member as `FR-CTX-039`
-  records it, and whether a `JSON` column reports a character set.
+  *Observed.* The fixture's columns yield 37 distinct `DATA_TYPE` values on
+  both series, none of them `inet4`, `inet6` or `uuid`, and the three rows of
+  the table above that MySQL adds to MariaDB's are the whole difference
+  between the two sets: `json` and `geomcollection` are the two values no
+  MariaDB read produced, and every other value is one of MariaDB's. The
+  display width is absent from every integer type but `tinyint(1)`, which
+  every column declared `BOOLEAN` reports, and the one type declared with
+  `ZEROFILL`, as the release notes state: statements "no longer show the
+  display width for integer types", save "`TINYINT(1)`" and a type that
+  "includes the `ZEROFILL` attribute"
+  (`relnotes/mysql/8.0/en/news-8-0-19.html`). A column declared `NUMERIC`
+  reports `decimal`. A `JSON` column reports `json` in both fields, with SQL
+  `NULL` for its character set and its collation. An `ENUM` member holding an
+  apostrophe reports it doubled, `'Lloyd''s Register'`, and one holding a
+  comma reports it as written inside its quotes,
+  `'Class 3, Flammable liquids'`, which are the rules of `FR-CTX-039`. The
+  parts each family populates are those `FR-CTX-040` records for MariaDB, in
+  every row the two providers share:
 
-  *Consequence, stated plainly.* A column declared `JSON` is `longtext` and
-  **textual** on a MariaDB read, and `json` and in no family on a MySQL read,
-  so the `textual` test of `FR-ENV-041` answers differently for one
-  declaration on the two providers. A template that needs the declaration
-  reads `data_type`, which says `json` on MySQL; on MariaDB the declaration
-  survives only as the implicit constraint `FR-CAT-038` records.
+  | Type family, as `data_type` | `length` | `precision` | `scale` |
+  |---|---|---|---|
+  | `bigint` `int` `mediumint` `smallint` `tinyint` | `null` | `3`, `5`, `7`, `10` or `19`, and `20` for an unsigned `bigint` | `0` |
+  | `decimal` | `null` | set | set |
+  | `float` | `null` | `12` | `null` |
+  | `double` | `null` | `22` | `null` |
+  | `bit` | `null` | the bit width | `null` |
+  | `datetime` `time` `timestamp` | `null` | `0`, `3` or `6` | `null` |
+  | `date` `year`, the geometry types, `json` | `null` | `null` | `null` |
+  | the character and text types, `enum`, `set` | set | `null` | `null` |
+  | the binary and blob types | set | `null` | `null` |
+
+  *Observed, on `9.7`: a `VECTOR` column.* A scratch column declared
+  `VECTOR(3)` reports `DATA_TYPE` `vector`, `COLUMN_TYPE` `vector(3)`, `12` in
+  `CHARACTER_MAXIMUM_LENGTH` and in `CHARACTER_OCTET_LENGTH`, and SQL `NULL`
+  in every other part; the 9.7 manual states that "Each entry is a 4-byte
+  (single-precision) floating-point value" (`refman/9.7/en/vector.html`).
+  *Consequence, stated plainly.* A `vector` column's `length` is its size in
+  bytes, four times its dimension count, and not the dimension count, which
+  only `column_type` carries.
+
+  *Consequence, stated plainly.* A column declared `JSON` is **textual** on
+  both providers, per `FR-ENV-049`, and its parts differ: a MariaDB read
+  carries `longtext`, with a length, a character set and a collation, and a
+  MySQL read carries `json`, with all three `null`. A template that needs the
+  declaration reads `data_type`, which says `json` on MySQL; on MariaDB the
+  declaration survives only as the implicit constraint `FR-CAT-038` records.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The table's MySQL
+  column read *as documented*, and is now observed; its row for
+  `GEOMETRYCOLLECTION` is new. The sentence on the values MariaDB does not
+  produce named `json` and `vector`, which took the family `FR-ENV-046` gives
+  an unplaced value, none of the three, "until an observation places it".
+  The observation added `geomcollection`, and the user decided on 2026-11-04
+  that the three be placed by analogy with what MariaDB reports for the same
+  declaration, which `FR-ENV-049` does; the sentence now cites it, and the
+  consequence note on `JSON`, which read that the `textual` test answered
+  differently on the two providers, follows. The sentence also read that no
+  MariaDB read produces `vector`, which no observation supports: two series
+  of `FR-SRV-015` accept the type, and what their catalogue reports for it
+  is not recorded. The *Pending observation* note is replaced by the two
+  *Observed* notes above.
 
 - **FR-MYSQL-029**: For a `mysql` read, the system SHALL classify a column's
   default from `COLUMN_DEFAULT`, `EXTRA` and `IS_NULLABLE`, by the first row
@@ -1225,11 +1641,12 @@ file owes one of `26.10`.
   |---|---|
   | `COLUMN_DEFAULT` is SQL `NULL`, and `IS_NULLABLE` is `NO` | `null` |
   | `COLUMN_DEFAULT` is SQL `NULL`, and `IS_NULLABLE` is `YES` | `{"kind":"null"}` |
-  | `EXTRA` carries the phrase `DEFAULT_GENERATED`, and the text begins with `(` and ends with `)` | `expression`, carrying the text between the outer parentheses |
-  | `EXTRA` carries the phrase `DEFAULT_GENERATED` | `expression`, carrying the text unchanged |
+  | `EXTRA` carries the phrase `DEFAULT_GENERATED`, and the text begins with `(` and ends with `)` | `expression`, carrying the text between the outer parentheses, unescaped per `FR-MYSQL-046` |
+  | `EXTRA` carries the phrase `DEFAULT_GENERATED` | `expression`, carrying the text unescaped per `FR-MYSQL-046` |
   | Anything else | `literal`, carrying the text unchanged |
 
   The classification of `FR-CTX-037` SHALL NOT be applied to a `mysql` read.
+  The rows SHALL be matched against the text as the catalogue returns it.
 
   *Why a separate classification.* MariaDB tells a string literal from
   everything else by quoting it, and writes a default of `NULL` as the four
@@ -1244,41 +1661,200 @@ file owes one of `26.10`.
 
   *Why the nullability.* A nullable column with no `DEFAULT` clause and a
   column declaring `DEFAULT NULL` are one state in MySQL as in MariaDB, and
-  the manual returns SQL `NULL` for both; a `NOT NULL` column with no default
-  returns SQL `NULL` too. `IS_NULLABLE` separates the two forms of
+  the catalogue returns SQL `NULL` for both; a `NOT NULL` column with no
+  default returns SQL `NULL` too. `IS_NULLABLE` separates the two forms of
   `FR-CTX-012` that MariaDB's field separates in one value, which is the
   reading `FR-LITE-027` makes for SQLite and not the reconstruction
   `FR-CTX-012` rejects.
 
-  *Pending observation.* `COLUMN_DEFAULT` "is `NULL` if the column has an
-  explicit default of `NULL`, or if the column definition includes no `DEFAULT`
-  clause", and `EXTRA` holds "`DEFAULT_GENERATED` for columns that have an
-  expression default value"
-  (`refman/8.4/en/information-schema-columns-table.html`); an expression
-  default is written in parentheses, save `CURRENT_TIMESTAMP` on a `TIMESTAMP`
-  or `DATETIME` column, and `BLOB`, `TEXT`, `GEOMETRY` and `JSON` columns take
-  only expression defaults (`refman/8.4/en/data-type-defaults.html`). The
-  manual does not state the text a default is reported as. rmp `#326` records,
-  on every series, for each case the fixture declares: whether
-  `CURRENT_TIMESTAMP` is marked `DEFAULT_GENERATED`, as the reference
-  inspector's handling of it implies; whether a parenthesised expression is
-  reported with its parentheses; whether a binary literal is reported in
-  hexadecimal, as the inspector's note "MySQL v8 uses Hexadecimal
-  representation" states; how a bit literal is reported; whether an empty
-  string default is reported as the empty text; and whether a quote inside an
-  expression is reported escaped with a backslash, which the inspector undoes.
-  WHERE an expression is reported escaped, carrying the text unchanged carries
-  the escapes, and the amendment that follows the observation fixes the rule
-  that removes them.
+  *Observed.* Every default of the fixture, and of a scratch table declaring
+  the shapes the fixture does not, was read on both series, and every one
+  falls to the row of the classification its shape gives it. In the second
+  column, text is shown as the field holds it, each backslash a byte of the
+  value:
+
+  | Declared | `COLUMN_DEFAULT` | `EXTRA` carries | Emitted |
+  |---|---|---|---|
+  | No `DEFAULT` clause, or `DEFAULT NULL` | SQL `NULL` | no phrase | `null` or `{"kind":"null"}`, by `IS_NULLABLE` |
+  | `'EUR'` | `EUR` | no phrase | `literal`, `EUR` |
+  | `''` | the empty string, of length 0 | no phrase | `literal`, the empty string |
+  | `'NULL'` | `NULL`, the four characters | no phrase | `literal`, `NULL` |
+  | A string holding an apostrophe, a backslash or a double quote | `it's`, `back\slash`, `8'6"`, as stored, with no escape | no phrase | `literal`, the text unchanged |
+  | `1.5e3`, `18.5`, `-1`, `TRUE` | `1500`, `18.5`, `-1`, `1` | no phrase | `literal` |
+  | `b'00000101'`, and `5` on a `BIT(4)` column | `b'101'` | no phrase | `literal`, `b'101'` |
+  | `x'27'`; `0x0A0B` and `X'0a0b'`; `'ab'` on a `VARBINARY` column | `0x27`; `0x0A0B`; `0x6162` | no phrase | `literal`, the hexadecimal text |
+  | `CURRENT_TIMESTAMP`, `CURRENT_TIMESTAMP(3)`, `CURRENT_TIMESTAMP(6)`, `NOW()` | the first three as declared; `CURRENT_TIMESTAMP` for the fourth | `DEFAULT_GENERATED` | `expression`, the text unchanged |
+  | `(CURRENT_DATE + INTERVAL 30 DAY)`, `((1 + 2) * (3 + 4))` | `(curdate() + interval 30 day)`, `((1 + 2) * (3 + 4))` | `DEFAULT_GENERATED` | `expression`, the text between the outer parentheses |
+  | `(NOW())`, `(UUID())`, `(PI())`, `(-1)`, `(JSON_OBJECT(…))` | `now()`, `uuid()`, `pi()`, `-(1)`, `json_object(…)` | `DEFAULT_GENERATED` | `expression`, the text, unescaped per `FR-MYSQL-046` where it holds a string literal |
+  | `(x'554E413A2B2E3F2027')` on a `BLOB` column | `0x554e413a2b2e3f2027`, in lower case | `DEFAULT_GENERATED` | `expression`, the text unchanged |
+  | `('it''s')` | `_utf8mb4\'it\\\'s\'`, hex `5F757466386D62345C2769745C5C5C27735C27` | `DEFAULT_GENERATED` | `expression`, `_utf8mb4'it\'s'`, unescaped per `FR-MYSQL-046` |
+
+  `CURRENT_TIMESTAMP` is marked `DEFAULT_GENERATED` in every form. The server
+  writes an expression in its own rendering and keeps outer parentheses only
+  around an operator expression, and every text observed that begins with `(`
+  and ends with `)` has matching outer parentheses, so the third row of the
+  classification removes a pair that encloses the whole. The manual states
+  that `COLUMN_DEFAULT` "is `NULL` if the column has an explicit default of
+  `NULL`, or if the column definition includes no `DEFAULT` clause", and that
+  `EXTRA` holds "`DEFAULT_GENERATED` for columns that have an expression
+  default value" (`refman/8.4/en/information-schema-columns-table.html`); it
+  does not state the text a default is reported as, on that page, on
+  `refman/8.4/en/data-type-defaults.html` or on
+  `refman/8.4/en/string-literals.html`.
+
+  *The text of an expression is the server's, with two marks no MariaDB
+  expression this corpus records carries.* Each string literal in it carries
+  an [introducer](glossary.md#introducer),
+  `_utf8mb4` or the character set of the column, and the whole text carries
+  one layer of backslash escaping beyond MySQL's own SQL escaping: a quote is
+  written `\'`, a backslash `\\`, and a newline inside a literal `\\n`.
+  `('back\\slash')` is reported `_utf8mb4\'back\\\\slash\'`. The same two
+  marks are in a generation expression, per `FR-MYSQL-031`, a check clause,
+  per `FR-MYSQL-034`, and the expression of a functional key part, per
+  `FR-MYSQL-024`; they are not in a routine body or a trigger body, which the
+  catalogue returns as written. A literal default carries neither.
+
+  *What the model receives.* An expression default is carried with the extra
+  layer removed and the introducers kept, per `FR-MYSQL-046`: `('it''s')`
+  yields an `expression` whose value is `_utf8mb4'it\'s'`, and not the
+  nineteen characters the server writes. An observed expression that holds no
+  string literal holds no backslash either, and is carried as the server
+  writes it, unchanged or between its outer parentheses, which is the
+  principle `FR-CTX-037` applies to a MariaDB expression.
+
+  *Consequence, stated plainly: a binary literal default is hexadecimal
+  text.* A string literal default on a binary column is reported in
+  hexadecimal, with no phrase in `EXTRA`, so `'ab'` on a `VARBINARY` column
+  yields the `literal` `0x6162`, and a template that quotes a literal writes
+  `'0x6162'`, which is another default. A bit default yields `b'101'`, with
+  any leading zeros dropped. Both are the server's literal text carried
+  unchanged, which is how `FR-CTX-037` carries MariaDB's `b'101'`.
 
   *Consequence, stated plainly.* A string default the DDL wrote `'EUR'`
   yields `{"kind":"literal","value":"EUR"}` from either provider. An
   expression's text is the server's own and differs between them —
-  `current_timestamp()` from MariaDB, per `FR-CTX-037`, where the manual
-  writes `CURRENT_TIMESTAMP` for MySQL — and is passed through as each server
-  writes it.
+  `current_timestamp()` from MariaDB, per `FR-CTX-037`, where MySQL writes
+  `CURRENT_TIMESTAMP` — and is passed through as each server writes it, save
+  the layer `FR-MYSQL-046` removes from MySQL's.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The *Pending
+  observation* note listed six questions — whether `CURRENT_TIMESTAMP` is
+  marked, whether parentheses are kept, whether a binary literal is
+  hexadecimal, how a bit literal reads, whether the empty string is empty
+  text, and whether a quote is escaped — and said that the amendment after the
+  observation would fix a rule removing any escapes. The *Observed* note
+  above answers all six, and the classification holds for every shape
+  observed. The observation found the extra layer and raised `OQ-078`, and
+  the user's decision of 2026-11-04 closed it in the same edition: the two
+  rows that emit an `expression` carry the text unescaped per
+  `FR-MYSQL-046`, the sentence after the table says which text the rows are
+  matched against, and the note on what the model receives says what is
+  carried. The consequence note on a binary literal default is new, and the
+  last consequence note names the layer removed.
+
+- **FR-MYSQL-046**: For a `mysql` read, the system SHALL remove exactly one
+  layer of backslash escaping from three texts, and from no other: the text
+  an `expression` default carries, per `FR-MYSQL-029`; a generated column's
+  expression, per `FR-MYSQL-031`; and a `CHECK` constraint's clause, per
+  `FR-MYSQL-034`. The system SHALL read each text from its first character to
+  its last and write:
+
+  | Where the text holds | The system SHALL write |
+  |---|---|
+  | A backslash followed by a backslash, `\\` | one backslash, `\`, and continue after the pair |
+  | A backslash followed by a single quote, `\'` | one single quote, `'`, and continue after the pair |
+  | Any other character, a backslash followed by any other character or ending the text included | that character, unchanged |
+
+  Every [introducer](glossary.md#introducer) SHALL be kept, and no other
+  character of the text SHALL change.
+
+  *Observed*, as bytes, on both series, the same on each:
+
+  | Field, and the DDL that wrote it | As the server writes it | As the model carries it |
+  |---|---|---|
+  | `COLUMN_DEFAULT`, `DEFAULT ('it''s')` | `_utf8mb4\'it\\\'s\'` | `_utf8mb4'it\'s'` |
+  | `COLUMN_DEFAULT`, `DEFAULT ('back\\slash')` | `_utf8mb4\'back\\\\slash\'` | `_utf8mb4'back\\slash'` |
+  | `COLUMN_DEFAULT`, `DEFAULT ('line1\nline2')` | `_utf8mb4\'line1\\nline2\'` | `_utf8mb4'line1\nline2'` |
+  | `GENERATION_EXPRESSION`, `AS (CONCAT('it''s ', l_quote))` | ``concat(_utf8mb4\'it\\\'s \',`l_quote`)`` | ``concat(_utf8mb4'it\'s ',`l_quote`)`` |
+  | `CHECK_CLAUSE`, `CHECK (l_quote <> 'o''clock')` | ``(`l_quote` <> _utf8mb4\'o\\\'clock\')`` | ``(`l_quote` <> _utf8mb4'o\'clock')`` |
+
+  The fixture's own texts read the same way: the generation expression
+  ``(`imdg_class` <> _utf8mb4\'Not regulated\')`` is carried
+  ``(`imdg_class` <> _utf8mb4'Not regulated')``. The observation read as
+  bytes fifteen distinct values holding a backslash — defaults, generation
+  expressions, check clauses and functional key parts, of the fixture and of
+  a scratch table. Fourteen are the text of an expression, and each, read as
+  this requirement reads it, resolves into the two pairs above and characters
+  that are not a backslash: no backslash of an expression's text was seen
+  outside a pair. The fifteenth is the literal default `back\slash`, which
+  carries no layer and which this requirement does not reach.
+
+  *What the result is.* Read under the grammar MySQL's manual gives a string
+  literal — `[_charset_name]'string'`, in which `\'` stands for a single
+  quote, `\\` for a backslash and `\n` for a newline
+  (`refman/8.4/en/string-literals.html`) — each text the model carries is the
+  expression the DDL declared, its literals marked with the character set the
+  server chose. A template that writes it into DDL writes MySQL's own SQL, as
+  a template that writes a MariaDB expression writes MariaDB's. No statement
+  of the observation submitted a carried text to a server. *Consequence,
+  stated plainly.* The same page states that the escape sequences have their
+  meaning "unless the `NO_BACKSLASH_ESCAPES` SQL mode is enabled", so the
+  text a read carries is SQL for a session without that mode.
+
+  *What the rule does not reach.* A literal default carries no layer, per
+  `FR-MYSQL-029`, and is carried unchanged; a routine body and a trigger body
+  carry none, per `FR-MYSQL-036` and `FR-MYSQL-038`; the expression of a
+  functional key part carries the layer and is not carried into the model,
+  per `FR-MYSQL-032`; and no view of the fixture held a string literal, so
+  whether a view's definition carries the layer was not observed, per
+  `FR-MYSQL-035`, and this requirement does not reach it.
+
+  *Rationale.* The user decided on 2026-11-04 that a `mysql` read carry SQL
+  text the server accepts, as a `mariadb` read already does, and that the
+  layer be removed from these three texts with the introducers kept. The
+  layer is regular, so one rule removes it. Removing a layer of quoting the
+  catalogue adds is the step `FR-CTX-037` and `FR-LITE-027` already take for
+  a literal, whose doubled apostrophes they collapse; this requirement takes
+  it for an expression, and only for the layer MySQL adds beyond its own SQL
+  escaping, so the escaping SQL needs stays in the text.
+
+  *Prior art.* The MySQL inspector of `ariga/atlas` passes the same three
+  texts, and a functional key part's expression, through its `unescape`,
+  defined in `sql/mysql/driver.go` and called in `sql/mysql/inspect.go`, and
+  passes no MariaDB text through it. That function replaces `\'` and `\\` by
+  the character after the backslash, as this requirement does, and drops a
+  backslash followed by any other character, where this requirement keeps it:
+  the user's decision names the sequences the observation shows, and the
+  observation shows those two alone. No text observed holds such a backslash,
+  so the two rules agree on every text observed.
+
+  *Rejected, by the user:* carrying each text as the server writes it, which
+  keeps the principle of `FR-CTX-037` and leaves every template that writes
+  DDL from a `mysql` read to remove the layer itself, the heuristic
+  `BR-CTX-002` keeps out of templates, and a template that forgets it writes
+  text that MySQL's grammar does not read as the expression declared.
+  *Rejected, by the user:* removing the introducers
+  too. The text would resemble MariaDB's, but an introducer names a literal's
+  character set, which the server chooses by column on one series, per
+  difference 5 of `FR-MYSQL-014`, so dropping it changes what the text means,
+  and it is a second rewrite with no ground in the observation. *Rejected, by
+  the user:* carrying both texts, as written and with the layer removed. It
+  adds a property to the model, which adds a key to every MariaDB document,
+  and `BR-CTX-002` rejects a raw field carried beside the structure.
+
+  *Accepted cost, stated because it is silent.* The system rewrites three
+  fields the server returned, and the rule rests on one observation, which
+  saw a quote, a backslash and a newline escaped. A text holding another
+  sequence is carried with that sequence unchanged, at exit `0`; a text
+  carried wrongly is a defect to report with the DDL that produced it, and is
+  the case this requirement is most likely to be amended for.
+
+  *Closes* `OQ-078`, now listed under [Closed](open-questions.md#closed).
+
+  *Added in the seventy-fifth edition,* for rmp `#326`, by the user's
+  decision of 2026-11-04.
 
 - **FR-MYSQL-030**: For a `mysql` read, the system SHALL read `EXTRA` as a
   sequence of the following phrases, separated by single spaces and in any
@@ -1300,34 +1876,78 @@ file owes one of `26.10`.
   NOT change the exit code on account of it, on the ground `FR-CAT-055` gives
   for a value outside a recorded set.
 
-  *Pending observation.* The manual lists `auto_increment`,
-  "`on update CURRENT_TIMESTAMP` for `TIMESTAMP` or `DATETIME` columns that
-  have the `ON UPDATE CURRENT_TIMESTAMP` attribute", "`STORED GENERATED` or
-  `VIRTUAL GENERATED` for generated columns", "`DEFAULT_GENERATED` for columns
-  that have an expression default value", and, on 9.7 and 26.10 only,
+  *Observed.* Over the fixture's 329 columns, on both series, `EXTRA` took
+  eleven values, and no other:
+
+  | `EXTRA` | Columns |
+  |---|---|
+  | the empty string | 290 |
+  | `auto_increment` | 11 |
+  | `auto_increment INVISIBLE` | 1 |
+  | `DEFAULT_GENERATED` | 13 |
+  | `DEFAULT_GENERATED INVISIBLE` | 1 |
+  | `DEFAULT_GENERATED on update CURRENT_TIMESTAMP` | 1 |
+  | `DEFAULT_GENERATED on update CURRENT_TIMESTAMP(3)` | 1 |
+  | `INVISIBLE` | 1 |
+  | `STORED GENERATED` | 7 |
+  | `VIRTUAL GENERATED` | 2 |
+  | `VIRTUAL GENERATED INVISIBLE` | 1 |
+
+  **A column carries more than one phrase, separated by single spaces, and
+  in one order**: the storage phrase or the default phrase first, then
+  `on update` and its word, and `INVISIBLE` last. The word after `on update`
+  is `CURRENT_TIMESTAMP` or `CURRENT_TIMESTAMP(3)`, one word in each case.
+  The reading above takes the phrases in any order, so it reads the observed
+  order and does not depend on it. Each phrase is one the manual lists:
+  `auto_increment`; "`on update CURRENT_TIMESTAMP` for `TIMESTAMP` or
+  `DATETIME` columns that have the `ON UPDATE CURRENT_TIMESTAMP` attribute";
+  "`STORED GENERATED` or `VIRTUAL GENERATED` for generated columns"; and
+  "`DEFAULT_GENERATED` for columns that have an expression default value"
+  (`refman/8.4/en/information-schema-columns-table.html`); and "For invisible
+  columns, `EXTRA` displays `INVISIBLE`" (`refman/8.4/en/invisible-columns.html`).
+  A generated invisible primary key reads `auto_increment INVISIBLE`, per
+  `FR-MYSQL-027`.
+
+  *Pending observation.* The phrase `MASKING POLICY`. The 9.7 manual lists
   "`MASKING POLICY` for columns with a masking policy"
-  (`refman/8.4/en/information-schema-columns-table.html`, and the 9.7 and
-  26.10 pages); "For invisible columns, `EXTRA` displays `INVISIBLE`", and
-  "Generated columns can be invisible" (`refman/8.4/en/invisible-columns.html`).
-  The manual shows no column carrying two phrases at once, which is the case
-  `FR-CAT-041` bounds for MariaDB. rmp `#326` records, on every series, the
-  field for every combination the fixture declares — an auto-incremental and
-  an expression default each with `INVISIBLE`, a generated invisible column,
-  `DEFAULT_GENERATED` with `on update`, and a fractional-second `ON UPDATE` —
-  and the amendment that follows fixes the order and the separator observed.
+  (`refman/9.7/en/information-schema-columns-table.html`), and the 8.4
+  manual does not. No column of the fixture can carry it: `8.4` refuses
+  `CREATE MASKING POLICY` as a syntax error, and `9.7` parses it and refuses
+  it because the masking-policy component is not installed, per difference 8
+  of `FR-MYSQL-014`; the 9.7 manual states that "If the component is not
+  installed, this statement returns an error"
+  (`refman/9.7/en/create-masking-policy.html`), the server's component table
+  is empty, and neither Community image carries the component's library.
+  Where the phrase falls among the others, and whether it is spelt as the
+  manual spells it, is therefore unobserved. A `9.7` server with that
+  component installed, which needs an image of another edition, would observe
+  it. The reading above does not depend on either answer: the phrase carries
+  no fact the model has a property for, and text the reading does not
+  recognise leaves the read and its exit code unchanged.
 
   *Consequence, stated plainly.* MariaDB writes the `ON UPDATE` attribute
-  `on update current_timestamp()`, per `FR-CAT-041`, and the manual writes it
-  `on update CURRENT_TIMESTAMP` for MySQL; the expression carried is each
-  server's own spelling.
+  `on update current_timestamp()`, per `FR-CAT-041`, and MySQL writes it
+  `on update CURRENT_TIMESTAMP`, or `on update CURRENT_TIMESTAMP(3)` for a
+  fractional-second column; the expression carried is each server's own
+  spelling.
 
   *Added in the seventy-third edition,* for rmp `#324`.
 
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The *Pending
+  observation* note covered every phrase and every combination, and said that
+  the amendment after the observation would fix the order and the separator.
+  The *Observed* note above records both. The requirement keeps reading the
+  phrases in any order, because a reading that tolerates every order reads the
+  observed one, and requiring that order would turn a server's change of order
+  into a lost fact. The *Pending observation* note now covers `MASKING POLICY`
+  alone. The requirement and its table are unchanged.
+
 - **FR-MYSQL-031**: For a `mysql` read, a generated column SHALL carry its
   storage kind from the phrase of `FR-MYSQL-030`, `VIRTUAL GENERATED` or
-  `STORED GENERATED`, and its expression from `GENERATION_EXPRESSION`, as
-  `FR-CAT-051` requires. A column whose `EXTRA` carries neither phrase SHALL
-  NOT be generated, whatever `GENERATION_EXPRESSION` holds.
+  `STORED GENERATED`, and its expression from `GENERATION_EXPRESSION`,
+  unescaped per `FR-MYSQL-046`, as `FR-CAT-051` requires. A column whose
+  `EXTRA` carries neither phrase SHALL NOT be generated, whatever
+  `GENERATION_EXPRESSION` holds.
 
   *Why `EXTRA` and not another field.* MySQL's column catalogue has no
   is-generated field, which `FR-CAT-051` reads beside the attribute field on
@@ -1335,17 +1955,30 @@ file owes one of `26.10`.
   silently wrong on MySQL. `FR-CAT-051` already takes the storage kind from
   the attribute field, so the fact is read from the field both servers carry.
 
-  *Pending observation.* `GENERATION_EXPRESSION` "For generated columns,
-  displays the expression used to compute column values. Empty for
-  nongenerated columns" (`refman/8.4/en/information-schema-columns-table.html`).
-  The text's form is not stated. The reference inspector passes a MySQL
-  generation expression through its `unescape` before use, and a MariaDB one
-  not, in `sql/mysql/inspect.go`. rmp `#326` records the expression of every
-  generated column of the fixture on every series, one of them holding a
-  string literal, and the amendment that follows fixes a rule for removing
-  any escaping observed, as `FR-MYSQL-029` states for a default.
+  *Observed.* `GENERATION_EXPRESSION` is the empty string, and never SQL
+  `NULL`, on every one of the 319 columns of the fixture that are not
+  generated, as the manual states: "Empty for nongenerated columns"
+  (`refman/8.4/en/information-schema-columns-table.html`). The empty string
+  makes no column generated, because the field does not decide it: the
+  phrase of `FR-MYSQL-030` does. On a generated column the field holds the
+  expression in the server's own rendering, with the two marks
+  `FR-MYSQL-029` records — an introducer before each string literal and one
+  extra layer of backslash escaping — and with outer parentheses around an
+  operator expression: ``(`imdg_class` <> _utf8mb4\'Not regulated\')``,
+  ``((`base_rate` + `bunker_surcharge`) + `congestion_surcharge`)``, and, on a
+  scratch column, ``concat(_utf8mb4\'it\\\'s \',`l_quote`)``. A generated
+  column's `COLUMN_DEFAULT` is SQL `NULL`. The expression is carried with the
+  extra layer removed and the introducers kept, per `FR-MYSQL-046`, so the
+  first of these is carried ``(`imdg_class` <> _utf8mb4'Not regulated')``.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The *Pending
+  observation* note said that the amendment after the observation would fix a
+  rule removing any escaping observed. The *Observed* note above records the
+  escaping, which raised `OQ-078`, and the user's decision of 2026-11-04
+  closed it in the same edition: the expression is now carried unescaped per
+  `FR-MYSQL-046`, which also records the reference inspector's reading.
 
 - **FR-MYSQL-032**: For a `mysql` read, a table's indexes SHALL be folded from
   the rows of the index catalogue, `STATISTICS`, for that table, per
@@ -1380,19 +2013,37 @@ file owes one of `26.10`.
   model carries one representation of one fact, under `FR-SRV-024`'s ground,
   across providers.
 
-  *Pending observation.* The 18 fields and their descriptions, from
-  `refman/8.4/en/information-schema-statistics-table.html` and
-  `refman/26.10/en/information-schema-statistics-table.html`, which list the
-  same 18. `INDEX_TYPE` is documented as "(`BTREE`, `FULLTEXT`, `HASH`,
-  `RTREE`)", where MariaDB was observed to report `SPATIAL` for a spatial
-  index, per `FR-CAT-042`; the value is carried as the server returns it, and
-  rmp `#326` records what a spatial index reports and what its `SUB_PART`
-  reads. `COMMENT` holds "information about the index not described in its
-  own column, such as `disabled`". A table with no primary key and a
-  `NOT NULL` unique index is reported under that index's own name, and the
-  model then carries no primary key; rmp `#326` records it.
+  *Observed, and the manual contradicted.* The manual documents `INDEX_TYPE`
+  as "The index method used (`BTREE`, `FULLTEXT`, `HASH`, `RTREE`)"
+  (`refman/8.4/en/information-schema-statistics-table.html`). The fixture's
+  spatial index reports **`SPATIAL`**, which is not in that list, with
+  `SUB_PART` `32` and `COLLATION` `A`, on both series. It is what MariaDB
+  reports, value for value, per `FR-CAT-042`, so a spatial index is no
+  divergence between the two products, and its `SUB_PART` of `32` reads as
+  MariaDB's does: what the catalogue states about the index, not a prefix the
+  DDL asked for.
+
+  *Observed.* The 18 fields, by the names above, on both series. A `FULLTEXT`
+  index reports SQL `NULL` in `COLLATION` and in `SUB_PART`; a descending
+  member reports `COLLATION` `D`; a prefix reports its length in `SUB_PART`,
+  `20` or `24` over the fixture; and the fixture's invisible index reports
+  `IS_VISIBLE` `NO`, the others `YES`. `NULLABLE` reads `YES` or the empty
+  string, and `PACKED` SQL `NULL` on every row. `COMMENT` is the empty string
+  on all 91 rows of the fixture, and reads `disabled` on a MyISAM table after
+  `ALTER TABLE … DISABLE KEYS`, as the manual's "information about the index
+  not described in its own column, such as `disabled`" states. A table with no
+  primary key and a `NOT NULL` unique index, `currency`, reports that index
+  under its own name, `uq_currency_iso_code`, and no row named `PRIMARY`, so
+  the model carries no primary key for it.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The *Pending
+  observation* note left what a spatial index reports to be observed, beside
+  a manual whose list omits `SPATIAL`. It reports `SPATIAL`, as MariaDB does,
+  and row 16 of `FR-MYSQL-040`, which recorded a divergence there, is removed.
+  The two *Observed* notes above replace the note. The requirement is
+  unchanged: `INDEX_TYPE` was always carried unchanged.
 
 - **FR-MYSQL-033**: For a `mysql` read, a table's outgoing foreign keys SHALL
   be read from the referential-constraint table, `REFERENTIAL_CONSTRAINTS`,
@@ -1421,36 +2072,100 @@ file owes one of `26.10`.
   A referenced table and a trigger's table SHALL be matched to a covered
   table by their names compared byte for byte.
 
-  *Pending observation.* The fields, from
-  `refman/8.4/en/information-schema-referential-constraints-table.html` and
-  `refman/8.4/en/information-schema-key-column-usage-table.html`. The rules
-  are documented as `CASCADE`, `SET NULL`, `SET DEFAULT`, `RESTRICT` and
-  `NO ACTION`, and `MATCH_OPTION` as "The only valid value at this time is
-  `NONE`". `SET DEFAULT` "is recognized by the MySQL parser, but both InnoDB
-  and NDB reject table definitions containing" it, so `FR-CAT-033` holds for
-  a MySQL read by a refusal at DDL time, where MariaDB accepts the clause and
-  reports `RESTRICT`; and "For an `ON DELETE` or `ON UPDATE` that is not
-  specified, the default action is always `NO ACTION`"
-  (`refman/8.4/en/create-table-foreign-keys.html`). InnoDB admits a key
-  referencing a non-unique index under `restrict_fk_on_non_standard_key`,
-  whose `UNIQUE_CONSTRAINT_NAME` the manual does not describe. rmp `#326`
-  records the rules a key declared without the clauses reports, the
-  referenced-key name of every key, and, under the fixture's setting of
-  `lower_case_table_names`, whether a referenced table's name is reported as
-  the table declares it.
+  `UPDATE_RULE` and `DELETE_RULE` SHALL be carried as the catalogue reports
+  them, `SET DEFAULT` included. `FR-CAT-033`, which bars `SET DEFAULT` from
+  the model, governs a `mariadb` read, as its note of the sixty-fifth edition
+  states, and does not reach a `mysql` read.
+
+  *Observed, and the manual contradicted.* The manual states that `SET
+  DEFAULT` "is recognized by the MySQL parser, but both InnoDB and NDB reject
+  table definitions containing ON DELETE SET DEFAULT or ON UPDATE SET DEFAULT
+  clauses" (`refman/8.4/en/create-table-foreign-keys.html`, and the same on
+  the 9.7 page). On both series, InnoDB accepted
+  `FOREIGN KEY … ON DELETE SET DEFAULT ON UPDATE SET DEFAULT` with no error
+  and no warning; `SHOW CREATE TABLE` kept both clauses; and
+  `REFERENTIAL_CONSTRAINTS` reported `SET DEFAULT` for both rules. A key
+  added by `ALTER TABLE … ADD CONSTRAINT … ON DELETE SET DEFAULT` was accepted
+  too, and reported `NO ACTION` and `SET DEFAULT`. **The action is not
+  performed**: a `DELETE` or an `UPDATE` of a parent row the key references
+  failed with `ERROR 1451 (23000)`, "Cannot delete or update a parent row: a
+  foreign key constraint fails", and left the child row unchanged. MariaDB
+  accepts the same clause and reports `RESTRICT`, per `FR-CAT-033`; MySQL
+  reports what was declared and refuses at run time.
+
+  *Observed.* The 11 fields of `REFERENTIAL_CONSTRAINTS` and the 12 of
+  `KEY_COLUMN_USAGE`, by the names above, on both series. `CASCADE`,
+  `SET NULL`, `RESTRICT` and `NO ACTION` are reported as declared, and a key
+  declared with neither clause reports `NO ACTION` for both, as the manual
+  states: "For an `ON DELETE` or `ON UPDATE` that is not specified, the
+  default action is always `NO ACTION`". The two rule fields are declared as
+  an enumeration of the five actions, so no sixth value can arrive.
+  `MATCH_OPTION` reads `NONE` on every key. A key that crosses into another
+  schema names that schema in `UNIQUE_CONSTRAINT_SCHEMA`, and `FR-CAT-057`
+  excludes it. `UNIQUE_CONSTRAINT_NAME` reads `PRIMARY` for every key of the
+  fixture, and the unique key's name for a key that references a `UNIQUE`
+  key; for a key that references an index that is not unique it reads SQL
+  `NULL`, and `FR-CAT-056` carries `referenced_key` as `null`. Such a key is
+  refused by default, with `ERROR 6125`, and is accepted only with
+  `restrict_fk_on_non_standard_key` set `OFF`, which draws the deprecation
+  warnings `4166` and `6124`; the fixture's servers run with it `ON`.
+
+  *Accepted cost, stated because it is silent.* A key declared
+  `SET DEFAULT` is presented with `SET DEFAULT`, at exit `0`, and nothing in
+  the document says that the server does not perform the action. A template
+  that emits DDL from it emits the clause the server accepted and kept, so
+  the round trip is faithful; a template that documents behaviour from it
+  states an action no write will ever see. It is the cost `FR-MYSQL-034`
+  accepts for a `CHECK` constraint declared `NOT ENFORCED`, on the same
+  ground: the model carries what the catalogue states, and the catalogue
+  states the declaration.
+
+  *Rejected: carrying `RESTRICT` in its place*, which is what a MariaDB read
+  carries for the same declaration. MySQL reports `SET DEFAULT`, and
+  substituting another action is a translation the server does not make, and
+  one no template could undo. *Rejected:
+  `null`.* The rule is reported, so it is not a fact the server fails to
+  provide, which is the only ground `BR-MYSQL-003` gives for `null`.
+  *Rejected: refusing the read or excluding the key.* The key exists and is
+  enforced against deletes and updates of its parent, and excluding it would
+  drop a relation the database holds. *What would change this.* A property
+  stating whether a referential action is performed, which adds a key to
+  every foreign key of every document and is a change to
+  [catalogue-coverage.md](catalogue-coverage.md) and
+  [context-document.md](context-document.md) the user has not asked for.
+
+  *Why this needs no change to the model.* A `sqlite` read already carries
+  `SET DEFAULT`, per `FR-LITE-031`, and `FR-CAT-055` already records a value
+  set of five spellings for that provider; `on_update` and `on_delete` are
+  carried unchanged on every provider. A `mysql` read adds no value the model
+  does not already admit.
 
   *Why byte for byte, and what bounds it.* No statement of `FR-MYSQL-015` reads
   `lower_case_table_names`, which decides how the server compares table names;
   the reference inspector reads it at connection time, in
-  `sql/mysql/driver.go`. On a server that compares names as written, a key's
-  referenced name is expected to be the table's own, which the pending
-  observation above confirms or refutes. On a server that stores or compares
-  them folded, a key whose referenced name differed in case from the table's
-  own would be excluded, at exit `0`, under `FR-CTX-042`'s ground. The
-  fixture's servers run with the setting they are started with, which the
-  fixture records, and the observation is bounded to it.
+  `sql/mysql/driver.go`. *Observed*, under `lower_case_table_names` `0`: a
+  key referencing a table declared `Shipping_Line` reports
+  `REFERENCED_TABLE_NAME` `Shipping_Line`, byte for byte equal to the table's
+  own name in the table catalogue, and a key written to reference
+  `shipping_line` is refused at DDL time with `ERROR 1824`, "Failed to open
+  the referenced table 'shipping_line'", so no key reaches the catalogue with
+  a referenced name in another case. On a server that stores or compares
+  names folded, a key whose referenced name differed in case from the table's
+  own would be excluded, at exit `0`, under `FR-CTX-042`'s ground. Only the
+  setting `0` was observed, which is every server of the fixture, and the
+  observation is bounded to it.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The paragraph on
+  the two rule fields is new. The *Pending observation* note read, from the
+  manual, that InnoDB refuses `SET DEFAULT` at DDL time, so that `FR-CAT-033`
+  held for a `mysql` read by that refusal. The servers accept the clause and
+  report it, so the requirement now states how the model carries it, and the
+  note on `FR-CAT-033` in [catalogue-coverage.md](catalogue-coverage.md) is
+  corrected with it. The rest of the note is replaced by the *Observed* notes
+  above, and the bounding note now records what was observed of letter case.
+  Row 18 of `FR-MYSQL-040` follows.
 
 - **FR-MYSQL-034**: For a `mysql` read, a table's `CHECK` constraints SHALL be
   the rows of the table-constraint table, `TABLE_CONSTRAINTS`, whose
@@ -1467,7 +2182,7 @@ file owes one of `26.10`.
   | `TABLE_CONSTRAINTS` | `ENFORCED` | not carried — the model has no property for it |
   | `CHECK_CONSTRAINTS` | `CONSTRAINT_CATALOG`, `CONSTRAINT_SCHEMA` | not carried — row identity, and the join |
   | `CHECK_CONSTRAINTS` | `CONSTRAINT_NAME` | the join |
-  | `CHECK_CONSTRAINTS` | `CHECK_CLAUSE` | `clause` |
+  | `CHECK_CONSTRAINTS` | `CHECK_CLAUSE` | `clause`, unescaped per `FR-MYSQL-046` |
 
   `level` SHALL be `null`: MySQL records no level for a constraint.
 
@@ -1498,26 +2213,48 @@ file owes one of `26.10`.
   is a change to [catalogue-coverage.md](catalogue-coverage.md) and
   [context-document.md](context-document.md) the user has not asked for.
 
-  *Pending observation.* `CHECK_CONSTRAINTS` has four fields, and no field
-  names the owning table
-  (`refman/8.4/en/information-schema-check-constraints-table.html`);
-  `TABLE_CONSTRAINTS` has seven, `CONSTRAINT_TYPE` "can be `UNIQUE`,
-  `PRIMARY KEY`, `FOREIGN KEY` or `CHECK`", and `ENFORCED` is "`YES` or `NO`"
-  for a `CHECK` constraint
-  (`refman/8.4/en/information-schema-table-constraints-table.html`); an
-  unnamed constraint is named "from the table name, a literal `_chk_`, and an
-  ordinal number", and "`CHECK` constraint names must be unique per schema"
-  (`refman/8.4/en/create-table-check-constraints.html`). A `JSON` column
-  carries no implicit constraint, where MariaDB attaches one, per
-  `FR-CAT-038`. rmp `#326` records, on every series, the clause of every
-  constraint of the fixture, the name of every unnamed one, the field
-  `ENFORCED`, and that no constraint appears on a `JSON` column the fixture
-  did not write; and, as the reduced-grant reader, whether the
-  check-constraint table returns a row the table-constraint table does not.
-  The join would drop such a row at exit `0`, and observing one would call
-  for a cross-check of the kind `FR-PRIV-019` makes for foreign keys.
+  *Observed.* `CHECK_CONSTRAINTS` has four fields and `TABLE_CONSTRAINTS`
+  seven, by the names above, on both series, and no field of the first names
+  the owning table, as the manual states
+  (`refman/8.4/en/information-schema-check-constraints-table.html`,
+  `refman/8.4/en/information-schema-table-constraints-table.html`).
+  `ENFORCED` reads `NO` on the fixture's two constraints declared
+  `NOT ENFORCED` and `YES` on the others. An unnamed constraint is named from
+  its table, `_chk_` and an ordinal, whichever level it was written at:
+  `cargo_item_chk_1` was written on a column and `container_type_chk_1` on
+  the table, as the manual's "from the table name, a literal `_chk_`, and an
+  ordinal number" states (`refman/8.4/en/create-table-check-constraints.html`).
+  No constraint names a `JSON` column, so MySQL attaches no implicit
+  constraint where MariaDB attaches one, per `FR-CAT-038`. As the
+  reduced-grant reader, every row of `CHECK_CONSTRAINTS` has its row in
+  `TABLE_CONSTRAINTS`, so the join drops none and no cross-check is called
+  for; a scratch reader holding no privilege on a table saw that table's
+  constraint in neither catalogue, which is the table's own absence and not
+  a short read of it.
+
+  *The clause is the server's rendering, with the marks of `FR-MYSQL-029`.*
+  `CHECK_CLAUSE` holds the clause wrapped in one pair of outer parentheses,
+  with an introducer before each string literal and one extra layer of
+  backslash escaping: `CHECK (l_quote <> 'o''clock')` reads
+  ``(`l_quote` <> _utf8mb4\'o\\\'clock\')``, and the fixture's
+  `chk_voyage_direction` reads
+  ``(right(`voyage_number`,1) in (_utf8mb4\'N\',_utf8mb4\'S\',_utf8mb4\'E\',_utf8mb4\'W\'))``.
+  The clause `FR-CAT-046` records of MariaDB carries no outer parentheses,
+  and no clause this corpus records of MariaDB carries either mark.
+  `clause` carries the field with the extra layer removed and the
+  introducers kept, per `FR-MYSQL-046`, so the first is carried
+  ``(`l_quote` <> _utf8mb4'o\'clock')``, with its outer parentheses; a
+  template that writes `CHECK (` and `)` around it writes a second pair of
+  parentheses, which the server accepts.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The *Pending
+  observation* note is replaced by the *Observed* note above, which confirms
+  it, and the note on the clause, which the observation refined, is new. The
+  escaping it records raised `OQ-078`, and the user's decision of 2026-11-04
+  closed it in the same edition: the row of `CHECK_CLAUSE` now carries the
+  clause unescaped per `FR-MYSQL-046`.
 
 - **FR-MYSQL-035**: For a `mysql` read, a view SHALL carry exactly the nine
   properties `FR-CAT-047` gives a view, from the view catalogue, `VIEWS`:
@@ -1536,19 +2273,43 @@ file owes one of `26.10`.
 
   `algorithm` SHALL be `null`: MySQL's view catalogue has no algorithm field.
   A view SHALL NOT carry its columns, as on every provider, per the note on
-  `FR-CAT-052`.
+  `FR-CAT-052`. A view whose `VIEW_DEFINITION` is the empty string SHALL be
+  treated as a missing privilege, per `FR-PRIV-011`.
 
-  *Pending observation.* Ten fields, and no `ALGORITHM`, on
-  `refman/8.4/en/information-schema-views-table.html` and
-  `refman/26.10/en/information-schema-views-table.html`. `CHECK_OPTION` is
-  documented as "one of `NONE`, `CASCADE`, or `LOCAL`", where MariaDB was
-  observed to return `CASCADED`, per `FR-CAT-047`; the value is carried as the
-  server returns it, and rmp `#326` records it. `VIEW_DEFINITION` "has most of
-  what you see in the `Create Table` column that `SHOW CREATE VIEW` produces",
-  and the table requires the `SHOW VIEW` privilege; what a reader without it
-  sees is `FR-MYSQL-041`'s.
+  *Observed, and the manual contradicted, twice.* The manual states that the
+  value of `CHECK_OPTION` "is one of NONE, CASCADE, or LOCAL", and that "You
+  must have the SHOW VIEW privilege to access this table"
+  (`refman/8.4/en/information-schema-views-table.html`, and the same on the
+  9.7 page). On both series, the fixture's view declared
+  `WITH CASCADED CHECK OPTION` reports **`CASCADED`**, and the field is
+  declared `enum('NONE','LOCAL','CASCADED')`, so `CASCADE` cannot be
+  returned. It is what MariaDB returns, per `FR-CAT-047`, so the value is no
+  divergence between the two products. And the reduced-grant reader, which
+  holds no `SHOW VIEW`, **reads every row of the table**, all five of the
+  fixture, with every field populated but one: `VIEW_DEFINITION` is the
+  **empty string**, of length 0, and not SQL `NULL`. That is the shape
+  `FR-PRIV-018` records of MariaDB, and the one `FR-PRIV-011` detects, so the
+  last sentence of the requirement applies that check to a `mysql` read in
+  its own terms.
+
+  *Observed.* Ten fields, by the names above, on both series, and no
+  `ALGORITHM`. `IS_UPDATABLE` reads `YES`, and `NO` for the view declared
+  `ALGORITHM = TEMPTABLE`; `SECURITY_TYPE` reads `DEFINER` or `INVOKER`; and
+  `VIEW_DEFINITION`, to a privileged reader, is the server's rewritten form,
+  qualified and back-quoted, as on MariaDB:
+  ``select `p`.`port_id` AS `port_id`,… from `freight`.`port` `p` ``. No view
+  of the fixture holds a string literal, so whether a view definition carries
+  the marks `FR-MYSQL-029` records of an expression was not observed.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The last sentence of
+  the requirement is new: the requirement mapped `VIEW_DEFINITION` to
+  `definition` and said nothing of the empty string, which `FR-MYSQL-041` left
+  to MariaDB's shapes. The *Pending observation* note quoted the manual's
+  `CASCADE` and its `SHOW VIEW` requirement, and both are contradicted; the
+  two *Observed* notes above replace it, and row 13 of `FR-MYSQL-040`, which
+  recorded `CASCADE` as a divergence, is removed.
 
 - **FR-MYSQL-036**: For a `mysql` read, a routine SHALL carry the properties
   `FR-CAT-048` gives it, from the fields of the routine catalogue, `ROUTINES`,
@@ -1560,22 +2321,41 @@ file owes one of `26.10`.
   be `null` WHERE `ROUTINE_DEFINITION` is SQL `NULL`, and the routine is then
   incomplete, per `FR-PRIV-017`.
 
-  *Pending observation.* The 31 fields, by the names `FR-CAT-048` reads, on
-  `refman/8.4/en/information-schema-routines-table.html` and
-  `refman/26.10/en/information-schema-routines-table.html`. Three documented
-  values differ from MariaDB's observed ones: a procedure's `DTD_IDENTIFIER`
-  "is empty", where MariaDB returns SQL `NULL`; `EXTERNAL_LANGUAGE` is "The
-  language of the stored routine", where MariaDB returned SQL `NULL` on every
-  routine; and `SQL_DATA_ACCESS` may be `CONTAINS SQL`, which `FR-CAT-048`
-  records MariaDB not returning over its fixture. `ROUTINE_BODY` is "always
-  `SQL`", and `ROUTINE_DEFINITION` "is `NULL` if you have only
-  `CREATE ROUTINE`, `ALTER ROUTINE`, or `EXECUTE`".
+  *Observed, and the manual contradicted.* The manual states of
+  `DTD_IDENTIFIER`: "If the routine is a stored procedure, this value is
+  empty" (`refman/8.4/en/information-schema-routines-table.html`). On both
+  series a procedure's `DTD_IDENTIFIER` is **SQL `NULL`**, and its
+  `DATA_TYPE` the empty string — the two shapes `FR-CAT-048` records side by
+  side for MariaDB. The procedure's return type is `null` in full either way,
+  per the requirement, so the field was never a divergence that reached the
+  model, and row 20 of `FR-MYSQL-040`, which recorded it, is removed.
+
+  *Observed.* The 31 fields, by the names `FR-CAT-048` reads, on both series.
+  `ROUTINE_BODY` and `PARAMETER_STYLE` read `SQL`, and `EXTERNAL_NAME` and
+  `SQL_PATH` SQL `NULL`, on all seven routines of the fixture.
+  `EXTERNAL_LANGUAGE` reads `SQL` on all seven, where MariaDB returned SQL
+  `NULL` on every routine; neither is carried. `SQL_DATA_ACCESS` returns
+  `CONTAINS SQL` beside the three values `FR-CAT-048` records, because the
+  fixture declares a routine of each of the four characteristics; it is
+  carried as returned. `ROUTINE_DEFINITION` is the body as written, with no
+  introducer and no extra escaping, unlike the expressions of `FR-MYSQL-029`;
+  to the reduced-grant reader, which holds `EXECUTE`, it is SQL `NULL` on all
+  seven, as the manual states: it "is `NULL` if you have only
+  `CREATE ROUTINE`, `ALTER ROUTINE`, or `EXECUTE`". `9.7` declares a third
+  routine type, `LIBRARY`, which `FR-MYSQL-023` does not cover.
 
   *Consequence, stated plainly.* A routine whose language is not SQL, which
   `EXTERNAL_LANGUAGE` admits, is carried with `body_kind` `SQL` and its body,
-  and nothing in the model names its language.
+  and nothing in the model names its language. No routine of the fixture is
+  of another language.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The *Pending
+  observation* note read, from the manual, that a procedure's
+  `DTD_IDENTIFIER` is empty, where MariaDB returns SQL `NULL`. It is SQL
+  `NULL`, as on MariaDB, and the two *Observed* notes above replace the note.
+  The requirement is unchanged.
 
 - **FR-MYSQL-037**: For a `mysql` read, a routine's parameters SHALL be the
   rows of the parameter catalogue, `PARAMETERS`, carrying the properties
@@ -1583,28 +2363,46 @@ file owes one of `26.10`.
   order. A function's return value, the row at ordinal position `0` with mode
   and name SQL `NULL`, SHALL NOT be presented as a parameter.
 
-  *Pending observation.* Sixteen fields, the sixteen `FR-CAT-049` records on
-  MariaDB's three oldest series, and the return row as stated
-  (`refman/8.4/en/information-schema-parameters-table.html`).
+  *Observed.* Sixteen fields, the sixteen `FR-CAT-049` records on MariaDB's
+  three oldest series, on both series. Every function has a row at position
+  `0` whose `PARAMETER_MODE` and `PARAMETER_NAME` are SQL `NULL` and whose
+  type fields carry the return type, such as `varchar` and `varchar(16)`; no
+  procedure has one, and a declared parameter starts at `1`. `IN`, `OUT` and
+  `INOUT` are reported as declared. The manual states it in the same terms:
+  "The ORDINAL_POSITION value is 0. The PARAMETER_NAME and PARAMETER_MODE
+  values are NULL" (`refman/8.4/en/information-schema-parameters-table.html`).
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note is replaced by the *Observed* note above, which confirms
+  it. The requirement is unchanged.
 
 - **FR-MYSQL-038**: For a `mysql` read, a table's triggers SHALL be the rows
   of the trigger catalogue, `TRIGGERS`, whose event object table is that
   table, carrying the properties `FR-CAT-050` gives them from the fields of
   the same names, with the same exclusions.
 
-  *Pending observation.* Twenty-two fields, the twenty-two of `FR-CAT-050`
-  (`refman/8.4/en/information-schema-triggers-table.html`): `ACTION_ORDER` is
-  "The ordinal position of the trigger's action within the list of triggers on
-  the same table with the same `EVENT_MANIPULATION` and `ACTION_TIMING`
-  values"; `ACTION_CONDITION` and the two table-reference fields are "always
-  `NULL`"; `ACTION_ORIENTATION` is "always `ROW`"; the row references are
-  "always `OLD`" and "always `NEW`"; and "To see information about a table's
-  triggers, you must have the `TRIGGER` privilege for the table", which
-  `FR-MYSQL-041` reaches.
+  *Observed.* Twenty-two fields, the twenty-two of `FR-CAT-050`, on both
+  series. `ACTION_ORDER` reads `1`, and `2` for the trigger the fixture
+  declares `FOLLOWS` another of the same event and timing on the same table,
+  as the manual's "The ordinal position of the trigger's action within the
+  list of triggers on the same table with the same `EVENT_MANIPULATION` and
+  `ACTION_TIMING` values" states
+  (`refman/8.4/en/information-schema-triggers-table.html`).
+  `ACTION_CONDITION` and the two table-reference fields are SQL `NULL`,
+  `ACTION_ORIENTATION` is `ROW`, and the row references are `OLD` and `NEW`,
+  on every trigger. `ACTION_STATEMENT` is the body as written, with no
+  introducer and no extra escaping. The reduced-grant reader, which holds no
+  `TRIGGER` privilege, receives **no row** of the table, as the manual's "To
+  see information about a table's triggers, you must have the `TRIGGER`
+  privilege for the table" states; `FR-MYSQL-041` reaches it.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note is replaced by the *Observed* note above, which confirms
+  it. The requirement is unchanged.
 
 - **FR-MYSQL-039**: Where the model defines a value or a property that MySQL
   has no source for, a `mysql` read SHALL carry what this table states:
@@ -1619,54 +2417,93 @@ file owes one of `26.10`.
   | The implicit `json_valid` constraint of `FR-CAT-038` | never: MySQL attaches none |
   | The `inet4`, `inet6` and `uuid` types | never: MySQL has none of them |
 
-  *Pending observation.* Each "never" is the absence of the feature from the
-  manuals cited in this file, which no page states in terms; rmp `#326`
-  confirms it over the catalogue the fixture produces, under the sixth
-  validation rule of the [README](README.md#maintenance-debt): a record of an
-  absence rests on an enumeration of what the catalogue returns.
+  *Observed, by enumeration and by refusal*, the two forms the sixth
+  validation rule of the [README](README.md#maintenance-debt) admits for a
+  record of an absence. By enumeration: no table type exists server-wide
+  other than the three of `FR-MYSQL-023`, and the field is declared with
+  those three alone; none of the fixture's 37 `data_type` values is `inet4`,
+  `inet6` or `uuid`; no check constraint names a `JSON` column; and the field
+  lists of `FR-MYSQL-015` hold no algorithm field in `VIEWS` and no level
+  field in `CHECK_CONSTRAINTS`. By refusal, each failing on both series with
+  `ERROR 1064`, a syntax error and not a silence: a column of type `INET4`,
+  `INET6` or `UUID`, `CREATE SEQUENCE`, `WITH SYSTEM VERSIONING`, and
+  `PERIOD FOR`, each of which MariaDB accepts.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note, which rested each "never" on the manuals' silence, is
+  replaced by the *Observed* note above. The requirement and its table are
+  unchanged.
 
 ## Divergences between MySQL and MariaDB
 
 - **FR-MYSQL-040**: Every divergence between MySQL and MariaDB that reaches a
   read SHALL be recorded in the following table, naming what this corpus
-  records of MariaDB, what MySQL's documentation states, and what the
-  divergence obliges. A divergence that an observation of rmp `#326` finds and
-  this table does not hold is a missing row.
+  records of MariaDB, what was observed of MySQL, and what the divergence
+  obliges. A divergence that an observation of MySQL finds and this table
+  does not hold is a missing row.
 
-  | # | Subject | MariaDB, as this corpus records it | MySQL, as its documentation states | What it obliges |
+  | # | Subject | MariaDB, as this corpus records it | MySQL, as observed | What it obliges |
   |---|---|---|---|---|
-  | 1 | The version string | `<x.y.z>-MariaDB`, with a build suffix, `FR-SRV-040` | `<x.y.z>`, with an optional suffix and no product marker | `FR-MYSQL-006`, `FR-MYSQL-007` |
-  | 2 | The read-only read-back | `tx_read_only`, present on all four series, `FR-SRV-009` | `tx_read_only` removed; `transaction_read_only` | `FR-MYSQL-018`, `FR-MYSQL-012` |
-  | 3 | A string default | quoted, `'EUR'`, `FR-CTX-037` | unquoted | `FR-MYSQL-029` |
-  | 4 | A default of `NULL` | the four characters `NULL`, `FR-CTX-012` | SQL `NULL` | `FR-MYSQL-029` |
-  | 5 | An expression default | told apart by its shape, `FR-CTX-037` | marked `DEFAULT_GENERATED` in the attribute field | `FR-MYSQL-029`, `FR-MYSQL-030` |
-  | 6 | A generated column | an is-generated field beside the attribute field, `FR-CAT-051` | the attribute field alone | `FR-MYSQL-031` |
+  | 1 | The version string | `<x.y.z>-MariaDB`, with a build suffix, `FR-SRV-040` | `<x.y.z>`, with no suffix and no product marker: `8.4.13`, `9.7.4` | `FR-MYSQL-006`, `FR-MYSQL-007` |
+  | 2 | The read-only read-back | `tx_read_only`, present on all four series, `FR-SRV-009` | `tx_read_only` absent, `ERROR 1193`; `transaction_read_only` reads the integer `0`, and `1` once set | `FR-MYSQL-018`, `FR-MYSQL-012` |
+  | 3 | A string default | quoted, `'EUR'`, `FR-CTX-037` | unquoted and unescaped: `EUR`, `it's` | `FR-MYSQL-029` |
+  | 4 | A default of `NULL` | the four characters `NULL`, `FR-CTX-012` | SQL `NULL`; the string `'NULL'` is the four characters | `FR-MYSQL-029` |
+  | 5 | An expression default | told apart by its shape, `FR-CTX-037` | marked `DEFAULT_GENERATED` in the attribute field, `CURRENT_TIMESTAMP` included | `FR-MYSQL-029`, `FR-MYSQL-030` |
+  | 6 | A generated column | an is-generated field beside the attribute field, `FR-CAT-051` | the attribute field alone; the expression field is the empty string on every other column | `FR-MYSQL-031` |
   | 7 | The check-constraint table | six fields, carrying the table and the level, `FR-CAT-046` | four fields, carrying neither; the table, and enforcement, in the table-constraint table | `FR-MYSQL-034` |
-  | 8 | `JSON` | an alias of `longtext`, with an implicit `json_valid` constraint, `FR-CAT-038` | a native type, `json`, with none | `FR-MYSQL-028`, `FR-MYSQL-034` |
-  | 9 | An invisible column | the attribute field reads `INVISIBLE`, `FR-CAT-035` | the attribute field carries `INVISIBLE`, and may carry it beside other phrases | `FR-MYSQL-030` |
+  | 8 | `JSON` | an alias of `longtext`, with an implicit `json_valid` constraint, `FR-CAT-038` | a native type, `json`, with no character set and no constraint | `FR-MYSQL-028`, `FR-MYSQL-034` |
+  | 9 | An invisible column | the attribute field reads `INVISIBLE`, `FR-CAT-035` | the attribute field carries `INVISIBLE`, last, after any other phrase | `FR-MYSQL-030` |
   | 10 | An index on an expression | none; an expression is indexed through a generated column, `FR-CAT-042` | a functional key part, with no column name and an expression | `FR-MYSQL-024` |
   | 11 | An index the optimizer does not use | an ignored field, `FR-CAT-042` | a visibility field of the opposite polarity | `FR-MYSQL-032` |
   | 12 | An integer type's display width | always present, `FR-CTX-038` | absent, save `tinyint(1)` and `ZEROFILL` | `FR-MYSQL-028` |
-  | 13 | A view's cascaded check option | `CASCADED`, `FR-CAT-047` | documented as `CASCADE` | carried unchanged, `FR-MYSQL-035` |
   | 14 | A view's algorithm | a field of the view catalogue, `FR-CAT-047` | no such field | `null`, `FR-MYSQL-035` |
   | 15 | The schema catalogue's sixth field | a schema comment, `FR-CTX-036` | the default encryption | neither carried, `FR-MYSQL-025` |
-  | 16 | A spatial index's type | `SPATIAL`, `FR-CAT-042` | the documented list is `BTREE`, `FULLTEXT`, `HASH`, `RTREE` | carried unchanged, `FR-MYSQL-032` |
   | 17 | The table types | five, and `TEMPORARY` on three series, `FR-CAT-031` | `BASE TABLE`, `VIEW`, `SYSTEM VIEW`; no temporary table listed | `FR-MYSQL-023` |
-  | 18 | `ON ... SET DEFAULT` | accepted, reported `RESTRICT`, `FR-CAT-033` | refused at DDL time by InnoDB and NDB | `FR-CAT-033` holds; `FR-MYSQL-033` |
+  | 18 | `ON ... SET DEFAULT` | accepted, reported `RESTRICT`, `FR-CAT-033` | accepted and reported `SET DEFAULT`; the action is refused at run time, `ERROR 1451` | carried unchanged, `FR-MYSQL-033`; `FR-CAT-033` governs a `mariadb` read |
   | 19 | A referential action not written | not recorded by this corpus | `NO ACTION` | `FR-MYSQL-033` |
-  | 20 | A procedure's DTD identifier | SQL `NULL`, `FR-CAT-048` | empty | none: the return type is `null`, `FR-MYSQL-036` |
-  | 21 | A routine's external language | SQL `NULL` on every routine, `FR-CAT-048` | the routine's language | not carried, `FR-MYSQL-036` |
-  | 22 | Identifier letter case | not recorded by this corpus | decided by `lower_case_table_names`, which no statement reads | names matched byte for byte, `FR-MYSQL-033` |
-  | 23 | An expression's text | backtick-quoted and rewritten, no backslash observed, `FR-CAT-051`, `FR-CTX-037` | not stated; the reference inspector unescapes MySQL's | `FR-MYSQL-029`, `FR-MYSQL-031` |
-  | 24 | A server with no TLS material | `10.11` offers no TLS until configured, difference 3 of `FR-SRV-038` | generates material at startup where built with OpenSSL | `FR-MYSQL-021` |
-  | 25 | The default authentication | not recorded by this corpus | `caching_sha2_password` | `FR-MYSQL-022`, `FR-MYSQL-045` |
+  | 21 | A routine's external language | SQL `NULL` on every routine, `FR-CAT-048` | `SQL` on every routine | not carried, `FR-MYSQL-036` |
+  | 22 | Identifier letter case | not recorded by this corpus | under `lower_case_table_names` `0`, a referenced table's name as declared; a reference in another letter case refused, `ERROR 1824` | names matched byte for byte, `FR-MYSQL-033` |
+  | 23 | An expression's text | backtick-quoted and rewritten, no backslash observed, `FR-CAT-051`, `FR-CTX-037` | rewritten as MariaDB's is, with an introducer before each string literal and one extra layer of backslash escaping, in a default, a generation expression, a check clause and a functional key part, and not in a routine or trigger body; a check clause in outer parentheses | the layer removed and the introducers kept in a default, a generation expression and a check clause, `FR-MYSQL-046`, with `FR-MYSQL-029`, `FR-MYSQL-031`, `FR-MYSQL-034`; a functional key part's expression not carried, `FR-MYSQL-032` |
+  | 24 | A server with no TLS material | `10.11` offers no TLS until configured, difference 3 of `FR-SRV-038` | generates material at startup where built with OpenSSL, per its manual | `FR-MYSQL-021` |
+  | 25 | The default authentication | not recorded by this corpus | `caching_sha2_password` on every account; the server's RSA public key sent only on request | `FR-MYSQL-022`, `FR-MYSQL-045` |
+  | 26 | A string literal default on a binary column | not recorded by this corpus | its hexadecimal text, `0x6162`, with no phrase in the attribute field | a `literal` carrying that text, `FR-MYSQL-029` |
+  | 27 | The `VECTOR` type | accepted on `11.8` and `12.3`, and no catalogue reading recorded, difference 14 of `FR-SRV-038` | on `9.7` alone: `data_type` `vector`, `column_type` `vector(N)`, and a length of four bytes for each dimension | `FR-MYSQL-028`, difference 1 of `FR-MYSQL-014` |
+  | 28 | A JSON duality view | none | on `9.7` alone, a row of the table catalogue of type `VIEW` and a row of the view catalogue | a covered view, `FR-MYSQL-023` |
+  | 29 | A generated invisible primary key | none | a column `my_row_id`, invisible and auto-incremental, and the key `PRIMARY` on it, or neither, by a session setting | carried as reported, `FR-MYSQL-027` |
+  | 30 | What a reduced-grant reader loses of the constraint tables | every row of `TABLE_CONSTRAINTS` and `REFERENTIAL_CONSTRAINTS`, `FR-PRIV-018` | nothing: every row of the database | `FR-MYSQL-041`: the cross-check of `FR-PRIV-019` has nothing to detect over the fixture |
 
-  *Pending observation.* Every cell of the MySQL column rests on the page
-  cited by the requirement the last column names, and on nothing observed.
+  **The rows are numbered as they were first written, and a number is not
+  reused.** Rows 13, 16 and 20 recorded divergences the documentation
+  described and the servers did not show, and are removed: a view's cascaded
+  check option reads `CASCADED`, as on MariaDB, per `FR-MYSQL-035`; a spatial
+  index reports `SPATIAL`, as on MariaDB, per `FR-MYSQL-032`; and a
+  procedure's DTD identifier is SQL `NULL`, as on MariaDB, per `FR-MYSQL-036`.
+  Rows 26 to 30 are divergences the observation found and the table did not
+  hold.
+
+  *Observed.* Every cell of the MySQL column is an observation of the fixture,
+  recorded in the requirement the last column names, save the cell of row 24.
   Every cell of the MariaDB column is an observation this corpus records, or
   says that it records none.
+
+  *Pending observation.* The MySQL cell of row 24 is the manual's statement
+  that a server built with OpenSSL "can generate missing certificate and key
+  files automatically at startup"
+  (`refman/8.4/en/using-encrypted-connections.html`), and is pending
+  observation in `FR-MYSQL-021`, for the reason that note gives: every server
+  of the fixture is given its TLS material.
+
+  *Four candidates read, and not recorded.* The observation named four more
+  differences as rows this table lacked, and none is one. A view's definition
+  read by a reader without `SHOW VIEW` is the empty string on MySQL, which is
+  what `FR-PRIV-018` records of MariaDB. A comment stores a character outside
+  the basic multilingual plane as `?` on MySQL, as on MariaDB per
+  `FR-CAT-036`; MySQL warns at DDL time where MariaDB does not, and the
+  warning reaches no read, per `FR-MYSQL-026`. A check clause's escaping is
+  row 23. And the empty generation expression of a column that is not
+  generated reaches no property, per `FR-MYSQL-031`, which row 6 now states.
 
   *Rationale.* `FR-SRV-038` keeps a record of every difference between the
   MariaDB series because a difference without a home is rediscovered or
@@ -1680,6 +2517,18 @@ file owes one of `26.10`.
   *Amended in the seventy-fourth edition,* for rmp `#331`: the last cell of
   row 25 named `OQ-077`, which `FR-MYSQL-045` closes.
 
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The requirement
+  named what MySQL's documentation states, and now names what was observed;
+  the column of the table is renamed with it. Every cell of that column is
+  rewritten as observed, and rows 13, 16 and 20 are removed, because the
+  servers contradicted the documentation each rested on and agreed with
+  MariaDB. Row 18 is rewritten, because the servers contradicted the
+  documentation and do not agree with MariaDB: `SET DEFAULT` is accepted and
+  reported. Rows 26 to 30 are added. The *Pending observation* note, which
+  covered every MySQL cell, now covers the cell of row 24 alone. The last
+  cell of row 23 names `FR-MYSQL-046`, by the user's decision on `OQ-078`,
+  which the observation raised and the same edition closed.
+
 ## Completeness
 
 - **FR-MYSQL-041**: The rules of
@@ -1688,24 +2537,58 @@ file owes one of `26.10`.
   incomplete under `FR-PRIV-001` and `FR-PRIV-002`, an incomplete named object
   is `77` under `FR-PRIV-003`, an incomplete object in a listing or a dump is
   marked under `FR-PRIV-005` through `FR-PRIV-007`, and the limit of
-  `FR-PRIV-020` holds for triggers. Until an observation of rmp `#326`
-  records the shapes in which MySQL gives a privilege-driven absence, the
-  cross-checks of `FR-PRIV-011`, `FR-PRIV-017` and `FR-PRIV-019` SHALL be
-  applied to a `mysql` read in the shapes `FR-PRIV-018` records for MariaDB,
-  and this corpus SHALL NOT claim that they detect every such absence of a
-  `mysql` read.
+  `FR-PRIV-020` holds for triggers. The cross-checks of `FR-PRIV-011`,
+  `FR-PRIV-017` and `FR-PRIV-019` SHALL be applied to a `mysql` read in the
+  shapes of the following table, which are the shapes `FR-PRIV-018` records
+  for MariaDB wherever MySQL gives an absence at all:
 
-  *Pending observation.* The manual states that `ROUTINE_DEFINITION` "is
-  `NULL` if you have only `CREATE ROUTINE`, `ALTER ROUTINE`, or `EXECUTE`",
-  the shape `FR-PRIV-017` detects; that the trigger catalogue shows a
-  trigger only to a reader holding the `TRIGGER` privilege on its table,
-  which is the absence `FR-PRIV-020` cannot tell from no trigger; and that
-  the view catalogue needs the `SHOW VIEW` privilege, without stating what a
-  reader without it sees. rmp `#326` reads the fixture as its reduced-grant
-  reader on every series and records the shape of each absence, as
-  `FR-PRIV-018` records it.
+  | Property | Read as a privileged reader | Read as the reduced-grant reader | Detectable |
+  |---|---|---|---|
+  | A view's definition | the full text | the **empty string**, length 0, on a row that is present | yes, `FR-PRIV-011`, per `FR-MYSQL-035` |
+  | A routine's body | the full body | **SQL `NULL`**, on a row that is present | yes, `FR-PRIV-017`, per `FR-MYSQL-036` |
+  | A table's referential rules, and the constraint table beside them | every row of the database | every row of the database: nothing is lost | nothing to detect; `FR-PRIV-019` is still applied |
+  | A table's `CHECK` constraints | every row | every row, each with its row in the constraint table | nothing to detect |
+  | A table's triggers | 7 rows for the fixture | **zero rows** | **no**, `FR-PRIV-020` |
+
+  *Observed.* The fixture's reduced-grant reader holds `SELECT` and
+  `EXECUTE` on `freight` and nothing more, on both series. It sees every
+  table and view of `freight`, and all five rows of the view catalogue with
+  every field populated but `VIEW_DEFINITION`, which is the empty string; all
+  seven rows of the routine catalogue, with `ROUTINE_DEFINITION` SQL `NULL`;
+  no row of the trigger catalogue, which is indistinguishable from a table
+  with no trigger; and every other catalogue complete for `freight`,
+  `REFERENTIAL_CONSTRAINTS` and `TABLE_CONSTRAINTS` among them, with nothing
+  of the second schema, `masterdata`, on which it holds no grant. The manual
+  states the routine shape and the trigger privilege, as `FR-MYSQL-036` and
+  `FR-MYSQL-038` quote it, and states of the view catalogue that "You must
+  have the SHOW VIEW privilege to access this table", which the reader
+  contradicts, per `FR-MYSQL-035`.
+
+  *Where MySQL differs from MariaDB.* A reduced-grant reader of a MariaDB
+  server loses every row of `REFERENTIAL_CONSTRAINTS` and `TABLE_CONSTRAINTS`,
+  per `FR-PRIV-018`, which is the loss `FR-PRIV-019` exists to detect; the
+  same reader of a MySQL server loses neither, so the cross-check finds
+  nothing over the fixture and costs nothing to keep. It stays applied,
+  because a reader with another set of grants may lose them, and
+  `FR-PRIV-012` requires every cross-check on every read that presents the
+  property it guards. It is row 30 of `FR-MYSQL-040`.
+
+  *Bounded claim.* One reduced grant was observed, the one item 16 of
+  `FR-MYSQL-044` fixes, and a scratch reader holding no privilege on one
+  table, which saw that table in no catalogue at all: an absent table, which
+  `FR-PRIV-015` gives no cross-check, and not a short read of one. What a
+  reader with any other set of grants receives was not observed.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`. The requirement
+  applied the cross-checks in MariaDB's shapes until an observation recorded
+  MySQL's, and said this corpus would not claim they detect every such
+  absence of a `mysql` read. The shapes are recorded in the table above, so
+  the requirement now applies the cross-checks in them. They are MariaDB's
+  shapes for a view and a routine, which is why the detection was already
+  correct for both, and MySQL loses neither constraint table, which MariaDB
+  does. The *Pending observation* note is replaced by the notes above.
 
 ## Requirements of form
 
@@ -1776,7 +2659,7 @@ file owes one of `26.10`.
 
   Its `setup.sql` and `seed.sql` SHALL model a realistic domain, never
   `id=1, name='test'`, SHALL be accepted by every series of `FR-MYSQL-003`,
-  and SHALL exercise every case this file states:
+  and SHALL exercise the following cases:
 
   1. tables of the InnoDB engine and of at least one other engine;
   2. every native data type every series accepts: the integer types signed
@@ -1785,7 +2668,8 @@ file owes one of `26.10`.
      and `time` with and without fractional seconds; the character, text,
      binary and blob types; `enum` with members holding a comma and an
      apostrophe, and `set`; `json`; and the geometry types, one with an
-     `SRID`;
+     `SRID`. `VECTOR` is not among them, because `8.4` refuses it, per
+     difference 1 of `FR-MYSQL-014`;
   3. every row of the default classification of `FR-MYSQL-029`: no default
      on a `NOT NULL` and on a nullable column, `DEFAULT NULL`, a string
      literal, the empty string, the string `'NULL'`, a literal holding an
@@ -1817,34 +2701,75 @@ file owes one of `26.10`.
       characteristic, with a comment, and with each security type;
   12. triggers of each timing on each event, and two on one table with the
       same event and timing;
-  13. comments on tables, columns, indexes and routines, one holding a
-      character outside the basic multilingual plane;
+  13. comments on tables, columns, indexes and routines, one written with a
+      character outside the basic multilingual plane, which every series
+      stores and returns as `?`, per `FR-MYSQL-026`;
   14. identifiers carrying a space, a backtick and a double quote;
   15. a scheduled event and a partitioned table, which the read excludes; and
   16. a reduced-grant reader holding `SELECT` and `EXECUTE` on the main
       schema and nothing more, and a schema declaring no collation of its own.
 
-  A structure that a series of `FR-MYSQL-003` refuses SHALL be omitted from
-  the shared DDL rather than made conditional, and the refusal SHALL be
-  recorded under `FR-MYSQL-014`, as `FR-SRV-029` records difference 14 for
-  MariaDB.
+  A structure or a statement of `setup.sql` or `seed.sql` that a series of
+  `FR-MYSQL-003` refuses SHALL be omitted from them rather than made
+  conditional, and the refusal SHALL be recorded under `FR-MYSQL-014`, as
+  `FR-SRV-029` records difference 14 for MariaDB. Differences 1 and 6 of
+  `FR-MYSQL-014` are the two such refusals recorded.
 
-  The fixture SHALL also present, at each series of `FR-MYSQL-003`, a server
-  whose certificate names the host by which the project's tests reach it;
-  SHALL retain a server that offers no TLS; and SHALL present at least one
-  server of a MySQL series outside `FR-MYSQL-003` and older than its newest
-  series, for the refusal of `FR-MYSQL-009`. The condition each server runs
-  under that a reading depends on — its TLS material, its
-  `lower_case_table_names`, and its
-  `show_gipk_in_create_table_and_information_schema` — SHALL be recorded
-  with every reading taken against it, per the fourth validation rule of the
+  The server of each series of `FR-MYSQL-003` SHALL present a certificate
+  that names the host by which the project's tests reach it. Beside those
+  servers, the fixture SHALL present:
+
+  - at each series of `FR-MYSQL-003`, **a server that offers no TLS**, staged
+    by configuration as the second item of `FR-MYSQL-021` describes, so that
+    the right-hand column of that requirement and the logins of
+    `FR-MYSQL-045` are observable on every series; and
+  - **one server of a MySQL series outside `FR-MYSQL-003` and older than its
+    newest series**, for the refusal of `FR-MYSQL-009`, presenting a
+    certificate that names the host by which the tests reach it, so that a
+    `mysql` entry reaches the version check under the default `tls` mode of
+    `FR-CONF-013` instead of ending at the TLS handshake.
+
+  The condition each server runs under that a reading depends on — its TLS
+  material, its `lower_case_table_names`, its
+  `show_gipk_in_create_table_and_information_schema`, and its
+  `sql_generate_invisible_primary_key` — SHALL be recorded with every reading
+  taken against it, per the fourth validation rule of the
   [README](README.md#maintenance-debt).
+
+  The release each server runs within its series, which series stands
+  outside the set, the ports the servers publish, and where their data
+  directories are kept are the fixture's choices, recorded in
+  `scripts/mysql/README.md`, and are not requirements of this corpus. *On
+  2026-11-04* the fixture runs the release the table of `FR-MYSQL-003` names
+  as the latest of each series, with and without TLS; its series outside the
+  set is `8.0`, at `8.0.46`, which is the series the example of
+  `FR-MYSQL-009` refuses; it publishes the five servers on the ports `13320`
+  to `13324`; and it keeps each data directory in memory, rebuilt from
+  `setup.sql` and `seed.sql` at
+  every start.
+
+  *Why those four choices are not requirements.* No requirement of this file
+  depends on any of them: a test reaches a server at the address the harness
+  reports, a data directory is rebuilt from the same versioned files wherever
+  it is kept, and any series outside the set and older than its newest
+  exercises the same refusal. Writing them here would make a second copy of
+  values `scripts/mysql/` keeps in one place that its scripts read, and a
+  copy that drifts without a sign. The date names the reading, so that the
+  sentence above is a record of the fixture on that day and not a statement
+  that ages.
+
+  *What the list does not exercise.* Two cases this file states were observed
+  on scratch objects and are not among the sixteen: a key declared
+  `SET DEFAULT`, which `FR-MYSQL-033` carries, and a generated invisible
+  primary key, which `FR-MYSQL-027` carries. A test of either needs DDL the
+  shared files do not hold. Neither is refused by a series, so either could
+  join the list.
 
   *Rationale.* It is what `FR-CONF-038` and the root `CLAUDE.md` require of
   `scripts/mariadb/`, and `FR-LITE-038` of `scripts/sqlite/`, written for the
-  catalogue a MySQL server reads: every statement of this file that is marked
-  *Pending observation* names a case of this list, and rmp `#326` takes the
-  observations through it.
+  catalogue a MySQL server reads. rmp `#326` took every observation of this
+  file through it, and each statement still marked *Pending observation*
+  names what it cannot stage.
 
   *Added in the seventy-third edition,* for rmp `#324`.
 
@@ -1853,6 +2778,22 @@ file owes one of `26.10`.
   newest series, for the reason the amendment to `FR-MYSQL-043` gives. The
   servers of the set are those of `FR-MYSQL-003`, which on 2026-11-04 holds
   two series where it held three.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`, to state what the
+  fixture built for rmp `#325` is. The list read "every case this file
+  states", which now includes two cases the fixture does not hold, and names
+  its cases instead. Item 2 says that `VECTOR` is not among the types, and
+  item 13 that the character is returned as `?`. The rule on refusals reaches
+  a statement of `seed.sql`, which difference 6 of `FR-MYSQL-014` is. The
+  servers beside those of the set are listed: the requirement read that the
+  fixture retain *a* server that offers no TLS, and it now presents one at
+  each series, which `FR-MYSQL-021` and `FR-MYSQL-045` need on every series;
+  and the server outside the set, which read *at least one*, is one, and
+  presents a certificate naming the host. The conditions recorded gain
+  `sql_generate_invisible_primary_key`, which decides whether a table created
+  without a primary key gains a generated one. The paragraph on the fixture's
+  own choices and the notes after it are new, and the rationale no longer
+  says that the observations are still to be taken.
 
 ## Dependencies
 
@@ -1874,39 +2815,52 @@ file owes one of `26.10`.
   `FR-SRV-009` and `FR-SRV-010` are the requirements `FR-MYSQL-012` reads,
   unchanged, for a `mariadb` entry on a MySQL server.
 - [sqlite-contract.md](sqlite-contract.md) — `FR-LITE-021`, whose exclusion
-  of an expression index `FR-MYSQL-024` shares, and `FR-LITE-027`, whose
-  reading of two fields `FR-MYSQL-029` shares.
+  of an expression index `FR-MYSQL-024` shares; `FR-LITE-027`, whose
+  reading of two fields `FR-MYSQL-029` shares; and `FR-LITE-031`, under which
+  a `sqlite` read already carries the `SET DEFAULT` that `FR-MYSQL-033`
+  carries.
 - [catalogue-coverage.md](catalogue-coverage.md) and
   [context-document.md](context-document.md) — the model and the document
-  this file fills; `FR-CTX-043`, the `provider` field.
+  this file fills; `FR-CTX-043`, the `provider` field; `FR-CAT-033`, which
+  governs a `mariadb` read and does not reach a `mysql` read, per
+  `FR-MYSQL-033`; and `FR-CAT-036`, which holds for a `mysql` read, per
+  `FR-MYSQL-026`.
 - [privileges-and-completeness.md](privileges-and-completeness.md) — the
-  rules `FR-MYSQL-041` applies.
+  rules `FR-MYSQL-041` applies, and the cross-check of `FR-PRIV-011`, which
+  `FR-MYSQL-035` applies to a view.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, `77` and
   `78`; the condition order of `FR-ERR-006`; and the message rules
   `FR-MYSQL-008`, `FR-MYSQL-009` and `FR-MYSQL-045` follow, with the `hint`
   rules `BR-ERR-004` and `BR-ERR-005` that `FR-MYSQL-045` applies.
 - [performance-requirements.md](performance-requirements.md) —
   `NFR-PERF-001` to `NFR-PERF-008`, which `FR-MYSQL-042` applies.
-- [template-environment.md](template-environment.md) — `FR-ENV-046`, whose
-  fall-through places the `data_type` values only MySQL produces.
+- [template-environment.md](template-environment.md) — `FR-ENV-046`, which
+  places every `data_type` value a `mysql` read shares with a `mariadb` read,
+  and `FR-ENV-049`, which places the three only a `mysql` read was observed
+  to produce, per `FR-MYSQL-028`.
 - [security.md](security.md) — `BR-SEC-002`, the promise `BR-MYSQL-002`
   states for a `mysql` entry.
-- [open-questions.md](open-questions.md) — `OQ-076` and `OQ-077`, which this
-  file raised and which `FR-MYSQL-002` and `FR-MYSQL-045` close.
+- [open-questions.md](open-questions.md) — `OQ-076`, `OQ-077` and `OQ-078`,
+  which this file raised and which `FR-MYSQL-002`, `FR-MYSQL-045` and
+  `FR-MYSQL-046` close.
 
 ## Open questions
 
-**None.** The two entries this file raised are closed by the user's
-decisions: `OQ-076` by `FR-MYSQL-002` as amended, and `OQ-077` by
-`FR-MYSQL-045`. Both are listed under [Closed](open-questions.md#closed),
-and the index of [open-questions.md](open-questions.md) holds no entry for
-this file.
+**None.** The three entries this file raised are closed by the user's
+decisions: `OQ-076` by `FR-MYSQL-002` as amended, `OQ-077` by
+`FR-MYSQL-045`, and `OQ-078` by `FR-MYSQL-046`. All three are listed under
+[Closed](open-questions.md#closed), and the index of
+[open-questions.md](open-questions.md) holds no entry for this file.
 
 *Amended in the seventy-fourth edition,* for rmp `#331`. This section held a
 table of the two entries, open in the index, with what each decided and what
 waited on it.
 
-The statements marked *Pending observation* are not open questions: each has
-an owner, rmp `#326`, and a fixture, `FR-MYSQL-044`, and the
+*Amended in the seventy-fifth edition,* for rmp `#326`. The section named two
+entries. `OQ-078`, which the observation of rmp `#326` raised, was closed in
+the same edition by the user's decision, and is the third.
+
+The statements marked *Pending observation* are not open questions. Each
+names what this fixture cannot stage and what would observe it, and the
 [README](README.md#maintenance-debt) records them as the one item of
-maintenance debt this edition leaves.
+maintenance debt the corpus carries.

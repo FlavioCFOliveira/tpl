@@ -707,6 +707,16 @@ Out of scope: the wording of any individual message.
   `FR-CONF-051`, and step 3 refuses a value outside all three, whatever the
   entry.
 
+  *Amended in the seventy-fifth edition,* for rmp `#326`. For a `mysql`
+  entry step 6 holds one condition the note above did not list, and it is
+  evaluated first: the authentication of `FR-MYSQL-045`, which ends the
+  connection with `78` WHERE the session is not encrypted and the login needs
+  the server's RSA public key. It is raised at the authentication, before
+  the read-only session statement is issued, so it precedes the three
+  conditions above, and `FR-MYSQL-045` states its `cause` and its `hint`.
+  The codes step 6 can end with are unchanged, and so is the order of the
+  steps.
+
   *Amended in the sixty-eighth edition,* for rmp `#317`: step 7 reached `77`
   for a named view that does not compile, under `FR-LITE-035`, which is
   withdrawn by the user's decision recorded under `FR-LITE-033`. Such a view
@@ -1670,11 +1680,16 @@ Out of scope: the wording of any individual message.
   like a MariaDB one, is a server that admits no name longer than 64
   characters.
 
-  *Pending observation.* The manual gives 64 characters for a database, a
-  table, a column, an index, a constraint, a stored program and a view, at
-  `https://dev.mysql.com/doc/refman/8.4/en/identifier-length.html`, checked
-  2026-11-04, and no row for a trigger; rmp `#326` observes the limit on every
-  series of `FR-MYSQL-003`.
+  *Observed, on MySQL, on 2026-11-04, for rmp `#326`.* On both series of
+  `FR-MYSQL-003`, through the fixture of `FR-MYSQL-044`, a name of 64
+  characters was accepted and a name of 65 refused with `ERROR 1059`,
+  "Identifier name '…' is too long", for a database, a table, a column, an
+  index, a `CHECK` constraint, a foreign-key constraint, a view, a function,
+  a procedure, a trigger and an event. The manual gives 64 characters for
+  each of these but the trigger, for which its table has no row
+  (`https://dev.mysql.com/doc/refman/8.4/en/identifier-length.html`, checked
+  2026-11-04); a trigger is limited to 64 characters as well. The note
+  above therefore holds for every name a MySQL catalogue returns.
 
   *Added in the sixty-seventh edition,* for rmp `#314`.
 
@@ -1682,6 +1697,12 @@ Out of scope: the wording of any individual message.
   escapes the C1 range and the bidirectional formatting characters as well,
   and this requirement applies unchanged: it counts the characters of the
   value as escaped, and neither cut falls inside the escape of one of them.
+
+  *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
+  observation* note on MySQL's identifier limit, which quoted the manual and
+  owed an observation on every series, is replaced by the *Observed* note
+  above, which confirms it and adds the trigger. The requirement is
+  unchanged, and so is what it bounds for a `mariadb` and a `sqlite` entry.
 
 - **FR-ERR-045**: WHERE a `hint` carries a command that changes the host, the
   port, the user, the password or the database of an entry defined by `dsn`,

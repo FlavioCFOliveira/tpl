@@ -275,10 +275,15 @@ requirement says otherwise; a difference between series is recorded under
   and enforces `SET DEFAULT`, and a `sqlite` read reports it, per
   `FR-LITE-031`. Nothing about a `mariadb` read changes.
 
-  *Note added in the seventy-third edition,* for rmp `#324`. This requirement
-  holds for a `mysql` read on another ground: MySQL's InnoDB and NDB engines
-  refuse the clause at DDL time, so no key carries it, per `FR-MYSQL-033`,
-  where that ground is marked pending observation.
+  *Note added in the seventy-third edition,* for rmp `#324`, and *amended in
+  the seventy-fifth*, for rmp `#326`. This requirement does not reach a
+  `mysql` read. MySQL accepts the clause, reports `SET DEFAULT` and refuses
+  the action at run time, and a `mysql` read carries `SET DEFAULT` as
+  reported, per `FR-MYSQL-033`, as a `sqlite` read does per `FR-LITE-031`.
+  The note read that this requirement held for a `mysql` read because
+  MySQL's InnoDB and NDB engines refuse the clause at DDL time, which MySQL's
+  manual states and the servers of the fixture contradicted. Nothing about a
+  `mariadb` read changes.
 
   *Observed.* `ON DELETE SET DEFAULT ON UPDATE SET DEFAULT` is accepted by all
   four series **without error and without warning**, and the catalogue then
@@ -403,7 +408,12 @@ requirement says otherwise; a difference between series is recorded under
   *Note added in the seventy-third edition,* for rmp `#324`. This requirement
   records MariaDB and governs a `mariadb` read. MySQL's `JSON` is a native
   type, which a `mysql` read carries as `json`, with no implicit constraint,
-  per `FR-MYSQL-028` and `FR-MYSQL-034`.
+  per `FR-MYSQL-028` and `FR-MYSQL-034`. *Amended in the seventy-fifth
+  edition,* for rmp `#326`: `json` is a value `data_type` takes on a `mysql`
+  read, and `FR-ENV-049` places it in the **textual** family, where a
+  `mariadb` read's `longtext` already puts the same declaration. The
+  paragraph below, which calls `json` a member of no family, describes a
+  `mariadb` read, as it did when it was written.
 
   *Partially closes* `OQ-028`, which `FR-CTX-038`
   closes, and bears on `OQ-072`, which `FR-ENV-046`
@@ -488,11 +498,17 @@ requirement says otherwise.
 
   *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
   read, the value sets are those the MySQL manual documents and
-  [mysql-contract.md](mysql-contract.md) records pending observation: the
-  rules of `FR-MYSQL-033`, the events and timings of `FR-MYSQL-038`, and the
-  routine types of `FR-MYSQL-036`; `level` is `null` on every constraint, per
+  [mysql-contract.md](mysql-contract.md) records: the rules of
+  `FR-MYSQL-033`, the events and timings of `FR-MYSQL-038`, and the routine
+  types of `FR-MYSQL-036`; `level` is `null` on every constraint, per
   `FR-MYSQL-034`. A value outside a set is carried unchanged under this
-  requirement.
+  requirement. *Amended in the seventy-fifth edition,* for rmp `#326`: the
+  note read that [mysql-contract.md](mysql-contract.md) records the sets
+  pending observation, and it records them as observed. The rules are the
+  five spellings a `sqlite` read takes, `SET DEFAULT` among them, and MySQL
+  declares the two rule fields as an enumeration of exactly those five. A
+  routine type `9.7` declares and no row of the fixture carries, `LIBRARY`,
+  is not covered, per `FR-MYSQL-023`, so this requirement does not reach it.
 
   **`table_type` is not one of them**, and the difference is the field's job
   rather than its shape. `FR-CAT-001` through `FR-CAT-006` make that value a

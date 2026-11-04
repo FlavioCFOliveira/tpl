@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventy-four editions. All are in force;
+The specification has been written in seventy-five editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -5807,8 +5807,8 @@ none is amended: the MariaDB window, probe, refusals and connection order are
 adopted by citation and not changed; a `mysql` entry writes nothing outside
 `.tpl`, closes its connection before a render, and stays within one
 connection; a cached read keeps the provider of the read that wrote it; and a
-`data_type` only MySQL produces falls through to no family under
-`FR-ENV-046`, as that requirement provides. `FR-PROJ-021` named a supported
+`data_type` only MySQL produced fell through to no family under
+`FR-ENV-046`, as that requirement provided. `FR-PROJ-021` named a supported
 MariaDB database as what the starter template must render against, and was
 left as it stood.
 
@@ -5933,6 +5933,166 @@ series, and `DIV-059` already owes it a row that cites `FR-MYSQL-002` and
 entry is raised. The reading of `DIV-036` and `DIV-050` named as owed by the
 seventy-second edition is still owed.
 
+### Seventy-fifth edition — the MySQL catalogue observed, four facts its manual had wrong, and a layer of escapes
+
+rmp `#326`, of sprint 28, confirms the MySQL catalogue on live servers and
+amends this corpus from what it found. Its first half observed, on
+2026-11-04, every statement the seventy-third edition had marked *Pending
+observation*, through the fixture of `scripts/mysql/` that rmp `#325` built
+at `1b3ff53`: `8.4.13` and `9.7.4`, each with and without TLS, and `8.0.46`
+outside the set. This edition is its second half. Of the thirty marked
+statements — twenty-nine in [mysql-contract.md](mysql-contract.md) and one
+on `FR-ERR-046` — sixteen were confirmed, ten refined and four contradicted,
+and six stay marked, each because the fixture cannot observe it. The
+observation raised one question and left three `data_type` values in no
+type family, and the user's decisions of 2026-11-04 on both are written into
+this edition, which also completes rmp `#326`.
+
+**Two identifiers are assigned**: `FR-MYSQL-046` and `FR-ENV-049`. None is
+retired and none is renumbered. One open question is raised, `OQ-078`, and
+closed in the same edition on the user's decision, so the index of
+[open-questions.md](open-questions.md) is empty again.
+[glossary.md](glossary.md) gains one entry, *introducer*, and amends one,
+*pending observation*.
+
+- **The observation, its conditions and what it could not reach** —
+  [mysql-contract.md](mysql-contract.md). The section on sources names the
+  observation as the first ground, records once the conditions every reading
+  was taken under, says that the stock client stood in for `tpl`'s driver,
+  and lists the six statements that stay pending, each with the reason. A
+  confirmed statement carries an *Observed* note, and a contradicted one a
+  note headed *Observed, and the manual contradicted.*, which writes down the
+  manual's words and what the servers did. The evidence was saved in a
+  directory the repository does not version, so every note carries what was
+  seen rather than a path.
+- **Four contradictions** — the same file. `SET DEFAULT` is accepted by
+  InnoDB on both series and reported, and the action is refused only at run
+  time with `ERROR 1451`; `FR-MYSQL-033` now carries the rule as reported,
+  `SET DEFAULT` included, as a `sqlite` read already does under
+  `FR-LITE-031`, so the model gains no value it does not admit, and states
+  that `FR-CAT-033` governs a `mariadb` read alone. A view's check option
+  reads `CASCADED`, as on MariaDB, and the view catalogue is readable without
+  `SHOW VIEW`, with the definition the empty string; `FR-MYSQL-035` now
+  applies `FR-PRIV-011` to that shape. A procedure's DTD identifier is SQL
+  `NULL`, as on MariaDB. A spatial index reports `SPATIAL`, as on MariaDB.
+  Rows 13, 16 and 20 of `FR-MYSQL-040` are removed, and row 18 rewritten.
+- **The refinements that reach the read** — the same file. An expression's
+  text carries an introducer before each string literal and one extra layer
+  of backslash escaping, in a default, a generation expression, a check
+  clause and a functional key part, and not in a routine or trigger body,
+  and it raised `OQ-078`, on whether a read removes the layer. The read-back
+  of `transaction_read_only` is the integer `1`, which `FR-MYSQL-018` now
+  names as the confirming value. A plain column's generation expression is the
+  empty string. A generated invisible primary key is carried as reported, and
+  `FR-MYSQL-027` orders columns by the value of their position, which starts
+  at 2 when the key is hidden. A binary literal default is hexadecimal text,
+  a bit default drops its leading zeros, `EXTRA` combines its phrases in one
+  order, and the version probe answers three parts beside a four-part
+  `version_with_update` the closed list does not read.
+- **The differences between `8.4` and `9.7`** — the same file.
+  `FR-MYSQL-014` records ten and registers none. A `VECTOR` column, on `9.7`
+  alone, is carried under `FR-MYSQL-028`, whose `length` is four bytes for
+  each dimension; a JSON duality view, on `9.7` alone, is a covered view under
+  `FR-MYSQL-023`; and a routine of type `LIBRARY`, which `9.7` declares, is
+  not covered, because a library is not a routine in the sense of
+  `FR-CAT-008` and covering one would break `FR-CAT-016`.
+- **Completeness** — the same file. `FR-MYSQL-041` records MySQL's shapes of
+  a privilege-driven absence and applies the cross-checks in them: a view's
+  definition and a routine's body take MariaDB's shapes, a trigger is not
+  shown, and the constraint tables, which MariaDB withholds, are kept.
+- **The fixture** — the same file. `FR-MYSQL-044` names its cases instead of
+  "every case this file states", requires a server without TLS at each
+  supported series, requires the server outside the set to present the
+  fixture's certificate, adds `sql_generate_invisible_primary_key` to the
+  conditions recorded, and says that the release, the series outside the
+  set, the ports and where data directories are kept are the fixture's
+  choices, recorded in `scripts/mysql/README.md` and not requirements.
+- **The cross-references** — the note on `FR-ERR-006` names the
+  authentication condition of `FR-MYSQL-045` in step 6, and the note on
+  `FR-ERR-046` is observed, a trigger included, in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md); `FR-SEC-021` in
+  [security.md](security.md) points at `FR-MYSQL-045`; the MySQL notes on
+  `FR-CAT-033` and `FR-CAT-055` in
+  [catalogue-coverage.md](catalogue-coverage.md) and the overview of
+  [privileges-and-completeness.md](privileges-and-completeness.md) state what
+  was observed. Each is a note, and each leaves its requirement unchanged.
+- **The user's decisions** — the same file,
+  [template-environment.md](template-environment.md) and
+  [upstream-divergences.md](upstream-divergences.md). `FR-MYSQL-046`, new,
+  closes `OQ-078`: a `mysql` read removes exactly one layer of backslash
+  escaping — `\\` read as `\`, and `\'` as `'` — from an expression default,
+  a generated column's expression and a check clause, keeps the introducers
+  and changes nothing else, so the text it carries is MySQL's own SQL.
+  Carrying the text as written, removing the introducers too, and carrying
+  both texts are rejected. `FR-MYSQL-029`, `FR-MYSQL-031`, `FR-MYSQL-034`
+  and row 23 of `FR-MYSQL-040` cite it. `FR-ENV-049`, new, places the three
+  values by analogy with what MariaDB reports for the same declaration:
+  `json` is **textual**, as MariaDB's `longtext` is, and `geomcollection` and
+  `vector` are in none of the three, beside `geometrycollection` and the
+  binary types. The fall-through and the bounded claim of `FR-ENV-046`,
+  `FR-MYSQL-028` and the MySQL note on `FR-CAT-038` in
+  [catalogue-coverage.md](catalogue-coverage.md) follow. `DIV-059`, re-read
+  now that `1b3ff53` has added `scripts/mysql/`, owes a sentence naming that
+  fixture in the *Development* section of the root `README.md`, and stays
+  due.
+- **The questions, the glossary and this file** —
+  [open-questions.md](open-questions.md) lists `OQ-078` as raised and closed,
+  with its index empty and the specification complete. In this file the
+  edition count of the Scope, the count of questions under the identifier
+  scheme, the writing convention on the pending-observation note, the first
+  and fourth items of the Provenance, the maintenance debt and one sentence
+  of the record of the seventy-third edition follow. The first Provenance item
+  counted "seven decision logs", which no decision after the twenty-ninth
+  edition had moved; the count is removed, and the item says where a later
+  decision is recorded.
+
+**No requirement that governs a `mariadb` or a `sqlite` entry changes its
+meaning.** Every requirement amended is a requirement of the `mysql`
+provider, save `FR-ENV-046`, whose fall-through now names `FR-ENV-049` and
+whose answer for a column of a `mariadb` or a `sqlite` read is unchanged, as
+`FR-ENV-049` shows; and every change elsewhere is a note about a `mysql`
+entry or a passage of the record. `FR-CAT-008`, `FR-CAT-016`, `FR-CAT-033`,
+`FR-CAT-036`, `FR-CAT-038`, `FR-CAT-039`, `FR-CAT-042`, `FR-CAT-046`,
+`FR-CAT-047`, `FR-CAT-048`, `FR-CAT-050`, `FR-CAT-051`, `FR-CAT-052`,
+`FR-CAT-055`, `FR-CAT-056`, `FR-CTX-012`, `FR-CTX-018`, `FR-CTX-037`,
+`FR-CTX-040`, `BR-CTX-002`, `FR-ENV-041`, `FR-ENV-042`, `FR-ENV-048`,
+`FR-LITE-026`, `FR-LITE-027`, `FR-LITE-031`, `FR-PRIV-011`, `FR-PRIV-012`,
+`FR-PRIV-015`, `FR-PRIV-017` to `FR-PRIV-020`, `FR-SRV-006`, `FR-SRV-026`,
+`FR-SRV-038`, `FR-CONF-038`, `FR-CONF-039`, `FR-ERR-006`, `FR-ERR-046` and
+`FR-SEC-021` were read against the changes, and none is amended: the model
+already admits `SET DEFAULT` from SQLite; the MariaDB shapes of an absent view
+definition and routine body are MySQL's too; every value a `mysql` read now
+carries is carried under a rule already in force, save the three texts
+`FR-MYSQL-046` unescapes, a rule that reaches a `mysql` read alone; and of
+the three values `FR-ENV-049` places, no `mariadb` or `sqlite` read was
+observed producing `json` or `geomcollection`, and `vector` is placed where
+the fall-through of `FR-ENV-046` already put it.
+
+**One editorial correction to an earlier edition.** The seventy-third
+edition's account of the requirements it read and left unchanged said that a
+`data_type` only MySQL produces *falls* through to no family under
+`FR-ENV-046`, as that requirement *provides*. `FR-ENV-049` now places the
+three such values, so both verbs are put in the past tense, and the sentence
+is not otherwise changed.
+
+The fifth validation rule is discharged for this edition: neither root
+document has changed since `e72e299`; at `1b3ff53` the root `CLAUDE.md` was
+read whole, and the root `README.md` was read wherever it names MySQL and
+searched for every subject this edition amends — `SET DEFAULT`, the
+read-back variable, escaping, `VECTOR`, duality views, a generated invisible
+primary key, `SHOW VIEW`, the check option, the identifier limit, the
+authentication method and `scripts/mysql/` — and neither paraphrases a
+requirement this edition amends. For the user's decisions, both files were
+searched at `1b3ff53` for the type families and for escaping, and neither
+paraphrases `FR-ENV-046`, `FR-ENV-049` or `FR-MYSQL-046`. `DIV-059` was
+re-read there: the root `README.md` has not changed since `60bf9df`, its
+*Development* section names the fixtures of `scripts/mariadb/` and
+`scripts/sqlite/` and not the one `1b3ff53` added, and the entry's
+correction, which said that section owed nothing while `scripts/mysql/` did
+not exist, now names it; the status is unchanged. No entry is raised. The
+reading of `DIV-036` and `DIV-050` named as owed by the seventy-second
+edition is still owed.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -5996,7 +6156,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 Identifiers are stable once assigned. They are never renumbered to tidy a file,
 never reused after a requirement is withdrawn, and are the reference used in
 commit messages, task descriptions, and test names. A gap in a sequence is
-therefore expected, not a defect: all seventy-seven open questions raised
+therefore expected, not a defect: all seventy-eight open questions raised
 are closed and their numbers are not reused. The *Closed* table of
 [open-questions.md](open-questions.md#closed) records each and what answered
 it.
@@ -6098,11 +6258,19 @@ because they constrain the whole module rather than one interaction.
   that states it: the requirement is in force. It is discharged by an
   *Observed* note in its place, or by the amendment an observation makes
   necessary where the observation contradicts it. The term is
-  [pending observation](glossary.md#pending-observation), and every statement
-  of MySQL behaviour in [mysql-contract.md](mysql-contract.md) carries the
-  note, owed to rmp `#326`. *Stated in the seventy-third edition*, at the
-  request that every MySQL fact not yet observed be visibly marked; no
-  convention for it existed.
+  [pending observation](glossary.md#pending-observation). *Stated in the
+  seventy-third edition*, at the request that every MySQL fact not yet
+  observed be visibly marked; no convention for it existed, and every
+  statement of MySQL behaviour in [mysql-contract.md](mysql-contract.md)
+  carried the note until rmp `#326` observed them. *Amended in the
+  seventy-fifth edition*: six carry it now, each because the project's
+  fixture cannot observe it, and each note says so. **Where a server
+  contradicts its own documentation**, the observation governs, and the
+  requirement that states the fact writes both down — the documentation's
+  words, cited by page, and what the servers did — in a note headed
+  *Observed, and the manual contradicted.* The seventy-fifth edition wrote
+  the first four, in [mysql-contract.md](mysql-contract.md); before it, no
+  passage of this corpus recorded a server contradicting its manual.
 - **A term that has a definition has exactly one, and it is in
   [glossary.md](glossary.md).** That file states one half of the rule of
   itself — a term used in a requirement without an entry there is a defect —
@@ -6177,7 +6345,7 @@ makes the other four exhaustive, and it is read where a reader is counting
 them; moving it to a paragraph below would leave the list looking open.
 
 
-1. Seven decision logs. The first interview settled 53 points about the CLI
+1. Decision logs. The first interview settled 53 points about the CLI
    surface; the second settled 28 points about the model, the document, the
    template surface, the server contract, and performance, and recorded four
    defects found in the first edition; the third is the audit of 2026-09-10,
@@ -6189,11 +6357,25 @@ them; moving it to a paragraph below would leave the list looking open.
    reversed a recommendation and reordered two values this corpus had held to
    be compatible; the seventh, of 2026-09-21, settled the one point the joined
    arms raised, that a boolean interpolated into a generated file renders
-   `true` and not `True`, which `FR-SEM-021` writes in. Each
-   decision carries its own reasoning and the alternatives it rejected; where
-   the reasoning explains why a requirement reads as it does, it is preserved in
-   the `Rationale`, the `Rejected`, or the `Accepted cost` note under that
-   requirement.
+   `true` and not `True`, which `FR-SEM-021` writes in. Every decision taken
+   since is recorded in the record of the edition that writes it in, with its
+   date or its rmp task — the thirty-sixth edition's of the product owner, on
+   the performance gates, and the seventy-fourth edition's three of the user,
+   on the supported MySQL series, on authentication without TLS and on the
+   starter template, are two such records — and they are not counted here.
+   Each decision carries its own reasoning and the alternatives it rejected;
+   where the reasoning explains why a requirement reads as it does, it is
+   preserved in the `Rationale`, the `Rejected`, or the `Accepted cost` note
+   under that requirement.
+
+   *Amended in the seventy-fifth edition.* The item opened "Seven decision
+   logs", a count that was true when the twenty-ninth edition recorded the
+   seventh and that no later decision moved, although editions from the
+   thirty-sixth onward record decisions of the user and of the product
+   owner. The count is removed rather than corrected, because a count kept
+   here goes stale at the next decision without a sign, which is what this
+   one did; the record of each edition is where a decision is found. The
+   first seven are described as they were.
 2. The root `README.md` and `CLAUDE.md`, used only where no decision contradicts
    them. Such requirements carry a provenance note.
 3. A published external authority, cited by name and by date. The fourth
@@ -6226,11 +6408,16 @@ them; moving it to a paragraph below would leave the list looking open.
    writing conventions above fix. It is then a statement of what the
    documentation says, not a record of behaviour, and the note says so in
    place. The exception exists for [mysql-contract.md](mysql-contract.md),
-   which had to be written before any MySQL server could be observed, and
-   whose every such statement is owed an observation by rmp `#326`. The rule
-   above stands for everything else: an unmarked statement of behaviour is a
-   record of an observation, and the exception never licenses an inference
-   that the documentation does not state.
+   which had to be written before any MySQL server could be observed. The
+   rule above stands for everything else: an unmarked statement of behaviour
+   is a record of an observation, and the exception never licenses an
+   inference that the documentation does not state.
+
+   *Amended in the seventy-fifth edition.* The paragraph said that every such
+   statement of [mysql-contract.md](mysql-contract.md) was owed an
+   observation by rmp `#326`. That observation was made on 2026-11-04 and
+   discharged all but six, and each of the six names why the project's
+   fixture cannot observe it; the exception stands for those six alone.
 5. Nothing else. Where information is missing, this specification records an
    entry in [open-questions.md](open-questions.md) rather than filling the
    gap. Where it is not merely missing but unobtainable, the entry closes on
@@ -6240,19 +6427,21 @@ them; moving it to a paragraph below would leave the list looking open.
 
 ## Maintenance debt
 
-**One item is outstanding**, recorded by the seventy-third edition: every
-statement of MySQL behaviour in [mysql-contract.md](mysql-contract.md)
-carries a *Pending observation* note, and none has been observed. rmp `#326`
-owes the observation of each, on every series of `FR-MYSQL-003`, through the
-fixture `FR-MYSQL-044` obliges and which does not yet exist; each observation
-replaces its note with an *Observed* one or amends the requirement it
-contradicts. Every such note opens a paragraph with the heading
-`*Pending observation.*` — in [mysql-contract.md](mysql-contract.md), and in
-one note on `FR-ERR-046` in
-[errors-and-exit-codes.md](errors-and-exit-codes.md) — so a search for that
-heading at the start of a line finds every one, and the item is discharged
-when the search finds none. No requirement of a
-`mariadb` or a `sqlite` entry waits on it.
+**One item is outstanding**, recorded by the seventy-third edition and
+narrowed by the seventy-fifth: six statements of MySQL behaviour in
+[mysql-contract.md](mysql-contract.md) carry a *Pending observation* note,
+each because the fixture of `FR-MYSQL-044` cannot observe it. Three are owed
+to the `mysql` provider once it exists — the `69` of three cells of
+`FR-MYSQL-021`, the `78` and the message of `FR-MYSQL-045`, both observed by
+the tests `FR-MYSQL-043` requires, and whether trust material stays
+additional to the public roots, observed once the driver is chosen. The
+other three need a server the fixture does not stage: one that generates its
+own TLS material, for the notes on `FR-MYSQL-021` and on row 24 of
+`FR-MYSQL-040`, and one with the masking-policy component installed, for the
+note on `FR-MYSQL-030`. Every such note opens a paragraph with the heading
+`*Pending observation.*`, so a search for that heading at the start of a line
+finds every one, and the item is discharged when the search finds none. No requirement of a `mariadb` or a
+`sqlite` entry waits on it.
 
 *Amended in the seventy-third edition.* This paragraph opened "No item is
 outstanding", which was true until this edition. The nine items this section
@@ -6267,13 +6456,26 @@ every field list was recorded verbatim, and each is now a requirement in
 [context-document.md](context-document.md). The document shapes and the field
 lists are frozen, and implementation is no longer blocked on them.
 
+*Amended in the seventy-fifth edition.* The item read that every statement
+of MySQL behaviour carried the note and none had been observed, and that rmp
+`#326` owed each an observation through a fixture that did not yet exist. The
+fixture exists, and rmp `#326` observed the thirty statements on 2026-11-04 —
+twenty-nine in [mysql-contract.md](mysql-contract.md) and one on
+`FR-ERR-046` in [errors-and-exit-codes.md](errors-and-exit-codes.md):
+sixteen were confirmed, ten refined and four contradicted. The note on
+`FR-ERR-046` is discharged, and six notes remain, which is what the
+paragraph now lists.
+
 The index of [open-questions.md](open-questions.md) is empty. `OQ-076` and
-`OQ-077`, raised by the seventy-third edition, waited on decisions of the
-user, and neither was debt of this corpus, because neither was a point the
-corpus could settle on its own; the seventy-fourth edition closed both on
-those decisions. *Amended in the seventy-third edition*: the paragraph read
-that the index was empty. *Amended in the seventy-fourth edition*: the
-paragraph read that the index held the two entries, open. Before them, the
+`OQ-077`, raised by the seventy-third edition, and `OQ-078`, raised by the
+seventy-fifth, waited on decisions of the user, and none was debt of this
+corpus, because none was a point the corpus could settle on its own; the
+seventy-fourth edition closed the first two on those decisions, and the
+seventy-fifth closed the third. *Amended in the seventy-third edition*: the
+paragraph read that the index was empty. *Amended in the seventy-fourth
+edition*: the paragraph read that the index held the two entries, open.
+*Amended in the seventy-fifth edition*: the paragraph named two entries, and
+names the third, raised and closed in that edition. Before them, the
 last open entry, `OQ-042`, was closed and was never debt of this corpus — it
 waited on evidence no fixture of MariaDB servers can produce, and it is very
 likely unobtainable at all, so the limit is written into `FR-SRV-041`

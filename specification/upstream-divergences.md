@@ -473,7 +473,7 @@ register was opened, and `DIV-025` cites it for a search of the history.
 | [DIV-056](#div-056) | `README.md` | Contradiction | Discharged, `6bc8513` | The `.cfg` key space counted short of the eighteen keys of `FR-CONF-002` |
 | [DIV-057](#div-057) | `README.md` | Contradiction | Discharged, `60bf9df` | MariaDB as the only database, no write outside `.tpl`, and eighteen keys |
 | [DIV-058](#div-058) | `CLAUDE.md` | Contradiction | Discharged, `60bf9df` | MariaDB as the only database, `INFORMATION_SCHEMA` as the only catalogue, and the MariaDB fixture as the only one |
-| [DIV-059](#div-059) | `README.md` | Contradiction | Due | MySQL as no target, and MariaDB and SQLite as the only providers |
+| [DIV-059](#div-059) | `README.md` | Contradiction | Due | MySQL as no target, MariaDB and SQLite as the only providers, and no MySQL fixture |
 | [DIV-060](#div-060) | `CLAUDE.md` | Contradiction | Due | MariaDB and SQLite as the only providers, and no contract or catalogue rule for a `mysql` entry |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
@@ -2913,11 +2913,13 @@ records and does not correct, because no entry's status turns on it.
 
 **Target**: `README.md`, the opening paragraph, the note on the three joined
 arms, *Two properties bound the tool*, *Requirements*, the paragraph on
-MySQL below it, and *A database entry and its provider*. **Kind**:
-contradiction.
+MySQL below it, *A database entry and its provider*, and *Development*.
+**Kind**: contradiction.
 
-**Status**: **due**, raised on 2026-11-04 at `e72e299`. No commit has
-discharged any part of it.
+**Status**: **due**, raised on 2026-11-04 at `e72e299`, and re-read on
+2026-11-04 at `1b3ff53`, the commit that added `scripts/mysql/`. The target
+has not changed since `60bf9df`, and no commit has discharged any part of
+it.
 
 *Says*: "`tpl` is a command-line tool that reads the structure — the DDL, or
 schema — of a **MariaDB** database or a **SQLite** database file … Which of
@@ -2930,15 +2932,18 @@ none for MySQL; "MySQL is not a target. A server that is not MariaDB is
 refused rather than read, because the two diverge in `INFORMATION_SCHEMA` in
 ways that would make the model silently wrong"; and "Every entry has a
 provider, named by its `provider` key: `mariadb` — the provider of an entry
-without the key — or `sqlite`".
+without the key — or `sqlite`"; and *Development* reads "Tests that need a
+live database use the containers defined in `scripts/mariadb/`" and "The
+tests of the SQLite provider build their databases at test time from the
+SQL text in `scripts/sqlite/`", and names no other fixture.
 *Specification*: `FR-CONF-051` and `FR-CONF-052` as amended in the
 seventy-third edition, under which the provider is `mariadb`, `mysql` or
 `sqlite`, and a `mysql` entry takes the keys of a `mariadb` entry;
 [mysql-contract.md](mysql-contract.md), which reads a MySQL server through a
-`mysql` entry, supports the series of `FR-MYSQL-002` and `FR-MYSQL-003`, and
-sets a MySQL session read-only under `FR-MYSQL-018`; and `FR-MYSQL-012`,
-under which a `mariadb` entry that reaches a MySQL server is refused as
-before.
+`mysql` entry, supports the series of `FR-MYSQL-002` and `FR-MYSQL-003`,
+sets a MySQL session read-only under `FR-MYSQL-018`, and obliges the
+fixture of `scripts/mysql/` in `FR-MYSQL-044`; and `FR-MYSQL-012`, under
+which a `mariadb` entry that reaches a MySQL server is refused as before.
 *Correction*: name MySQL as the third provider in the opening paragraph, the
 joined-arms note and the paragraph on providers; name a MySQL session beside
 a MariaDB one as set read-only, or point at
@@ -2946,15 +2951,27 @@ a MariaDB one as set read-only, or point at
 for MySQL that cites `FR-MYSQL-002` for the rule and `FR-MYSQL-003` for the
 current members, as the MariaDB row cites its pair; and replace the paragraph
 on MySQL with one saying that MySQL is read through a `mysql` entry, and that
-a server that is not MariaDB is still refused through a `mariadb` entry. The
-testing section owes nothing yet: `scripts/mysql/`, which `FR-MYSQL-044`
-obliges, does not exist at `e72e299`, and the section describes the fixtures
-that do.
+a server that is not MariaDB is still refused through a `mariadb` entry. In
+*Development*, beside the paragraphs on `scripts/mariadb/` and
+`scripts/sqlite/`, name `scripts/mysql/` as the fixture a test that reads a
+MySQL server uses, operated through its own scripts, and point at
+`scripts/mysql/README.md` for what it holds and how it is driven, as the
+paragraph on `scripts/mariadb/` points at that directory's README.
 
 *Raised by an amendment to this corpus, and not by an edit to the target*, the
 direction `DIV-053` first recorded. Every passage was an exact summary of the
 corpus when it was written, and `DIV-057` asked that the paragraph on MySQL
 stay, which it then rightly did.
+
+*Amended in the seventy-fifth edition,* for rmp `#326`. The correction ended:
+"The testing section owes nothing yet: `scripts/mysql/`, which
+`FR-MYSQL-044` obliges, does not exist at `e72e299`, and the section
+describes the fixtures that do." `1b3ff53` added the directory, and its
+`README.md` with it; *Development* in the target still names
+`scripts/mariadb/` and `scripts/sqlite/` alone, so the section now owes the
+sentence above, is named among the targets and is quoted under *Says*, and
+`FR-MYSQL-044` joins the *Specification*. The status is unchanged, so no
+count of the Overview moves.
 
 ## DIV-060
 

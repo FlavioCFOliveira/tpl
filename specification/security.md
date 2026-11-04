@@ -414,6 +414,18 @@ states the rule that answers it.
   hostname check of `verify-identity`, which is the default, is what carries
   the guarantee an operator pinning a CA is usually reaching for.
 
+  *Note added in the seventy-fifth edition,* for rmp `#326`. A `mysql` entry
+  set to a mode that leaves the session unencrypted — `disabled`, or
+  `preferred` against a server offering no TLS — meets one more path to the
+  password. The default authentication method of every supported MySQL
+  series sends the password, over such a session, encrypted with the
+  server's RSA public key, and a key the client requests over that session
+  can be replaced by an active intermediary, who then reads the password.
+  `FR-MYSQL-045` closes the path: the system never requests the key over a
+  session TLS does not protect, and ends a login that needs it with `78`,
+  whose `hint` names `verify-identity`. See
+  [mysql-contract.md](mysql-contract.md), which owns the requirement.
+
 ## Availability
 
 - **FR-SEC-022**: Every blocking phase SHALL have a deadline. See `FR-CONF-005`

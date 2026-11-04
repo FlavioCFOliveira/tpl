@@ -364,6 +364,20 @@ not cover an index that holds one, per `FR-MYSQL-024`.
 
 *Added in the seventy-third edition.*
 
+## introducer
+
+The name of a character set, preceded by an underscore, written immediately
+before a string literal to name the literal's character set, as in
+`_utf8mb4'EUR'`; MySQL's manual calls it a character set introducer, at
+`https://dev.mysql.com/doc/refman/8.4/en/string-literals.html`, checked
+2026-11-04. A MySQL server writes one before each string literal of the
+expression text it reports — in a default, a generation expression, a check
+clause and a functional key part — per `FR-MYSQL-029`, and a `mysql` read
+keeps it as written, per `FR-MYSQL-046`. No expression text this corpus
+records of MariaDB carries one.
+
+*Added in the seventy-fifth edition.*
+
 ## group node
 
 A node of the command tree that has children and no action of its own — `tpl`,
@@ -503,10 +517,14 @@ checked, and names the observation that would confirm it; the
 [README](README.md#writing-conventions) fixes the note's shape. The marker
 qualifies the ground of a fact, never the force of the requirement that
 states it, and it is discharged by an *Observed* note or by the amendment an
-observation makes necessary. Every statement of MySQL behaviour in
-[mysql-contract.md](mysql-contract.md) carries it, owed to rmp `#326`.
+observation makes necessary. Six statements of MySQL behaviour in
+[mysql-contract.md](mysql-contract.md) carry it, each naming why the
+project's fixture cannot observe it and what would.
 
-*Added in the seventy-third edition.*
+*Added in the seventy-third edition.* *Amended in the seventy-fifth
+edition*: the last sentence read that every statement of MySQL behaviour in
+[mysql-contract.md](mysql-contract.md) carried the marker, owed to rmp
+`#326`. That observation discharged it from all but six.
 
 ## project
 
