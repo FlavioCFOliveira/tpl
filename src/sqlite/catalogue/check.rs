@@ -13,11 +13,20 @@
 //! | A table or a view named in the namespace of the pragma table-valued functions | A `type` of `table` or `view` and a `name` whose first seven bytes are `pragma_`, ignoring ASCII case, whether the name is a text or a BLOB |
 //! | A value of a storage class the schema table's contract excludes | A `type`, `name` or `tbl_name` that is not text, a `rootpage` that is neither an integer nor `NULL`, an `sql` that is neither text nor `NULL` |
 //! | A table whose root page contradicts its text | A row of type `table` whose `rootpage` is `0` and whose text does not create a virtual table, or whose `rootpage` is not `0` and whose text creates one — read from the first word after `CREATE`, under SQLite's comment syntax |
+//! | A type SQLite does not write | A `type` that is not exactly one of the four texts `table`, `index`, `view` and `trigger`, compared on its whole value — a NUL character included — with no letter case folded |
+//! | A row with no text that is not an index's | An `sql` that is `NULL` or the empty text on a row whose `type` is not exactly `index` |
+//! | A NUL character in a name or a text | A `name`, `tbl_name` or `sql` holding a NUL character anywhere in its value |
+//! | A trigger's header SQLite does not write | A row of type `trigger` whose `sql`, under SQLite's comment syntax and ignoring ASCII letter case, does not begin with the words `CREATE` and `TRIGGER`, or whose next word is an unquoted `IF` |
 //!
 //! A row refused under more than one kind is reported under the first, in the
 //! order of that table. An integer or a real is written in digits and cannot
 //! begin with `pragma_`; a `NULL` root page, which the library refuses when it
 //! loads the schema, is not `0`.
+//!
+//! **Every comparison of `type` the reader makes is exact**, here and in the
+//! statements and the fold after the check: the fourth kind refuses every
+//! other spelling before any of them runs, so an exact comparison misses no
+//! row of a file the check admits (`FR-LITE-041`, `FR-LITE-020`).
 
 use std::borrow::Cow;
 
@@ -32,6 +41,14 @@ const PRAGMA: &[u8] = b"pragma_";
 /// The keyword whose place after `CREATE` makes a text create a virtual table.
 const VIRTUAL: &str = "VIRTUAL";
 
+/// The four texts SQLite writes in the `type` column of the schema table, and
+/// no other (`https://sqlite.org/schematab.html`).
+const TYPES: [&[u8]; 4] = [b"table", b"index", b"view", b"trigger"];
+
+/// The NUL character, which the library reads a value of the schema table
+/// only up to (`FR-LITE-041`, its sixth kind).
+const NUL: u8 = 0;
+
 /// The five columns of the schema table, in the order the check's statement
 /// selects them and the order a value of an excluded class is reported in.
 pub(crate) const COLUMNS: [&str; 5] = ["type", "name", "tbl_name", "rootpage", "sql"];
@@ -43,7 +60,7 @@ pub(crate) const COLUMNS: [&str; 5] = ["type", "name", "tbl_name", "rootpage", "
 /// as stored.
 #[must_use]
 pub(crate) fn verdict(values: [ValueRef<'_>; 5]) -> Option<RefusedRow> {
-    let [kind, name, _, rootpage, sql] = values;
+    let [kind, name, tbl_name, rootpage, sql] = values;
     let refused = |refused: RefusedKind| {
         Some(RefusedRow {
             row_type: written(kind),
@@ -80,6 +97,44 @@ pub(crate) fn verdict(values: [ValueRef<'_>; 5]) -> Option<RefusedRow> {
                 creates_virtual,
             });
         }
+    }
+
+    // The second kind admitted only a text `type`, so `kind` is one here.
+    // The fourth kind: a type SQLite does not write, compared on the whole
+    // value — `table` followed by a NUL character is not `table` — and in its
+    // case.
+    if let ValueRef::Text(bytes) = kind
+        && !TYPES.contains(&bytes)
+    {
+        return refused(RefusedKind::Type);
+    }
+
+    // The fifth kind: a row with no text, which the library reads as an
+    // index's whatever its type, on a row that is not an index's.
+    let null = matches!(sql, ValueRef::Null);
+    if (null || matches!(sql, ValueRef::Text(b""))) && !matches!(kind, ValueRef::Text(b"index")) {
+        return refused(RefusedKind::NoText { null });
+    }
+
+    // The sixth kind: a NUL character the library would read a value only up
+    // to, in the first of the three columns that holds one.
+    for (column, value) in [("name", name), ("tbl_name", tbl_name), ("sql", sql)] {
+        if let ValueRef::Text(bytes) = value
+            && bytes.contains(&NUL)
+        {
+            return refused(RefusedKind::Nul { column });
+        }
+    }
+
+    // The seventh kind: a trigger's header SQLite does not write — a text
+    // that does not begin `CREATE TRIGGER`, or whose next word is an unquoted
+    // `IF`, as `TEMP`, `TEMPORARY` and `IF NOT EXISTS`, which SQLite removes,
+    // would make it.
+    if matches!(kind, ValueRef::Text(b"trigger"))
+        && let ValueRef::Text(bytes) = sql
+        && !trigger::header_written(&String::from_utf8_lossy(bytes))
+    {
+        return refused(RefusedKind::TriggerHeader);
     }
 
     None
@@ -354,11 +409,19 @@ mod tests {
             }
         }
 
-        // The classes the contract admits: a NULL root page and a NULL sql.
+        // The classes the contract admits: a NULL root page, and a NULL sql,
+        // which the fifth kind admits on an index's row alone.
         let mut admitted = good;
         admitted[3] = ValueRef::Null;
-        admitted[4] = ValueRef::Null;
         assert_eq!(kind_of(admitted), None);
+        let autoindex = [
+            INDEX,
+            ValueRef::Text(b"sqlite_autoindex_carrier_1"),
+            ValueRef::Text(b"carrier"),
+            ValueRef::Integer(3),
+            ValueRef::Null,
+        ];
+        assert_eq!(kind_of(autoindex), None);
     }
 
     #[test]
@@ -464,5 +527,284 @@ mod tests {
         .expect("refused");
         assert_eq!(refused.row_type.as_str(), "1.5");
         assert_eq!(refused.name.as_str(), "42");
+    }
+
+    /// A row SQLite writes for each of the four types.
+    fn written_by_sqlite() -> [[ValueRef<'static>; 5]; 6] {
+        [
+            [
+                TABLE,
+                ValueRef::Text(b"vessel"),
+                ValueRef::Text(b"vessel"),
+                ValueRef::Integer(2),
+                ValueRef::Text(b"CREATE TABLE vessel(imo INTEGER PRIMARY KEY)"),
+            ],
+            [
+                INDEX,
+                ValueRef::Text(b"ix_vessel"),
+                ValueRef::Text(b"vessel"),
+                ValueRef::Integer(3),
+                ValueRef::Text(b"CREATE INDEX ix_vessel ON vessel(imo)"),
+            ],
+            [
+                INDEX,
+                ValueRef::Text(b"sqlite_autoindex_port_1"),
+                ValueRef::Text(b"port"),
+                ValueRef::Integer(4),
+                ValueRef::Null,
+            ],
+            [
+                VIEW,
+                ValueRef::Text(b"v_fleet"),
+                ValueRef::Text(b"v_fleet"),
+                ValueRef::Integer(0),
+                ValueRef::Text(b"CREATE VIEW v_fleet AS SELECT imo FROM vessel"),
+            ],
+            [
+                TRIGGER,
+                ValueRef::Text(b"trg_vessel"),
+                ValueRef::Text(b"VESSEL"),
+                ValueRef::Integer(0),
+                ValueRef::Text(
+                    b"CREATE TRIGGER trg_vessel after insert on VESSEL BEGIN SELECT 1; END",
+                ),
+            ],
+            [
+                TRIGGER,
+                ValueRef::Text(b"temp"),
+                ValueRef::Text(b"vessel"),
+                ValueRef::Integer(0),
+                ValueRef::Text(b"CREATE TRIGGER temp AFTER DELETE ON vessel BEGIN SELECT 1; END"),
+            ],
+        ]
+    }
+
+    #[test]
+    fn fr_lite_041_rows_sqlite_writes_pass_the_four_new_kinds() {
+        for row in written_by_sqlite() {
+            assert_eq!(kind_of(row), None, "{row:?}");
+        }
+    }
+
+    #[test]
+    fn fr_lite_041_a_type_sqlite_does_not_write_is_refused_whole_and_in_its_case() {
+        // The fourth kind: every spelling the library loads — upper, title
+        // and mixed case, and the type followed by a NUL character — and
+        // every other text.
+        for row in written_by_sqlite() {
+            let ValueRef::Text(written) = row[0] else {
+                panic!("a type SQLite writes is a text");
+            };
+            let upper = written.to_ascii_uppercase();
+            let mut title = written.to_vec();
+            title[0] = title[0].to_ascii_uppercase();
+            let mixed: Vec<u8> = written
+                .iter()
+                .enumerate()
+                .map(|(at, byte)| {
+                    if at % 2 == 1 {
+                        byte.to_ascii_uppercase()
+                    } else {
+                        *byte
+                    }
+                })
+                .collect();
+            let nul = [written, &b"\0"[..]].concat();
+            let nul_letter = [written, &b"\0x"[..]].concat();
+            for spelling in [&upper, &title, &mixed, &nul, &nul_letter] {
+                let mut refused = row;
+                refused[0] = ValueRef::Text(spelling);
+                assert_eq!(
+                    kind_of(refused),
+                    Some(RefusedKind::Type),
+                    "{}",
+                    String::from_utf8_lossy(spelling)
+                );
+            }
+        }
+        for other in [&b""[..], b"garbage", b" table", b"tables", b"virtual"] {
+            let mut refused = written_by_sqlite()[0];
+            refused[0] = ValueRef::Text(other);
+            assert_eq!(kind_of(refused), Some(RefusedKind::Type), "{other:?}");
+        }
+
+        // The table named like the encoding function, typed `TABLE`, which
+        // the first kind alone let forge the encoding at exit 0, is refused
+        // by this one.
+        assert_eq!(
+            kind_of([
+                ValueRef::Text(b"TABLE"),
+                ValueRef::Text(b"pragma_encoding"),
+                ValueRef::Text(b"pragma_encoding"),
+                ValueRef::Integer(2),
+                ValueRef::Text(b"CREATE TABLE pragma_encoding(encoding)"),
+            ]),
+            Some(RefusedKind::Type)
+        );
+    }
+
+    #[test]
+    fn fr_lite_041_a_row_with_no_text_is_refused_unless_it_is_an_index_s() {
+        // The fifth kind: NULL or the empty text, on every type but `index`.
+        for kind in [TABLE, VIEW, TRIGGER] {
+            for (sql, null) in [(ValueRef::Null, true), (ValueRef::Text(b""), false)] {
+                assert_eq!(
+                    kind_of([
+                        kind,
+                        ValueRef::Text(b"ix_vessel"),
+                        ValueRef::Text(b"vessel"),
+                        ValueRef::Integer(3),
+                        sql,
+                    ]),
+                    Some(RefusedKind::NoText { null }),
+                    "{kind:?} {sql:?}"
+                );
+            }
+        }
+        for sql in [ValueRef::Null, ValueRef::Text(b"")] {
+            assert_eq!(
+                kind_of([
+                    INDEX,
+                    ValueRef::Text(b"ix_vessel"),
+                    ValueRef::Text(b"vessel"),
+                    ValueRef::Integer(3),
+                    sql,
+                ]),
+                None,
+                "{sql:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_lite_041_a_nul_character_in_a_name_or_a_text_is_refused_naming_its_column() {
+        // The sixth kind: anywhere in `name`, `tbl_name` or `sql`, reported
+        // under the first of the three that holds one.
+        for row in written_by_sqlite() {
+            for (at, column) in [(1, "name"), (2, "tbl_name"), (4, "sql")] {
+                let ValueRef::Text(value) = row[at] else {
+                    continue;
+                };
+                for placed in [
+                    [&b"\0"[..], value].concat(),
+                    [value, &b"\0"[..]].concat(),
+                    [value, &b"\0; DROP TABLE vessel"[..]].concat(),
+                ] {
+                    let mut refused = row;
+                    refused[at] = ValueRef::Text(&placed);
+                    assert_eq!(
+                        kind_of(refused),
+                        Some(RefusedKind::Nul { column }),
+                        "{column}: {}",
+                        String::from_utf8_lossy(&placed)
+                    );
+                }
+            }
+        }
+        let mut both = written_by_sqlite()[0];
+        both[2] = ValueRef::Text(b"vessel\0");
+        both[4] = ValueRef::Text(b"CREATE TABLE vessel(imo)\0x");
+        assert_eq!(kind_of(both), Some(RefusedKind::Nul { column: "tbl_name" }));
+    }
+
+    #[test]
+    fn fr_lite_041_a_trigger_header_sqlite_does_not_write_is_refused() {
+        // The seventh kind: TEMP, TEMPORARY and IF NOT EXISTS, which SQLite
+        // removes, and any text that does not begin CREATE TRIGGER.
+        let trigger = |sql: &'static [u8]| {
+            [
+                TRIGGER,
+                ValueRef::Text(b"trg_vessel"),
+                ValueRef::Text(b"vessel"),
+                ValueRef::Integer(0),
+                ValueRef::Text(sql),
+            ]
+        };
+        for sql in [
+            &b"CREATE TEMP TRIGGER trg_vessel AFTER INSERT ON vessel BEGIN SELECT 1; END"[..],
+            b"CREATE TEMPORARY TRIGGER trg_vessel AFTER INSERT ON vessel BEGIN SELECT 1; END",
+            b"CREATE TRIGGER IF NOT EXISTS trg_vessel AFTER INSERT ON vessel BEGIN SELECT 1; END",
+            b"CREATE TRIGGER if not exists trg_vessel AFTER INSERT ON vessel BEGIN END",
+            b"CREATE TRIGGER /* x */ If NOT EXISTS trg_vessel AFTER INSERT ON vessel BEGIN END",
+            b"CREATE VIEW trg_vessel AS SELECT 1",
+            b"SELECT 1",
+            b" ",
+            b"CREATE",
+            b"CREATE \"TRIGGER\" trg_vessel AFTER INSERT ON vessel BEGIN END",
+        ] {
+            assert_eq!(
+                kind_of(trigger(sql)),
+                Some(RefusedKind::TriggerHeader),
+                "{}",
+                String::from_utf8_lossy(sql)
+            );
+        }
+        // Admitted: lower case, a comment inside the header, and names SQLite
+        // writes after `CREATE TRIGGER`, `IF` among them when quoted.
+        for sql in [
+            &b"create trigger trg_vessel after insert on vessel BEGIN SELECT 1; END"[..],
+            b"CREATE /* note */ TRIGGER trg_vessel AFTER INSERT ON vessel BEGIN END",
+            b"CREATE -- note\nTRIGGER trg_vessel AFTER INSERT ON vessel BEGIN END",
+            b"CREATE TRIGGER \"IF\" AFTER INSERT ON vessel BEGIN END",
+            b"CREATE TRIGGER [if] AFTER INSERT ON vessel BEGIN END",
+            b"CREATE TRIGGER temp AFTER INSERT ON vessel BEGIN END",
+            b"CREATE TRIGGER after AFTER INSERT ON vessel BEGIN END",
+            b"CREATE TRIGGER iffy AFTER INSERT ON vessel BEGIN END",
+        ] {
+            assert_eq!(
+                kind_of(trigger(sql)),
+                None,
+                "{}",
+                String::from_utf8_lossy(sql)
+            );
+        }
+        // A view or a table whose text begins otherwise is not a trigger's.
+        assert_eq!(
+            kind_of([
+                VIEW,
+                ValueRef::Text(b"v"),
+                ValueRef::Text(b"v"),
+                ValueRef::Integer(0),
+                ValueRef::Text(b"CREATE TEMP VIEW v AS SELECT 1"),
+            ]),
+            None
+        );
+    }
+
+    #[test]
+    fn fr_lite_041_a_row_refused_under_several_kinds_is_reported_under_the_first() {
+        // A NUL type with no text: the fourth before the fifth.
+        assert_eq!(
+            kind_of([
+                ValueRef::Text(b"table\0"),
+                ValueRef::Text(b"ix\0"),
+                ValueRef::Text(b"vessel"),
+                ValueRef::Integer(3),
+                ValueRef::Null,
+            ]),
+            Some(RefusedKind::Type)
+        );
+        // No text and a NUL name: the fifth before the sixth.
+        assert_eq!(
+            kind_of([
+                VIEW,
+                ValueRef::Text(b"ix\0"),
+                ValueRef::Text(b"vessel"),
+                ValueRef::Integer(3),
+                ValueRef::Null,
+            ]),
+            Some(RefusedKind::NoText { null: true })
+        );
+        // A NUL in a trigger's TEMP header: the sixth before the seventh.
+        assert_eq!(
+            kind_of([
+                TRIGGER,
+                ValueRef::Text(b"t"),
+                ValueRef::Text(b"vessel"),
+                ValueRef::Integer(0),
+                ValueRef::Text(b"CREATE TEMP TRIGGER t AFTER INSERT ON vessel BEGIN END\0"),
+            ]),
+            Some(RefusedKind::Nul { column: "sql" })
+        );
     }
 }

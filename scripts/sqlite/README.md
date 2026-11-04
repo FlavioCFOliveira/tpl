@@ -7,7 +7,7 @@ there is no container, no harness and no script to run.
 
 | File | What it builds |
 |---|---|
-| `freight.sql` | The main database: a freight operator's carriers, vessels, voyages, consignments and customs records, exercising items 1 to 13 of `FR-LITE-038`; each object carries a comment naming the item it exercises |
+| `freight.sql` | The main database: a freight operator's carriers, vessels, voyages, consignments and customs records, exercising items 1 to 14 of `FR-LITE-038`; each object carries a comment naming the item it exercises |
 | `internal.sql` | The database whose only objects are the internal tables `sqlite_sequence` and `sqlite_stat1` |
 | `pragma_view.sql` | A database whose schema holds a view named `pragma_table_list` |
 | `pragma_table.sql` | A database whose schema holds a table named `PRAGMA_TABLE_XINFO` |
@@ -15,6 +15,14 @@ there is no container, no harness and no script to run.
 | `blob_trigger_type.sql` | A database whose schema table holds the `type` of a trigger as a BLOB, written under `writable_schema` |
 | `rootpage_zero.sql` | A database whose schema table holds a `CREATE TABLE` row at root page `0`, written under `writable_schema` |
 | `rootpage_virtual.sql` | A database whose schema table holds a `CREATE VIRTUAL TABLE` row at a root page other than `0`, written under `writable_schema` |
+| `type_upper_pragma.sql` | A database whose schema table holds a table named `pragma_encoding`, holding one row, whose `type` is `TABLE`, written under `writable_schema` |
+| `type_title_case.sql` | A database whose schema table holds an ordinary table whose `type` is `Table`, written under `writable_schema` |
+| `type_nul_trigger.sql` | A database whose schema table holds a trigger whose `type` is `trigger` followed by a NUL character, written under `writable_schema` |
+| `no_text_table.sql` | A database whose schema table holds, for an index it holds, a second row whose `sql` is `NULL` and whose `type` is `table`, written under `writable_schema` |
+| `empty_text_view.sql` | A database whose schema table holds, for an index it holds, a second row whose `sql` is the empty text and whose `type` is `view`, written under `writable_schema` |
+| `nul_trigger_table.sql` | A database whose schema table holds a trigger whose `tbl_name` is its table's name followed by a NUL character, written under `writable_schema` |
+| `nul_view_sql.sql` | A database whose schema table holds a view whose `sql` is its definition followed by a NUL character and further text, written under `writable_schema` |
+| `temp_trigger.sql` | A database whose schema table holds a trigger whose text begins `CREATE TEMP TRIGGER`, written under `writable_schema` |
 | `fts5_view.sql` | A database holding an `fts5` table, a view over it that compiles, and no view that does not |
 
 ## How the tests build it
@@ -22,7 +30,7 @@ there is no container, no harness and no script to run.
 `tests/support/sqlite.rs` builds every artefact into a temporary directory of
 the test's own, through `rusqlite` — the SQLite library the binary carries —
 on a plain connection with none of `tpl`'s controls, so that the `CHECK` of
-item 9 is written under `trusted_schema` on. The four databases written under
+item 9 is written under `trusted_schema` on. The twelve databases written under
 `writable_schema` are built on a connection whose defensive mode the builder
 sets off and reads back, because defensive mode refuses
 `PRAGMA writable_schema=ON`; that connection is the builder's own, and nothing

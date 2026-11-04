@@ -333,8 +333,9 @@ fn fr_lite_019_the_read_covers_main_and_its_tables_and_views_and_no_routine() {
     // FR-LITE-019 … FR-LITE-022, as amended in the sixty-ninth edition: the
     // database is `main`; tables carry `BASE TABLE`; internal and virtual
     // tables are excluded; the five shadow tables of the fts5 table of item 12
-    // are covered as `BASE TABLE`, with their columns and keys; and there is
-    // no routine.
+    // are covered as `BASE TABLE`, with their columns and keys; the two tables
+    // of item 14 whose names differ only outside ASCII are two tables; and
+    // there is no routine.
     let (_scratch, artefacts) = built();
     let database = model(&artefacts);
 
@@ -361,11 +362,15 @@ fn fr_lite_019_the_read_covers_main_and_its_tables_and_views_and_no_routine() {
         "inspection_zone",
         "manifest_line",
         "port",
+        "port_call",
+        "stowage_plan",
         "tariff_band",
         "vessel",
         "voyage",
         "voyage_audit",
         "voyage_leg",
+        "\u{c9}mbarque",
+        "\u{e9}mbarque",
     ] {
         assert!(names.contains(&covered), "{covered} is covered");
     }
@@ -378,7 +383,7 @@ fn fr_lite_019_the_read_covers_main_and_its_tables_and_views_and_no_routine() {
     ] {
         assert!(!names.contains(&excluded), "{excluded} is excluded");
     }
-    assert_eq!(names.len(), 20, "{names:?}");
+    assert_eq!(names.len(), 24, "{names:?}");
     // A shadow table carries its columns and its key, like any other table.
     let config = table(&database, "cargo_note_config");
     assert_eq!(config.columns().len(), 2);
@@ -733,6 +738,164 @@ fn fr_lite_031_the_foreign_keys_carry_their_pairs_rules_and_no_name() {
 }
 
 #[test]
+fn br_lite_003_names_in_another_letter_case_find_their_objects_carried_under_their_own_names() {
+    // BR-LITE-003 over item 14 of FR-LITE-038: the trigger written ON
+    // STOWAGE_PLAN is attached to stowage_plan; the key written REFERENCES
+    // CARRIER (CARRIER_ID) names carrier and carrier_id; the key written
+    // REFERENCES "ÉMBARQUE" (ID) names Émbarque and id — folding the ASCII
+    // letters alone, so not émbarque — and each incoming key is listed under
+    // the table it matched; a key's own column written EMBARQUE_ID and an
+    // index's member written BAY_NO are carried as their table declares them.
+    let (_scratch, artefacts) = built();
+    let database = model(&artefacts);
+    let plan = table(&database, "stowage_plan");
+
+    let triggers: Vec<&str> = plan
+        .triggers()
+        .iter()
+        .map(|trigger| &*trigger.name)
+        .collect();
+    assert_eq!(triggers, ["trg_stowage_after_insert"]);
+    assert_eq!(plan.triggers()[0].timing, TriggerTiming::After);
+    assert_eq!(plan.triggers()[0].event, TriggerEvent::Insert);
+
+    let keys: Vec<(&str, Vec<(&str, &str)>)> = plan
+        .foreign_keys()
+        .iter()
+        .map(|key| {
+            (
+                key.referenced_table.as_deref().unwrap_or_default(),
+                key.columns
+                    .iter()
+                    .map(|pair| (&*pair.column, &*pair.referenced_column))
+                    .collect(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        keys,
+        [
+            ("carrier", vec![("carrier_id", "carrier_id")]),
+            ("\u{c9}mbarque", vec![("embarque_id", "id")]),
+        ]
+    );
+    let on_delete: Vec<&str> = plan
+        .foreign_keys()
+        .iter()
+        .map(|key| key.on_delete.name())
+        .collect();
+    assert_eq!(on_delete, ["SET NULL", "CASCADE"]);
+
+    let incoming = |name: &str| -> Vec<String> {
+        table(&database, name)
+            .referenced_by()
+            .iter()
+            .map(|incoming| incoming.table.to_string())
+            .collect()
+    };
+    assert_eq!(incoming("\u{c9}mbarque"), ["stowage_plan"]);
+    assert!(incoming("\u{e9}mbarque").is_empty());
+    assert!(incoming("carrier").contains(&"stowage_plan".to_owned()));
+
+    let index = plan
+        .indexes()
+        .iter()
+        .find(|index| index.name == "ix_stowage_bay")
+        .expect("the index written ON STOWAGE_PLAN (BAY_NO) is carried");
+    let members: Vec<&str> = index.columns.iter().map(|member| &*member.name).collect();
+    assert_eq!(members, ["bay_no"]);
+}
+
+#[test]
+fn fr_lite_021_a_key_naming_no_parent_column_of_a_key_of_another_arity_is_excluded() {
+    // FR-LITE-021 as amended in the seventy-first edition: the key of item 8
+    // written FOREIGN KEY (vessel_imo, voyage_no) REFERENCES vessel, whose
+    // primary key is one column, pairs two columns with one and is excluded
+    // as a dangling key is; the key on port beside it is carried, and vessel
+    // lists no incoming key from port_call.
+    let (_scratch, artefacts) = built();
+    let database = model(&artefacts);
+    let call = table(&database, "port_call");
+
+    let keys: Vec<(&str, Vec<(&str, &str)>)> = call
+        .foreign_keys()
+        .iter()
+        .map(|key| {
+            (
+                key.referenced_table.as_deref().unwrap_or_default(),
+                key.columns
+                    .iter()
+                    .map(|pair| (&*pair.column, &*pair.referenced_column))
+                    .collect(),
+            )
+        })
+        .collect();
+    assert_eq!(keys, [("port", vec![("port_code", "port_code")])]);
+    assert!(
+        table(&database, "vessel")
+            .referenced_by()
+            .iter()
+            .all(|incoming| incoming.table != "port_call")
+    );
+}
+
+#[test]
+fn fr_lite_038_every_trigger_and_key_of_the_main_database_is_attached_but_those_excluded() {
+    // The legitimate fixture, read through the check of the seventy-first
+    // edition: every trigger of the file is carried on its table but the two
+    // INSTEAD OF triggers on views, and every foreign key the library reports
+    // is carried but the two FR-LITE-021 excludes — the key naming a table the
+    // file does not hold, and the key of another arity. Counted against the
+    // library on a plain connection, so that a key or a trigger the match of
+    // BR-LITE-003 dropped would show.
+    let (_scratch, artefacts) = built();
+    let database = model(&artefacts);
+
+    let plain = Connection::open_with_flags(&artefacts.main, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .expect("the main database opens");
+    let triggers: i64 = plain
+        .query_row(
+            "SELECT count(*) FROM sqlite_schema WHERE type = 'trigger'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the triggers count");
+    let keys: i64 = plain
+        .query_row(
+            "SELECT count(*) FROM (SELECT DISTINCT s.name, f.id FROM sqlite_schema AS s \
+             CROSS JOIN pragma_foreign_key_list(s.name) AS f \
+             WHERE s.type = 'table' AND s.rootpage IS NOT 0)",
+            [],
+            |row| row.get(0),
+        )
+        .expect("the keys count");
+    drop(plain);
+    let triggers = usize::try_from(triggers).expect("a count is not negative");
+    let keys = usize::try_from(keys).expect("a count is not negative");
+
+    let carried_triggers: usize = database
+        .tables
+        .iter()
+        .map(|table| table.triggers().len())
+        .sum();
+    let carried_keys: usize = database
+        .tables
+        .iter()
+        .map(|table| table.foreign_keys().len())
+        .sum();
+    let incoming_keys: usize = database
+        .tables
+        .iter()
+        .map(|table| table.referenced_by().len())
+        .sum();
+
+    assert_eq!(triggers, 12);
+    assert_eq!(carried_triggers, triggers - 2);
+    assert_eq!(carried_keys, keys - 2, "{keys} keys in the file");
+    assert_eq!(incoming_keys, carried_keys);
+}
+
+#[test]
 fn fr_lite_032_the_triggers_on_tables_carry_their_timing_event_and_whole_statement() {
     let (_scratch, artefacts) = built();
     let database = model(&artefacts);
@@ -799,14 +962,70 @@ fn fr_lite_032_the_triggers_on_tables_carry_their_timing_event_and_whole_stateme
     assert_eq!(port.triggers()[0].timing, TriggerTiming::Before);
     assert_eq!(port.triggers()[0].event, TriggerEvent::Insert);
 
-    // The INSTEAD OF trigger on a view is not carried.
+    // The INSTEAD OF triggers on a view are not carried, the one whose ON
+    // clause names the view in another letter case included (FR-LITE-021,
+    // BR-LITE-003).
     assert!(
         database
             .tables
             .iter()
             .flat_map(|table| table.triggers())
-            .all(|trigger| trigger.name != "trg_fleet_rename")
+            .all(|trigger| {
+                trigger.name != "trg_fleet_rename" && trigger.name != "trg_port_country_rename"
+            })
     );
+}
+
+#[test]
+fn fr_lite_032_a_header_sqlite_keeps_in_lower_case_is_read_and_carried_in_upper_case() {
+    // FR-LITE-032 as amended in the seventy-first edition: SQLite upper-cases
+    // the leading CREATE TRIGGER alone, so the trigger of item 11 written in
+    // lower case keeps `after delete` as written; its timing and event are
+    // recognised ignoring ASCII case and carried in upper case, and its
+    // statement is the stored text, unchanged. The trigger named `temp`, which
+    // the seventh kind of FR-LITE-041 admits, is read by its header.
+    let (_scratch, artefacts) = built();
+    let database = model(&artefacts);
+    let berth = table(&database, "berth");
+    let found = |name: &str| {
+        berth
+            .triggers()
+            .iter()
+            .find(|trigger| trigger.name == name)
+            .unwrap_or_else(|| panic!("berth carries {name}"))
+    };
+
+    let lower = found("trg_berth_after_delete");
+    assert_eq!(lower.timing, TriggerTiming::After);
+    assert_eq!(lower.event, TriggerEvent::Delete);
+    assert!(
+        lower.statement.as_deref().is_some_and(|statement| statement
+            .starts_with("CREATE TRIGGER trg_berth_after_delete after delete on berth")),
+        "{:?}",
+        lower.statement
+    );
+
+    let temp = found("temp");
+    assert_eq!(temp.timing, TriggerTiming::Before);
+    assert_eq!(temp.event, TriggerEvent::Update);
+    assert!(
+        temp.statement
+            .as_deref()
+            .is_some_and(|statement| statement.starts_with("CREATE TRIGGER temp BEFORE")),
+        "{:?}",
+        temp.statement
+    );
+
+    // The document carries the upper-case spellings.
+    let dumped = crate::model::document::dump(&database, crate::output::Source::Server)
+        .expect("the document builds");
+    let written = serde_json::to_string(&dumped).expect("the document serialises");
+    assert!(
+        written.contains(r#""name":"trg_berth_after_delete""#),
+        "{written}"
+    );
+    assert!(!written.contains(r#""timing":"after""#), "{written}");
+    assert!(!written.contains(r#""event":"delete""#), "{written}");
 }
 
 #[test]
@@ -1170,10 +1389,11 @@ fn fr_lite_018_over_the_fts5_database_no_statement_compiles_a_view_or_connects_a
 
 #[test]
 fn fr_lite_041_each_database_the_check_refuses_is_78_naming_its_row_and_no_statement_follows() {
-    // FR-LITE-038 and FR-LITE-041: a read of each of the six databases named
-    // like a pragma function or written under writable_schema ends with 78,
-    // the `cause` naming the path, the check, the row's type and name, and its
-    // kind; no statement follows the check, COMMIT included (FR-LITE-042).
+    // FR-LITE-038 and FR-LITE-041: a read of each of the fourteen databases
+    // named like a pragma function or written under writable_schema ends with
+    // 78, the `cause` naming the path, the check, the row's type and name, and
+    // its kind; no statement follows the check, COMMIT included
+    // (FR-LITE-042).
     let (_scratch, artefacts) = built();
     let storage =
         |column: &'static str, class: &'static str| RefusedKind::StorageClass { column, class };
@@ -1227,6 +1447,64 @@ fn fr_lite_041_each_database_the_check_refuses_is_78_naming_its_row_and_no_state
             },
             "its root page is 2 and its text creates a virtual table",
         ),
+        (
+            &artefacts.type_upper_pragma,
+            "TABLE",
+            "pragma_encoding",
+            RefusedKind::Type,
+            "its type is not exactly one of table, index, view and trigger, and SQLite writes \
+             no other type",
+        ),
+        (
+            &artefacts.type_title_case,
+            "Table",
+            "vessel",
+            RefusedKind::Type,
+            "SQLite writes no other type",
+        ),
+        (
+            &artefacts.type_nul_trigger,
+            "trigger\0",
+            "trg_voyage_after_insert",
+            RefusedKind::Type,
+            "SQLite writes no other type",
+        ),
+        (
+            &artefacts.no_text_table,
+            "table",
+            "ix_berth_port",
+            RefusedKind::NoText { null: true },
+            "its sql is NULL, and the library reads a row with no text as an index's",
+        ),
+        (
+            &artefacts.empty_text_view,
+            "view",
+            "ix_container_teu",
+            RefusedKind::NoText { null: false },
+            "its sql is the empty text, and the library reads a row with no text as an index's",
+        ),
+        (
+            &artefacts.nul_trigger_table,
+            "trigger",
+            "trg_port_code_length",
+            RefusedKind::Nul { column: "tbl_name" },
+            "its tbl_name holds a NUL character",
+        ),
+        (
+            &artefacts.nul_view_sql,
+            "view",
+            "v_vessel_names",
+            RefusedKind::Nul { column: "sql" },
+            "its sql holds a NUL character",
+        ),
+        (
+            &artefacts.temp_trigger,
+            "trigger",
+            "trg_consignment_after_update",
+            RefusedKind::TriggerHeader,
+            "SQLite writes a trigger's text beginning CREATE TRIGGER followed by the trigger's \
+             name, and this text does not",
+        ),
     ] {
         let spelled = path.display().to_string();
         let (answered, texts) = record::recorded(|| read(path).map(drop));
@@ -1250,8 +1528,11 @@ fn fr_lite_041_each_database_the_check_refuses_is_78_naming_its_row_and_no_state
             cause.contains("check of the schema table main.sqlite_schema"),
             "{cause}"
         );
+        // The type and the name as FR-ERR-024 escapes them: a NUL character
+        // is written `\u{00}`.
+        let escaped = row_type.replace('\0', "\\u{00}");
         assert!(
-            cause.contains(&format!("'{row_type}' named '{name}'")),
+            cause.contains(&format!("'{escaped}' named '{name}'")),
             "{cause}"
         );
         assert!(cause.contains(said), "{cause}");

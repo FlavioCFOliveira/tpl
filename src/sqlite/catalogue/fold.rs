@@ -13,21 +13,26 @@
 //! | The rowid alias | Not `WITHOUT ROWID` — `pragma_index_info` returned no row for the table's name — one `pk` column, and no index of origin `pk` | `FR-LITE-028` |
 //! | The primary key | The `pk` columns in order of `pk`, named after the index of origin `pk` or unnamed | `FR-LITE-029` |
 //! | The indexes | Those `pragma_index_list` reports, less an index with an expression member | `FR-LITE-030`, `FR-LITE-021` |
-//! | The foreign keys | One per `id`, unnamed; `to` `NULL` read as the parent's primary key; a key whose parent is not columns of a covered table excluded | `FR-LITE-031`, `FR-LITE-021` |
-//! | The triggers | The rows of type `trigger` on a covered table, their timing and event from the header | `FR-LITE-032` |
+//! | The foreign keys | One per `id`, unnamed; `to` `NULL` read as the parent's primary key; a key whose parent is not columns of a covered table — or that names no parent column of a parent whose primary key has another number of columns — excluded | `FR-LITE-031`, `FR-LITE-021` |
+//! | The triggers | The rows of type `trigger` on a covered table, their timing and event from the header; a trigger on a view excluded | `FR-LITE-032`, `FR-LITE-021` |
 //! | The views | Their name and their whole stored statement, and `null` for the seven server fields; no columns, and no marking | `FR-LITE-033`, `FR-LITE-036` |
 //!
-//! **Names are matched as SQLite matches them.** SQLite compares identifiers
-//! ignoring ASCII case, and a foreign key or a trigger names its table as its
-//! author wrote it. Each reference is therefore resolved against the covered
-//! tables ignoring ASCII case and carried under the name the table itself
-//! carries, so that the byte-wise lookups of the document find it
-//! (`NFR-DET-002`).
+//! **Names are matched as SQLite matches them** (`BR-LITE-003`). SQLite writes
+//! a trigger's `tbl_name`, and reports a foreign key's parent table and
+//! columns, as the statement wrote them, and resolves each by folding the 26
+//! ASCII letters. Each of these three names is therefore matched — a trigger's
+//! table against the covered tables and the views, a key's parent table
+//! against the covered tables, a key's parent columns against that table's
+//! columns — after folding the 26 ASCII letters over the whole name, and no
+//! other character; and the object found is carried under its own name, so
+//! that the byte-wise lookups of the document find it (`NFR-DET-002`,
+//! `FR-CTX-023`). An index's members and a key's own columns are not matched:
+//! the library reports each as its table declares it.
 //!
 //! **The fold indexes before it looks up.** Every collection the fold reads
 //! by a name — the column, index and key rows by their table, an index's
-//! members by their index, the stored rows by their name, the covered tables
-//! and a table's columns by name, exactly and ignoring ASCII case — is grouped
+//! members by their index, the stored rows by their name, the covered tables,
+//! the views and a table's columns by their folded name — is grouped
 //! once into a map keyed by that name, and no object is found by scanning
 //! another collection. The fold runs after the last statement, outside every
 //! statement's bound, so a lookup that scanned would let a file of many
@@ -94,34 +99,33 @@ const KEY_COLUMN: &str = "every key a sqlite read folds names columns of its own
 /// The stage a fold failure is reported at.
 const FOLD: Stage = Stage::Catalogue("the fold of the catalogue the statements returned");
 
-/// Names looked up exactly, then ignoring ASCII case, the first carried
-/// winning — as SQLite resolves an identifier.
+/// Names matched as `BR-LITE-003` matches them: equal once the 26 ASCII
+/// upper-case letters of each are folded to lower case, over the whole name,
+/// and no other character folded.
+///
+/// SQLite refuses two tables or views, and two columns of one table, whose
+/// names differ only in ASCII letter case, so among the names of a file whose
+/// schema loads at most one matches; the first is kept all the same, so that
+/// a lookup is defined whatever it is given.
 #[derive(Debug, Default)]
-struct Names<'c> {
-    /// Each name, exactly.
-    exact: HashMap<&'c str, usize>,
-    /// Each name with its ASCII letters lower-cased.
+struct Names {
+    /// Each name with its ASCII letters lower-cased, and its position.
     folded: HashMap<String, usize>,
 }
 
-impl<'c> Names<'c> {
+impl Names {
     /// The names, each at its position in `names`.
-    fn of(names: impl Iterator<Item = &'c str>) -> Self {
+    fn of<'c>(names: impl Iterator<Item = &'c str>) -> Self {
         let mut found = Self::default();
         for (at, name) in names.enumerate() {
-            found.exact.entry(name).or_insert(at);
             found.folded.entry(name.to_ascii_lowercase()).or_insert(at);
         }
         found
     }
 
-    /// The position of the name `name` names, exactly and then ignoring ASCII
-    /// case.
+    /// The position of the name `name` matches.
     fn position(&self, name: &str) -> Option<usize> {
-        self.exact
-            .get(name)
-            .or_else(|| self.folded.get(&name.to_ascii_lowercase()))
-            .copied()
+        self.folded.get(&name.to_ascii_lowercase()).copied()
     }
 }
 
@@ -182,7 +186,7 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
         .filter(|object| covered_table(object))
         .collect();
     let names = Names::of(tables.iter().map(|table| table.name.as_str()));
-    let columns: Vec<Names<'_>> = tables
+    let columns: Vec<Names> = tables
         .iter()
         .map(|table| {
             Names::of(
@@ -198,24 +202,19 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
         parts.push(self::table(&grouped, table));
     }
 
-    // FR-LITE-031: the keys, once every table's columns and key are known.
+    // FR-LITE-031: the keys, once every table's columns and key are known;
+    // each incoming key is listed under the table its parent matched.
     let mut incoming: Vec<(usize, IncomingForeignKey<'static>)> = Vec::new();
     for (at, table) in tables.iter().enumerate() {
         let rows = Grouped::of_table(&grouped.keys, &table.name);
-        for key in keys(rows, at, &tables, &names, &columns, &parts) {
-            if let Some(referenced) = key
-                .referenced_table
-                .as_deref()
-                .and_then(|referenced| names.position(referenced))
-            {
-                incoming.push((
-                    referenced,
-                    IncomingForeignKey {
-                        table: Cow::Owned(table.name.clone()),
-                        key: key.clone(),
-                    },
-                ));
-            }
+        for (parent, key) in keys(rows, &tables, &names, &columns, &parts) {
+            incoming.push((
+                parent,
+                IncomingForeignKey {
+                    table: Cow::Owned(table.name.clone()),
+                    key: key.clone(),
+                },
+            ));
             if let Some(part) = parts.get_mut(at) {
                 part.foreign_keys.push(key);
             }
@@ -227,10 +226,23 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
         }
     }
 
-    // FR-LITE-032: the triggers on covered tables.
+    // FR-LITE-032 and FR-LITE-021: the triggers whose `tbl_name` matches a
+    // covered table under BR-LITE-003; one that matches a view is excluded.
+    let view_names = Names::of(
+        catalogue
+            .objects
+            .iter()
+            .filter(|object| object.kind == VIEW)
+            .map(|object| object.name.as_str()),
+    );
     for row in catalogue.stored.iter().filter(|row| row.kind == TRIGGER) {
+        if view_names.position(&row.table).is_some() {
+            // A trigger on a view: the model carries triggers on tables.
+            continue;
+        }
         let Some(at) = names.position(&row.table) else {
-            // A trigger on a view, or on an object the model does not cover.
+            // A trigger on no covered table — an object the model does not
+            // cover.
             continue;
         };
         let sql = row.sql.clone().unwrap_or_default();
@@ -570,16 +582,16 @@ fn blob(written: &str) -> bool {
         .is_some_and(|hex| hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
-/// The outgoing keys of the covered table at `own`, from its key rows, less
-/// those `FR-LITE-021` excludes (`FR-LITE-031`).
+/// The outgoing keys of one covered table, from its key rows, less those
+/// `FR-LITE-021` excludes, each with the position of the covered table its
+/// parent matched (`FR-LITE-031`).
 fn keys(
     rows: &[&KeyRow],
-    own: usize,
     tables: &[&Object],
-    names: &Names<'_>,
-    columns: &[Names<'_>],
+    names: &Names,
+    columns: &[Names],
     parts: &[TableParts<'static>],
-) -> Vec<ForeignKey<'static>> {
+) -> Vec<(usize, ForeignKey<'static>)> {
     // One key per `id`, in ascending order of `id`, its pairs in order of
     // `seq`.
     let mut by_id: BTreeMap<i64, Vec<&KeyRow>> = BTreeMap::new();
@@ -593,13 +605,17 @@ fn keys(
             pairs.sort_by_key(|row| row.seq);
             let first = pairs.first()?;
 
-            // FR-LITE-021: the parent must be a covered table.
+            // FR-LITE-021: the parent table must match a covered table under
+            // BR-LITE-003, and the key carries that table's own name.
             let parent_at = names.position(&first.referenced)?;
             let parent = parts.get(parent_at)?;
             let parent_name = &tables.get(parent_at)?.name;
             let parent_columns = columns.get(parent_at)?;
 
-            // `to` NULL on every pair: the parent's primary key, in its order.
+            // `to` NULL on every pair: the parent's primary key, in its order;
+            // a parent with none is excluded. Otherwise each `to` must match a
+            // column of the parent under BR-LITE-003, carried under the
+            // column's own name.
             let referenced: Vec<String> = if pairs.iter().all(|row| row.to.is_none()) {
                 let key = parent.primary_key.as_ref()?;
                 key.columns
@@ -616,42 +632,45 @@ fn keys(
                     })
                     .collect::<Option<Vec<String>>>()?
             };
+            // FR-LITE-021: a key naming no parent column of a parent whose
+            // primary key has another number of columns than the key pairs
+            // nothing, and is excluded as a dangling key is. A key naming its
+            // parent columns has one per pair already.
             if referenced.len() != pairs.len() {
                 return None;
             }
 
-            let own_part = parts.get(own);
-            let own_columns = columns.get(own);
+            // A key's own columns are not matched: the `from` field is the
+            // column's name as the referencing table declares it
+            // (BR-LITE-003), carried as reported.
             let columns = pairs
                 .iter()
                 .zip(referenced)
                 .map(|(row, referenced)| ForeignKeyColumn {
-                    column: Cow::Owned(
-                        own_part
-                            .zip(own_columns)
-                            .and_then(|(part, names)| carried(part, names, &row.from))
-                            .unwrap_or_else(|| row.from.clone()),
-                    ),
+                    column: Cow::Owned(row.from.clone()),
                     referenced_column: Cow::Owned(referenced),
                 })
                 .collect();
 
-            Some(ForeignKey {
-                name: None,
-                columns,
-                referenced_table: Some(Cow::Owned(parent_name.clone())),
-                referenced_key: None,
-                match_option: Cow::Owned(first.matched.clone()),
-                on_update: ReferentialAction::from_catalogue_owned(first.on_update.clone()),
-                on_delete: ReferentialAction::from_catalogue_owned(first.on_delete.clone()),
-            })
+            Some((
+                parent_at,
+                ForeignKey {
+                    name: None,
+                    columns,
+                    referenced_table: Some(Cow::Owned(parent_name.clone())),
+                    referenced_key: None,
+                    match_option: Cow::Owned(first.matched.clone()),
+                    on_update: ReferentialAction::from_catalogue_owned(first.on_update.clone()),
+                    on_delete: ReferentialAction::from_catalogue_owned(first.on_delete.clone()),
+                },
+            ))
         })
         .collect()
 }
 
-/// The name a column of `table` carries, matched as SQLite matches it,
-/// through the table's column names grouped once.
-fn carried(table: &TableParts<'_>, names: &Names<'_>, column: &str) -> Option<String> {
+/// The name a column of `table` carries, matched under `BR-LITE-003` through
+/// the table's column names grouped once.
+fn carried(table: &TableParts<'_>, names: &Names, column: &str) -> Option<String> {
     names
         .position(column)
         .and_then(|at| table.columns.get(at))
@@ -793,14 +812,27 @@ mod tests {
     }
 
     #[test]
-    fn fr_lite_031_a_name_is_found_exactly_then_ignoring_ascii_case_the_first_winning() {
-        let names = Names::of(["Port", "port_call", "PORT"].into_iter());
+    fn br_lite_003_names_match_with_the_26_ascii_letters_folded_and_no_other_character() {
+        let names =
+            Names::of(["Vessel", "port_call", "\u{c9}mbarque", "\u{e9}mbarque"].into_iter());
 
-        assert_eq!(names.position("Port"), Some(0));
-        assert_eq!(names.position("PORT"), Some(2));
-        assert_eq!(names.position("port"), Some(0), "the first carried wins");
+        // Folded over the whole name, in either direction.
+        assert_eq!(names.position("Vessel"), Some(0));
+        assert_eq!(names.position("VESSEL"), Some(0));
+        assert_eq!(names.position("vessel"), Some(0));
+        assert_eq!(names.position("vEsSeL"), Some(0));
         assert_eq!(names.position("PORT_CALL"), Some(1));
-        assert_eq!(names.position("p\u{f6}rt"), None, "ASCII case alone");
-        assert_eq!(names.position("berth"), None);
+        // No character outside ASCII is folded: É and é are two names.
+        assert_eq!(names.position("\u{c9}MBARQUE"), Some(2));
+        assert_eq!(names.position("\u{e9}MBARQUE"), Some(3));
+        assert_eq!(names.position("\u{c9}mbarque"), Some(2));
+        // The whole name, and nothing near it.
+        for other in ["Vesse", "Vessels", "v\u{e9}ssel", "port call", "", "berth"] {
+            assert_eq!(names.position(other), None, "{other}");
+        }
+        // A file whose schema loads holds no two names that fold alike; were
+        // it given them, the first is kept.
+        let clashing = Names::of(["a", "A"].into_iter());
+        assert_eq!(clashing.position("A"), Some(0));
     }
 }

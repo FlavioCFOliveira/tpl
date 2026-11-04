@@ -9,7 +9,7 @@
 //!
 //! | Artefact | Built from |
 //! |---|---|
-//! | The main database, items 1 to 13 | `scripts/sqlite/freight.sql` |
+//! | The main database, items 1 to 14 | `scripts/sqlite/freight.sql` |
 //! | A copy in write-ahead-log mode | The main database, copied and switched with `journal_mode` |
 //! | An empty file, a text file, a truncated database | Bytes written here |
 //! | A directory, a FIFO, a link to the main database, a dangling link | The filesystem; the FIFO with the system's `mkfifo` |
@@ -17,9 +17,10 @@
 //! | A database whose only objects are the internal tables | `scripts/sqlite/internal.sql` |
 //! | A view named `pragma_table_list`, and a table named `PRAGMA_TABLE_XINFO` | `scripts/sqlite/pragma_view.sql`, `scripts/sqlite/pragma_table.sql` |
 //! | A view's `sql` and a trigger's `type` stored as BLOBs; a `CREATE TABLE` row at root page `0`, and a `CREATE VIRTUAL TABLE` row at another — the four written under `writable_schema` | `scripts/sqlite/blob_view_sql.sql`, `blob_trigger_type.sql`, `rootpage_zero.sql`, `rootpage_virtual.sql`, on a connection whose defensive mode is off |
+//! | A table `pragma_encoding` typed `TABLE`, an ordinary table typed `Table`, a trigger typed `trigger` and a NUL character; a second row with no text for an index, `NULL` typed `table` and empty typed `view`; a trigger whose `tbl_name` ends in a NUL character; a view whose `sql` carries text after a NUL character; and a trigger whose text begins `CREATE TEMP TRIGGER` — the eight written under `writable_schema` | `scripts/sqlite/type_upper_pragma.sql`, `type_title_case.sql`, `type_nul_trigger.sql`, `no_text_table.sql`, `empty_text_view.sql`, `nul_trigger_table.sql`, `nul_view_sql.sql`, `temp_trigger.sql`, on a connection whose defensive mode is off |
 //! | An `fts5` table, a view over it that compiles, and no view that does not | `scripts/sqlite/fts5_view.sql` |
 //!
-//! **Defensive mode is turned off here, and only here**, for the four
+//! **Defensive mode is turned off here, and only here**, for the twelve
 //! databases written under `writable_schema`: defensive mode refuses
 //! `PRAGMA writable_schema=ON`, and SQLite writes no such schema any other way
 //! (`OD-37`, as amended for rmp `#317`). The builder sets it off and reads it
@@ -71,6 +72,37 @@ const ROOTPAGE_VIRTUAL: &str = include_str!("../../scripts/sqlite/rootpage_virtu
 /// The SQL text of the database holding an `fts5` table and a view over it.
 const FTS5_VIEW: &str = include_str!("../../scripts/sqlite/fts5_view.sql");
 
+/// The SQL text of the database holding a table `pragma_encoding` typed
+/// `TABLE`.
+const TYPE_UPPER_PRAGMA: &str = include_str!("../../scripts/sqlite/type_upper_pragma.sql");
+
+/// The SQL text of the database holding an ordinary table typed `Table`.
+const TYPE_TITLE_CASE: &str = include_str!("../../scripts/sqlite/type_title_case.sql");
+
+/// The SQL text of the database holding a trigger typed `trigger` followed by
+/// a NUL character.
+const TYPE_NUL_TRIGGER: &str = include_str!("../../scripts/sqlite/type_nul_trigger.sql");
+
+/// The SQL text of the database holding a second row with a `NULL` text,
+/// typed `table`, for an index.
+const NO_TEXT_TABLE: &str = include_str!("../../scripts/sqlite/no_text_table.sql");
+
+/// The SQL text of the database holding a second row with the empty text,
+/// typed `view`, for an index.
+const EMPTY_TEXT_VIEW: &str = include_str!("../../scripts/sqlite/empty_text_view.sql");
+
+/// The SQL text of the database holding a trigger whose `tbl_name` ends in a
+/// NUL character.
+const NUL_TRIGGER_TABLE: &str = include_str!("../../scripts/sqlite/nul_trigger_table.sql");
+
+/// The SQL text of the database holding a view whose `sql` carries text after
+/// a NUL character.
+const NUL_VIEW_SQL: &str = include_str!("../../scripts/sqlite/nul_view_sql.sql");
+
+/// The SQL text of the database holding a trigger whose text begins
+/// `CREATE TEMP TRIGGER`.
+const TEMP_TRIGGER: &str = include_str!("../../scripts/sqlite/temp_trigger.sql");
+
 /// The length of the oversized `CREATE TABLE` statement, past the million
 /// bytes of `FR-LITE-011`.
 const OVERSIZED: usize = 1_100_000;
@@ -119,14 +151,39 @@ pub struct Artefacts {
     /// A database holding an `fts5` table, a view over it that compiles, and
     /// no view that does not.
     pub fts5: PathBuf,
+    /// A database whose schema table holds a table named `pragma_encoding`,
+    /// holding one row, whose `type` is `TABLE`.
+    pub type_upper_pragma: PathBuf,
+    /// A database whose schema table holds an ordinary table whose `type` is
+    /// `Table`.
+    pub type_title_case: PathBuf,
+    /// A database whose schema table holds a trigger whose `type` is
+    /// `trigger` followed by a NUL character.
+    pub type_nul_trigger: PathBuf,
+    /// A database whose schema table holds, for an index it holds, a second
+    /// row whose `sql` is `NULL` and whose `type` is `table`.
+    pub no_text_table: PathBuf,
+    /// A database whose schema table holds, for an index it holds, a second
+    /// row whose `sql` is the empty text and whose `type` is `view`.
+    pub empty_text_view: PathBuf,
+    /// A database whose schema table holds a trigger whose `tbl_name` is its
+    /// table's name followed by a NUL character.
+    pub nul_trigger_table: PathBuf,
+    /// A database whose schema table holds a view whose `sql` is its
+    /// definition followed by a NUL character and further text.
+    pub nul_view_sql: PathBuf,
+    /// A database whose schema table holds a trigger whose text begins
+    /// `CREATE TEMP TRIGGER`.
+    pub temp_trigger: PathBuf,
 }
 
 impl Artefacts {
-    /// The six databases a read of which ends with `78` under `FR-LITE-041`:
-    /// the two named like a pragma function and the four written under
-    /// `writable_schema`, each with the kind of row the check refuses there.
+    /// The fourteen databases a read of which ends with `78` under
+    /// `FR-LITE-041`: the two named like a pragma function and the twelve
+    /// written under `writable_schema`, each with words of the `cause` that
+    /// name the kind of row the check refuses there.
     #[must_use]
-    pub fn refused_by_the_check(&self) -> [(&Path, &'static str); 6] {
+    pub fn refused_by_the_check(&self) -> [(&Path, &'static str); 14] {
         [
             (&self.pragma_view, "pragma"),
             (&self.pragma_table, "pragma"),
@@ -134,6 +191,20 @@ impl Artefacts {
             (&self.blob_trigger_type, "storage class"),
             (&self.rootpage_zero, "root page"),
             (&self.rootpage_virtual, "root page"),
+            (&self.type_upper_pragma, "SQLite writes no other type"),
+            (&self.type_title_case, "SQLite writes no other type"),
+            (&self.type_nul_trigger, "SQLite writes no other type"),
+            (
+                &self.no_text_table,
+                "reads a row with no text as an index's",
+            ),
+            (
+                &self.empty_text_view,
+                "reads a row with no text as an index's",
+            ),
+            (&self.nul_trigger_table, "holds a NUL character"),
+            (&self.nul_view_sql, "holds a NUL character"),
+            (&self.temp_trigger, "beginning CREATE TRIGGER"),
         ]
     }
 }
@@ -312,6 +383,14 @@ pub fn build(root: &Path) -> Artefacts {
     let rootpage_zero = built("rootpage-zero.sqlite", ROOTPAGE_ZERO, true);
     let rootpage_virtual = built("rootpage-virtual.sqlite", ROOTPAGE_VIRTUAL, true);
     let fts5 = built("fts5-view.sqlite", FTS5_VIEW, false);
+    let type_upper_pragma = built("type-upper-pragma.sqlite", TYPE_UPPER_PRAGMA, true);
+    let type_title_case = built("type-title-case.sqlite", TYPE_TITLE_CASE, true);
+    let type_nul_trigger = built("type-nul-trigger.sqlite", TYPE_NUL_TRIGGER, true);
+    let no_text_table = built("no-text-table.sqlite", NO_TEXT_TABLE, true);
+    let empty_text_view = built("empty-text-view.sqlite", EMPTY_TEXT_VIEW, true);
+    let nul_trigger_table = built("nul-trigger-table.sqlite", NUL_TRIGGER_TABLE, true);
+    let nul_view_sql = built("nul-view-sql.sqlite", NUL_VIEW_SQL, true);
+    let temp_trigger = built("temp-trigger.sqlite", TEMP_TRIGGER, true);
 
     Artefacts {
         root: root.to_owned(),
@@ -333,5 +412,13 @@ pub fn build(root: &Path) -> Artefacts {
         rootpage_zero,
         rootpage_virtual,
         fts5,
+        type_upper_pragma,
+        type_title_case,
+        type_nul_trigger,
+        no_text_table,
+        empty_text_view,
+        nul_trigger_table,
+        nul_view_sql,
+        temp_trigger,
     }
 }

@@ -134,6 +134,20 @@ CREATE TABLE consignment (
     seal_code TEXT NOT NULL
 );
 
+-- Item 8: a key naming no parent column of a table whose primary key has
+-- another number of columns: vessel's key is one column and this key two.
+-- SQLite creates it and refuses every write it governs with "foreign key
+-- mismatch" while keys are enforced; FR-LITE-021 excludes it, and the key on
+-- port beside it is carried.
+CREATE TABLE port_call (
+    vessel_imo INTEGER NOT NULL,
+    voyage_no INTEGER NOT NULL,
+    port_code CHAR(5) NOT NULL REFERENCES port (port_code),
+    arrived_at TEXT,
+    PRIMARY KEY (vessel_imo, voyage_no, port_code),
+    FOREIGN KEY (vessel_imo, voyage_no) REFERENCES vessel
+);
+
 -- Item 1: a STRICT table. Item 2: a STRICT column declared ANY.
 CREATE TABLE manifest_line (
     line_id INTEGER PRIMARY KEY,
@@ -242,6 +256,57 @@ BEGIN
     UPDATE vessel SET vessel_name = NEW.vessel_name WHERE vessel_imo = OLD.vessel_imo;
 END;
 
+-- Item 11: a trigger written in lower case, whose timing and event SQLite
+-- keeps as written, and a trigger named temp.
+create trigger trg_berth_after_delete after delete on berth
+begin
+    insert into voyage_audit (action) values ('berth ' || old.berth_no || ' removed');
+end;
+
+CREATE TRIGGER temp BEFORE UPDATE OF max_draught_m ON berth
+BEGIN
+    SELECT RAISE(ABORT, 'a draught is positive') WHERE NEW.max_draught_m <= 0;
+END;
+
+-- Item 14: names written in another ASCII letter case than their objects
+-- declare them, in each place BR-LITE-003 matches and in an index: the table
+-- in a trigger's ON clause, the view in an INSTEAD OF trigger's, a foreign
+-- key's parent table and parent column, and an index's member. And two tables
+-- whose names differ only in a letter outside ASCII, which SQLite does not
+-- fold, with a key naming the first of them in another case. A key's own
+-- column is written in another case too; SQLite reports it as declared.
+CREATE TABLE "Émbarque" (
+    id INTEGER PRIMARY KEY,
+    vessel_imo INTEGER NOT NULL,
+    loaded_on TEXT
+);
+
+CREATE TABLE "émbarque" (
+    id INTEGER PRIMARY KEY,
+    vessel_imo INTEGER NOT NULL,
+    discharged_on TEXT
+);
+
+CREATE TABLE stowage_plan (
+    plan_id INTEGER PRIMARY KEY,
+    embarque_id INTEGER NOT NULL,
+    carrier_id INTEGER REFERENCES CARRIER (CARRIER_ID) ON DELETE SET NULL,
+    bay_no INTEGER NOT NULL,
+    FOREIGN KEY (EMBARQUE_ID) REFERENCES "ÉMBARQUE" (ID) ON DELETE CASCADE
+);
+
+CREATE INDEX ix_stowage_bay ON STOWAGE_PLAN (BAY_NO);
+
+CREATE TRIGGER trg_stowage_after_insert AFTER INSERT ON STOWAGE_PLAN
+BEGIN
+    INSERT INTO voyage_audit (action) VALUES ('stowage plan ' || NEW.plan_id);
+END;
+
+CREATE TRIGGER trg_port_country_rename INSTEAD OF UPDATE OF country ON V_PORT_COUNTRY
+BEGIN
+    UPDATE country SET country_name = NEW.country WHERE country_name = OLD.country;
+END;
+
 -- A realistic population, so that sqlite_sequence holds a row and ANALYZE has
 -- something to record in sqlite_stat1 (item 12).
 INSERT INTO country (country_code, country_name) VALUES
@@ -279,6 +344,13 @@ INSERT INTO consignment (consignment_id, reference, shipper, insured, seal_code,
 INSERT INTO manifest_line (consignment_id, payload, weight_kg, declared_value, hs_code) VALUES
     (40211, 'Rocha pears, 22 pallets', 18450.0, 42000, '0808.30'),
     (40212, x'4d414e4946455354', 9120.5, 15800, '6403.99');
+
+INSERT INTO port_call (vessel_imo, voyage_no, port_code, arrived_at) VALUES
+    (9778791, 2611, 'PTSIE', '2026-11-06 14:10:00');
+
+INSERT INTO "Émbarque" (id, vessel_imo, loaded_on) VALUES (1, 9778791, '2026-11-02');
+INSERT INTO "émbarque" (id, vessel_imo, discharged_on) VALUES (1, 9778791, '2026-11-06');
+INSERT INTO stowage_plan (plan_id, embarque_id, carrier_id, bay_no) VALUES (7001, 1, 1, 14);
 
 INSERT INTO cargo_note (consignment_ref, body) VALUES
     ('BKG-2026-40211', 'reefer container, pre-cooled to 4 C before stuffing'),

@@ -1374,8 +1374,12 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             path.display()
         )),
         // FR-LITE-041: the path, the check, the row's type and name, and the
-        // kind of row — what SQLite does with the name, the column and the
-        // class it holds, or the root page and what the text creates.
+        // kind of row — what SQLite does with the name; the column and the
+        // class it holds; the root page and what the text creates; that SQLite
+        // writes no other type; that the library reads a row with no text as
+        // an index's; the column holding the NUL character; or that SQLite
+        // writes a trigger's text beginning CREATE TRIGGER, the trigger's name
+        // being the row's.
         Error::SqliteSchemaRefused { path, row, .. } => {
             let refused = format!(
                 "the check of the schema table main.sqlite_schema of {} refused the row of type \
@@ -1404,6 +1408,22 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                     } else {
                         "does not create"
                     }
+                ),
+                RefusedKind::Type => format!(
+                    "{refused}: its type is not exactly one of table, index, view and trigger, \
+                     and SQLite writes no other type"
+                ),
+                RefusedKind::NoText { null } => format!(
+                    "{refused}: its sql is {}, and the library reads a row with no text as an \
+                     index's",
+                    if null { "NULL" } else { "the empty text" }
+                ),
+                RefusedKind::Nul { column } => {
+                    format!("{refused}: its {column} holds a NUL character")
+                }
+                RefusedKind::TriggerHeader => format!(
+                    "{refused}: SQLite writes a trigger's text beginning CREATE TRIGGER followed \
+                     by the trigger's name, and this text does not"
                 ),
             })
         }

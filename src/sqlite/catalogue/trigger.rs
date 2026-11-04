@@ -9,8 +9,14 @@
 //! `TEMP`, `IF NOT EXISTS` and the schema qualifier removed
 //! (`https://sqlite.org/lang_createtrigger.html` and
 //! `https://sqlite.org/schematab.html`, consulted 2026-11-03; `IF NOT EXISTS`
-//! observed). The other keywords keep the case they were written in, so they
-//! are compared ignoring ASCII case.
+//! observed). The other keywords keep the case they were written in — SQLite
+//! stored `create trigger t1 after insert on x` as
+//! `CREATE TRIGGER t1 after insert on x` — so every keyword is recognised
+//! ignoring ASCII case, and the timing and the event are carried in upper case
+//! by the model's own spellings. A text that does not begin `CREATE TRIGGER`
+//! followed by the name is refused before the read by the check of
+//! `FR-LITE-041`, its seventh kind, which reads it through [`header_written`];
+//! [`header`] therefore reads no `TEMP`, `TEMPORARY` or `IF NOT EXISTS`.
 //!
 //! The tokens are read under SQLite's four identifier quotings — `"…"`,
 //! `` `…` ``, `[…]` and `'…'`, each doubling its closing quote to escape it,
@@ -74,24 +80,14 @@ enum Token<'s> {
 pub(crate) fn header(sql: &str) -> Option<Header> {
     let mut tokens = Tokens { rest: sql };
 
+    // `CREATE TRIGGER` and the name: the check of FR-LITE-041 refused every
+    // other beginning — `TEMP`, `TEMPORARY` and `IF NOT EXISTS` among them —
+    // before the read, so nothing is read past here.
     expect_word(&mut tokens, "CREATE")?;
-    let mut next = tokens.next()?;
-    // TEMP is removed from the stored text, and read past where it is not.
-    if is_word(&next, "TEMP") || is_word(&next, "TEMPORARY") {
-        next = tokens.next()?;
-    }
-    if !is_word(&next, "TRIGGER") {
-        return None;
-    }
+    expect_word(&mut tokens, "TRIGGER")?;
 
-    // The name, past an `IF NOT EXISTS` and a schema qualifier the stored text
-    // does not normally carry.
-    let mut name = tokens.next()?;
-    if is_word(&name, "IF") {
-        expect_word(&mut tokens, "NOT")?;
-        expect_word(&mut tokens, "EXISTS")?;
-        name = tokens.next()?;
-    }
+    // The name, and a schema qualifier the stored text does not carry.
+    let name = tokens.next()?;
     if !matches!(name, Token::Word(_) | Token::Quoted) {
         return None;
     }
@@ -153,6 +149,23 @@ pub(crate) fn header(sql: &str) -> Option<Header> {
         timing: timing.unwrap_or(Timing::Before),
         event: event?,
     })
+}
+
+/// Whether the stored text of a trigger begins as SQLite writes it: the words
+/// `CREATE` and `TRIGGER`, under SQLite's comment syntax and ignoring ASCII
+/// letter case, followed by a token that is not an unquoted `IF`
+/// (`FR-LITE-041`, its seventh kind).
+///
+/// SQLite removes a `TEMP` or `TEMPORARY` after `CREATE`, and an
+/// `IF NOT EXISTS` after `TRIGGER`, from the text it stores; and `IF` names no
+/// trigger unless it is quoted, so an unquoted `IF` there opens
+/// `IF NOT EXISTS` and nothing else.
+pub(super) fn header_written(sql: &str) -> bool {
+    let mut tokens = Tokens { rest: sql };
+
+    expect_word(&mut tokens, "CREATE").is_some()
+        && expect_word(&mut tokens, "TRIGGER").is_some()
+        && !tokens.next().is_some_and(|name| is_word(&name, "IF"))
 }
 
 /// The first word after the keyword `CREATE` of a stored `CREATE` statement,
@@ -336,7 +349,7 @@ mod tests {
             "CREATE TRIGGER `on ``x``` After Delete ON t BEGIN SELECT 1; END",
             "CREATE TRIGGER [insert] /* the timing */ AFTER -- the event\n DELETE ON t BEGIN END",
             "CREATE TRIGGER 'q''uoted' AFTER DELETE ON t WHEN old.id = 1 BEGIN SELECT 1; END",
-            "CREATE TRIGGER IF NOT EXISTS main.trg AFTER DELETE ON t BEGIN SELECT 1; END",
+            "CREATE TRIGGER main.trg AFTER DELETE ON t BEGIN SELECT 1; END",
         ] {
             assert_eq!(
                 read(sql),
@@ -346,6 +359,79 @@ mod tests {
                 }),
                 "{sql}"
             );
+        }
+    }
+
+    #[test]
+    fn fr_lite_032_keywords_are_recognised_in_any_letter_case_as_sqlite_stores_them() {
+        // SQLite upper-cases the leading CREATE TRIGGER alone: these are the
+        // texts it stored for headers written in lower and mixed case.
+        for (sql, timing, event) in [
+            (
+                "CREATE TRIGGER t1 after insert on x BEGIN SELECT 1; END",
+                Timing::After,
+                Event::Insert,
+            ),
+            (
+                "CREATE TRIGGER t2 Before Update Of a, \"b\" On x BEGIN SELECT 1; END",
+                Timing::Before,
+                Event::Update,
+            ),
+            (
+                "CREATE TRIGGER temp before delete on x BEGIN SELECT 1; END",
+                Timing::Before,
+                Event::Delete,
+            ),
+            (
+                "CREATE TRIGGER after update of a on x BEGIN SELECT 1; END",
+                Timing::Before,
+                Event::Update,
+            ),
+            (
+                "create trigger t3 aFtEr dElEtE oN x BEGIN SELECT 1; END",
+                Timing::After,
+                Event::Delete,
+            ),
+        ] {
+            assert_eq!(read(sql), Some(Header { timing, event }), "{sql}");
+        }
+    }
+
+    #[test]
+    fn fr_lite_041_the_header_sqlite_writes_begins_create_trigger_and_no_unquoted_if() {
+        use super::header_written;
+
+        for sql in [
+            "CREATE TRIGGER t AFTER INSERT ON a BEGIN END",
+            "create trigger t after insert on a BEGIN END",
+            "CREATE /* c */ TRIGGER -- d\n t AFTER INSERT ON a BEGIN END",
+            "CREATE TRIGGER \"IF\" AFTER INSERT ON a BEGIN END",
+            "CREATE TRIGGER `if` AFTER INSERT ON a BEGIN END",
+            "CREATE TRIGGER [IF] AFTER INSERT ON a BEGIN END",
+            "CREATE TRIGGER temp AFTER INSERT ON a BEGIN END",
+            "CREATE TRIGGER ifs AFTER INSERT ON a BEGIN END",
+        ] {
+            assert!(header_written(sql), "{sql}");
+        }
+        for sql in [
+            "CREATE TEMP TRIGGER t AFTER INSERT ON a BEGIN END",
+            "CREATE TEMPORARY TRIGGER t AFTER INSERT ON a BEGIN END",
+            "CREATE TRIGGER IF NOT EXISTS t AFTER INSERT ON a BEGIN END",
+            "CREATE TRIGGER if not exists t AFTER INSERT ON a BEGIN END",
+            "CREATE TRIGGER /* c */ iF NOT EXISTS t AFTER INSERT ON a BEGIN END",
+            "CREATE VIEW t AS SELECT 1",
+            "TRIGGER t AFTER INSERT ON a BEGIN END",
+            "CREATE /* unclosed TRIGGER",
+            "",
+        ] {
+            assert!(!header_written(sql), "{sql}");
+        }
+        // What the check refuses, the derivation does not read either.
+        for sql in [
+            "CREATE TEMP TRIGGER t AFTER INSERT ON a BEGIN END",
+            "CREATE TRIGGER IF NOT EXISTS t AFTER INSERT ON a BEGIN END",
+        ] {
+            assert_eq!(read(sql), None, "{sql}");
         }
     }
 

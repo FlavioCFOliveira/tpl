@@ -61,9 +61,10 @@ const LABELS: [&str; 4] = ["error:", "cause:", "hint:", "exit:"];
 const LISTING: &str = "{{ database.provider }} {{ database.name }}\n\
                        {% for table in database.tables %}{{ table.name }}\n{% endfor %}";
 
-/// What [`LISTING`] renders from the main fixture database: the twenty tables
-/// `FR-LITE-020` covers — the five shadow tables of the fts5 table of item 12
-/// among them, since the sixty-ninth edition — in the order of `FR-CTX-013`.
+/// What [`LISTING`] renders from the main fixture database: the twenty-four
+/// tables `FR-LITE-020` covers — the five shadow tables of the fts5 table of
+/// item 12 among them, since the sixty-ninth edition, and the tables of items
+/// 8 and 14, since the seventy-first — in the order of `FR-CTX-013`.
 const LISTED: &str = "sqlite main\n\
                       berth\n\
                       cargo_note_config\n\
@@ -80,11 +81,15 @@ const LISTED: &str = "sqlite main\n\
                       inspection_zone\n\
                       manifest_line\n\
                       port\n\
+                      port_call\n\
+                      stowage_plan\n\
                       tariff_band\n\
                       vessel\n\
                       voyage\n\
                       voyage_audit\n\
-                      voyage_leg\n";
+                      voyage_leg\n\
+                      \u{c9}mbarque\n\
+                      \u{e9}mbarque\n";
 
 /// What [`LISTING`] renders from a database with no object.
 const LISTED_EMPTY: &str = "sqlite main\n";
@@ -1153,7 +1158,8 @@ fn fr_cfg_056_the_test_of_a_sqlite_entry_reports_the_four_steps() {
 
     // FR-CFG-056 as amended in the sixty-ninth edition: the catalogue probe is
     // the check of FR-LITE-041, so a file every read refuses is not reported
-    // as readable — each of the six databases of row 33 is the check's 78.
+    // as readable — each of the fourteen databases FR-LITE-038 names for the
+    // check, the eight of the seventy-first edition among them, is its 78.
     for (database, kind) in built.refused_by_the_check() {
         repoint(&sandbox, database);
         let written = refused(
@@ -1716,5 +1722,59 @@ fn fr_err_046_a_name_from_the_argument_vector_is_written_whole_on_a_sqlite_path(
         "a long missing table",
     );
     assert!(line(&written, "cause:").contains(&long), "{written}");
+    assert!(!written.contains("characters omitted"), "{written}");
+}
+
+#[test]
+fn fr_err_046_a_name_of_the_file_reaches_a_did_you_mean_only_within_the_bound() {
+    // FR-ERR-046 through the nearest-match suggestion of FR-ERR-019: the
+    // candidates are names of the file. One past the bound never reaches the
+    // line — FR-ERR-022 admits no candidate past 64 characters and FR-ERR-023
+    // drops it in every form — and one within it is written whole.
+    let sandbox = project("data/freight.sqlite");
+    let path = sandbox.path("data/long-names.sqlite");
+    let long = format!("manifest_{}", "l".repeat(300));
+    let within = format!("{}a", "v".repeat(63));
+    let connection = rusqlite::Connection::open(&path).expect("the database opens");
+    connection
+        .execute_batch(&format!(
+            "CREATE TABLE \"{long}\" (line_id INTEGER PRIMARY KEY); \
+             CREATE TABLE \"{within}\" (vessel_imo INTEGER PRIMARY KEY);"
+        ))
+        .expect("the database builds");
+    connection.close().expect("the database closes");
+    repoint(&sandbox, &path);
+
+    // One substitution from the long name, so that it qualifies by distance
+    // and the argument vector does not hold it.
+    let supplied = format!("manifest_{}k{}", "l".repeat(150), "l".repeat(149));
+    let written = refused(
+        &sandbox.run(&["schema", "table", &supplied, "--direct", "--no-cache"]),
+        66,
+        "a missing table one step from a long name of the file",
+    );
+    assert!(!written.contains(&long), "{written}");
+    assert!(
+        !line(&written, "hint:").contains("did you mean"),
+        "{written}"
+    );
+    assert!(
+        line(&written, "hint:").contains("tpl schema tables"),
+        "{written}"
+    );
+    // The argument vector is written whole, per FR-ERR-034.
+    assert!(line(&written, "error:").contains(&supplied), "{written}");
+
+    // One substitution from the name of 64 characters: written whole.
+    let supplied = format!("{}b", "v".repeat(63));
+    let written = refused(
+        &sandbox.run(&["schema", "table", &supplied, "--direct", "--no-cache"]),
+        66,
+        "a missing table one step from a name of 64 characters",
+    );
+    assert!(
+        line(&written, "hint:").starts_with(&format!("did you mean '{within}'?")),
+        "{written}"
+    );
     assert!(!written.contains("characters omitted"), "{written}");
 }

@@ -708,7 +708,7 @@ pub struct RefusedRow {
     pub kind: RefusedKind,
 }
 
-/// The three kinds of row the check of `FR-LITE-041` refuses, in the order of
+/// The seven kinds of row the check of `FR-LITE-041` refuses, in the order of
 /// that requirement's table.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -731,6 +731,24 @@ pub enum RefusedKind {
         /// Whether the text creates a virtual table.
         creates_virtual: bool,
     },
+    /// A `type` that is not exactly one of the four texts SQLite writes:
+    /// `table`, `index`, `view` and `trigger`.
+    Type,
+    /// A row with no text that is not an index's: the library reads every
+    /// such row as an index's.
+    NoText {
+        /// Whether the `sql` is `NULL`; it is the empty text otherwise.
+        null: bool,
+    },
+    /// A NUL character in a name or a text, which the library reads only up
+    /// to.
+    Nul {
+        /// The column that holds it: `name`, `tbl_name` or `sql`.
+        column: &'static str,
+    },
+    /// A trigger whose text does not begin `CREATE TRIGGER` followed by the
+    /// trigger's name, as SQLite writes it.
+    TriggerHeader,
 }
 
 /// Every condition `tpl` reports as a failure.
@@ -2431,8 +2449,10 @@ pub enum Error {
     /// The schema table of the file a `sqlite` entry names holds a row the
     /// check of `FR-LITE-041` refuses: a table or a view named like a pragma
     /// table-valued function, a value of a storage class the table's contract
-    /// excludes, or a table whose root page contradicts its text. No further
-    /// statement reads the file.
+    /// excludes, a table whose root page contradicts its text, a type SQLite
+    /// does not write, a row with no text that is not an index's, a NUL
+    /// character in a name or a text, or a trigger's header SQLite does not
+    /// write. No further statement reads the file.
     #[error("{} holds a schema tpl refuses to read, for database entry '{entry}'", .path.display())]
     SqliteSchemaRefused {
         /// The entry.
