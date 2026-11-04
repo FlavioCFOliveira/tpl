@@ -33,6 +33,14 @@
 //! `FR-LITE-042`, only a process that writes the file without SQLite's locks
 //! can put there — is reported with the row it belongs to (`FR-LITE-040`, its
 //! paragraph on values).
+//!
+//! **No statement orders its rows.** `FR-LITE-015` fixes which statements are
+//! issued, not an order of their rows, and every order the model carries —
+//! the objects by name, a table's columns by `cid`, an index's members by
+//! `seqno`, a key's pairs by `seq` — is produced by the fold whatever order
+//! the rows arrive in (`catalogue::fold`). PERF: an `ORDER BY` here sorted
+//! every row in the library's sorter before the first was returned, for an
+//! order the fold produces again.
 
 /// The confirmation of the extension-loading control, and of the build the
 /// temporary-storage control depends on (`FR-LITE-010`).
@@ -86,7 +94,8 @@ pub(crate) const ENCODING: &str = "SELECT encoding FROM pragma_encoding";
 /// Statement 2: the rows of type `table` and `view`, with their root page,
 /// and for a table whose root page is not `0` whether `pragma_index_info`
 /// returns a row for its name — a `WITHOUT ROWID` table (`FR-LITE-019` …
-/// `FR-LITE-021`, `FR-LITE-028`).
+/// `FR-LITE-021`, `FR-LITE-028`), in no stated order: the fold orders the
+/// objects by name.
 pub(crate) const OBJECTS: &str = "SELECT s.type, s.name, s.rootpage, \
      EXISTS (SELECT 1 FROM pragma_index_info(s.name, 'main')) \
      FROM main.sqlite_schema AS s \
@@ -94,41 +103,39 @@ pub(crate) const OBJECTS: &str = "SELECT s.type, s.name, s.rootpage, \
      UNION ALL \
      SELECT s.type, s.name, s.rootpage, 0 \
      FROM main.sqlite_schema AS s \
-     WHERE s.type = 'view' OR (s.type = 'table' AND s.rootpage IS 0) \
-     ORDER BY 2";
+     WHERE s.type = 'view' OR (s.type = 'table' AND s.rootpage IS 0)";
 
-/// Statement 3: the columns of every table (`FR-LITE-025` … `FR-LITE-029`).
+/// Statement 3: the columns of every table (`FR-LITE-025` … `FR-LITE-029`),
+/// in no stated order: the fold orders a table's columns by `cid`.
 pub(crate) const TABLE_COLUMNS: &str = "SELECT s.type, s.name, c.cid, c.name, c.type, \
      c.\"notnull\", c.dflt_value, c.pk, c.hidden \
      FROM main.sqlite_schema AS s \
      CROSS JOIN pragma_table_xinfo(s.name, 'main') AS c \
-     WHERE s.type = 'table' AND s.rootpage IS NOT 0 \
-     ORDER BY s.name, c.cid";
+     WHERE s.type = 'table' AND s.rootpage IS NOT 0";
 
 /// Statement 4: the indexes of every table, and their members
-/// (`FR-LITE-028` … `FR-LITE-030`).
+/// (`FR-LITE-028` … `FR-LITE-030`), in no stated order: the fold orders an
+/// index's members by `seqno`.
 pub(crate) const INDEXES: &str = "SELECT s.type, s.name, l.name, l.\"unique\", l.origin, \
      x.seqno, x.cid, x.name, x.\"desc\", x.\"key\" \
      FROM main.sqlite_schema AS s \
      CROSS JOIN pragma_index_list(s.name, 'main') AS l \
      CROSS JOIN pragma_index_xinfo(l.name, 'main') AS x \
-     WHERE s.type = 'table' AND s.rootpage IS NOT 0 \
-     ORDER BY s.name, l.name, x.seqno";
+     WHERE s.type = 'table' AND s.rootpage IS NOT 0";
 
-/// Statement 5: the foreign keys of every table (`FR-LITE-031`).
+/// Statement 5: the foreign keys of every table (`FR-LITE-031`), in no stated
+/// order: the fold orders a key's pairs by `seq`.
 pub(crate) const FOREIGN_KEYS: &str = "SELECT s.type, s.name, f.id, f.seq, f.\"table\", \
      f.\"from\", f.\"to\", f.on_update, f.on_delete, f.\"match\" \
      FROM main.sqlite_schema AS s \
      CROSS JOIN pragma_foreign_key_list(s.name, 'main') AS f \
-     WHERE s.type = 'table' AND s.rootpage IS NOT 0 \
-     ORDER BY s.name, f.id, f.seq";
+     WHERE s.type = 'table' AND s.rootpage IS NOT 0";
 
 /// Statement 6: the stored text of every view and trigger (`FR-LITE-032`,
-/// `FR-LITE-033`).
+/// `FR-LITE-033`), in no stated order.
 pub(crate) const STORED: &str = "SELECT s.type, s.name, s.tbl_name, s.sql \
      FROM main.sqlite_schema AS s \
-     WHERE s.type IN ('view', 'trigger') \
-     ORDER BY s.name";
+     WHERE s.type IN ('view', 'trigger')";
 
 /// Every statement of the list `FR-LITE-015` closes, in the order
 /// `FR-LITE-017` and the plan fix them: the connection start, then the read.

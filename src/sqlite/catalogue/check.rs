@@ -43,7 +43,12 @@ const VIRTUAL: &str = "VIRTUAL";
 
 /// The four texts SQLite writes in the `type` column of the schema table, and
 /// no other (`https://sqlite.org/schematab.html`).
-const TYPES: [&[u8]; 4] = [b"table", b"index", b"view", b"trigger"];
+pub(crate) const TYPES: [&str; 4] = ["table", "index", "view", "trigger"];
+
+/// How many bytes of a stored text [`creates_virtual`] reads first: enough
+/// for `CREATE`, the word after it and the character that ends that word,
+/// behind the comments and whitespace SQLite stores before them.
+const HEAD: usize = 128;
 
 /// The NUL character, which the library reads a value of the schema table
 /// only up to (`FR-LITE-041`, its sixth kind).
@@ -104,7 +109,7 @@ pub(crate) fn verdict(values: [ValueRef<'_>; 5]) -> Option<RefusedRow> {
     // value — `table` followed by a NUL character is not `table` — and in its
     // case.
     if let ValueRef::Text(bytes) = kind
-        && !TYPES.contains(&bytes)
+        && !TYPES.iter().any(|written| written.as_bytes() == bytes)
     {
         return refused(RefusedKind::Type);
     }
@@ -195,10 +200,30 @@ fn pragma_named(name: ValueRef<'_>) -> bool {
 
 /// Whether `sql` creates a virtual table: its first word after `CREATE`,
 /// under SQLite's comment syntax, is `VIRTUAL`, ignoring ASCII case.
+///
+/// PERF: the word is read first from the [`HEAD`] bytes of the text, as far
+/// as they are valid UTF-8, so that the whole text is not converted on every
+/// table's row. That reading is kept only where the word it finds ends before
+/// the head does: every token before the word, and the word itself, then
+/// ended at a character the head holds, and the whole text converted with
+/// U+FFFD substituted begins with the head, so the whole text yields the same
+/// word. Otherwise — no such word in the head, or a word that reaches its end
+/// — the whole text is converted and read, as it always was.
 fn creates_virtual(sql: ValueRef<'_>) -> bool {
     let ValueRef::Text(bytes) = sql else {
         return false;
     };
+    let head = bytes
+        .get(..HEAD)
+        .unwrap_or(bytes)
+        .utf8_chunks()
+        .next()
+        .map_or("", |chunk| chunk.valid());
+    if let Some((word, rest)) = trigger::word_and_rest_after_create(head)
+        && !rest.is_empty()
+    {
+        return word.eq_ignore_ascii_case(VIRTUAL);
+    }
     let text: Cow<'_, str> = String::from_utf8_lossy(bytes);
 
     trigger::word_after_create(&text).is_some_and(|word| word.eq_ignore_ascii_case(VIRTUAL))
@@ -770,6 +795,71 @@ mod tests {
             ]),
             None
         );
+    }
+
+    #[test]
+    fn fr_lite_041_the_head_of_a_text_decides_as_the_whole_text_converted_does() {
+        // The third kind reads the word after CREATE from the head of the
+        // text first: over texts whose word stands inside the head, straddles
+        // its end, stands past it behind a long comment, or meets invalid
+        // UTF-8 or a character cut by the head's end, the answer is the one
+        // the whole text converted with U+FFFD substituted gives.
+        let whole = |bytes: &[u8]| {
+            super::trigger::word_after_create(&String::from_utf8_lossy(bytes))
+                .is_some_and(|word| word.eq_ignore_ascii_case(super::VIRTUAL))
+        };
+        let mut texts: Vec<Vec<u8>> = Vec::new();
+        for body in [
+            &b"CREATE VIRTUAL TABLE cargo_note USING fts5(body)"[..],
+            b"create virtual table cargo_note using fts5(body)",
+            b"CREATE TABLE cargo_note(body)",
+            b"CREATE VIRTUALX TABLE t USING fts5(a)",
+            b"CREATE VIRTUAL",
+            b"CREATE TABLE",
+            b"CREATE \"VIRTUAL\" TABLE t(a)",
+            b"CREATE VIRTUAL\xff TABLE t(a)",
+            b"CREATE \xffVIRTUAL TABLE t(a)",
+            b"CREATE VIRTUAL TABLE t USING fts5(a) -- \xff",
+            b"SELECT 1",
+        ] {
+            for pad in 0..=super::HEAD + 8 {
+                for filler in [&b" "[..], b"\n", b"\xc3\xa9"] {
+                    // Whitespace, or a comment holding `é`, in front of the
+                    // text, so that every byte of it falls at the head's end
+                    // once, and `é` is cut there once.
+                    let mut text = Vec::new();
+                    if filler == b"\xc3\xa9" {
+                        text.extend_from_slice(b"/*");
+                        for _ in 0..pad / 2 {
+                            text.extend_from_slice(filler);
+                        }
+                        text.extend_from_slice(b"*/ ");
+                    } else {
+                        text.extend(std::iter::repeat_n(filler[0], pad));
+                    }
+                    text.extend_from_slice(body);
+                    texts.push(text);
+
+                    // And the comment between CREATE and the word.
+                    if let Some(rest) = body.strip_prefix(b"CREATE ") {
+                        let mut text = b"CREATE /*".to_vec();
+                        text.extend(std::iter::repeat_n(b'x', pad));
+                        text.extend_from_slice(b"*/ ");
+                        text.extend_from_slice(rest);
+                        texts.push(text);
+                    }
+                }
+            }
+        }
+
+        for text in &texts {
+            assert_eq!(
+                super::creates_virtual(ValueRef::Text(text)),
+                whole(text),
+                "{}",
+                String::from_utf8_lossy(text)
+            );
+        }
     }
 
     #[test]

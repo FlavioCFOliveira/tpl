@@ -447,8 +447,8 @@ a `sqlite` entry (`FR-LITE-015`, `FR-LITE-016`). It is shaped like `mariadb/`
 and shares nothing with it; both write `model/` and both are bounded through
 `deadline.rs`. It is prescribed by
 [`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader).
-The reader at `19abb1f` implements everything this section prescribes, against
-the seventy-first edition.
+The reader at `19abb1f`, as rmp `#323` changes it, implements everything this
+section prescribes, against the seventy-first edition.
 
 | Part | What it owns | Forced by |
 |---|---|---|
@@ -572,8 +572,17 @@ is decided in `tpl`, not in the statement's text.
 | What is held | Each row is judged as it is stepped; only a refused row is kept | `CLAUDE.md`, *Implementation rules*: streaming wherever the operation allows it |
 
 **The read owns its values, typed and converted at the boundary.** A `rusqlite`
-row borrows its statement, so every value is copied out as it is read, and the
-statements are dropped before the connection closes. Each is read through its
+row borrows its statement, so every value the read keeps is copied out as its
+row is read, and the statements are dropped before the connection closes. A
+value the join repeats over consecutive rows is kept once per run of them — a
+table's name in statements 4 to 6, and an index's `name`, `unique` and
+`origin` in statement 5 — and rows that come apart form a run per part, so no
+run assumes an order. A field of a closed set of spellings — the schema table's
+`type` in statements 3 and 7 (`FR-LITE-041`, fourth kind), `origin`
+(`FR-LITE-030`), and `on_update`, `on_delete` and `match` (`FR-LITE-031`) —
+holds the recorded spelling it equals, uncopied, and any other value as read.
+Both spare a copy and change no value (`CLAUDE.md`, *Implementation rules*:
+minimal allocation on hot paths). Each is read through its
 SQLite storage class and never coerced, a SQL `NULL` kept apart from every
 value (`FR-LITE-004`, step 2); a pragma field of a class the library does not
 document for it is a violated internal invariant, `70` (`FR-ERR-030`), as a
@@ -586,7 +595,10 @@ locks could produce, a case `FR-LITE-042` claims nothing against — is still
 the `78` of the check, never the `70` of a pragma field (`FR-LITE-040`, its
 paragraph on values). Text is read
 as bytes and converted with U+FFFD substituted, at this boundary and nowhere
-else (`FR-OUT-017`).
+else (`FR-OUT-017`). Where that conversion replaced invalid UTF-8 in the name of
+an object, a stored row, a run's table or an index run, the name also keeps
+the bytes the library returned for it, and elsewhere nothing more: the fold
+orders by those bytes and converts nothing.
 
 **The fold** applies `FR-LITE-019` … `FR-LITE-034` and `BR-LITE-003` to the
 owned values through the one constructor a table has, so `FR-CAT-044` is
@@ -601,21 +613,47 @@ answer without them is the `70` of `FR-ERR-030`, on the ground `FR-LITE-012`
 gives a control: the library is part of the binary.
 
 **The fold indexes before it looks up.** Every collection the fold reads by a
-name — the column, index and key rows by their table and an index's members by
-their index, each by the name its own row reports; the stored rows of the views
-by their name; and the covered tables, the views and a table's columns by the
-name `BR-LITE-003` matches, with the 26 ASCII letters folded — is grouped once
-into a map keyed by that name, and no object is found by scanning another
-collection. The
-fold runs after the last statement, outside every statement's bound
+name is grouped once, and no object is found by scanning another collection.
+
+| Collection | Read by | Grouped as |
+|---|---|---|
+| The column, index and key rows | Their table, under the name the schema row reports, as converted | Each statement's runs, sorted once by that name, byte-wise, then by the bytes the library returned for it; a table's runs found by binary search |
+| A table's index runs | Their index | Sorted by the index's name, byte-wise, then by the bytes the library returned for the table's and the index's names, so that the runs of one index stand together |
+| The stored rows of the views | Their name | Sorted once by name, byte-wise, then by the bytes the library returned for it; a view's row found by binary search |
+| The covered tables, the views, and a parent table's columns | The name `BR-LITE-003` matches | A map keyed by the name, hashed and compared with the 26 ASCII letters folded, holding no folded copy; a parent's columns mapped only for a key that names them |
+
+Grouping holds whatever order the rows arrive in. No statement orders its rows:
+every order the model carries is the fold's (`FR-LITE-025`, `FR-LITE-029` …
+`FR-LITE-031`, `NFR-DET-002`). The fold runs after the last statement, outside
+every statement's bound
 ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)),
 so a lookup that scanned would let a file of many objects cost time growing
 with their square where the statements' grows with their number (`FR-LITE-009`,
 *Consequence*; `FR-LITE-020`, *Provenance*). **Discharged at `82eb1d4` — the
 discrepancy this paragraph recorded.** The fold at `cb99236` scanned, in
 `table()`, `keys()`, `indexes()`, `views()` and the placement of triggers; at
-`19abb1f` every such lookup goes through a map built once, in `Grouped` and
-`Names` of `sqlite/catalogue/fold.rs`.
+`19abb1f` every such lookup went through a map built once, in `Grouped` and
+`Names` of `sqlite/catalogue/fold.rs`. rmp `#323` keeps `Names` and replaces
+the maps of `Grouped` with the sorted runs above.
+
+**Names that convert alike keep the order the removed `ORDER BY` gave.** Two
+names that differ only in invalid UTF-8 convert to one text (`FR-OUT-017`), so
+the orders above tie on them. The fold breaks each tie with the bytes the
+library returned, under the keys those clauses used: the objects and the
+stored rows by their names' bytes; columns by their table's bytes, then `cid`;
+index members — and with them the directions and `unique` of the primary
+key's index of origin `pk` — by their table's and their index's bytes, then
+`seqno`; key pairs by `id`, `seq`, then their table's bytes. The clauses
+compared under `BINARY`, which "Compares string data using memcmp(), regardless
+of text encoding" (`https://sqlite.org/datatype3.html`, consulted 2026-11-04).
+The bytes come from `sqlite3_column_text` (docs.rs, `rusqlite` 0.41.1,
+`statement.rs`, `value_ref`, consulted 2026-11-04), whose cases of conversion
+name a conversion to UTF-8 for UTF-16 content alone
+(`https://sqlite.org/c3ref/column_blob.html`, consulted 2026-11-04), so in a
+UTF-8 file they are the stored bytes and the fold breaks a tie as those
+clauses did. That a UTF-16 file cannot hold two names that convert alike is
+stated in the code (`sqlite/catalogue.rs`, `Raw`) and not confirmed in the
+official documentation.
 
 **The close.** Every statement is dropped, the watchdog is stopped and joined,
 and then the connection is closed — before any render starts (`FR-RND-040`). A

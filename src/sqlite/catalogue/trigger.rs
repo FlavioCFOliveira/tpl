@@ -175,11 +175,18 @@ pub(super) fn header_written(sql: &str) -> bool {
 /// [`None`] where the text does not begin with `CREATE`, or where the token
 /// after it is not a bare word.
 pub(super) fn word_after_create(sql: &str) -> Option<&str> {
+    word_and_rest_after_create(sql).map(|(word, _)| word)
+}
+
+/// [`word_after_create`], and the text that follows the word: empty where the
+/// word reaches the end of `sql`, so that a caller reading a head of a longer
+/// text knows whether the word could continue past it.
+pub(super) fn word_and_rest_after_create(sql: &str) -> Option<(&str, &str)> {
     let mut tokens = Tokens { rest: sql };
 
     expect_word(&mut tokens, "CREATE")?;
     match tokens.next()? {
-        Token::Word(word) => Some(word),
+        Token::Word(word) => Some((word, tokens.rest)),
         _ => None,
     }
 }

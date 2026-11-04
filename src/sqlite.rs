@@ -37,6 +37,7 @@ mod harden;
 mod open;
 mod watch;
 
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -478,9 +479,9 @@ impl Session {
             })
     }
 
-    /// The rows of a statement that answered, or the condition its failure
+    /// What a statement that answered yielded, or the condition its failure
     /// is under `FR-LITE-040`.
-    fn answered<T>(&self, stage: Stage, answered: Result<Vec<T>, Failed>) -> Result<Vec<T>, Error> {
+    fn answered<T>(&self, stage: Stage, answered: Result<T, Failed>) -> Result<T, Error> {
         answered.map_err(|failed| match failed {
             Failed::Condition(error) => error,
             Failed::Library(error, timing) => {
@@ -489,18 +490,8 @@ impl Session {
         })
     }
 
-    /// Runs one statement under its bound and reads every row through `read`
-    /// (`FR-LITE-009`, `OD-36`, `FR-GLOB-017`).
-    ///
-    /// The bound is the phase clock's bound over `core.query_timeout`, composed
-    /// with the overall budget; a bound already spent starts nothing and is the
-    /// `69` of `FR-ERR-027`. The busy timeout is set to what remains of it, the
-    /// watchdog armed with the same, and both apply to this statement alone.
-    /// `catalogue` says whether the statement is one of the last row of
-    /// `FR-LITE-015`, which is what the line of `FR-GLOB-017` counts.
-    ///
-    /// Every row is copied out as it is read, so the statement is finalised
-    /// before this returns, and no value borrows the connection.
+    /// Runs one statement through [`Session::each`] and collects what `read`
+    /// copies out of every row.
     fn rows<T, F>(
         &self,
         stage: Stage,
@@ -510,6 +501,31 @@ impl Session {
     ) -> Result<Vec<T>, Failed>
     where
         F: FnMut(&Row<'_>) -> Result<T, Misread>,
+    {
+        let mut collected = Vec::new();
+        self.each(stage, sql, catalogue, |row| {
+            collected.push(read(row)?);
+            Ok(())
+        })?;
+        Ok(collected)
+    }
+
+    /// Runs one statement under its bound and hands every row to `read`
+    /// (`FR-LITE-009`, `OD-36`, `FR-GLOB-017`).
+    ///
+    /// The bound is the phase clock's bound over `core.query_timeout`, composed
+    /// with the overall budget; a bound already spent starts nothing and is the
+    /// `69` of `FR-ERR-027`. The busy timeout is set to what remains of it, the
+    /// watchdog armed with the same, and both apply to this statement alone.
+    /// `catalogue` says whether the statement is one of the last row of
+    /// `FR-LITE-015`, which is what the line of `FR-GLOB-017` counts.
+    ///
+    /// A row borrows its statement, so `read` copies out of each what it keeps
+    /// as the row is read; the statement is finalised before this returns, and
+    /// no value borrows the connection.
+    fn each<F>(&self, stage: Stage, sql: &str, catalogue: bool, mut read: F) -> Result<(), Failed>
+    where
+        F: FnMut(&Row<'_>) -> Result<(), Misread>,
     {
         let bound = self.clock.bound(self.query);
         if bound.expired() {
@@ -539,14 +555,13 @@ impl Session {
             watchdog.arm(bound.remaining());
         }
 
-        let outcome = (|| -> Result<Vec<T>, Unread> {
+        let outcome = (|| -> Result<(), Unread> {
             let mut statement = connection.prepare(sql)?;
             let mut rows = statement.query([])?;
-            let mut collected = Vec::new();
             while let Some(row) = rows.next()? {
-                collected.push(read(row).map_err(Unread::Misread)?);
+                read(row).map_err(Unread::Misread)?;
             }
-            Ok(collected)
+            Ok(())
         })();
 
         if let Some(watchdog) = watchdog {
@@ -579,10 +594,52 @@ impl Session {
 /// A text field, read through its storage class and converted with U+FFFD
 /// substituted, at this boundary and nowhere else (`FR-OUT-017`).
 fn text(row: &Row<'_>, at: usize) -> Result<String, Misread> {
+    text_named(row, at).map(|(text, _)| text.into_owned())
+}
+
+/// A text field as [`text`] reads it, borrowed from its row, and the bytes it
+/// was converted from: it is copied only where the caller keeps it, and only
+/// where invalid UTF-8 had a replacement substituted is it converted into a
+/// value of its own.
+///
+/// The bytes order the value as SQLite's `BINARY` collation does, which the
+/// converted text does not where two values differ only in invalid UTF-8
+/// (`catalogue::fold`, *Every order is produced here*).
+fn text_named<'r>(row: &'r Row<'_>, at: usize) -> Result<(Cow<'r, str>, &'r [u8]), Misread> {
     match row.get_ref(at) {
-        Ok(ValueRef::Text(bytes)) => Ok(String::from_utf8_lossy(bytes).into_owned()),
+        Ok(ValueRef::Text(bytes)) => Ok((String::from_utf8_lossy(bytes), bytes)),
         _ => Err(Misread::Shape(STORAGE_CLASS)),
     }
+}
+
+/// A text field whose values come from a closed set of spellings, as
+/// [`text`] reads it: a value that is one of `spellings` is that spelling,
+/// which allocates nothing, and any other value is carried as read
+/// (`FR-LITE-004`, step 2; `FR-OUT-017`).
+fn spelled(
+    row: &Row<'_>,
+    at: usize,
+    spellings: &[&'static str],
+) -> Result<Cow<'static, str>, Misread> {
+    match row.get_ref(at) {
+        Ok(ValueRef::Text(bytes)) => Ok(closed(bytes, spellings)),
+        _ => Err(Misread::Shape(STORAGE_CLASS)),
+    }
+}
+
+/// `bytes` as one of `spellings` where it is exactly one, and converted with
+/// U+FFFD substituted otherwise.
+///
+/// The two agree: every spelling is ASCII, and the conversion of `bytes` is a
+/// spelling exactly where `bytes` are its bytes.
+fn closed(bytes: &[u8], spellings: &[&'static str]) -> Cow<'static, str> {
+    spellings
+        .iter()
+        .find(|spelling| spelling.as_bytes() == bytes)
+        .map_or_else(
+            || Cow::Owned(String::from_utf8_lossy(bytes).into_owned()),
+            |spelling| Cow::Borrowed(*spelling),
+        )
 }
 
 /// A text field that may be SQL `NULL`, kept distinct from every value
@@ -631,8 +688,29 @@ fn schema_value<'r, T>(
 
 /// A text value of the schema table: its `type`, `name` or `tbl_name`.
 fn schema_text(row: &Row<'_>, at: usize, column: &'static str) -> Result<String, Misread> {
+    schema_named(row, at, column).map(|(text, _)| text.into_owned())
+}
+
+/// A text value of the schema table as [`schema_text`] reads it, borrowed
+/// from its row, and the bytes it was converted from, as [`text_named`]
+/// reads a field.
+fn schema_named<'r>(
+    row: &'r Row<'_>,
+    at: usize,
+    column: &'static str,
+) -> Result<(Cow<'r, str>, &'r [u8]), Misread> {
     schema_value(row, at, column, |value| match value {
-        ValueRef::Text(bytes) => Some(String::from_utf8_lossy(bytes).into_owned()),
+        ValueRef::Text(bytes) => Some((String::from_utf8_lossy(bytes), bytes)),
+        _ => None,
+    })
+}
+
+/// The `type` of the schema table as [`schema_text`] reads it, one of the
+/// four texts SQLite writes there kept as that spelling, as [`spelled`]
+/// keeps one.
+fn schema_type(row: &Row<'_>, at: usize) -> Result<Cow<'static, str>, Misread> {
+    schema_value(row, at, "type", |value| match value {
+        ValueRef::Text(bytes) => Some(closed(bytes, &check::TYPES)),
         _ => None,
     })
 }

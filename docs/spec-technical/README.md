@@ -31,6 +31,20 @@ blocks is a statement, not a document. Every other entry is settled. `OD-30`,
 the one entry that was settled and **interim**, was discharged on 2026-09-22,
 when the last leaf of the tree was implemented.
 
+**Changes of 2026-11-04, second pass**, for rmp `#323` — against the SQLite
+reader as that task changes it, not yet committed: no catalogue statement
+orders its rows, the fold produces every order and groups rows by sorted runs,
+the read keeps a repeated value once per run, and a name whose conversion
+replaced invalid UTF-8 keeps its bytes, which break ties as the removed
+`ORDER BY` did.
+
+- `architecture.md`: the read's ownership, the fold's grouping and the
+  reader's implementation note follow the code; names that convert alike are
+  ordered by their bytes; the discharged discrepancy records what replaced the
+  maps of `Grouped`.
+- `quality-attributes.md` and `traceability.md` state the fold's grouping
+  without naming its means.
+
 **Changes of 2026-11-04**, for rmp `#317` and `#321` — against the seventieth
 and seventy-first editions of `/specification` (`2991b7e`, `9171337`) and the
 code at `19abb1f`, which implements both: the check and the catalogue read in

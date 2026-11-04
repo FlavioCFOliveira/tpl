@@ -49,15 +49,18 @@ fn over(path: &std::path::Path) -> FileSettings {
 
 /// The catalogue of the file at `path`, read through the whole connection
 /// start.
-fn read(path: &std::path::Path) -> Result<super::Catalogue, Error> {
+///
+/// The model borrows the rows of its catalogue, so the catalogue is kept for
+/// the rest of the test process and every model folded from it lives as long.
+fn read(path: &std::path::Path) -> Result<&'static super::Catalogue, Error> {
     let clock = settings::clock(None);
     let session = super::open(&over(path), &clock)?;
     let read = super::read(&session);
     session.close();
-    read
+    read.map(|catalogue| &*Box::leak(Box::new(catalogue)))
 }
 
-/// The model of the main fixture database.
+/// The model of the main fixture database, whose rows [`read`] keeps alive.
 fn model(artefacts: &Artefacts) -> Database<'static> {
     read(&artefacts.main)
         .expect("the main fixture database reads")
@@ -108,6 +111,37 @@ fn column<'t>(table: &'t Table<'static>, name: &str) -> &'t crate::model::column
         .iter()
         .find(|column| column.name == name)
         .unwrap_or_else(|| panic!("{} carries {name}", table.name()))
+}
+
+#[test]
+fn fr_lite_004_a_field_of_a_closed_set_is_its_spelling_and_any_other_value_as_read() {
+    // FR-LITE-004 step 2 and FR-OUT-017: a value of the closed set is that
+    // spelling, with no copy; any other value — another letter case, a
+    // spelling near one, an empty text, invalid UTF-8 — is carried as read,
+    // with U+FFFD substituted.
+    const ACTIONS: [&str; 5] = [
+        "NO ACTION",
+        "RESTRICT",
+        "SET NULL",
+        "SET DEFAULT",
+        "CASCADE",
+    ];
+    for spelling in ACTIONS {
+        let read = super::closed(spelling.as_bytes(), &ACTIONS);
+        assert!(matches!(read, Cow::Borrowed(_)), "{spelling}");
+        assert_eq!(read, spelling);
+    }
+    for (bytes, carried) in [
+        (&b"cascade"[..], "cascade"),
+        (b"SET  NULL", "SET  NULL"),
+        (b"NO ACTION ", "NO ACTION "),
+        (b"", ""),
+        (b"CASC\xffADE", "CASC\u{fffd}ADE"),
+    ] {
+        let read = super::closed(bytes, &ACTIONS);
+        assert!(matches!(read, Cow::Owned(_)), "{carried}");
+        assert_eq!(read, carried);
+    }
 }
 
 #[test]
@@ -1740,10 +1774,8 @@ fn fr_lite_015_the_poc_dos_shape_reads_without_compiling_a_view() {
     let clock = settings::clock(None);
     let session = super::open(&over(&path), &clock).expect("the file opens");
     let (answered, texts) = record::recorded(|| super::read(&session));
-    let database = answered
-        .expect("the read succeeds without compiling a view")
-        .model()
-        .expect("it folds");
+    let catalogue = answered.expect("the read succeeds without compiling a view");
+    let database = catalogue.model().expect("it folds");
     assert_eq!(record::issued(&texts), statements::READ);
     assert_eq!(database.views.len(), 14);
     assert_eq!(database.tables.len(), 1);

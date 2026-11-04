@@ -30,22 +30,55 @@
 //! the library reports each as its table declares it.
 //!
 //! **The fold indexes before it looks up.** Every collection the fold reads
-//! by a name — the column, index and key rows by their table, an index's
-//! members by their index, the stored rows by their name, the covered tables,
-//! the views and a table's columns by their folded name — is grouped
-//! once into a map keyed by that name, and no object is found by scanning
-//! another collection. The fold runs after the last statement, outside every
-//! statement's bound, so a lookup that scanned would let a file of many
-//! objects cost time growing with their square where the statements' grows
-//! with their number (architecture, *The SQLite reader*; `FR-LITE-009`,
-//! *Consequence*; `FR-LITE-020`, *Provenance*). The maps are only looked up,
-//! never iterated, so no order of a document depends on them.
+//! by a name is grouped once and then looked up, and no object is found by
+//! scanning another collection. The column, index and key rows are grouped by
+//! their table: each statement's runs of rows ([`Tabled`]) are sorted once by
+//! their table's name and a table's are found by binary search; a table's
+//! index runs are sorted by the index's name, which brings an index's members
+//! together; the stored rows of the views are sorted by their name and found
+//! the same way. The covered tables, the views and a table's columns are
+//! looked up by the name `BR-LITE-003` matches, through a map keyed by that
+//! name with the 26 ASCII letters folded ([`Names`]) — a table's columns only
+//! where a key names its parent columns. The fold runs after the last
+//! statement, outside every statement's bound, so a lookup that scanned would
+//! let a file of many objects cost time growing with their square where the
+//! statements' grows with their number (architecture, *The SQLite reader*;
+//! `FR-LITE-009`, *Consequence*; `FR-LITE-020`, *Provenance*). The maps are
+//! only looked up, never iterated, so no order of a document depends on them.
+//!
+//! **Every order is produced here.** No statement orders its rows
+//! (`statements`), and grouping is correct whatever order they come in. The
+//! objects are taken in ascending order of the bytes of their names, so a
+//! position among the covered tables, and the first of two names a map keeps,
+//! do not depend on the order of the rows; a table's columns in ascending
+//! order of `cid` (`FR-LITE-025`); an index's members in ascending order of
+//! `seqno` (`FR-LITE-030`); the primary key's members in ascending order of
+//! `pk` (`FR-LITE-029`); a key's pairs in ascending order of `seq`, its keys
+//! one per `id` in ascending order of `id`, then the keys in both directions by
+//! content (`FR-LITE-031`); and the tables, the indexes, the triggers and the
+//! views by name (`NFR-DET-002`).
+//!
+//! **Names that convert alike keep the order of their bytes.** Two names that
+//! differ only in invalid UTF-8 convert to one text (`FR-OUT-017`), and the
+//! fold groups by that text, so their rows are grouped together. Where such
+//! names tie, every order is the one the statements' `ORDER BY` gave before
+//! it was removed, which SQLite's `BINARY` collation decided over the bytes the
+//! file holds: the objects and the stored rows by their names' bytes; a group's
+//! columns by their table's bytes, then `cid`; its index members by their
+//! table's and their index's bytes, then `seqno`; its key pairs by `id`,
+//! `seq`, then their table's bytes. Each name keeps those bytes only where the
+//! conversion changed them ([`super::Raw`]); elsewhere the text is the bytes,
+//! and the order is the one above.
+//!
+//! PERF: the model borrows every name and text from the rows the read owns,
+//! and copies none of them.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use super::trigger::{self, Event, Timing};
-use super::{Catalogue, ColumnRow, IndexRow, KeyRow, Object, StoredRow};
+use super::{Catalogue, ColumnRow, IndexMember, IndexRun, KeyRow, Object, Run, StoredRow, Tabled};
 use crate::error::Error;
 use crate::model::column::{Column, Generated, GeneratedStorage};
 use crate::model::column_default::ColumnDefault;
@@ -99,125 +132,207 @@ const KEY_COLUMN: &str = "every key a sqlite read folds names columns of its own
 /// The stage a fold failure is reported at.
 const FOLD: Stage = Stage::Catalogue("the fold of the catalogue the statements returned");
 
-/// Names matched as `BR-LITE-003` matches them: equal once the 26 ASCII
+/// A name as `BR-LITE-003` matches it: equal to another once the 26 ASCII
 /// upper-case letters of each are folded to lower case, over the whole name,
 /// and no other character folded.
+///
+/// PERF: it hashes the folded bytes and compares ignoring ASCII case, so a map
+/// keyed by it holds the name itself and never a folded copy of it.
+#[derive(Debug, Clone, Copy)]
+struct Folded<'n>(&'n str);
+
+impl PartialEq for Folded<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.eq_ignore_ascii_case(other.0)
+    }
+}
+
+impl Eq for Folded<'_> {}
+
+impl Hash for Folded<'_> {
+    /// The bytes [`str::to_ascii_lowercase`] gives, in chunks of a fixed
+    /// size, then a terminator, so that two names equal under
+    /// [`PartialEq`] — which have one length — hash alike.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let mut folded = [0_u8; 32];
+        for chunk in self.0.as_bytes().chunks(folded.len()) {
+            let folded = folded.get_mut(..chunk.len()).unwrap_or_default();
+            folded.copy_from_slice(chunk);
+            folded.make_ascii_lowercase();
+            state.write(folded);
+        }
+        state.write_u8(0xff);
+    }
+}
+
+/// Names matched as `BR-LITE-003` matches them, through [`Folded`].
 ///
 /// SQLite refuses two tables or views, and two columns of one table, whose
 /// names differ only in ASCII letter case, so among the names of a file whose
 /// schema loads at most one matches; the first is kept all the same, so that
 /// a lookup is defined whatever it is given.
 #[derive(Debug, Default)]
-struct Names {
-    /// Each name with its ASCII letters lower-cased, and its position.
-    folded: HashMap<String, usize>,
+struct Names<'n> {
+    /// Each name, and its position.
+    folded: HashMap<Folded<'n>, usize>,
 }
 
-impl Names {
+impl<'n> Names<'n> {
     /// The names, each at its position in `names`.
-    fn of<'c>(names: impl Iterator<Item = &'c str>) -> Self {
-        let mut found = Self::default();
+    fn of(names: impl Iterator<Item = &'n str>) -> Self {
+        let mut folded = HashMap::with_capacity(names.size_hint().0);
         for (at, name) in names.enumerate() {
-            found.folded.entry(name.to_ascii_lowercase()).or_insert(at);
+            folded.entry(Folded(name)).or_insert(at);
         }
-        found
+        Self { folded }
     }
 
     /// The position of the name `name` matches.
     fn position(&self, name: &str) -> Option<usize> {
-        self.folded.get(&name.to_ascii_lowercase()).copied()
+        let folded: &HashMap<Folded<'_>, usize> = &self.folded;
+        folded.get(&Folded(name)).copied()
     }
 }
 
-/// Every row the fold reads by a table's or an index's name, grouped once.
-#[derive(Debug, Default)]
+/// The rows of one statement, found by their table's name.
+#[derive(Debug)]
+struct ByTable<'c, T> {
+    /// The rows.
+    tabled: &'c Tabled<T>,
+    /// Their runs in ascending order of their table's name, byte-wise, then
+    /// of the bytes that name was converted from; the sort is stable, so the
+    /// runs of one table keep the order the statement returned them in.
+    runs: Vec<&'c Run>,
+}
+
+impl<'c, T> ByTable<'c, T> {
+    /// Groups the runs of `tabled` by their table's name, once.
+    fn of(tabled: &'c Tabled<T>) -> Self {
+        let mut runs: Vec<&'c Run> = tabled.runs.iter().collect();
+        runs.sort_by(|left, right| {
+            order::compare(&left.table, &right.table).then_with(|| left.key().cmp(right.key()))
+        });
+        Self { tabled, runs }
+    }
+
+    /// The rows of `table`, each with its run, run by run: the runs in the
+    /// order of the bytes their tables' names were converted from, and each
+    /// run's rows in the order the statement returned them.
+    fn rows(&self, table: &str) -> Vec<(&'c Run, &'c T)> {
+        let start = self
+            .runs
+            .partition_point(|run| order::compare(&run.table, table).is_lt());
+        let after = self.runs.get(start..).unwrap_or_default();
+        let runs = after
+            .get(..after.partition_point(|run| run.table == table))
+            .unwrap_or_default();
+
+        let mut rows = Vec::with_capacity(runs.iter().map(|run| run.rows.len()).sum());
+        for run in runs {
+            rows.extend(self.tabled.rows_of(run).iter().map(|row| (*run, row)));
+        }
+        rows
+    }
+}
+
+/// Every row the fold reads by a table's or a view's name, grouped once.
+#[derive(Debug)]
 struct Grouped<'c> {
-    /// The column rows of each table, in the order of `cid`.
-    columns: HashMap<&'c str, Vec<&'c ColumnRow>>,
-    /// The index rows of each table, member by member.
-    indexes: HashMap<&'c str, Vec<&'c IndexRow>>,
-    /// The key rows of each table, pair by pair.
-    keys: HashMap<&'c str, Vec<&'c KeyRow>>,
-    /// The stored row of each view, by its name.
-    views: HashMap<&'c str, &'c StoredRow>,
+    /// The column rows, by their table.
+    columns: ByTable<'c, ColumnRow>,
+    /// The index runs, by their table.
+    indexes: ByTable<'c, IndexRun>,
+    /// The key rows, by their table.
+    keys: ByTable<'c, KeyRow>,
+    /// The stored rows of the views, in ascending order of name, byte-wise,
+    /// then of the bytes the name was converted from.
+    views: Vec<&'c StoredRow>,
 }
 
 impl<'c> Grouped<'c> {
     /// Groups every row of `catalogue` by the name it is read by.
     fn of(catalogue: &'c Catalogue) -> Self {
-        let mut grouped = Self::default();
-        for row in &catalogue.columns {
-            grouped.columns.entry(&row.table).or_default().push(row);
+        let mut views: Vec<&'c StoredRow> = catalogue
+            .stored
+            .iter()
+            .filter(|row| row.kind == VIEW)
+            .collect();
+        views.sort_by(|left, right| {
+            order::compare(&left.name, &right.name).then_with(|| left.key().cmp(right.key()))
+        });
+
+        Self {
+            columns: ByTable::of(&catalogue.columns),
+            indexes: ByTable::of(&catalogue.indexes.indexes),
+            keys: ByTable::of(&catalogue.keys),
+            views,
         }
-        for row in &catalogue.indexes {
-            grouped.indexes.entry(&row.table).or_default().push(row);
-        }
-        for row in &catalogue.keys {
-            grouped.keys.entry(&row.table).or_default().push(row);
-        }
-        for row in catalogue.stored.iter().filter(|row| row.kind == VIEW) {
-            grouped.views.entry(&row.name).or_insert(row);
-        }
-        grouped
     }
 
-    /// The rows of `table` in `map`, or none.
-    fn of_table<'m, T>(map: &'m HashMap<&'c str, Vec<&'c T>>, table: &str) -> &'m [&'c T] {
-        map.get(table).map_or(&[], Vec::as_slice)
+    /// The stored row of the view `name` whose bytes come first.
+    fn view(&self, name: &str) -> Option<&'c StoredRow> {
+        let at = self
+            .views
+            .partition_point(|row| order::compare(&row.name, name).is_lt());
+        self.views.get(at).copied().filter(|row| row.name == name)
     }
 }
 
-/// Folds the catalogue into the model.
+/// Folds the catalogue into the model, which borrows from it.
 ///
 /// # Errors
 ///
 /// Returns the `70` of `FR-LITE-032` and of `FR-CAT-044`.
-pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error> {
+pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'_>, Error> {
     let place = Place {
         entry: &catalogue.entry,
         path: &catalogue.path,
     };
     let grouped = Grouped::of(catalogue);
 
+    // The objects in ascending order of the bytes their names were converted
+    // from, whatever order the statement returned them in.
+    let mut objects: Vec<&Object> = catalogue.objects.iter().collect();
+    objects.sort_by(|left, right| left.key().cmp(right.key()));
+
     // FR-LITE-019 … FR-LITE-021: coverage, before anything is folded.
-    let tables: Vec<&Object> = catalogue
-        .objects
+    let tables: Vec<&Object> = objects
         .iter()
+        .copied()
         .filter(|object| covered_table(object))
         .collect();
     let names = Names::of(tables.iter().map(|table| table.name.as_str()));
-    let columns: Vec<Names> = tables
+
+    let mut parts: Vec<TableParts<'_>> = tables
         .iter()
-        .map(|table| {
-            Names::of(
-                Grouped::of_table(&grouped.columns, &table.name)
-                    .iter()
-                    .map(|row| row.name.as_str()),
-            )
-        })
+        .map(|table| self::table(catalogue, &grouped, table))
         .collect();
 
-    let mut parts: Vec<TableParts<'static>> = Vec::with_capacity(tables.len());
-    for table in &tables {
-        parts.push(self::table(&grouped, table));
-    }
-
-    // FR-LITE-031: the keys, once every table's columns and key are known;
-    // each incoming key is listed under the table its parent matched.
-    let mut incoming: Vec<(usize, IncomingForeignKey<'static>)> = Vec::new();
-    for (at, table) in tables.iter().enumerate() {
-        let rows = Grouped::of_table(&grouped.keys, &table.name);
-        for (parent, key) in keys(rows, &tables, &names, &columns, &parts) {
-            incoming.push((
-                parent,
-                IncomingForeignKey {
-                    table: Cow::Owned(table.name.clone()),
-                    key: key.clone(),
-                },
-            ));
-            if let Some(part) = parts.get_mut(at) {
-                part.foreign_keys.push(key);
+    // FR-LITE-031: the keys, once every table's columns and key are known.
+    // A table's columns are matched by name only for a key that names its
+    // parent columns, so their names are indexed only for such a parent.
+    let mut outgoing = Vec::new();
+    {
+        let mut folded: HashMap<usize, Names<'_>> = HashMap::new();
+        for (at, table) in tables.iter().enumerate() {
+            let rows = grouped.keys.rows(&table.name);
+            for (parent, key) in keys(rows, &tables, &names, &mut folded, &parts) {
+                outgoing.push((at, table.name.as_str(), parent, key));
             }
+        }
+    }
+    // Each incoming key is listed under the table its parent matched.
+    let mut incoming: Vec<(usize, IncomingForeignKey<'_>)> = Vec::with_capacity(outgoing.len());
+    for (at, table, parent, key) in outgoing {
+        incoming.push((
+            parent,
+            IncomingForeignKey {
+                table: Cow::Borrowed(table),
+                key: key.clone(),
+            },
+        ));
+        if let Some(part) = parts.get_mut(at) {
+            part.foreign_keys.push(key);
         }
     }
     for (at, key) in incoming {
@@ -229,13 +344,18 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
     // FR-LITE-032 and FR-LITE-021: the triggers whose `tbl_name` matches a
     // covered table under BR-LITE-003; one that matches a view is excluded.
     let view_names = Names::of(
-        catalogue
-            .objects
+        objects
             .iter()
             .filter(|object| object.kind == VIEW)
             .map(|object| object.name.as_str()),
     );
-    for row in catalogue.stored.iter().filter(|row| row.kind == TRIGGER) {
+    let mut triggers: Vec<&StoredRow> = catalogue
+        .stored
+        .iter()
+        .filter(|row| row.kind == TRIGGER)
+        .collect();
+    triggers.sort_by(|left, right| left.key().cmp(right.key()));
+    for row in triggers {
         if view_names.position(&row.table).is_some() {
             // A trigger on a view: the model carries triggers on tables.
             continue;
@@ -245,12 +365,12 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
             // cover.
             continue;
         };
-        let sql = row.sql.clone().unwrap_or_default();
+        let sql = row.sql.as_deref().unwrap_or_default();
         let header =
-            trigger::header(&sql).ok_or_else(|| fault::defect(place, FOLD, HEADER, None))?;
+            trigger::header(sql).ok_or_else(|| fault::defect(place, FOLD, HEADER, None))?;
         if let Some(part) = parts.get_mut(at) {
             part.triggers.push(Trigger {
-                name: Cow::Owned(row.name.clone()),
+                name: Cow::Borrowed(&row.name),
                 event: match header.event {
                     Event::Delete => TriggerEvent::Delete,
                     Event::Insert => TriggerEvent::Insert,
@@ -261,7 +381,7 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
                     Timing::After => TriggerTiming::After,
                 },
                 action_order: None,
-                statement: Some(Cow::Owned(sql)),
+                statement: Some(Cow::Borrowed(sql)),
                 orientation: Cow::Borrowed("ROW"),
                 old_row_alias: Cow::Borrowed("OLD"),
                 new_row_alias: Cow::Borrowed("NEW"),
@@ -299,12 +419,12 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'static>, Error
     Ok(Database {
         // FR-LITE-019, FR-LITE-023.
         name: Cow::Borrowed("main"),
-        charset: Cow::Owned(catalogue.encoding.clone()),
+        charset: Cow::Borrowed(&catalogue.encoding),
         collation: None,
         provider: Provider::Sqlite,
         server: catalogue.server.clone(),
         tables: assembled,
-        views: views(catalogue, &grouped),
+        views: views(&objects, &grouped),
         // FR-LITE-022: SQLite has no stored routines.
         routines: Vec::new(),
     })
@@ -325,46 +445,74 @@ fn internal(name: &str) -> bool {
 
 /// One table's parts: its columns, its primary key and its indexes
 /// (`FR-LITE-024` … `FR-LITE-030`).
-fn table(grouped: &Grouped<'_>, object: &Object) -> TableParts<'static> {
-    let rows = Grouped::of_table(&grouped.columns, &object.name);
-    let indexes = by_index(Grouped::of_table(&grouped.indexes, &object.name));
+fn table<'c>(
+    catalogue: &'c Catalogue,
+    grouped: &Grouped<'c>,
+    object: &'c Object,
+) -> TableParts<'c> {
+    // FR-LITE-025: the columns in ascending order of `cid`, after the bytes
+    // of their table's name.
+    let mut rows = grouped.columns.rows(&object.name);
+    rows.sort_by(|(left_run, left), (right_run, right)| {
+        left_run
+            .key()
+            .cmp(right_run.key())
+            .then(left.cid.cmp(&right.cid))
+    });
+    // FR-LITE-030: the index runs in ascending order of the index's name,
+    // then of the bytes of their table's name and of the index's name, so
+    // that the runs of one index stand together whatever order its members
+    // came in.
+    let mut entries = grouped.indexes.rows(&object.name);
+    entries.sort_by(|(left_table, left), (right_table, right)| {
+        order::compare(&left.name, &right.name)
+            .then_with(|| left_table.key().cmp(right_table.key()))
+            .then_with(|| left.key().cmp(right.key()))
+    });
+    let members = &catalogue.indexes;
 
     // FR-LITE-029: the primary key's columns, in ascending order of `pk`.
-    let mut key_rows: Vec<&ColumnRow> = rows.iter().copied().filter(|row| row.pk > 0).collect();
-    key_rows.sort_by_key(|row| row.pk);
-    let origin = indexes
+    let mut key_rows: Vec<&ColumnRow> = rows
         .iter()
-        .find(|(_, members)| members.iter().any(|row| row.origin == PRIMARY_ORIGIN))
-        .map(|(name, members)| (*name, members.as_slice()));
+        .map(|(_, row)| *row)
+        .filter(|row| row.pk > 0)
+        .collect();
+    key_rows.sort_by_key(|row| row.pk);
+    // The index of origin `pk`: of several, the one whose bytes come first.
+    let origin = by_index(&entries)
+        .filter(|index| index.iter().any(|(_, run)| run.origin == PRIMARY_ORIGIN))
+        .min_by(|left, right| bytes_of(left).cmp(&bytes_of(right)));
+    // Its members, in the order of their bytes, then of `seqno`.
+    let origin_members = origin
+        .map(|index| ordered_members(members, index))
+        .unwrap_or_default();
 
     // FR-LITE-028: the rowid alias.
     let alias = (!object.without_rowid && key_rows.len() == 1 && origin.is_none())
         .then(|| key_rows.first().map(|row| row.name.as_str()))
         .flatten();
 
-    let columns: Vec<Column<'static>> = rows
+    let columns: Vec<Column<'c>> = rows
         .iter()
-        .map(|row| column(row, &object.name, alias == Some(row.name.as_str())))
+        .map(|(_, row)| column(row, &object.name, alias == Some(row.name.as_str())))
         .collect();
 
     // The direction of each member of the index of origin `pk`, by its name.
-    let descending: HashMap<&str, bool> = origin
-        .map(|(_, members)| {
-            members
-                .iter()
-                .filter(|row| row.key)
-                .filter_map(|row| row.name.as_deref().map(|name| (name, row.descending)))
-                .collect()
-        })
-        .unwrap_or_default();
+    let descending: HashMap<&str, bool> = origin_members
+        .iter()
+        .filter(|(member, _, _)| member.key)
+        .filter_map(|(member, _, _)| member.name.as_deref().map(|name| (name, member.descending)))
+        .collect();
 
     let primary_key = (!key_rows.is_empty()).then(|| PrimaryKey {
-        name: origin.map(|(name, _)| Cow::Owned(name.to_owned())),
-        unique: origin.is_none_or(|(_, members)| members.first().is_none_or(|row| row.unique)),
+        name: origin
+            .and_then(|index| index.first())
+            .map(|(_, run)| Cow::Borrowed(run.name.as_str())),
+        unique: origin_members.first().is_none_or(|(_, _, run)| run.unique),
         columns: key_rows
             .iter()
             .map(|row| IndexColumn {
-                name: Cow::Owned(row.name.clone()),
+                name: Cow::Borrowed(&row.name),
                 direction: Some(match origin {
                     Some(_) if descending.get(row.name.as_str()) == Some(&true) => {
                         SortDirection::Descending
@@ -384,53 +532,92 @@ fn table(grouped: &Grouped<'_>, object: &Object) -> TableParts<'static> {
         engine: None,
         collation: None,
         columns,
-        indexes: self::indexes(&indexes),
+        indexes: self::indexes(members, &entries),
         primary_key,
-        ..TableParts::new(Cow::Owned(object.name.clone()), TableType::Base)
+        ..TableParts::new(Cow::Borrowed(&object.name), TableType::Base)
     }
 }
 
-/// The rows of one table's indexes, grouped by index, each index in the order
-/// it first appears and its rows in theirs.
-fn by_index<'c>(rows: &[&'c IndexRow]) -> Vec<(&'c str, Vec<&'c IndexRow>)> {
-    let mut at: HashMap<&'c str, usize> = HashMap::new();
-    let mut grouped: Vec<(&'c str, Vec<&'c IndexRow>)> = Vec::new();
-    for row in rows {
-        let slot = *at.entry(row.index.as_str()).or_insert_with(|| {
-            grouped.push((row.index.as_str(), Vec::new()));
-            grouped.len() - 1
-        });
-        if let Some((_, members)) = grouped.get_mut(slot) {
-            members.push(row);
-        }
-    }
-    grouped
+/// One index run of a table, with the run of its table.
+type Entry<'c> = (&'c Run, &'c IndexRun);
+
+/// One table's index runs, ordered by the index's name and then by bytes, as
+/// one slice per index name.
+fn by_index<'r, 'c>(entries: &'r [Entry<'c>]) -> impl Iterator<Item = &'r [Entry<'c>]> {
+    entries.chunk_by(|(_, left), (_, right)| left.name == right.name)
 }
 
-/// The indexes of one table, less those with an expression member
-/// (`FR-LITE-030`, `FR-LITE-021`).
-fn indexes(grouped: &[(&str, Vec<&IndexRow>)]) -> Vec<Index<'static>> {
-    grouped
-        .iter()
-        .filter_map(|(name, rows)| {
-            let mut members: Vec<&IndexRow> = rows.iter().copied().filter(|row| row.key).collect();
-            if members
+/// The bytes of the table's name and of the index's name of the first run of
+/// `index`, which order the indexes of one name as the statement's
+/// `ORDER BY` ordered them.
+fn bytes_of<'c>(index: &[Entry<'c>]) -> Option<(&'c [u8], &'c [u8])> {
+    index.first().map(|(table, run)| (table.key(), run.key()))
+}
+
+/// Every member of the index whose runs are `index`, each with the runs that
+/// carry its table and its index's fields, run by run.
+fn index_members<'c>(
+    members: &'c super::Indexes,
+    index: &[Entry<'c>],
+) -> impl Iterator<Item = (&'c IndexMember, &'c Run, &'c IndexRun)> {
+    index.iter().flat_map(move |(table, run)| {
+        members
+            .members_of(run)
+            .iter()
+            .map(move |member| (member, *table, *run))
+    })
+}
+
+/// Every member of the index whose runs are `index`, in ascending order of
+/// the bytes of its table's name and of its index's name, then of `seqno`.
+fn ordered_members<'c>(
+    members: &'c super::Indexes,
+    index: &[Entry<'c>],
+) -> Vec<(&'c IndexMember, &'c Run, &'c IndexRun)> {
+    let mut ordered: Vec<_> = index_members(members, index).collect();
+    ordered.sort_by(
+        |(left, left_table, left_run), (right, right_table, right_run)| {
+            left_table
+                .key()
+                .cmp(right_table.key())
+                .then_with(|| left_run.key().cmp(right_run.key()))
+                .then(left.seqno.cmp(&right.seqno))
+        },
+    );
+    ordered
+}
+
+/// The indexes of one table, from its index runs ordered by the index's name
+/// and then by bytes, less those with an expression member (`FR-LITE-030`,
+/// `FR-LITE-021`).
+fn indexes<'c>(members: &'c super::Indexes, entries: &[Entry<'c>]) -> Vec<Index<'c>> {
+    by_index(entries)
+        .filter_map(|index| {
+            let (_, first) = index.first()?;
+            let mut keyed: Vec<(&IndexMember, &IndexRun)> = index_members(members, index)
+                .filter(|(member, _, _)| member.key)
+                .map(|(member, _, run)| (member, run))
+                .collect();
+            if keyed
                 .iter()
-                .any(|row| row.cid == EXPRESSION || row.name.is_none())
+                .any(|(member, _)| member.cid == EXPRESSION || member.name.is_none())
             {
                 return None;
             }
-            members.sort_by_key(|row| row.seqno);
-            let unique = members.first().is_some_and(|row| row.unique);
+            // FR-LITE-030: the members in ascending order of `seqno`; the
+            // sort is stable, so members of one `seqno` keep the order of
+            // their bytes.
+            keyed.sort_by_key(|(member, _)| member.seqno);
+            let unique = keyed.first().is_some_and(|(_, run)| run.unique);
 
             Some(Index {
-                name: Cow::Owned((*name).to_owned()),
+                name: Cow::Borrowed(&first.name),
                 unique,
-                columns: members
+                columns: keyed
                     .iter()
-                    .map(|row| IndexColumn {
-                        name: Cow::Owned(row.name.clone().unwrap_or_default()),
-                        direction: Some(if row.descending {
+                    .map(|(member, _)| IndexColumn {
+                        name: Cow::Borrowed(member.name.as_deref().unwrap_or_default()),
+                        direction: Some(if member.descending {
                             SortDirection::Descending
                         } else {
                             SortDirection::Ascending
@@ -447,17 +634,14 @@ fn indexes(grouped: &[(&str, Vec<&IndexRow>)]) -> Vec<Index<'static>> {
 }
 
 /// One column of a table (`FR-LITE-025` … `FR-LITE-028`).
-fn column(row: &ColumnRow, table: &str, alias: bool) -> Column<'static> {
+fn column<'c>(row: &'c ColumnRow, table: &'c str, alias: bool) -> Column<'c> {
     let nullable = !row.not_null;
 
     Column {
-        name: Cow::Owned(row.name.clone()),
-        table_name: Cow::Owned(table.to_owned()),
+        name: Cow::Borrowed(&row.name),
+        table_name: Cow::Borrowed(table),
         position: u64::try_from(row.cid).unwrap_or_default() + 1,
-        column_type: ColumnType::affinity(
-            Cow::Owned(row.declared.clone()),
-            affinity(&row.declared),
-        ),
+        column_type: ColumnType::affinity(Cow::Borrowed(&row.declared), affinity(&row.declared)),
         nullable,
         default: default(row.default.as_deref(), nullable),
         comment: Cow::Borrowed(""),
@@ -483,25 +667,43 @@ fn column(row: &ColumnRow, table: &str, alias: bool) -> Column<'static> {
 /// column of a `STRICT` table included (`FR-LITE-026`, as amended in the
 /// sixty-ninth edition): no statement reports that a table is `STRICT`, so a
 /// column declared `ANY` takes `numeric`, the fifth rule's.
+///
+/// Each rule asks whether the declared type holds a word in any ASCII letter
+/// case, which is what upper-casing the type and searching it for the word
+/// in upper case answers. PERF: it is asked of the type as declared, so no
+/// upper-cased copy is made.
 pub(super) fn affinity(declared: &str) -> &'static str {
-    let upper = declared.to_ascii_uppercase();
+    let holds = |word: &str| holds_ignoring_ascii_case(declared, word);
 
-    if upper.contains("INT") {
+    if holds("INT") {
         "integer"
-    } else if upper.contains("CHAR") || upper.contains("CLOB") || upper.contains("TEXT") {
+    } else if holds("CHAR") || holds("CLOB") || holds("TEXT") {
         "text"
-    } else if upper.contains("BLOB") || upper.is_empty() {
+    } else if holds("BLOB") || declared.is_empty() {
         "blob"
-    } else if upper.contains("REAL") || upper.contains("FLOA") || upper.contains("DOUB") {
+    } else if holds("REAL") || holds("FLOA") || holds("DOUB") {
         "real"
     } else {
         "numeric"
     }
 }
 
+/// Whether `text` holds `word`, its ASCII letters compared ignoring case and
+/// every other byte compared exactly.
+///
+/// A match found among the bytes of `text` begins on a character, because
+/// `word` is ASCII and no byte of a multi-byte character is.
+fn holds_ignoring_ascii_case(text: &str, word: &str) -> bool {
+    word.is_empty()
+        || text
+            .as_bytes()
+            .windows(word.len())
+            .any(|window| window.eq_ignore_ascii_case(word.as_bytes()))
+}
+
 /// The default of a column, classified by the first row of `FR-LITE-027`
 /// that matches.
-pub(super) fn default(written: Option<&str>, nullable: bool) -> Option<ColumnDefault<'static>> {
+pub(super) fn default(written: Option<&str>, nullable: bool) -> Option<ColumnDefault<'_>> {
     let Some(written) = written else {
         // The first two rows: SQL NULL is no default for a column that is not
         // nullable, and the default NULL for one that is.
@@ -512,19 +714,19 @@ pub(super) fn default(written: Option<&str>, nullable: bool) -> Option<ColumnDef
         return Some(ColumnDefault::Null);
     }
     if let Some(inner) = quoted(written) {
-        return Some(ColumnDefault::Literal(Cow::Owned(
-            crate::model::collapse_doubled_apostrophes(inner).into_owned(),
-        )));
+        return Some(ColumnDefault::Literal(
+            crate::model::collapse_doubled_apostrophes(inner),
+        ));
     }
     if number(written)
         || blob(written)
         || written.eq_ignore_ascii_case("TRUE")
         || written.eq_ignore_ascii_case("FALSE")
     {
-        return Some(ColumnDefault::Literal(Cow::Owned(written.to_owned())));
+        return Some(ColumnDefault::Literal(Cow::Borrowed(written)));
     }
 
-    Some(ColumnDefault::Expression(Cow::Owned(written.to_owned())))
+    Some(ColumnDefault::Expression(Cow::Borrowed(written)))
 }
 
 /// The text between the quotes of a single quoted string, `'([^']|'')*'`.
@@ -585,52 +787,57 @@ fn blob(written: &str) -> bool {
 /// The outgoing keys of one covered table, from its key rows, less those
 /// `FR-LITE-021` excludes, each with the position of the covered table its
 /// parent matched (`FR-LITE-031`).
-fn keys(
-    rows: &[&KeyRow],
-    tables: &[&Object],
-    names: &Names,
-    columns: &[Names],
-    parts: &[TableParts<'static>],
-) -> Vec<(usize, ForeignKey<'static>)> {
-    // One key per `id`, in ascending order of `id`, its pairs in order of
-    // `seq`.
-    let mut by_id: BTreeMap<i64, Vec<&KeyRow>> = BTreeMap::new();
-    for row in rows {
-        by_id.entry(row.id).or_default().push(row);
-    }
+///
+/// `folded` holds the column names of every parent already matched by name,
+/// indexed on first need.
+fn keys<'c, 'p>(
+    mut rows: Vec<(&'c Run, &'c KeyRow)>,
+    tables: &[&'c Object],
+    names: &Names<'_>,
+    folded: &mut HashMap<usize, Names<'p>>,
+    parts: &'p [TableParts<'c>],
+) -> Vec<(usize, ForeignKey<'c>)> {
+    // One key per `id`, in ascending order of `id`, its pairs in ascending
+    // order of `seq` and then of the bytes of their table's name, whatever
+    // order the rows came in.
+    rows.sort_by(|(left_table, left), (right_table, right)| {
+        (left.id, left.seq)
+            .cmp(&(right.id, right.seq))
+            .then_with(|| left_table.key().cmp(right_table.key()))
+    });
 
-    by_id
-        .into_values()
-        .filter_map(|mut pairs| {
-            pairs.sort_by_key(|row| row.seq);
-            let first = pairs.first()?;
+    rows.chunk_by(|(_, left), (_, right)| left.id == right.id)
+        .filter_map(|pairs| {
+            let (_, first) = pairs.first()?;
 
             // FR-LITE-021: the parent table must match a covered table under
             // BR-LITE-003, and the key carries that table's own name.
             let parent_at = names.position(&first.referenced)?;
             let parent = parts.get(parent_at)?;
             let parent_name = &tables.get(parent_at)?.name;
-            let parent_columns = columns.get(parent_at)?;
 
             // `to` NULL on every pair: the parent's primary key, in its order;
             // a parent with none is excluded. Otherwise each `to` must match a
             // column of the parent under BR-LITE-003, carried under the
             // column's own name.
-            let referenced: Vec<String> = if pairs.iter().all(|row| row.to.is_none()) {
+            let referenced: Vec<Cow<'c, str>> = if pairs.iter().all(|(_, row)| row.to.is_none()) {
                 let key = parent.primary_key.as_ref()?;
                 key.columns
                     .iter()
-                    .map(|member| member.name.to_string())
+                    .map(|member| member.name.clone())
                     .collect()
             } else {
+                let columns = folded.entry(parent_at).or_insert_with(|| {
+                    Names::of(parent.columns.iter().map(|column| column.name.as_ref()))
+                });
                 pairs
                     .iter()
-                    .map(|row| {
+                    .map(|(_, row)| {
                         row.to
                             .as_deref()
-                            .and_then(|to| carried(parent, parent_columns, to))
+                            .and_then(|to| carried(parent, columns, to))
                     })
-                    .collect::<Option<Vec<String>>>()?
+                    .collect::<Option<Vec<Cow<'c, str>>>>()?
             };
             // FR-LITE-021: a key naming no parent column of a parent whose
             // primary key has another number of columns than the key pairs
@@ -646,9 +853,9 @@ fn keys(
             let columns = pairs
                 .iter()
                 .zip(referenced)
-                .map(|(row, referenced)| ForeignKeyColumn {
-                    column: Cow::Owned(row.from.clone()),
-                    referenced_column: Cow::Owned(referenced),
+                .map(|((_, row), referenced)| ForeignKeyColumn {
+                    column: Cow::Borrowed(&row.from),
+                    referenced_column: referenced,
                 })
                 .collect();
 
@@ -657,11 +864,11 @@ fn keys(
                 ForeignKey {
                     name: None,
                     columns,
-                    referenced_table: Some(Cow::Owned(parent_name.clone())),
+                    referenced_table: Some(Cow::Borrowed(parent_name)),
                     referenced_key: None,
-                    match_option: Cow::Owned(first.matched.clone()),
-                    on_update: ReferentialAction::from_catalogue_owned(first.on_update.clone()),
-                    on_delete: ReferentialAction::from_catalogue_owned(first.on_delete.clone()),
+                    match_option: Cow::Borrowed(&first.matched),
+                    on_update: ReferentialAction::from_catalogue(&first.on_update),
+                    on_delete: ReferentialAction::from_catalogue(&first.on_delete),
                 },
             ))
         })
@@ -670,31 +877,29 @@ fn keys(
 
 /// The name a column of `table` carries, matched under `BR-LITE-003` through
 /// the table's column names grouped once.
-fn carried(table: &TableParts<'_>, names: &Names, column: &str) -> Option<String> {
+fn carried<'c>(table: &TableParts<'c>, names: &Names<'_>, column: &str) -> Option<Cow<'c, str>> {
     names
         .position(column)
         .and_then(|at| table.columns.get(at))
-        .map(|carried| carried.name.to_string())
+        .map(|carried| carried.name.clone())
 }
 
 /// The views: each one's name and whole stored statement, and nothing a view
 /// whose definition does not compile could lack (`FR-LITE-033`,
-/// `FR-LITE-036`).
-fn views(catalogue: &Catalogue, grouped: &Grouped<'_>) -> Vec<View<'static>> {
-    let mut views: Vec<View<'static>> = catalogue
-        .objects
+/// `FR-LITE-036`), from the objects in ascending order of name.
+fn views<'c>(objects: &[&'c Object], grouped: &Grouped<'c>) -> Vec<View<'c>> {
+    let mut views: Vec<View<'c>> = objects
         .iter()
         .filter(|object| object.kind == VIEW)
         .map(|object| {
             let definition = grouped
-                .views
-                .get(object.name.as_str())
-                .and_then(|row| row.sql.clone())
+                .view(&object.name)
+                .and_then(|row| row.sql.as_deref())
                 .unwrap_or_default();
 
             View {
-                name: Cow::Owned(object.name.clone()),
-                definition: Cow::Owned(definition),
+                name: Cow::Borrowed(&object.name),
+                definition: Cow::Borrowed(definition),
                 check_option: None,
                 is_updatable: None,
                 definer: None,
@@ -713,9 +918,258 @@ fn views(catalogue: &Catalogue, grouped: &Grouped<'_>) -> Vec<View<'static>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Names, affinity, default, internal, number};
+    use super::{ByTable, Names, affinity, default, indexes, internal, number};
     use crate::model::column_default::ColumnDefault;
+    use crate::model::index::SortDirection;
+    use crate::sqlite::catalogue::{IndexMember, Indexes, Tabled};
     use std::borrow::Cow;
+
+    /// The type affinity as it was decided before the declared type was
+    /// searched in place: over an upper-cased copy of it.
+    fn affinity_of_an_upper_cased_copy(declared: &str) -> &'static str {
+        let upper = declared.to_ascii_uppercase();
+
+        if upper.contains("INT") {
+            "integer"
+        } else if upper.contains("CHAR") || upper.contains("CLOB") || upper.contains("TEXT") {
+            "text"
+        } else if upper.contains("BLOB") || upper.is_empty() {
+            "blob"
+        } else if upper.contains("REAL") || upper.contains("FLOA") || upper.contains("DOUB") {
+            "real"
+        } else {
+            "numeric"
+        }
+    }
+
+    /// Every spelling of `word` in which each ASCII letter is upper or lower
+    /// case.
+    fn every_case(word: &str) -> Vec<String> {
+        let letters = word.bytes().filter(u8::is_ascii_alphabetic).count();
+        (0_u32..1 << letters)
+            .map(|mask| {
+                let mut at = 0;
+                word.chars()
+                    .map(|character| {
+                        if !character.is_ascii_alphabetic() {
+                            return character;
+                        }
+                        let upper = mask & (1 << at) != 0;
+                        at += 1;
+                        if upper {
+                            character.to_ascii_uppercase()
+                        } else {
+                            character.to_ascii_lowercase()
+                        }
+                    })
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn fr_lite_026_the_type_searched_in_place_decides_as_its_upper_cased_copy_did() {
+        // FR-LITE-026: the affinity of every declared type is unchanged by
+        // searching the type ignoring ASCII case rather than an upper-cased
+        // copy of it: every letter case of every word the five rules search
+        // for, alone and inside other text, and texts whose letters outside
+        // ASCII look like those words or sit beside them.
+        let mut declared: Vec<String> = Vec::new();
+        for word in [
+            "INT", "CHAR", "CLOB", "TEXT", "BLOB", "REAL", "FLOA", "DOUB",
+        ] {
+            for spelling in every_case(word) {
+                for (before, after) in [
+                    ("", ""),
+                    ("x", ""),
+                    ("", "y"),
+                    ("var", "(80)"),
+                    ("\u{e9}", "\u{e9}"),
+                    ("big ", " unsigned"),
+                    ("\u{0}", "\u{0}"),
+                ] {
+                    declared.push(format!("{before}{spelling}{after}"));
+                }
+            }
+        }
+        declared.extend(
+            [
+                "",
+                " ",
+                "ANY",
+                "any",
+                "NUMERIC(5,2)",
+                "DECIMAL(12,3)",
+                "BOOLEAN",
+                "DateTime",
+                "STRING",
+                "FLOATING POINT",
+                "CharInt",
+                "\u{131}nt",
+                "\u{130}NT",
+                "\u{ff49}\u{ff4e}\u{ff54}",
+                "ch\u{e4}r",
+                "TEXT\u{e9}",
+                "\u{c9}TEXT",
+                "flo\u{301}at",
+                "D\u{d6}UB",
+                "IN T",
+                "I\u{0}NT",
+                "REA",
+                "FLO",
+                "DOU",
+                "BLO",
+                "CLO",
+                "TEX",
+                "CHA",
+            ]
+            .map(str::to_owned),
+        );
+
+        for declared in &declared {
+            assert_eq!(
+                affinity(declared),
+                affinity_of_an_upper_cased_copy(declared),
+                "{declared:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn br_lite_003_a_name_longer_than_a_hash_chunk_matches_in_any_letter_case() {
+        // The folded key hashes a name in chunks of 32 bytes: a name across
+        // several chunks still matches in every letter case, and a name that
+        // differs from it in one letter outside ASCII, or in its length,
+        // does not.
+        let long = "Consignment_Customs_Declaration_Line_Item_Archive_2026";
+        let names = Names::of([long, "other"].into_iter());
+
+        assert_eq!(names.position(long), Some(0));
+        assert_eq!(names.position(&long.to_ascii_uppercase()), Some(0));
+        assert_eq!(names.position(&long.to_ascii_lowercase()), Some(0));
+        assert_eq!(names.position(&long.replace('A', "\u{c0}")), None);
+        assert_eq!(names.position(&long[..long.len() - 1]), None);
+        assert_eq!(names.position(&format!("{long}x")), None);
+    }
+
+    #[test]
+    fn a_table_s_rows_are_grouped_whatever_runs_they_came_in() {
+        // Rows of three tables interleaved: each table's rows are found, run
+        // by run, in the order they were pushed; a name no row carries finds
+        // none, and a name is matched whole and byte for byte.
+        let mut tabled = Tabled::default();
+        for (table, row) in [
+            ("b", 1),
+            ("b", 2),
+            ("a", 3),
+            ("c", 4),
+            ("b", 5),
+            ("a", 6),
+            ("a", 7),
+            ("B", 8),
+        ] {
+            tabled.push(table, table.as_bytes(), row);
+        }
+        assert_eq!(tabled.runs.len(), 6);
+
+        let grouped = ByTable::of(&tabled);
+        let rows = |table: &str| -> Vec<i32> {
+            grouped
+                .rows(table)
+                .into_iter()
+                .map(|(_, row)| *row)
+                .collect()
+        };
+        assert_eq!(rows("a"), [3, 6, 7]);
+        assert_eq!(rows("b"), [1, 2, 5]);
+        assert_eq!(rows("B"), [8]);
+        assert_eq!(rows("c"), [4]);
+        for none in ["", "d", "aa", " a"] {
+            assert!(rows(none).is_empty(), "{none:?}");
+        }
+    }
+
+    #[test]
+    fn fr_lite_030_an_index_whose_members_came_apart_is_one_index_in_seqno_order() {
+        // FR-LITE-030 over member rows in no order: the members of `ix_b`
+        // come in three runs, interleaved with `ix_a`'s and in descending
+        // `seqno`; each index is one index, its key members in ascending
+        // `seqno`, a member that is not of the key left out, and the indexes
+        // in order of name.
+        let member = |seqno: i64, name: Option<&str>, descending: bool, key: bool| IndexMember {
+            seqno,
+            cid: seqno,
+            name: name.map(str::to_owned),
+            descending,
+            key,
+        };
+        let mut read = Indexes::default();
+        for (index, member) in [
+            ("ix_b", member(2, Some("third"), false, true)),
+            ("ix_a", member(1, Some("y"), true, true)),
+            ("ix_b", member(1, Some("second"), true, true)),
+            ("ix_a", member(0, Some("x"), false, true)),
+            ("ix_b", member(3, None, false, false)),
+            ("ix_b", member(0, Some("first"), false, true)),
+        ] {
+            read.push(
+                ("t", b"t"),
+                (index, index.as_bytes()),
+                true,
+                Cow::Borrowed("c"),
+                member,
+            );
+        }
+        // One table's run; five runs of an index, the last two members of
+        // `ix_b` consecutive and so one run.
+        assert_eq!(read.indexes.runs.len(), 1);
+        assert_eq!(read.indexes.rows.len(), 5);
+
+        let grouped = ByTable::of(&read.indexes);
+        let mut entries = grouped.rows("t");
+        entries.sort_by(|(_, left), (_, right)| left.name.cmp(&right.name));
+        let built = indexes(&read, &entries);
+
+        /// An index as the test reads it: its name, whether it is unique, and
+        /// each member's name and direction.
+        type Shown<'i> = (&'i str, bool, Vec<(&'i str, Option<SortDirection>)>);
+        let shown: Vec<Shown<'_>> = built
+            .iter()
+            .map(|index| {
+                (
+                    &*index.name,
+                    index.unique,
+                    index
+                        .columns
+                        .iter()
+                        .map(|column| (&*column.name, column.direction))
+                        .collect(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                (
+                    "ix_a",
+                    true,
+                    vec![
+                        ("x", Some(SortDirection::Ascending)),
+                        ("y", Some(SortDirection::Descending))
+                    ]
+                ),
+                (
+                    "ix_b",
+                    true,
+                    vec![
+                        ("first", Some(SortDirection::Ascending)),
+                        ("second", Some(SortDirection::Descending)),
+                        ("third", Some(SortDirection::Ascending))
+                    ]
+                ),
+            ]
+        );
+    }
 
     #[test]
     fn fr_lite_026_the_five_rules_apply_in_their_order() {
