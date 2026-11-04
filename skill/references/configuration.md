@@ -5,8 +5,8 @@ All configuration lives in `.tpl/.cfg` (TOML) of the project. There is no global
 ## The key space (closed; an unknown key is refused)
 
 - `[core]`: `database` (the default entry), `connect_timeout` (10), `query_timeout` (30), `password_timeout` (5), `render_timeout` (30), `render_fuel` (100000000), `render_output_limit` (67108864), `render_memory_limit` (134217728). Times are whole seconds, 1 or more. No key admits 0.
-- `[database.NAME]`: `provider`, `mariadb` (the default, also when the key is absent) or `sqlite`. Each provider takes only its own keys:
-  - `mariadb`: `dsn`, **or** the discrete fields `host`, `port` (3306), `user`, `password`, `database`. Either shape may add `password_command`, `tls` (default `verify-identity`), `ca_file` and `ca_path`. `password` and `password_command` exclude each other.
+- `[database.NAME]`: `provider`, `mariadb` (the default, also when the key is absent), `mysql` or `sqlite`. Each provider takes only its own keys:
+  - `mariadb` and `mysql` alike: `dsn`, **or** the discrete fields `host`, `port` (3306), `user`, `password`, `database`. Either shape may add `password_command`, `tls` (default `verify-identity`), `ca_file` and `ca_path`. `password` and `password_command` exclude each other.
   - `sqlite`: `path`, the database file, and nothing else.
 - Entry names are 1 to 64 letters, digits or underscores.
 
@@ -17,6 +17,7 @@ A key outside the space, or a value of the wrong type, anywhere in the file, mak
 | Goal | Command |
 |---|---|
 | Create an entry | `tpl cfg database add NAME --host … --user … --schema …` or `--dsn URL` |
+| Register a MySQL server | The same, with `--provider mysql` |
 | Register a SQLite file | `tpl cfg database add NAME --provider sqlite --path FILE` |
 | Change some fields | `tpl cfg database update NAME --host …` (other fields keep their values) |
 | Set one key | `tpl cfg set database.NAME.tls verify-ca`, `tpl cfg set core.query_timeout 60` |
@@ -25,9 +26,23 @@ A key outside the space, or a value of the wrong type, anywhere in the file, mak
 | Inspect safely | `tpl cfg list --format json`, `tpl cfg database show NAME --format json` (redacted) |
 | Read one raw value | `tpl cfg get KEY` (**not redacted**: never use it on a password key in a transcript) |
 
-`cfg get` on a key the file does not set exits 66, and its message states the default. `add` never overwrites an existing entry (64), and `update` never creates one (66). A write that would leave an entry carrying a key its provider does not take is refused (64): to move to the other provider, add a new entry. The `cfg` commands write atomically, keep comments and key order, and never touch the cache.
+`cfg get` on a key the file does not set exits 66, and its message states the default. `add` never overwrites an existing entry (64), and `update` never creates one (66). A write that would leave an entry carrying a key its provider does not take is refused (64): to move between a server provider and `sqlite`, add a new entry. `mariadb` and `mysql` take the same keys, so `tpl cfg set database.NAME.provider mysql` switches a server entry, and the cache warning that follows applies. The `cfg` commands write atomically, keep comments and key order, and never touch the cache.
 
 Edit the file by hand only for what no command can write: a `${VAR}` for `port` (`port = "${SHOP_PORT}"`). Afterwards, keep the mode at 0600 and run `tpl cfg list` to confirm the file still parses.
+
+## MySQL entries
+
+```sh
+tpl cfg database add orders --provider mysql --host mysql.example.com --user reader --schema orders
+tpl cfg database test orders --format json
+tpl -d orders schema tables --format json
+```
+
+- A `mysql` entry is described, resolved and connected exactly as a `mariadb` entry: the same keys, `${VAR}` rules, password sources, TLS modes and deadlines. Only `provider` tells them apart; `mysql://` or `mariadb://` in a DSN selects nothing.
+- Supported: MySQL's LTS series under Oracle Premier or Extended Support, `8.4` and `9.7` in this build. A server that is not MySQL, MariaDB included, and an older series outside that set, such as `8.0`, exit 78. A newer series is read, with `standing: newer_than_supported`.
+- **Keep TLS on.** Over an unencrypted session — `tls = "disabled"`, or `preferred` against a server that offers no TLS — `tpl` never requests the server's RSA public key. MySQL's default authentication method needs that key when the server holds no cached login for the account, and then the login exits 78 with `encrypt the session: tpl cfg database update NAME --tls verify-identity` in the hint. A server that offers no TLS must be given TLS first; don't lower the mode to get around it.
+- The catalogue is read from twelve `INFORMATION_SCHEMA` tables, in a session made read-only and confirmed by reading `@@session.transaction_read_only` back. A reader without the privileges to see view definitions, routine bodies or triggers gets marked views and routines and no triggers, as on MariaDB.
+- `cfg database test` reports the same four answers as for a `mariadb` entry.
 
 ## SQLite entries
 
@@ -47,7 +62,7 @@ tpl -d ledger schema tables --format json
 
 ## Credentials
 
-These apply to a `mariadb` entry. Order of preference:
+These apply to a `mariadb` and a `mysql` entry alike. Order of preference:
 
 1. **`password_command`**: `--password-command "security find-generic-password -s tpl-shop -w"`. It is given as one string, split like a shell would split it, stored as an array, and run **without** a shell. Its trimmed stdout is the password (at most 4096 bytes). A non-zero exit, a timeout (`core.password_timeout`) or too much output is exit 78. `${VAR}` is not expanded inside it.
 2. **`${VAR}` reference**: `tpl cfg set database.NAME.password '${SHOP_PASSWORD}'`, or inside a DSN: `'mysql://user:${SHOP_PASSWORD}@host:3306/db'`. Use single quotes so your shell passes it literally. It is expanded only in `dsn`, `host`, `port`, `user`, `password` and `database`. `$$` is a literal `$`. Never expanded: `tls`, `ca_file`, `ca_path` (a `${` there is refused), `password_command`, and every `[core]` key.
@@ -59,7 +74,8 @@ Rules for the operator:
 - When running a command that needs the variable, supply it in the environment (`SHOP_PASSWORD=… tpl …`, or `export` it once). Never print it. If you don't have the secret, ask the user to export it. Don't ask them to paste it into the chat.
 - The variable must be defined for **every** command that uses the entry, cache hits included. An undefined variable exits 78, and the hint names the variable.
 - `tpl` never prints a credential in an error, at any verbosity. `cfg list` and `cfg database show` print a literal password as `***` and a `${VAR}` as written.
-- A DSN takes no query parameters: a `?` is refused. Strip parameters from strings copied from other tools. `mysql://` and `mariadb://` are equivalent.
+- A DSN takes no query parameters: a `?` is refused. Strip parameters from strings copied from other tools. `mysql://` and `mariadb://` are equivalent, and neither selects the provider.
+- An account with no password: `password = ""`, a DSN with an empty password part, a `password_command` that prints nothing, or no password source at all. Each is sent as the server's own clients send an empty password.
 
 ## TLS
 
@@ -71,7 +87,7 @@ Rules for the operator:
 | `verify-ca` | Certificate chain checked |
 | `verify-identity` | Chain and host name checked (the default) |
 
-`ca_file` and `ca_path` add trusted CAs for the two verifying modes. Their paths are read literally. An unreadable CA file is exit 74, and a `ca_path` holding no certificate is exit 78. For a local server with a self-signed certificate, prefer `--ca-file` with `verify-identity` over lowering the mode. Lowering TLS on a remote server is the user's decision, not yours.
+`ca_file` and `ca_path` add trusted CAs for the two verifying modes. Their paths are read literally. An unreadable CA file is exit 74, and a `ca_path` holding no certificate is exit 78. For a local server with a self-signed certificate, prefer `--ca-file` with `verify-identity` over lowering the mode. Lowering TLS on a remote server is the user's decision, not yours. For a MySQL server, lowering it can end the login with 78 (see *MySQL entries*). A server that accepts only encrypted sessions refuses a login under a mode that does not encrypt, and `tpl` exits 78 with a `--tls verify-identity` hint.
 
 ## Project safety
 
@@ -81,9 +97,9 @@ Rules for the operator:
 
 ## Read-only guarantee
 
-For a `mariadb` entry, `tpl` runs only `SELECT` statements, most of them against `INFORMATION_SCHEMA`. It makes each session read-only first, and exits 78 if that cannot be done. For a `sqlite` entry, it opens the file read-only and reads the catalogue only through the schema table `sqlite_schema` and SQLite's pragma functions. No flag or key disables this. The database user needs only read access to the catalogue of the target schema; a SQLite file needs only read access to the file. `tpl cfg database test` reports `read_only_session` and `can_read_catalogue`. A user who can log in but can't read the catalogue gets 77 on schema reads, or objects marked `restricted` in listings.
+For a `mariadb` or a `mysql` entry, `tpl` runs only `SELECT` statements, most of them against `INFORMATION_SCHEMA`. It makes each session read-only first, and exits 78 if that cannot be done. For a `sqlite` entry, it opens the file read-only and reads the catalogue only through the schema table `sqlite_schema` and SQLite's pragma functions. No flag or key disables this. The database user needs only read access to the catalogue of the target schema; a SQLite file needs only read access to the file. `tpl cfg database test` reports `read_only_session` and `can_read_catalogue`. A user who can log in but can't read the catalogue gets 77 on schema reads, or objects marked `restricted` in listings.
 
-Supported servers are MariaDB only, in a window of series listed in `specification/server-contract.md` (for v0.0.1: 10.11, 11.4, 11.8 and 12.3). MySQL and servers below the window exit 78. A series newer than the window is read, and reported with `standing: newer_than_supported`. No window applies to SQLite: the library is the one built into `tpl`, and `standing` is always `supported`.
+A `mariadb` entry supports MariaDB only, in a window of series listed in `specification/server-contract.md` (for v0.0.1: 10.11, 11.4, 11.8 and 12.3); a MySQL server and a series below the window exit 78. A `mysql` entry supports MySQL only, in the series listed in `specification/mysql-contract.md` (in this build: 8.4 and 9.7); a MariaDB server and an older series outside the set exit 78. For either, a series newer than every supported one is read, and reported with `standing: newer_than_supported`. No window applies to SQLite: the library is the one built into `tpl`, and `standing` is always `supported`.
 
 ## Cache interplay
 

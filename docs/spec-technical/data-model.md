@@ -162,16 +162,17 @@ totality:
 
 `FR-CTX-036` fixes four metadata fields, `FR-CTX-031` a `server` object of
 exactly three keys, and `FR-CTX-035` three collections. One property of the
-built system is decided by where each comes from; for a `sqlite` read the
-sources are [A SQLite read](#a-sqlite-read)'s.
+built system is decided by where each comes from; for a `mysql` read the
+sources are [A MySQL read](#a-mysql-read)'s, and for a `sqlite` read
+[A SQLite read](#a-sqlite-read)'s.
 
 | Part | Source | Consequence |
 |---|---|---|
 | `name`, `charset`, `collation` | The schema catalogue row | Read with the rest of the catalogue |
 | `provider` | The entry the read was made through; on a cache hit, the record that wrote the cache | Present in every document, never `null`; the only key a MariaDB document gains (`FR-CTX-043`, `FR-CDOC-018`) |
-| `server` | The version probe of `FR-SRV-002`, **not** the catalogue | Available before any catalogue read, and derived from a statement of the closed list of `FR-SRV-006` (`BR-CTX-006`) |
+| `server` | The version probe of `FR-SRV-002`, or of `FR-MYSQL-006` for a `mysql` read, **not** the catalogue | Available before any catalogue read, and derived from a statement of the closed list of `FR-SRV-006` or `FR-MYSQL-015` (`BR-CTX-006`) |
 | `series` | Derived from `version` as `FR-SRV-040` requires, by `<major>.<minor>` alone | A field of its own; a template cannot derive it, per `FR-CTX-032` |
-| `standing` | The resolved series against the window of `FR-SRV-015` | Unconditionally present, because `FR-SEM-012` fails a render that reads an absent field, so a conditional marker would fail the guard that looks for it (`FR-CTX-034`, `BR-SRV-008`) |
+| `standing` | The resolved series against the window of `FR-SRV-015`, or the set of `FR-MYSQL-003` for a `mysql` read | Unconditionally present, because `FR-SEM-012` fails a render that reads an absent field, so a conditional marker would fail the guard that looks for it (`FR-CTX-034`, `BR-SRV-008`) |
 
 A cached `server` object describes the read that produced it and not any server
 reachable now (`BR-CTX-006`), which is the same statement `FR-CDOC-015` makes
@@ -205,6 +206,49 @@ the difference does bind is the statement the reader sends: `FR-SRV-037`
 requires a fixed column list to be common to all four series or selected per
 series, because naming an absent column fails hard at the server. That is
 `interfaces.md`.
+
+## A MySQL read
+
+A `mysql` read fills the same model, and `specification/mysql-contract.md`
+states the source or the absence of every property (`BR-MYSQL-003`,
+`FR-MYSQL-025` … `FR-MYSQL-039`); this section states what that obliges of the
+model's types and of the document, and cites the rest. The four treatments
+above reach it across the series of `FR-MYSQL-003`, which `FR-MYSQL-013`
+applies as `FR-SRV-026` does; the differences between those series are
+recorded in `FR-MYSQL-014`, and none is registered.
+
+**What the model's types gained for it.**
+
+| Fact | What the build does | Forced by |
+|---|---|---|
+| A `CHECK` constraint's `level` is `null` | The field is optional in the model; reading a document back, the key is still required, so a document that omits it is refused while one carrying `null` is read as no level | `FR-MYSQL-034`, `FR-MYSQL-039`; `FR-CTX-033` |
+| A view's `algorithm` is `null` | Already optional, for a `sqlite` read | `FR-MYSQL-035` |
+| Three `data_type` values no supported MariaDB series was observed to report — `geomcollection`, `json`, `vector` | Recognised by the type decomposition for a `mysql` read alone, so their parts are read from the fields `FR-CTX-040` names rather than nulled as an unrecognised type's; the decomposition of a `mariadb` read is unchanged | `FR-MYSQL-028`, `FR-CTX-018` |
+| Which family each of the three belongs to | `json` is added to `textual` as a row of its own; the other two belong to no family, which the fall-through of `FR-ENV-046` already gives them | `FR-ENV-049`, `FR-ENV-046` |
+
+**What the document does with it.** The primary key of a `mysql` table is its
+index named `PRIMARY`, as a MariaDB table's is, so reading a `mysql` document
+back takes the key from the indexes; and a `mysql` foreign key carries its
+name, so both directions are ordered by name, as a `mariadb` read's are
+(`FR-MYSQL-032`, `FR-MYSQL-033`, `NFR-DET-002`). A cached read records the
+provider `mysql`, and is served under it whatever the entry says now
+(`FR-CDOC-018`).
+
+**What the reader rewrites, and what it carries as reported.** One layer of
+backslash escaping is removed from an expression default, a generated column's
+expression and a check clause, the introducers kept (`FR-MYSQL-046`); the outer
+parentheses of an expression default are removed once, unmatched pairs
+included (`FR-MYSQL-029`); the `ON UPDATE` default is the phrase as the
+attribute field writes it (`FR-MYSQL-030`); and a `SET DEFAULT` rule is
+carried as reported, which the model already admits for a `sqlite` read
+(`FR-MYSQL-033`). The divergences from MariaDB that reach a read are
+`FR-MYSQL-040`'s and are not restated.
+
+**What a `mysql` read never produces.** A system-versioned table, a sequence,
+an application-time period, the implicit `json_valid` constraint of
+`FR-CAT-038`, and the `inet4`, `inet6` and `uuid` types (`FR-MYSQL-039`); an
+index holding a functional key part (`FR-MYSQL-024`); and a routine of type
+`LIBRARY` (`FR-MYSQL-023`).
 
 ## A SQLite read
 
@@ -358,8 +402,8 @@ removes it. The wording is the functional owner's to settle.
 | Property | Decision | Forced by |
 |---|---|---|
 | Format | TOML, one file. No global configuration, no home, XDG or `/etc` fallback, so the project alone determines behaviour | `FR-CONF-001`, `FR-CONF-003`, `BR-PROJ-001` |
-| Key space | Exactly twenty key forms, eight under `[core]` and twelve per database entry, each with a declared type and a declared default. One table serves two jobs: the validator's population, and the source of every built-in default a phase deadline or a render bound resolves from. Which of the twelve an entry may carry depends on its provider (`FR-CONF-052`) | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CONF-004`, `FR-CONF-045` |
-| `provider` and `path` | `provider` is one of `mariadb` and `sqlite`, the type the model also carries, and an absent key is `mariadb`, so every file written before the sixty-fifth edition keeps its meaning; nothing writes `provider = "mariadb"` on an entry that did not carry it. `path` is a literal path, stored as written, never expanded, refused with `${` in it | `FR-CONF-051`, `FR-CFG-055`, `FR-CONF-054` |
+| Key space | Exactly twenty key forms, eight under `[core]` and twelve per database entry, each with a declared type and a declared default. One table serves two jobs: the validator's population, and the source of every built-in default a phase deadline or a render bound resolves from. Which of the twelve an entry may carry depends on its provider, a `mysql` entry taking those of a `mariadb` entry (`FR-CONF-052`) | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CONF-004`, `FR-CONF-045` |
+| `provider` and `path` | `provider` is one of `mariadb`, `mysql` and `sqlite`, the type the model also carries, and an absent key is `mariadb`, so every file written before the sixty-fifth edition keeps its meaning; nothing writes `provider = "mariadb"` on an entry that did not carry it. `path` is a literal path, stored as written, never expanded, refused with `${` in it | `FR-CONF-051`, `FR-CFG-055`, `FR-CONF-054` |
 | The three render-bound keys | Integers within the range `FR-CONF-002` declares for each; none admits `0` or a value meaning "no bound". A value outside it is `78` from the file and `64` from `tpl cfg set`. Each range is a type in `render/bounds.rs`, so an out-of-range value cannot be held once read | `FR-CONF-045`, `FR-CFG-010` |
 | Mode | Created `0600`; refused at any looser mode and when not owned by the current user; retained at `0600` across every rewrite, including the temporary file | `FR-PROJ-019`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-034`, `FR-CFG-041` |
 | Rewrite | Temporary file in `.tpl/`, renamed over the target; a failure part-way leaves the previous file unchanged and removes the temporary; **no lock**, so two writers yield one whole file or the other | `FR-CFG-041`, `FR-CFG-042` |

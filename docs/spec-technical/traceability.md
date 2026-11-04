@@ -12,7 +12,7 @@ related: [README.md, open-decisions.md]
 The mapping between the functional specification and this folder, in both
 directions.
 
-- **Forward**, sections 1 to 27: one section per file of `specification/`,
+- **Forward**, sections 1 to 28: one section per file of `specification/`,
   stating the technical concerns that file's requirements **force** on the
   implementation, the requirement identifiers or file section each is drawn
   from, and the technical document that answers it.
@@ -20,10 +20,11 @@ directions.
   that answer it, and the five concerns the corpus forces as a whole rather
   than through any one file.
 
-`specification/` holds **28 files**: 27 requirement modules and `README.md`,
-the index. **27 are covered**: `examples.md`, added in the thirty-fourth
-edition, has no section here, and `sqlite-contract.md`, added in the
-sixty-fifth, is section 27. The mapping was harvested against the seventh
+`specification/` holds **29 files**: 28 requirement modules and `README.md`,
+the index. **28 are covered**: `examples.md`, added in the thirty-fourth
+edition, has no section here; `sqlite-contract.md`, added in the
+sixty-fifth, is section 27; and `mysql-contract.md`, added in the
+seventy-third, is section 28. The mapping was harvested against the seventh
 edition and is **current with the ninth**, reconciled on 2026-09-11. The eighth
 edition changed the rows drawn from `cli-contract.md`,
 `configuration-model.md`, `project-and-discovery.md`,
@@ -118,6 +119,18 @@ refusals `FR-LITE-038` requires move the concerns that cross every file.
 rows in sections 14, 15 and 27, and its glossary term moves section 24;
 `BR-LITE-003`, the four new kinds of `FR-LITE-041` and the amendments around
 them move rows in section 27. Counting both, the mapping is behind by the same
+forty editions.
+
+**The seventy-second to seventy-seventh editions are harvested on the same
+terms on 2026-11-04**, for rmp `#328`. The seventy-second changes no
+requirement and adds no row. The seventy-third to seventy-seventh give `tpl` a
+third provider and reclassify a failed server connection: section 28 is new,
+and holds every `FR-MYSQL` and `BR-MYSQL` identifier; rows move in sections 3,
+10, 11, 12, 13, 14, 15, 17, 18, 19, 21, 22, 23, 24, 25 and 26, and in the
+reverse mapping and the concerns that cross every file. Every identifier those
+editions assign is mapped — `FR-MYSQL-001` … `FR-MYSQL-047`, `BR-MYSQL-001` …
+`BR-MYSQL-003`, `FR-ENV-049`, `FR-ERR-047` … `FR-ERR-050` and `FR-CONF-055` —
+and so is every requirement they amend. The mapping is behind by the same
 forty editions.
 
 This file derives concerns. It states no requirement, adds no requirement, and
@@ -223,6 +236,7 @@ formatting characters, and `NFR-DET-004` is unchanged.
 | Four diagnostic levels, one line per catalogue query at `INFO`, **distinguishable from every other line**, and cache hit/miss at `DEBUG`; the count of those lines at `-v` must equal the catalogue statements the server's statement record shows | `FR-GLOB-014` … `FR-GLOB-017`, `NFR-PERF-008` (sixty-second edition) | `operations` (`OD-17`), `verification` |
 | Six categories of content must never reach any diagnostic stream at any level: argv, resolved DSN, `password_command` and its stderr, raw driver error, `.cfg` contents. A raw driver error is what a naive `tracing` call on an `Err` emits | `FR-GLOB-018`, `FR-SEC-005` | `security`, `operations` (`OD-17`) |
 | For a `sqlite` entry the raw driver error is the driver's error value in any rendering; a `cause` obliged to state what the library returned carries the result code's name and the library's message, escaped and bounded, so the reader must take both from the driver without its rendering | `FR-GLOB-018` (sixty-seventh edition) | `interfaces`, `security` (`OD-38`) |
+| For a server entry, the error number of a server's error packet and the operating system's error number for the TCP connect are not the raw driver error, so a `cause` may name either; the classification takes each from the driver's value and lets nothing else of it cross | `FR-GLOB-018` (seventy-seventh edition), the note on `FR-SEC-005` | `interfaces`, `security` (`OD-06`) |
 | Five short forms exist in the whole tool and no local flag may declare one | `FR-GLOB-024` | `interfaces` |
 | The refusal of `-q` with `-v` is stated **where both flags are declared**, so an implementer resolving the pair meets it without reading another file; no precedence is admitted, because quiet-over-verbose and last-wins both make the result depend on how a script grew | `FR-GLOB-015` (twentieth edition), `FR-CLI-015`, `FR-CLI-014` | `interfaces` |
 
@@ -346,7 +360,8 @@ formatting characters, and `NFR-DET-004` is unchanged.
 | The privilege probe is **exactly one** `SELECT` against `INFORMATION_SCHEMA`, restricted to the named database, read for two facts only | `FR-CFG-044` | `interfaces`, `quality-attributes` |
 | `can_read_catalogue` false does **not** change the exit code | `FR-CFG-045` | `interfaces` |
 | `cfg list` is the first of exactly **two** exceptions to "absent is `null`": an absent key is absent from the document | `FR-CFG-037` | `interfaces` (`OD-18`) |
-| `--provider` and `--path`, and the flag combinations each provider admits, decided at argument parsing where the command line suffices and against the entry after the write otherwise | `FR-CFG-027`, `FR-CFG-055`, `FR-CFG-016`, `FR-CFG-048` (sixty-fifth edition) | `interfaces` |
+| `--provider` and `--path`, and the flag combinations each provider admits, decided at argument parsing where the command line suffices and against the entry after the write otherwise; `--provider mysql` takes the flags of `--provider mariadb`, and the help of `--provider` states the three values | `FR-CFG-027`, `FR-CFG-055`, `FR-CFG-016`, `FR-CFG-048` (sixty-fifth edition); `FR-CFG-055`, `FR-CFG-033` (seventy-third) | `interfaces` |
+| The connectivity command's four steps for a `mysql` entry, each the MySQL counterpart of a `mariadb` entry's, in the same fields | The notes on `FR-CFG-024`, `FR-CFG-039`, `FR-CFG-043` and `FR-CFG-048` (seventy-third edition) | `interfaces`, `architecture` |
 | The connectivity command's four steps for a `sqlite` entry, reported in the same five fields; the fourth is the check of `FR-LITE-041`, so a file every read refuses is `78` here too | `FR-CFG-056` (sixty-ninth edition), `FR-CFG-039` | `interfaces`, `architecture` |
 
 ---
@@ -378,10 +393,11 @@ formatting characters, and `NFR-DET-004` is unchanged.
 | Single-pass expansion, `$$` literal, unclosed brace `78`, undefined variable `78` | `FR-CONF-019` … `FR-CONF-022` | `interfaces` |
 | `password_command` runs **without a shell** from an argument array; metacharacters are literal | `FR-CONF-024`, `FR-CONF-026` | `security` |
 | The child is bounded and silent: 4096-byte stdout cap then terminate, stderr to the null device, non-zero exit is `78` naming the command and status | `FR-CONF-031` … `FR-CONF-033` | `security`, `architecture` |
-| A deadline on every blocking phase, **six phases against four keys**: catalogue query, `password_command` and render take a budget each from `core.query_timeout`, `core.password_timeout` and `core.render_timeout`; DNS resolution, TCP connect and TLS handshake **share one** budget of `core.connect_timeout`, measured from the first of the three that runs. The deadline machinery therefore carries one clock across three phases, and reports an expiry against the phase in progress when it expired | `FR-CONF-005`, `FR-CONF-004`; `FR-ERR-034` | `architecture` (`OD-12`) |
+| A deadline on every blocking phase, **seven phases against four keys**: catalogue query, `password_command` and render take a budget each from `core.query_timeout`, `core.password_timeout` and `core.render_timeout`; DNS resolution, TCP connect, TLS handshake and the login **share one** budget of `core.connect_timeout`, measured from the first of the four that runs. The deadline machinery therefore carries one clock across four phases, and reports an expiry against the phase the connection had reached — which one call to a driver cannot tell, so the driver must record it | `FR-CONF-005` (seventy-seventh edition), `FR-CONF-004`; `FR-ERR-034`, `FR-ERR-027` | `architecture` (`OD-12`; [`ADR-014`](../adr/adr-014-mysql-provider-driver.md)) |
 | The `musl` static linkage changes DNS behaviour, and the `cause` line owes the caller the distinction | `FR-CONF-005` note; `NFR-PERF-018` | `operations`, `interfaces` |
-| Every entry has a **provider** that decides which reader reads it; an absent key is `mariadb`, so every older file keeps its meaning — the provider is one closed type, matched exhaustively | `FR-CONF-051` | `architecture`, `data-model` (`OD-35`) |
-| The keys a provider refuses are decided at entry resolution, for the selected entry only, before any expansion or child | `FR-CONF-052`, `FR-CONF-053` | `architecture`, `interfaces` |
+| Every entry has a **provider** that decides which reader reads it; an absent key is `mariadb`, so every older file keeps its meaning — the provider is one closed type of three values, matched exhaustively | `FR-CONF-051`, `FR-CONF-002` (seventy-third edition) | `architecture`, `data-model` (`OD-35`) |
+| The keys a provider refuses are decided at entry resolution, for the selected entry only, before any expansion or child; a `mysql` entry takes and refuses exactly the keys of a `mariadb` entry, and a DSN's scheme selects no provider | `FR-CONF-052`, `FR-CONF-053`; `FR-CONF-052` and the note on `FR-CONF-010` (seventy-third edition) | `architecture`, `interfaces` |
+| An empty password and an absent one are presented as the servers' own clients present an empty password, at the first response and at every switch of the method, never as a scramble — which the pinned driver cannot do unpatched | `FR-CONF-055` (seventy-seventh edition), `FR-MYSQL-047` | `security` ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 5) |
 | `path` is literal, never expanded, and resolved against the **project directory** — the parent of the canonical `.tpl` folder, whichever link reached it — never the working directory | `FR-CONF-054` (sixty-seventh edition), `FR-PROJ-009` | `data-model`, `security`, `interfaces` |
 
 ---
@@ -396,7 +412,7 @@ formatting characters, and `NFR-DET-004` is unchanged.
 | The `.tpl` path is canonicalised **before** any check, so a symlinked `.tpl` is verified at its target | `FR-PROJ-009`, `FR-SEC-015` | `security` |
 | `.cfg` must be owned by the current user and carry no group or other bits: the current process's uid and the file's uid and mode are all needed, and `std` supplies only the file's | `FR-PROJ-010`, `FR-PROJ-011` | `security`, `technology-stack` (the residual of `OD-24`) |
 | `tpl init` creates five artefacts, `.cfg` at `0600`, missing parents included, and refuses an existing `.tpl` with `73` changing nothing | `FR-PROJ-013` … `FR-PROJ-019` | `interfaces`, `operations` |
-| Two artefacts are **shipped content**: `example.jinja` and `rust/_types.jinja`; the example must render against any table of any supported series and use at least one filter and one test | `FR-PROJ-017`, `FR-PROJ-021`, `FR-ENV-011` | `operations`, `verification` |
+| Two artefacts are **shipped content**: `example.jinja` and `rust/_types.jinja`; the example must render against any table of any supported MariaDB series and, since the seventy-fourth edition, of any supported MySQL series, and use at least one filter and one test | `FR-PROJ-017`, `FR-PROJ-021` (seventy-fourth edition), `FR-ENV-011` | `operations`, `verification` |
 | The generated `.cfg` carries a **commented-out** example entry — the file must survive later rewrites with its comments | `FR-PROJ-017`, `FR-PROJ-018` | `data-model` (`OD-09`) |
 | Exactly five writers inside `.tpl`, and exactly two file-system exceptions outside it: the destination of `tpl init`, and the two files the SQLite library may write beside a database in write-ahead-log mode, which no writer of `tpl` writes | `FR-PROJ-023`, `FR-PROJ-024` (sixty-seventh edition), `BR-PROJ-002` | `architecture`, `security`, `data-model` |
 | A nested project warns on stderr and exits `0` | `FR-PROJ-016` | `interfaces` |
@@ -420,7 +436,7 @@ formatting characters, and `NFR-DET-004` is unchanged.
 | An error is never formatted: `--format` is ignored, stdout stays empty, the four lines go to stderr | `FR-OUT-015`, `FR-ERR-033` | `interfaces` |
 | Invalid UTF-8 from the catalogue becomes U+FFFD and the read continues — so catalogue values must be read as **bytes** and converted lossily, not as validated strings | `FR-OUT-017` | `architecture`, `interfaces` |
 | C0 escaping in read output applies to **every interpolated value whatever its source**, and the two paths differ: in `text` tab is excepted, because the aligned columns of `FR-OUT-006` are laid out with it; in `json` there is no exception, a tab being emitted as the escape the format defines. `render` and `template show` are exempt and byte-for-byte | `FR-OUT-018`, `FR-OUT-019`, `FR-OUT-006` | `security`, `interfaces` |
-| C1 controls and bidirectional formatting characters are escaped as C0 is, for both providers: in `text` in the form of a C0 escape, and in `json` as JSON's own `\u` escape, which the encoder does not write and a parser reads back as the same character | `FR-OUT-018` (sixty-ninth edition) | `interfaces` (`OD-18`) |
+| C1 controls and bidirectional formatting characters are escaped as C0 is, for every provider: in `text` in the form of a C0 escape, and in `json` as JSON's own `\u` escape, which the encoder does not write and a parser reads back as the same character | `FR-OUT-018` (sixty-ninth edition; seventy-third) | `interfaces` (`OD-18`) |
 | An empty result is `0`: the header row alone in `text`, the collection key with `[]` in `json` | `FR-OUT-033` … `FR-OUT-037` | `interfaces` |
 | Results to stdout, everything else to stderr, nothing else on stdout for a piped command | `FR-OUT-020`, `FR-OUT-021` | `architecture` |
 
@@ -447,7 +463,16 @@ formatting characters, and `NFR-DET-004` is unchanged.
 | Nine codes carry at least one integration test, part of the definition of done; `70` is the single exception and is exercised in process | `BR-ERR-001` | `verification` |
 | A render bound's `cause` names the bound, its resolved value and the key that raises it, so each bound is its own variant; a bound an abandoned render crosses is step 8's `65`, with no return to the cache-or-connection step | `FR-ERR-034` row `65`, `FR-ERR-001`, `FR-ERR-006` (forty-second edition) | `interfaces`, `architecture` |
 | For a `sqlite` entry, step 6 is the kind check, the open, the hardening, the probe, the `BEGIN DEFERRED` of a read and the check, ending `69`, `70`, `74` or `78`; the transaction statement adds no code, its result codes taking those `FR-LITE-040` gives; the `cause` names the path and what the library or, for the kind check, the filesystem returned, and no host or port. A `69` names a lock only where the library returned `SQLITE_BUSY`, so the error value records what ended the statement | `FR-ERR-006`, `FR-ERR-045` (sixty-fifth edition notes); `FR-ERR-006` notes (sixty-ninth and seventieth editions); `FR-ERR-034` note (sixty-seventh edition) | `interfaces` (`OD-38`), `architecture` |
-| A value read from a SQLite file, or returned by its library, is bounded at 256 characters in every diagnostic line, ends kept around a counted marker, and no other value is: the bound needs to know where a value came from, so it is a property of the value's type and is applied after escaping | `FR-ERR-046` | `interfaces`, `security` |
+| A value read from a SQLite file, or returned by its library, is bounded at 256 characters in every diagnostic line, ends kept around a counted marker, and no other value is — a MySQL server's values included: the bound needs to know where a value came from, so it is a property of the value's type and is applied after escaping | `FR-ERR-046`, its note (seventy-fifth edition) | `interfaces`, `security` |
+| A failure of a server connection is classified by the **phase the connection reached**, so the classification needs that phase from the driver, and a failure in the login is never reported as a refused TCP connect | `FR-ERR-047`, `FR-ERR-034` row `69`, `FR-CONF-005` (seventy-seventh edition) | `interfaces`, `architecture` ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 6) |
+| A login that does not complete has three outcomes — the connection failed, an answer not accepted, and, for a `mariadb` entry, a login that needs the server's RSA public key, which keeps `69` where a `mysql` entry's is `78`; the third is recognised by a type the patched driver returns | `FR-ERR-047`, the notes on `FR-ERR-002` and `FR-SEC-021` (seventy-seventh edition) | `interfaces`, `security` ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) points 3 and 4) |
+| An error packet during the login is classified by its number, read for the entry's provider, into the `77` of a refused account, the `77` of `FR-PRIV-021` where the connection named a database, the `78` of a server requiring encryption, and the `69` of a limit, a blocked host or any other number; so the error value carries the number, and the database the connection named | `FR-ERR-048`, `FR-ERR-034` row `77`, the note on `FR-PRIV-021` (seventy-seventh edition) | `interfaces` |
+| A TCP connect that fails names what the operating system reported, by its POSIX name or its number, and only a refusal is reported as one — so the classification reads the operating system's number, or the error's kind where it carries none | `FR-ERR-049` (seventy-seventh edition) | `interfaces` |
+| A TLS handshake that fails keeps its two messages, and is decided by the phase reached rather than by the driver's variant alone; a `mysql` entry's refused handshake names no mode that does not encrypt | `FR-ERR-050` (seventy-seventh edition), `FR-MYSQL-021` | `interfaces` |
+| A statement that fails on an open session is its own condition, in one of three ways, naming the statement and, where the server sent one, the error number; it is never a refused TCP connect | `FR-ERR-036` (seventy-seventh edition) | `interfaces` |
+| An expired connection budget names the budget the four connection phases share, and the phase reached | `FR-ERR-027` (seventy-seventh edition) | `interfaces`, `architecture` |
+| The `hint`s of a TCP connect, of a login and of a refused account that names another user route to `--dsn` for an entry defined by one | `FR-ERR-045` (seventy-seventh edition) | `interfaces` |
+| A `mysql` entry's conditions take the codes and the step of `FR-ERR-006` the corpus already provides; the `78` cell names a MySQL server outside the set, and the RSA key's condition is reached at the cache-or-connection step | `FR-ERR-001`, `FR-ERR-024` (seventy-third edition); the notes on `FR-ERR-006`, `FR-ERR-034` and `FR-ERR-036` (seventy-third and seventy-fifth) | `interfaces`, `architecture` |
 
 **Two contradictions recorded, both from the harvest of editions ten to
 twenty.**
@@ -477,6 +502,9 @@ what replaced it.
 | This file is a cross-reference, not a second source: the technical `security.md` must likewise cite its owning requirement and not restate it | `BR-SEC-001` | `security` |
 | A seventh untrusted input, the SQLite database file: a regular file, opened read-only, read under SQLite's hardening, each control confirmed before the file is parsed, a schema table that could forge the catalogue refused before it is read, and that check and every catalogue statement reading one snapshot, so that nothing another connection adds during the read is read through | `FR-SEC-028`, *Trust boundaries* (sixty-fifth edition; amended in the sixty-ninth and seventieth) | `security` |
 | The escaping rule names its two owners and covers C0, C1 and the bidirectional formatting characters, whatever the source and the provider | `FR-SEC-020` (sixty-ninth edition) | `security`, `interfaces` |
+| The read-only promise has its two parts for a `mysql` entry as well | `BR-SEC-002` (seventy-third edition), `BR-MYSQL-002` | `security` |
+| The server's RSA public key is never requested over a session TLS does not protect, for either server provider; the code of the refusal differs by provider, by the user's decision | The notes on `FR-SEC-021` (seventy-fifth to seventy-seventh editions), `FR-MYSQL-045` | `security`, `interfaces` |
+| A `cause` may name a server's or the operating system's error number, and the packet's message stays barred | The note on `FR-SEC-005` (seventy-seventh edition), `FR-GLOB-018` | `security`, `interfaces` |
 
 ---
 
@@ -508,6 +536,7 @@ what replaced it.
 | Generated-column storage kind comes from the **attribute** field, not the is-generated field | `FR-CAT-051` | `interfaces` |
 | Five whole features are excluded by decision: events, sequences, partitions, application-time periods, spatial reference identifiers | `FR-CAT-019` … `FR-CAT-023` | `overview`, `data-model` |
 | Identifiers arrive unquoted and unescaped, including hostile ones (backtick, space, reserved word, non-ASCII): quoting is the template's job | `FR-CAT-042` note; `FR-ENV-045` | `interfaces`, `security` |
+| The observed catalogue behaviours of this file are MariaDB's; a `mysql` read encodes its own, and `FR-CAT-033` governs a `mariadb` read alone | The notes on `FR-CAT-015`, `FR-CAT-033`, `FR-CAT-038` and `FR-CAT-055` (seventy-third and seventy-fifth editions); `FR-MYSQL-033`, `FR-MYSQL-040` | `data-model` |
 
 ---
 
@@ -531,7 +560,8 @@ what replaced it.
 | A supplied document whose foreign key names a table `tables` does not carry is `65`, never `70`; a column's `table_name` is not such a reference | `FR-CTX-042` | `interfaces`, `security` |
 | `now` is one RFC 3339 UTC second-precision string, evaluated **once per invocation** | `FR-CTX-028`, `FR-CTX-029` | `architecture` (`OD-25`) |
 | A server read promises referential integrity and **not** a point-in-time snapshot; a cache-served document promises neither | `FR-CTX-023` … `FR-CTX-025` | `data-model` |
-| `database.provider`, on every document and the only key a MariaDB document gains; absent from a `--context` document it reads as `mariadb`; `schema_version` does not move | `FR-CTX-043`, `FR-CTX-036` (sixty-fifth edition) | `data-model`, `interfaces` |
+| `database.provider`, on every document and the only key a MariaDB document gains; absent from a `--context` document it reads as `mariadb`; `mysql` is a third value, accepted from a `--context` document; `schema_version` does not move | `FR-CTX-043`, `FR-CTX-036` (sixty-fifth edition); `FR-CTX-043` (seventy-third) | `data-model`, `interfaces` |
+| A default is classified for a `mysql` read by the classification of `FR-MYSQL-029`, into the same discriminant | `FR-CTX-012` (seventy-third edition); the notes on `FR-CTX-014`, `FR-CTX-031`, `FR-CTX-033`, `FR-CTX-034` and `FR-CTX-036`, and on `FR-RND-020` | `data-model`, `architecture` |
 
 ---
 
@@ -552,7 +582,8 @@ what replaced it.
 | Seven tests accept a **column object and nothing else**; a wrong operand fails, never answers `false` | `FR-ENV-040`, `FR-SEM-005`, `FR-SEM-007` | `interfaces` |
 | `primary_key` and `unique` resolve `table_name` **against the render context**, so a filter/test needs access to the context, and an absent table is `65` | `FR-ENV-015`, `FR-ENV-017`, `FR-ENV-043` | `architecture`, `interfaces` |
 | `unique` also answers for a member of the table's primary key, which a rowid alias carries without an index, so both tests read the key the table holds rather than an index name | `FR-ENV-041` (sixty-seventh edition), `FR-LITE-029` | `interfaces`, `data-model` |
-| Three disjoint type families over an exact 39-value partition; a value in none satisfies none and does not fail | `FR-ENV-042`, `FR-ENV-046` | `interfaces`, `data-model` |
+| Three disjoint type families over an exact 39-value partition; a value in none satisfies none and does not fail | `FR-ENV-042`, `FR-ENV-046` (amended in the seventy-fifth edition) | `interfaces`, `data-model` |
+| The three `data_type` values only a `mysql` read produces belong to the families by analogy with MariaDB — `json` textual, `geomcollection` and `vector` in none — without moving any answer over another provider's document | `FR-ENV-049` (seventy-fifth edition), `FR-MYSQL-028` | `data-model`, `verification` |
 | Fourteen inherited filters, closed; everything else the engine offers is group 3 and unguaranteed | `FR-ENV-018`, `FR-ENV-019` | `technology-stack`, `interfaces` |
 | Five global functions and no more; four capability prohibitions — no environment, no file, no network, no clock | `FR-ENV-020` … `FR-ENV-025`, `BR-ENV-004` | `security`, `architecture` |
 | Auto-escaping is **off always**, and must not be keyed on any property of a name — the engine's default callback does key on extension | `FR-ENV-026`, `FR-ENV-027`; minijinja `set_auto_escape_callback` (verified) | `architecture`, `security` (`OD-14`) |
@@ -597,6 +628,8 @@ what replaced it.
 | The version is taken from the **probe** and never from the connection greeting. On `10.11` the greeting carries a `5.5.5-` prefix the probe's answer does not, so `<major>.<minor>` read from the greeting is `5.5` and `FR-SRV-020` would refuse a supported server as older than the window. Any gate, diagnostic or fixture script that reads a greeting must not assume the two readings agree | `FR-SRV-040`, `FR-SRV-041`; `FR-SRV-038`, difference 13 (twelfth edition) | `interfaces`, `verification` |
 | A difference may be about what a server **accepts** rather than what it reports, which bounds the fixture rather than the reader: the shared DDL must be accepted by all four series, so a structure one series rejects is deliberately absent rather than hidden behind a conditional | `FR-SRV-038`, difference 14; `FR-SRV-029` (thirteenth edition) | `verification` |
 | An observation of a value **the fixture itself sets** records the condition it was read under, or the record contradicts the fixture it was taken from. Only one reading of the fourteen is such a value, and the negative was established by sweep rather than assumed | `FR-SRV-038`, difference 3; `FR-CONF-038` (fourteenth edition) | `verification` |
+| The window, the probe, the refusals and the connection order of this file govern a `mariadb` entry; a `mysql` entry adopts them by citation in `mysql-contract.md`, against its own set | The notes on `FR-SRV-001`, `FR-SRV-003`, `FR-SRV-007` and `FR-SRV-034` (seventy-third edition), `FR-MYSQL-013` | `architecture`, `interfaces` |
+| The refusal of a series outside the window names the series and one reason for every series refused, and no line printed changes; the code per case stays rejected | `FR-SRV-030`, the note on `FR-SRV-020` (seventy-seventh edition) | `interfaces` |
 | A reading that is a property of the **build** the fixture selects, or whose entailment by the series is not established, is **not** a difference between the series: it goes below the table with its bound and with the observation that would settle it. Three readings sit there — the source revision, the SSL library string and the distribution suffix — and none may be read as a series fact | `FR-SRV-038` as amended in the eighteenth edition; `FR-SRV-040` | `verification`, `data-model` |
 
 ---
@@ -614,6 +647,7 @@ what replaced it.
 | Every cross-check runs on every read that presents the guarded property, dumps included | `FR-PRIV-012` | `architecture` |
 | A marked document is refused as a `--context`, whatever the render selects | `FR-PRIV-008`, `FR-PRIV-009` | `interfaces` |
 | Completeness is a property of a **read**, not of a server: nothing in the model records which reader produced it | `BR-PRIV-003` | `data-model` |
+| The rules of this file hold for a `mysql` read in the shapes MySQL gives an absence, and the `77` of `FR-PRIV-021` is reached by a second condition at the login | The *Overview* (seventy-third and seventy-fifth editions), the note on `FR-PRIV-021` (seventy-seventh); `FR-MYSQL-041` | `interfaces`, `architecture` |
 
 ---
 
@@ -636,6 +670,7 @@ what replaced it.
 | Three reference workloads and a byte scalar, `WL-001` kept separate from the correctness fixture so that one does not hide an N+1 in the other. `seed-bench.sql` carries it, and was written on 2026-09-21 | `WL-001` … `WL-003`, `BR-PERF-002`, `BR-PERF-007` | `verification` (`OD-27`) |
 | The failure path is a measurement point because nearest match computes an edit distance against every existing name; that it should cost what `tpl --version` costs is a **design expectation** to be checked against a reading, never an obligation on a figure | `BR-PERF-004` | `quality-attributes` (`OD-20`) |
 | The six hold for a `sqlite` entry, a connection being the library's to the file; the count is taken in process, and no path makes it grow with the objects: the probe and seven catalogue statements, the check of `FR-LITE-041` first | `FR-LITE-037` (sixty-ninth edition); `NFR-PERF-001`, `NFR-PERF-004` (sixty-fifth edition notes) | `quality-attributes`, `verification` |
+| The six hold for a `mysql` entry as for a `mariadb` entry, verified from the server's records of the MySQL fixture on every series | The assertion table and the notes on `NFR-PERF-001` and `NFR-PERF-008` (seventy-third edition), `FR-MYSQL-042` | `quality-attributes`, `verification` |
 | For a `sqlite` entry the connection count is observed by the syscall trace on the two Linux targets and skipped, with its reason, on the two macOS targets; the query-count lines are compared with the in-process statement record over the fixture, on all four, so the comparison runs in process | `NFR-PERF-004`, `NFR-PERF-008` (sixty-seventh edition) | `quality-attributes`, `verification` |
 
 ---
@@ -644,7 +679,7 @@ what replaced it.
 
 | Technical concern | Drawn from | Doc |
 |---|---|---|
-| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, measurement point, reference figure, series, and — since the forty-second edition — render bound, render fuel, render output limit, render memory limit, and — since the sixty-ninth — bidirectional formatting character and storage class, and — since the seventieth — read transaction. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
+| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, measurement point, reference figure, series, and — since the forty-second edition — render bound, render fuel, render output limit, render memory limit, and — since the sixty-ninth — bidirectional formatting character and storage class, and — since the seventieth — read transaction, and — since the seventy-third — functional key part, LTS release and Innovation release, and pending observation, and — since the seventy-fifth — introducer, and — since the seventy-seventh — login and scramble. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
 | `plumbing` / `porcelain` name the two output audiences; the technical spec's naming of modules and types should not invent a third vocabulary | *plumbing*, *porcelain* | `interfaces` |
 | One term already carries two meanings by decision — `schema` (the arm, and the `--schema` flag) — and code naming must disambiguate rather than pick one | *schema (the word, two meanings)*; `FR-CFG-028` | `interfaces` |
 | `target` is defined as one of four build targets: the word is reserved and must not be reused for a render target | *target*; `NFR-PERF-018` | `operations`, `quality-attributes` |
@@ -656,7 +691,7 @@ what replaced it.
 
 | Technical concern | Drawn from | Doc |
 |---|---|---|
-| **Nothing is open**: no technical decision may be deferred by citing an open functional question | *Index* — empty; all 75 closed | `overview` |
+| **Nothing is open**: no technical decision may be deferred by citing an open functional question | *Index* — empty; all 78 closed, `OQ-076` to `OQ-078` by the user's decisions of the seventy-fourth and seventy-fifth editions | `overview` |
 | Three obligations recur and are not questions: the series table re-verification, the recording of a measured figure where a point is measured, and the falsifiability of any observation-based requirement | *Overview*, "Complete means that no point of this specification is waiting on someone" | `operations`, `quality-attributes` |
 | An unsettled point is a **defect to report**, never an old identifier revived | *Overview*, final paragraph | `README`, `decisions` |
 | The closed table is the provenance trail for every fixed decision: a technical decision that contradicts one must cite the entry it reopens | *Closed* | `decisions` |
@@ -688,6 +723,7 @@ is named only where a row would otherwise imply a correction is outstanding.
 | The register admits a third kind of entry, **Overstatement**: a file states as a present fact about the repository something the repository does not contain. It contradicts no requirement, owes this folder nothing, and acting on it fails anyway — so no technical decision discharges one, and a row of this table must not imply that one does | *Overview*, the three kinds (sixteenth edition) | `README` |
 | **A passage that directs is not a passage that asserts.** A deontic statement about which targets a verification runs on is an intention and not a claim of a state, and this corpus states verification in that same mode in requirements in force — so a conclusion that nothing is owed is itself recorded, or the next reader re-opens it from scratch | *A candidate read, and not recorded* (seventeenth edition) | `README`, `verification` |
 | The second provider is owed to the two root documents: neither may present MariaDB as the only database, `INFORMATION_SCHEMA` as the only catalogue, or `.tpl` as the only place a read writes | `DIV-057`, `DIV-058` | `data-model`; the `CLAUDE.md` *Stack* correction is [open-decisions.md](open-decisions.md#corrections-owed-to-claudemd)'s |
+| The third provider is owed to the two root documents: neither may present MySQL as refused rather than read, nor omit its fixture; and the phases `connect_timeout` bounds include the login. Which driver reads MySQL is an architecture decision, so the *Stack* table and the project tree are this folder's correction and not the register's | `DIV-059`, `DIV-060`, `DIV-061` | `README`; the `CLAUDE.md` *Stack* and tree correction is [open-decisions.md](open-decisions.md#corrections-owed-to-claudemd)'s |
 
 ---
 
@@ -715,6 +751,34 @@ is named only where a row would otherwise imply a correction is outstanding.
 | The requirements of form hold, with the count taken in process | `FR-LITE-037` | `quality-attributes`, `verification` |
 | The read takes time linear in the objects apart from the library's schema load, which the deadline ends, so the in-process fold looks up by name through collections grouped once rather than by scanning | `FR-LITE-009`, `FR-LITE-020` (sixty-ninth edition) | `architecture`, `quality-attributes` |
 | A fixture built from versioned SQL text at test time, never committed as a binary; twelve of its databases are written under `writable_schema`, on a connection without defensive mode, and a read of each of those and of the two named like a pragma function ends with `78` | `FR-LITE-038` (sixty-ninth and seventy-first editions) | `verification`, `operations` (`OD-37`) |
+
+---
+
+## 28. `mysql-contract.md` — the third provider
+
+Harvested on 2026-11-04 for rmp `#328`, against the seventy-seventh edition,
+which the code at `cc511e2` implements.
+
+| Technical concern | Drawn from | Doc |
+|---|---|---|
+| A third reader, of its own, beside `mariadb/` and `sqlite/`, reached by the one dispatch; a `mysql` entry connects exactly as a `mariadb` entry, so the connection code is shared rather than copied | `FR-MYSQL-001`, `FR-MYSQL-020`, `FR-CONF-051` | `architecture` (`OD-05`, `OD-35`; [`ADR-005`](../adr/adr-005-async-runtime-scope.md), [`ADR-014`](../adr/adr-014-mysql-provider-driver.md)) |
+| The supported set is a criterion and its dated instance; the instance is one table compiled into the binary and stated once, and re-verifying it is a release gate | `FR-MYSQL-002` … `FR-MYSQL-005`, `BR-MYSQL-001` | `architecture`, `operations`, `overview` |
+| The version probe characterises the server; the product check is necessary and not sufficient; an older series outside the set is `78`, a newer one read and marked; the refusal names the version and the set | `FR-MYSQL-006` … `FR-MYSQL-011` | `architecture`, `interfaces`, `overview` |
+| An entry whose provider names the wrong product is refused, each at its own step: a `mariadb` entry on MySQL at its read-back, a `mysql` entry on MariaDB at the product check | `FR-MYSQL-012`, `FR-MYSQL-008` | `security`, `interfaces` |
+| The four treatments and the equivalence of `FR-SRV-026` range over the set of `FR-MYSQL-003`; the record of differences between those series registers none | `FR-MYSQL-013`, `FR-MYSQL-014` | `data-model`, `quality-attributes`, `verification` |
+| A closed list of statements and of twelve tables, each statement a constant with the database name bound, issued in the order of `FR-SRV-042`; no other statement | `FR-MYSQL-015` … `FR-MYSQL-017`, `BR-MYSQL-002` | `security`, `architecture`, `interfaces` |
+| The read-back names `@@session.transaction_read_only` and confirms by the integer `1` alone, so it is decoded as an integer whatever its signedness; either half failing is `78`, and nothing disables it | `FR-MYSQL-018`, `FR-MYSQL-019` | `security`, `architecture` |
+| An empty or absent password is presented as `FR-CONF-055` requires, which the published driver does not do | `FR-MYSQL-047`, `FR-CONF-055` | `security` ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 5) |
+| The five modes behave against a MySQL server as `FR-CONF-038` fixes, and a refused handshake's `hint` names no mode that does not encrypt; the driver must authenticate `caching_sha2_password` under every mode that encrypts | `FR-MYSQL-021`, `FR-MYSQL-022` | `security`, `interfaces`, `technology-stack` ([`ADR-002`](../adr/adr-002-tls-mode-mapping.md), [`ADR-014`](../adr/adr-014-mysql-provider-driver.md)) |
+| The server's RSA public key is never requested over a session TLS does not protect, which the published driver does and no option prevents, so the driver is patched and the refusal recognised by its type | `FR-MYSQL-045` | `security`, `interfaces` ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) points 3 and 4) |
+| What a read covers: `BASE TABLE`, views and routines but those of type `LIBRARY`, and no index holding a functional key part | `FR-MYSQL-023`, `FR-MYSQL-024` | `architecture`, `data-model` |
+| Every field of the twelve tables is mapped, a property MySQL cannot supply is `null`, and a field the model lacks is not carried; `level` becomes optional in the model, three more `data_type` values are recognised, and the primary key is the index named `PRIMARY` | `BR-MYSQL-003`, `FR-MYSQL-025` … `FR-MYSQL-028`, `FR-MYSQL-031` … `FR-MYSQL-039` | `data-model` (`OD-35`) |
+| Three readings rewrite a catalogue text — the default classification, the attribute field and one layer of escaping — each a pure function over a string | `FR-MYSQL-029`, `FR-MYSQL-030`, `FR-MYSQL-046` | `architecture`, `data-model`, `verification` |
+| The divergences between MySQL and MariaDB that reach a read are recorded, not re-derived | `FR-MYSQL-040` | `data-model` |
+| The completeness rules hold in the shapes MySQL gives an absence, through the verdict a `mariadb` read applies | `FR-MYSQL-041` | `architecture`, `interfaces` |
+| The requirements of form hold, the count being twelve statements whatever the database and whatever was named | `FR-MYSQL-042` | `quality-attributes`, `verification` |
+| The verifications of `server-contract.md` are reapplied to the MySQL fixture, and the product refusal is verified against a MariaDB server | `FR-MYSQL-043` | `verification` |
+| A fixture of five servers with a harness of the MariaDB fixture's contract, plus the authentication cache `FR-MYSQL-045` depends on | `FR-MYSQL-044` | `operations`, `verification` |
 
 ---
 
@@ -752,6 +816,7 @@ folder.
 | `open-questions.md` | `overview`, `decisions` |
 | `upstream-divergences.md` | `README`, `interfaces`, `operations` |
 | `sqlite-contract.md` | `architecture`, `interfaces`, `data-model`, `security`, `verification` |
+| `mysql-contract.md` | `architecture`, `interfaces`, `data-model`, `security`, `operations`, `verification` |
 
 ## Concerns that cross every file
 
@@ -764,7 +829,7 @@ and each is the reason a document of this folder exists.
 | **One model, three sources.** A live read, a cached read and a `--context` document must present the same objects and fields, so the model is the single junction of three producers and three consumers — `text`, `json`, and the render | `catalogue-coverage.md` *Overview*; `BR-SCH-001`, `FR-SCH-022` | `architecture`, `interfaces` |
 | **Silent wrongness is the failure mode the corpus is written against.** Every fail-loud rule — no coercion, strict field access, `77` for a named short read, refusal of a marked context, exclusion of volatile fields — is one design stance applied repeatedly | `BR-SEM-004`, `BR-PRIV-001`, `BR-CAT-002`, `FR-SRV-003` | `overview`, `architecture` |
 | **The seventeen JSON documents share one envelope and one emitter.** Seventeen payload shapes, one outer shape, one ordering rule, one escaping rule, one encoding rule | `FR-OUT-024`, `BR-OUT-002` | `interfaces` |
-| **Twenty-one mandated tests are part of the contract, not of the plan.** `BR-ERR-001`, `BR-HELP-001`, `BR-HELP-003` (three), `BR-SCH-004`, `BR-SEC-003`, `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-029` (two), `FR-SRV-035`, `FR-RND-040` (forty-second edition), `FR-LITE-018` (four, the third from the sixty-eighth edition and the fourth from the sixty-ninth), `FR-LITE-037` (sixty-fifth edition) and `FR-LITE-038` (sixty-ninth edition), and the published test vectors of `FR-ENV-032`, `FR-ENV-033`, `FR-ENV-041` and `FR-ENV-046`. The count was left at eighteen when the sixty-eighth edition added the third of `FR-LITE-018`, and is corrected here | as cited | `verification` |
+| **Twenty-six mandated tests and four published test vectors are part of the contract, not of the plan.** `BR-ERR-001`, `BR-HELP-001`, `BR-HELP-003` (three), `BR-SCH-004`, `BR-SEC-003`, `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-029` (two), `FR-SRV-035`, `FR-RND-040` (forty-second edition), `FR-LITE-018` (four, the third from the sixty-eighth edition and the fourth from the sixty-ninth), `FR-LITE-037` (sixty-fifth edition), `FR-LITE-038` (sixty-ninth edition) and `FR-MYSQL-043` (seven: `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-014`, `FR-SRV-029` twice and `FR-SRV-035` reapplied, and the product refusal of `FR-MYSQL-008`; seventy-third edition), and the published test vectors of `FR-ENV-032`, `FR-ENV-033`, `FR-ENV-041` and `FR-ENV-046`. The count was left at eighteen when the sixty-eighth edition added the third of `FR-LITE-018`, and then read *twenty-one*, which matched neither the tests listed, nineteen, nor the tests and the vectors, twenty-three; it is recounted here, with the seven of `FR-MYSQL-043` | as cited | `verification` |
 
 ## Editorial defects found while harvesting
 

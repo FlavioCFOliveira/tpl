@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventy-seven editions. All are in force;
+The specification has been written in seventy-eight editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6360,6 +6360,51 @@ handshake", which `FR-CONF-005` now extends to the login, so
 [upstream-divergences.md](upstream-divergences.md) raises `DIV-061` against
 it and its counts move. `CLAUDE.md` paraphrases no requirement this edition
 amends.
+
+### Seventy-eighth edition — four divergences discharged, one of them raised in the same pass
+
+rmp `#330`, of sprint 28, corrected the three divergences
+[upstream-divergences.md](upstream-divergences.md) owed against the root
+documents: `DIV-059` and `DIV-061` in `README.md`, and `DIV-060` in
+`CLAUDE.md`. The correction is in the working tree over `cc511e2`, and the
+commit of rmp `#330` records it together with this edition. This edition
+reads both files there and records what it found; no requirement changes.
+
+**No identifier of a requirement is assigned, retired or renumbered.** One
+divergence entry is assigned, `DIV-062`, and discharged in the same
+edition. No open question is raised, so the
+index of [open-questions.md](open-questions.md) stays empty, and
+[glossary.md](glossary.md) is unchanged.
+
+- **Three entries discharged** — `DIV-059`, `DIV-060` and `DIV-061`. Each
+  part of each correction was found made, and each entry's status names the
+  commit of rmp `#330` as the one that discharged it, with the working tree
+  over `cc511e2` that it records, and keeps the status it was raised with.
+- **One entry raised and discharged** — `DIV-062`, against the row *MySQL
+  privileges* that the correction of `DIV-059` added to the *Requirements*
+  table of `README.md`. The row said that a reader's restricted views and
+  routines are marked `restricted`, which `FR-MYSQL-041` makes true of a
+  listing and a dump, and omitted that one requested by name exits `77` under
+  `FR-PRIV-003`. It did not hold back the discharge of `DIV-059`, whose
+  correction did not ask for the row. rmp `#330` corrected the row in the
+  same working tree, a second reading found the correction's first form
+  made, and the entry is discharged by the same commit as the other three.
+- **The counts** — the Overview of the register counts sixty-two entries:
+  three due in full, fifty-five discharged and four partly discharged; seven
+  still owe something, five to `CLAUDE.md` and two to `README.md`.
+  `DIV-032` and `DIV-041` restate the count.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied for this edition: both root documents
+were read in the working tree over `cc511e2` against every entry this edition
+moves, and against the requirements their new passages paraphrase —
+`FR-MYSQL-002`, `FR-MYSQL-003`, `FR-MYSQL-008`, `FR-MYSQL-010`,
+`FR-MYSQL-012`, `FR-MYSQL-015`, `FR-MYSQL-018`, `FR-MYSQL-021`,
+`FR-MYSQL-034`, `FR-MYSQL-035`, `FR-MYSQL-041`, `FR-MYSQL-044`,
+`FR-MYSQL-045`, `FR-CONF-005`, `FR-CONF-010`, `FR-CONF-051`, `FR-CONF-052` and
+`FR-CONF-055`. One passage contradicted this corpus, and is `DIV-062`,
+discharged by the second reading. `DIV-036`, `DIV-037` and `DIV-050`, whose
+passages of `CLAUDE.md` sit beside the corrected lines, stand as they were.
 
 ### Still out of scope
 

@@ -1,6 +1,6 @@
 # tpl skill for Claude Code
 
-This folder is a Claude Code skill. It makes Claude the operator of the `tpl` CLI. With it, Claude initialises projects, manages database entries and credentials, explores MariaDB and SQLite schemas, manages the cache, checks templates and renders them. It does all of this by invoking `tpl`, never by reimplementing it.
+This folder is a Claude Code skill. It makes Claude the operator of the `tpl` CLI. With it, Claude initialises projects, manages database entries and credentials, explores MariaDB, MySQL and SQLite schemas, manages the cache, checks templates and renders them. It does all of this by invoking `tpl`, never by reimplementing it.
 
 The skill carries workflows, decision rules, an exit-code playbook, security rules and a map of every command. For exact flags and values it defers to the binary's own help (`tpl help <path> --format json`), so the skill does not become a stale copy of the contract.
 

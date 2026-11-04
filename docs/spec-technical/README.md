@@ -31,6 +31,41 @@ blocks is a statement, not a document. Every other entry is settled. `OD-30`,
 the one entry that was settled and **interim**, was discharged on 2026-09-22,
 when the last leaf of the tree was implemented.
 
+**Changes of 2026-11-04, third pass**, for rmp `#328` — the third provider,
+against the seventy-third to seventy-seventh editions of `/specification`,
+[`ADR-014`](../adr/adr-014-mysql-provider-driver.md), the amended `ADR-003`,
+`ADR-005` and `ADR-010`, and the code at `cc511e2`, which implements all of it.
+No crate is adopted.
+
+- `architecture.md` gains [The MySQL reader](architecture.md#the-mysql-reader):
+  its parts, what it shares with `mariadb/` and why, its one plan, and the
+  connectivity command for it. The module map gains `mysql/`; the dispatch,
+  the connection lifecycle, the model's producers and the runtime row of lazy
+  initialisation name three readers; *The six phase deadlines* becomes
+  [The seven phase deadlines](architecture.md#the-seven-phase-deadlines), the
+  login among them and the phase read from the driver's record; and the
+  render's quiescence check is described as built, in `provider.rs`.
+- `interfaces.md` gains [The MySQL reader](interfaces.md#the-mysql-reader) and
+  [A server connection that fails](interfaces.md#a-server-connection-that-fails),
+  contracts 39 and 40; the error type carries the provider where a message
+  differs by it, and two error numbers.
+- `data-model.md` gains [A MySQL read](data-model.md#a-mysql-read); `security.md`
+  the RSA key refusal and the empty password under *Transport*, and the
+  read-only promise of a `mysql` entry; `technology-stack.md` the second
+  vendored crate, citing `ADR-014`; `operations.md` the MySQL series gate, the
+  MySQL fixture and the two accounts added to both fixtures;
+  `quality-attributes.md` the requirements of form and cross-series
+  equivalence for a `mysql` entry; `verification.md`
+  [The MySQL provider](verification.md#the-mysql-provider), with
+  `tests/mysql_provider.rs` and `tests/login_faults.rs`; `overview.md` the
+  third product.
+- `open-decisions.md` amends `OD-05`, `OD-06`, `OD-11`, `OD-12` and `OD-35`,
+  records `OD-35`'s correction of 2026-11-03 applied at `60bf9df`, prepares one
+  correction to `CLAUDE.md` for `ADR-014`, applied the same day and uncommitted
+  in the working tree, and re-reads four records and `CLAUDE.md`.
+- `traceability.md` harvests the seventy-second to seventy-seventh editions:
+  section 28 is new, and every identifier they assign is mapped.
+
 **Changes of 2026-11-04, second pass**, for rmp `#323` — against the SQLite
 reader as that task changes it, not yet committed: no catalogue statement
 orders its rows, the fold produces every order and groups rows by sorted runs,
@@ -388,11 +423,13 @@ ordered stages in the order `FR-SRV-042` fixes, closed when the read ends. The
 catalogue reader and the query-count invariants. The cache as a read-through layer. The model as
 the single junction of three sources and three consumers. The render component:
 engine construction, loader, undefined behaviour, the output formatter,
-auto-escape, context assembly. Deadlines on six named blocking phases. The four
+auto-escape, context assembly. Deadlines on seven named blocking phases, the
+phase of a server connection read from the driver's record. The four
 render bounds, their composition, and the poll interval of the memory limit.
 Lazy initialisation. The
-synchronous process and the runtime boundary inside `mariadb/`. The provider
-dispatch, and the SQLite reader: its submodules, its six connection stages, its
+synchronous process and the runtime boundary inside the two server readers.
+The provider dispatch over three providers; the MySQL reader, its parts and
+what it shares with `mariadb/`; and the SQLite reader: its submodules, its six connection stages, its
 fixed plan, the check that opens it, the read transaction that holds both, the
 fold's indexing and its close. The
 module map
@@ -413,7 +450,8 @@ which are `data-model.md`.
 was chosen, what was rejected, and the official source consulted with the date.
 The template engine and its pin. Which engine built-ins are guaranteed, which
 are shadowed by a registration of a different signature, and which carry no
-guarantee. The database driver, already decided on measured evidence. The five
+guarantee. The database driver, already decided on measured evidence, serving
+both server providers, and its two vendored crates. The five
 TLS modes as a criterion that disqualifies a driver. The SQLite driver's
 surface as `tpl` calls it. The argument parser and
 the default features that must be off. The TOML read and write paths.
@@ -426,7 +464,9 @@ profile. The dependency budget, and the consequence of forbidding `unsafe`.
 ### `interfaces.md`
 
 **Answers.** The catalogue reader's surface and how a short read is reported.
-The SQLite reader's surface, and where its results become exit codes.
+The MySQL reader's surface. How a failed server connection becomes a
+condition, by the phase it reached. The SQLite reader's surface, and where its
+results become exit codes.
 The three privilege cross-checks. The error type, its exit-code derivation, and
 the per-code obligation on the `cause` line. The diagnostic renderer, its
 escaping, the bound on a value of a SQLite file, and suggestion selection. The
@@ -463,8 +503,9 @@ ordered classification. The `database` object. The four treatments of a
 cross-series difference. `.tpl/.cfg`: format, key space, mode, rewrite
 discipline. `.tpl/.cache/`: layout, keying, encoding, filenames, atomic write.
 `meta.json` and its two independent versions. Migration. What a cached document
-does not promise. The five writers inside `.tpl`. What a SQLite read obliges of
-the model's types, and the provider a cached read carries.
+does not promise. The five writers inside `.tpl`. What a MySQL read and a
+SQLite read oblige of the model's types, and the provider a cached read
+carries.
 
 **Must not contain.** The JSON document contract, which
 `specification/context-document.md` owns and this file cites.
@@ -479,8 +520,10 @@ and its ordering inside a DSN. The child process. The discovery boundary,
 canonicalisation, ownership and mode checks. Template containment. The
 injection surfaces. Transport, including the mode set explicitly on every
 connection, the trust material that widens rather than narrows, and how a
-directory of trust material is resolved and when it refuses. The
-read-only promise in its two parts, and in the three of a `sqlite` entry. The
+directory of trust material is resolved and when it refuses. The RSA
+public-key request never made over a session TLS does not protect, and the
+empty password. The read-only promise in its two parts, for a `mariadb` and a
+`mysql` entry, and in the three of a `sqlite` entry. The
 controls a SQLite database file is read under, and the check that refuses a
 schema able to forge the catalogue. The four template capability
 prohibitions.
@@ -492,7 +535,8 @@ owning requirement, as `BR-SEC-001` requires of the functional file it mirrors.
 
 **Answers.** The four targets, the static `musl` linkage and its observable
 consequence. The C compile and the build option the bundled SQLite library
-adds, the release gate on its release, and the SQLite fixture. The mandatory validation pipeline. The release profile. MSRV, the
+adds, the release gate on its release, and the SQLite fixture. The MySQL
+series gate and the MySQL fixture. The mandatory validation pipeline. The release profile. MSRV, the
 toolchain and tools as installed on the development host, and the cross-build
 path for the musl targets. The measurement harness, and why it can enforce
 nothing. The release gates. The four version numbers and what a breaking change
@@ -508,7 +552,7 @@ the protocol, which are `quality-attributes.md`.
 ### `quality-attributes.md`
 
 **Answers.** The six requirements of form, the design decisions each forces —
-for a `sqlite` entry as well — and why they are the part of this subject that
+for a `mysql` and a `sqlite` entry as well — and why they are the part of this subject that
 can fail anything. Determinism over
 stdout, and the single source of non-reproducibility. The nine measurement
 points, what each is measured over and with what cache posture, the distinction
@@ -534,7 +578,9 @@ The two test seams that must not reach the published surface. Help snapshots at
 every depth, and which tests of them exist. The parser mapping, one test per
 kind. The invocation surface observed on the process. The dump round-trip. The
 twelve end-to-end flows. Test naming by requirement identifier, and the suite's
-divergence from it. The SQLite provider's fixture, tests and instruments.
+divergence from it. The SQLite provider's fixture, tests and instruments. The
+MySQL provider's fixture and tests, and the verifications `FR-MYSQL-043`
+reapplies.
 
 **Must not contain.** Targets or measurement points, which are
 `quality-attributes.md`; the build pipeline and the measurement harness, which

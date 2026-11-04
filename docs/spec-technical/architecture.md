@@ -28,7 +28,9 @@ modules under `src/`, plus the crate root, and it settles the visibility rule.
 Its rationale, the seven placements it argued and the homes it rejected are
 recorded there and are not restated. `sqlite/` and `provider.rs` are the two
 added for the second provider, by
-[`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader).
+[`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader);
+`mysql/` is the sixteenth, added for the third, in the place
+[`ADR-005`](../adr/adr-005-async-runtime-scope.md) gives it.
 
 ```
 src/
@@ -36,8 +38,9 @@ src/
 ├── lib.rs         the crate root and its deliberate re-exports
 ├── cli/           the parser tree, one module per porcelain command, and the help renderer
 ├── project/       discovery, the trust checks, and the configuration reader and writer
-├── provider.rs    the one match over an entry's provider, and the quiescence of both readers (OD-35)
-├── mariadb/       for a mariadb entry: the connection, the catalogue reader, and the privilege cross-checks
+├── provider.rs    the one match over an entry's provider, and the quiescence of the three readers (OD-35)
+├── mariadb/       for a mariadb entry: the connection, the catalogue reader, and the privilege cross-checks; the connection and the fault classification serve a mysql entry too
+├── mysql/         for a mysql entry: the session checks, the window, and the catalogue reader (ADR-005, ADR-014)
 ├── sqlite/        for a sqlite entry: the hardened open, the catalogue reader, and the fold (OD-35)
 ├── model/         the model read from the catalogue — the published surface
 ├── cache/         the read-through cache and its on-disk arrangement
@@ -87,8 +90,8 @@ therefore the shape of the process, not a convention of the error module.
 | 2 | Discover the project and apply the trust checks | `project/` | `78` |
 | 3 | Read and validate the configuration file | `project/config.rs` | `78` |
 | 4 | Resolve the database entry | `project/settings.rs` | `78` or `66` |
-| 5 | Consult the cache; open a connection if it does not answer | `cache/`, then `provider.rs`, which reaches `mariadb/` or `sqlite/` | `69`, `77` or `78`; for a `sqlite` entry `69`, `70`, `74` or `78` (`FR-ERR-006`, note of the sixty-fifth edition) |
-| 6 | Resolve the named catalogue object | `mariadb/` or `cache/`, or `cli/` where a `--context` document is the source | `66` |
+| 5 | Consult the cache; open a connection if it does not answer | `cache/`, then `provider.rs`, which reaches `mariadb/`, `mysql/` or `sqlite/` | `69`, `77` or `78` for a server entry; for a `sqlite` entry `69`, `70`, `74` or `78` (`FR-ERR-006`, note of the sixty-fifth edition) |
+| 6 | Resolve the named catalogue object | The reader or `cache/`, or `cli/` where a `--context` document is the source | `66` |
 | 7 | Resolve the template | `render/` | `66` |
 | 8 | Render | `render/` | `65` |
 
@@ -247,7 +250,7 @@ Four divisions inside it are decisions rather than arrangement.
 elsewhere.** `project/` resolves the seven `[core]` values, taking the built-in
 default of `FR-CONF-002` for each key the file omits (`FR-CONF-004`,
 `FR-CONF-045`); `deadline.rs` owns the construct the deadlines are applied
-through, which is [The six phase deadlines](#the-six-phase-deadlines) below, and
+through, which is [The seven phase deadlines](#the-seven-phase-deadlines) below, and
 `render/` applies the bounds, which is [The render bounds](#the-render-bounds).
 
 ## Project discovery and the trust checks
@@ -354,14 +357,16 @@ coordination document's rule (`CLAUDE.md`, *Desempenho e Eficiência*) and also
 what `NFR-PERF-004` makes verifiable from the server side (`FR-SRV-014`).
 
 For a `mariadb` entry the lifecycle is five ordered stages inside `mariadb/`;
-for a `sqlite` entry it is the six stages of
-[The SQLite reader](#the-sqlite-reader). No module but those two sends a
-statement, and which of them is reached is
+for a `mysql` entry it is the same five inside `mysql/`, stage 1 run by the
+code of `mariadb/`, and the read-back of stage 3 and the checks of stage 4
+MySQL's own ([The MySQL reader](#the-mysql-reader)); for a `sqlite` entry it is the six
+stages of [The SQLite reader](#the-sqlite-reader). No module but those three
+sends a statement, and which of them is reached is
 [The provider dispatch](#the-provider-dispatch)'s.
 
 | # | Stage | Rule | Forced by |
 |---|---|---|---|
-| 1 | Open | Opened late — when the reader is about to read, never at dispatch | `NFR-PERF-006`, `NFR-PERF-003`, [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
+| 1 | Open | Opened late — when the reader is about to read, never at dispatch. One call to the driver runs the TCP connect, the login and, where the mode negotiates one, the TLS handshake inside the login; the driver records in a handle `tpl` passes it the phase the connection reaches, and `tpl` reads that handle once the call ends in an error or an expired budget | `NFR-PERF-006`, `NFR-PERF-003`, [`ADR-005`](../adr/adr-005-async-runtime-scope.md); `FR-CONF-005`, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 6 |
 | 2 | Set the session read-only | Once, at connection start | `FR-SRV-008` |
 | 3 | Read the session state back | Once, immediately after stage 2, reading `@@session.tx_read_only` and nothing else — the spelling `transaction_read_only` does not exist on `10.11`; a failure of either half refuses the connection and reads no catalogue | `FR-SRV-009`, `FR-SRV-010`; `FR-SRV-038`, difference 12 |
 | 4 | Probe the product and version | Before any statement other than stages 2 and 3; the series is derived from it and decides the treatment of every known difference | `FR-SRV-002`, `FR-SRV-034`, `FR-SRV-040`, `FR-SRV-022` |
@@ -373,7 +378,9 @@ list of `FR-SRV-006` prevents, which is
 [overview.md](overview.md#the-three-properties-that-bound-the-artefact)'s first
 property and `security.md`'s subject. The verdicts stages 4 and 5 produce — an
 unsupported product, a series below the window, a series above it — are
-[interfaces.md](interfaces.md#the-catalogue-reader)'s.
+[interfaces.md](interfaces.md#the-catalogue-reader)'s, and how a failure of
+stage 1 becomes a condition is
+[interfaces.md](interfaces.md#a-server-connection-that-fails)'s.
 
 **Stage 5 leaves nothing of the read alive** (`FR-RND-040`). `Session::close` in
 `src/mariadb.rs` sends the protocol's quit, releases the connection, and then
@@ -385,7 +392,7 @@ timeout leaks work and threads that did not stop in time (docs.rs,
 `tokio::runtime::Runtime`, tokio 1.53.1, *Shutdown*, consulted 2026-09-23).
 Each connection and each runtime is counted, per thread, from creation to drop;
 `mariadb::quiescent()` answers whether both counts are zero on the calling
-thread. The count is per thread because the runtime of
+thread, and `mysql::quiescent()` answers the same of `mysql/`'s own counts. The count is per thread because the runtime of
 [`ADR-005`](../adr/adr-005-async-runtime-scope.md) is current-thread and the
 counted values cannot leave the thread that built them; a process-wide count
 would see another test's connection in the suite. The mechanism and the option
@@ -415,30 +422,102 @@ what belongs here is where the provider is decided and who reaches the choice.
 
 | Step of `FR-ERR-006` | Where | What happens | Forced by |
 |---|---|---|---|
-| 3 | `project/config.rs` | `provider` is read as one of two values, an absent key meaning `mariadb`; a `path` holding `${` is refused | `FR-CONF-051`, `FR-CONF-054` |
-| 5 | `project/settings.rs` | The keys the provider refuses, then the presence of `path`, are checked **before** any `${VAR}` expansion and before `password_command` can run; a `sqlite` entry's `path` is resolved against the project directory | `FR-CONF-052` … `FR-CONF-054` |
-| 6 | `provider.rs`, once the cache did not answer | One exhaustive match sends a `mariadb` entry to `mariadb/` and a `sqlite` entry to `sqlite/`; both produce the same `model::Database` | `FR-CONF-051`, `BR-LITE-002` |
+| 3 | `project/config.rs` | `provider` is read as one of three values, an absent key meaning `mariadb`; a `path` holding `${` is refused | `FR-CONF-051`, `FR-CONF-054` |
+| 5 | `project/settings.rs` | The keys the provider refuses, then the presence of `path`, are checked **before** any `${VAR}` expansion and before `password_command` can run; a `mysql` entry is resolved by the function that resolves a `mariadb` entry, into the same settings type; a `sqlite` entry's `path` is resolved against the project directory | `FR-CONF-052` … `FR-CONF-054`, `FR-MYSQL-020` |
+| 6 | `provider.rs`, once the cache did not answer | One exhaustive match sends a `mariadb` entry to `mariadb/`, a `mysql` entry to `mysql/` and a `sqlite` entry to `sqlite/`; all three produce the same `model::Database` | `FR-CONF-051`, `BR-LITE-002`, `BR-MYSQL-003` |
 
 Three callers reach `provider.rs`, and no other module names a reader:
 `cli/source.rs`, which every catalogue read goes through — the eight `schema`
 subcommands, `tpl cache load`, and `tpl render` without `--context`;
 `cli/cfg/connectivity.rs`, for `tpl cfg database test` (`FR-CFG-024`,
 `FR-CFG-056`); and `bounded()` in `cli/render.rs`, which asks whether anything
-of either reader's read is alive (`FR-RND-040`). The two checks of
-`FR-CONF-040` and `FR-CONF-041` stay in `cli/source.rs` and reach the `mariadb`
-arm alone: a `sqlite` entry carries neither key (`FR-CONF-052`).
+of any reader's read is alive (`FR-RND-040`). The two checks of
+`FR-CONF-040` and `FR-CONF-041` stay in `cli/source.rs` and reach the two
+server arms alone: a `sqlite` entry carries neither key (`FR-CONF-052`), and a
+`mysql` entry must name both (`FR-MYSQL-020`).
 
 **The refused keys are checked before the child runs.** `FR-CONF-052` refuses
 a key because a refused key "would look in force"; running the
 `password_command` of an entry whose provider refuses it would put it in force
 for as long as the child runs.
 
-**One read shape for both providers.** A read is the whole catalogue whatever
+**One read shape for every provider.** A read is the whole catalogue whatever
 was asked for, on the three grounds `cli/source.rs` records for a server: both
 ends of every foreign key are embedded (`FR-CTX-006`, `FR-CTX-010`), the
 population a suggestion is drawn from is in hand (`FR-SCH-010`), and the cache
 is warmed (`FR-CACHE-007`). The count still does not depend on the objects,
-which is all `FR-LITE-037` asks of a named read.
+which is all `FR-LITE-037` and `FR-MYSQL-042` ask of a named read.
+
+## The MySQL reader
+
+`mysql/` is the third reader, and the only module that issues the statements
+of a `mysql` entry's session and read (`FR-MYSQL-015`, `FR-MYSQL-016`). That it
+is a module of its own, and builds the runtime it needs, is
+[`ADR-005`](../adr/adr-005-async-runtime-scope.md)'s as amended on 2026-11-04;
+that it reads through the driver of
+[`ADR-003`](../adr/adr-003-database-driver.md), and the patch that driver
+carries for it, are [`ADR-014`](../adr/adr-014-mysql-provider-driver.md)'s.
+The code at `cc511e2` implements this section against the seventy-seventh
+edition.
+
+| Part | What it owns | Forced by |
+|---|---|---|
+| `mysql.rs` | `open` builds the current-thread runtime, opens the connection through the function of `mariadb/connect.rs` that opens a `mariadb` one, handing it `mysql/fault.rs`'s classification, and runs the session start; `Session::close` sends the protocol's quit, closes the socket and then drops the runtime; `quiescent` answers for this module's own counts | `NFR-PERF-004`, `FR-RND-040`, `FR-MYSQL-020` |
+| `mysql/session.rs` | The three connection-start statements, once each, in the order of `FR-MYSQL-017`; the read-back of `@@session.transaction_read_only`, confirmed by the integer `1` alone and decoded as an integer of either signedness; the product check; the series | `FR-MYSQL-006` … `FR-MYSQL-012`, `FR-MYSQL-017` … `FR-MYSQL-019` |
+| `mysql/window.rs` | The set of `FR-MYSQL-003` as one table compiled in, newest first; the comparison is `mariadb/window.rs`'s | `FR-MYSQL-002`, `FR-MYSQL-003`, `FR-MYSQL-009`, `FR-MYSQL-010`, `BR-MYSQL-001` |
+| `mysql/fault.rs` | Hands a failed connection to the classification of `mariadb/fault.rs`, with the provider `mysql` | `FR-MYSQL-045`, `FR-ERR-047` … `FR-ERR-049` |
+| `mysql/catalogue.rs` | Issues the plan of `statements.rs` and nothing besides, each statement under the catalogue-query deadline and the database name bound as a parameter; the privilege probe of `FR-CFG-044`, against `SCHEMATA` | `FR-MYSQL-015`, `FR-MYSQL-042`, `FR-CFG-044` |
+| `mysql/catalogue/statements.rs` | Twelve constant statements, one per table of the closed list, each naming only fields the mapping reads | `FR-MYSQL-015`, `FR-MYSQL-016`, `FR-MYSQL-025` … `FR-MYSQL-038` |
+| `mysql/catalogue/row.rs` | The decoding of a field; an integer field accepted in either signedness, because MySQL declares the integer fields of its catalogue with both | `FR-MYSQL-025` … `FR-MYSQL-038` |
+| `mysql/catalogue/expression.rs` | The phrases of the attribute field, the outer parentheses of an expression default, and the one layer of backslash escaping removed | `FR-MYSQL-029`, `FR-MYSQL-030`, `FR-MYSQL-046` |
+| `mysql/catalogue/fold.rs` | The rows become the model | `FR-MYSQL-023` … `FR-MYSQL-041` |
+
+**What it shares with `mariadb/`, and why only that.** `FR-MYSQL-020`
+connects a `mysql` entry exactly as a `mariadb` entry, so one function opens
+both connections — the driver's options, the name resolution, the TLS mode of
+[`ADR-002`](../adr/adr-002-tls-mode-mapping.md), the trust material and the
+connection budget — and takes the classification of a failure as a parameter.
+The statement runner and its deadline, the counting of what is alive, the
+comparison of two series, the text accessors, the classification of a failure,
+the attachment of both directions of every foreign key with the cross-check of
+`FR-PRIV-019`, and the assembly of each table with its primary key read from
+the index named `PRIMARY` are shared on the same ground: a requirement holds
+them to the same behaviour for both providers (`FR-MYSQL-032`, `FR-MYSQL-033`,
+`FR-MYSQL-041`). Everything a MySQL server answers differently — the read-back,
+the product check, the window, the twelve statements and every field they
+map — is `mysql/`'s, so no rule of `mysql-contract.md` is written in
+`mariadb/` beyond the provider the shared classification is handed.
+
+**The read is one plan, whatever was asked.** Twelve statements, one per
+table, each restricted to the database the entry names; a named read issues
+the same twelve, so the reader has no second entry point, and a `CHECK`
+constraint is joined to its table in the fold, by its schema and its name,
+rather than by a statement per table (`FR-MYSQL-034`, `FR-MYSQL-042`). Each
+statement writes the per-query line of `FR-GLOB-017` before it is sent, under
+the token a `mariadb` read writes; the three connection-start statements write
+none.
+
+**The fold differs from `mariadb/`'s where MySQL reports differently**, and
+`fold.rs`'s own table names each difference with its requirement: the covered
+table type and the routine type `LIBRARY` (`FR-MYSQL-023`), an index holding a
+functional key part (`FR-MYSQL-024`), the default (`FR-MYSQL-029`), the
+attribute field (`FR-MYSQL-030`), a generated column (`FR-MYSQL-031`), three
+more `data_type` values (`FR-MYSQL-028`), `ignored` (`FR-MYSQL-032`), a
+`CHECK` constraint's table and level (`FR-MYSQL-034`), a view's algorithm
+(`FR-MYSQL-035`), and the escaping removed from three texts (`FR-MYSQL-046`).
+A short read is marked in the shapes of `FR-MYSQL-041` by the completeness
+verdict `mariadb/` already applies.
+
+**The session guarantee cannot be stepped around.** `mysql::open` issues the
+three connection-start statements before it returns, behind no condition, and
+the catalogue read takes only the session `open` produces, so every catalogue
+statement follows all three (`FR-MYSQL-017`, `FR-MYSQL-019`).
+
+**`tpl cfg database test` for a `mysql` entry** runs the four steps of
+`FR-CFG-024` with the MySQL counterpart of each: the connection carries no
+default schema, the session start of `mysql/session.rs` answers the second and
+third steps, and the probe of `FR-CFG-044` reads `SCHEMATA` for the database
+the entry names, an error packet in answer being its `false`.
 
 ## The SQLite reader
 
@@ -686,7 +765,9 @@ sources on 2026-11-03. Neither is copied; both were studied.
 surface and its obligations are
 [interfaces.md](interfaces.md#the-catalogue-reader)'s; what belongs here is
 where the two entry points sit and what bounds the number of statements. The
-SQLite reader's plan is [The SQLite reader](#the-sqlite-reader)'s.
+MySQL reader's plan, which has one entry point, is
+[The MySQL reader](#the-mysql-reader)'s, and the SQLite reader's is
+[The SQLite reader](#the-sqlite-reader)'s.
 
 | Entry point | Shape | Invariant | Forced by |
 |---|---|---|---|
@@ -742,29 +823,31 @@ Everything the layer puts on disk — the location, the keying, the encoding, th
 filenames, the atomic write, the two independent versions — is
 [data-model.md](data-model.md#tplcache)'s and is not repeated.
 
-## The model: one junction, four producers, three consumers
+## The model: one junction, five producers, three consumers
 
 A live read, a cached read and a supplied context document must present the same
 objects and the same fields, so `model/` is the single junction of the corpus
 (`specification/catalogue-coverage.md` *Overview*; `BR-SCH-001`, `FR-SCH-022`).
 The model is also the same whichever provider read it (`catalogue-coverage.md`,
-note of the sixty-fifth edition), so a live read has two producers.
+note of the sixty-fifth edition; `BR-MYSQL-003`), so a live read has three
+producers.
 
 | Producers | Consumers |
 |---|---|
 | `mariadb/`, on a read through a `mariadb` entry | The `text` layouts, in `output/` |
-| `sqlite/`, on a read through a `sqlite` entry | The JSON emitter, in `output/` |
-| `cache/`, on a cached read | The render, in `render/` |
+| `mysql/`, on a read through a `mysql` entry | The JSON emitter, in `output/` |
+| `sqlite/`, on a read through a `sqlite` entry | The render, in `render/` |
+| `cache/`, on a cached read | |
 | `cli/`, from a supplied context document | |
 
 Two design consequences follow from the junction being single.
 
-- **An invariant over an assembled model is checked by each of the four
+- **An invariant over an assembled model is checked by each of the five
   producers and not on the emitting path**, because `render/` consumes the same
   model without passing through `output/` (`FR-CAT-044`;
   [interfaces.md](interfaces.md#the-catalogue-reader)).
 - **The lossy conversion of catalogue bytes to text happens at the boundary of
-  the reader — `mariadb/` or `sqlite/` — and nowhere else**, so all three
+  the reader — `mariadb/`, `mysql/` or `sqlite/` — and nowhere else**, so all three
   consumers inherit one substitution (`FR-OUT-017`;
   [interfaces.md](interfaces.md#the-catalogue-reader)).
 
@@ -962,11 +1045,11 @@ two of the registered tests reach back into the assembled context rather than
 answering from their operand, which is
 [interfaces.md](interfaces.md#context-access-from-a-filter-or-a-test)'s.
 
-## The six phase deadlines
+## The seven phase deadlines
 
 `FR-SEC-022` requires a deadline on every blocking phase, because a hung process
 is the failure the never-interactive invariant exists to prevent (`BR-CLI-003`).
-`FR-CONF-005` names six phases and maps each onto one of four keys. The
+`FR-CONF-005` names seven phases and maps each onto one of four keys. The
 mechanism for each, and the rejected alternatives, are
 [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and are
 not restated.
@@ -975,17 +1058,27 @@ not restated.
 |---|---|---|---|---|
 | 1 | DNS resolution | The shared connection budget | The runtime's own timer, around a resolution `tpl` performs itself | `FR-CONF-005`, `FR-ERR-027` |
 | 2 | TCP connect | What remains of the same budget | The runtime's own timer, around the driver's connect call | `FR-CONF-005`, `FR-ERR-027` |
-| 3 | TLS handshake | What remains of the same budget | The same timer and the same call; the phase is separated in the **report**, from the driver's own discriminant | `FR-CONF-005`, `FR-ERR-027` |
-| 4 | Catalogue query | The query budget, per query — for a `sqlite` entry, per statement on the connection | The runtime's own timer; for a `sqlite` entry, the library's busy timeout and a watchdog thread holding the interrupt handle ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)) | `FR-CONF-005`, `FR-ERR-027`, `FR-LITE-009` |
-| 5 | `password_command` | The password budget, until the child has exited **and** its standard output has closed | A reader thread draining the child's pipe and a polling loop in the parent, which kills the child's whole process group and reports the expiry | `FR-CONF-005`, `FR-CONF-028` |
-| 6 | Render | The render budget | A watchdog thread that writes the diagnostic and terminates the process; the same thread observes the render memory limit ([The render bounds](#the-render-bounds)) | `FR-CONF-005`, `FR-RND-033`, `FR-RND-039` |
+| 3 | TLS handshake | What remains of the same budget | The same timer and the same call | `FR-CONF-005`, `FR-ERR-027` |
+| 4 | The login | What remains of the same budget | The same timer and the same call; the login runs before and after a TLS handshake | `FR-CONF-005`, `FR-ERR-027`, `FR-ERR-047` |
+| 5 | Catalogue query | The query budget, per query — for a `sqlite` entry, per statement on the connection | The runtime's own timer; for a `sqlite` entry, the library's busy timeout and a watchdog thread holding the interrupt handle ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)) | `FR-CONF-005`, `FR-ERR-027`, `FR-LITE-009` |
+| 6 | `password_command` | The password budget, until the child has exited **and** its standard output has closed | A reader thread draining the child's pipe and a polling loop in the parent, which kills the child's whole process group and reports the expiry | `FR-CONF-005`, `FR-CONF-028` |
+| 7 | Render | The render budget | A watchdog thread that writes the diagnostic and terminates the process; the same thread observes the render memory limit ([The render bounds](#the-render-bounds)) | `FR-CONF-005`, `FR-RND-033`, `FR-RND-039` |
 
-Four rules bind the table.
+Six rules bind the table.
 
-- **Phases 1 to 3 share one budget**, measured from the start of the first of
+- **Phases 1 to 4 share one budget**, measured from the start of the first of
   them that runs and consumed in the order they run; they are not given one
   budget each (`FR-CONF-005`). `FR-CONF-004` resolves that budget, and the three
   other budgets, from the declared key or its built-in default.
+- **Phases 2 to 4 are one call to the driver, and the phase is the one the
+  connection reached**, read from the handle the driver records it in, never
+  from the call that was running (`FR-CONF-005`;
+  [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 6). An expired
+  budget is reported against that phase, and a failure is classified by it
+  ([interfaces.md](interfaces.md#a-server-connection-that-fails)). The driver
+  resolves the host a second time inside the call, so a budget that expires
+  there is reported against the TCP connect, the bound
+  [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) states.
 - **Every phase deadline composes with the overall budget** measured from
   process start, and a phase ends at the first of the two to expire
   (`FR-GLOB-011`, `FR-GLOB-012`).
@@ -997,22 +1090,23 @@ Four rules bind the table.
   that a host refused a connection (`FR-CONF-005`, `NFR-PERF-018`,
   `FR-ERR-034`). A deadline there bounds `tpl`'s wait and not the resolver's
   work.
-- **A `sqlite` entry runs phases 4 and 6 alone.** DNS resolution, TCP connect,
-  the TLS handshake and `password_command` do not run, and every statement on
-  the connection to the file is bounded as a catalogue query (`FR-LITE-009`).
-  The open of the file is bounded by nothing, which is `FR-LITE-005`'s
-  accepted cost.
+- **A `sqlite` entry runs phases 5 and 7 alone.** DNS resolution, TCP connect,
+  the TLS handshake, the login and `password_command` do not run, and every
+  statement on the connection to the file is bounded as a catalogue query
+  (`FR-LITE-009`). The open of the file is bounded by nothing, which is
+  `FR-LITE-005`'s accepted cost. A `mysql` entry runs all seven, as a
+  `mariadb` entry does (`FR-MYSQL-020`).
 
-**`deadline.rs` owns the construct and four modules use it** — the runtime
-inside `mariadb/`, the watchdog inside `sqlite/`, the child process run from
-`project/password.rs`, and the render in `render/` — because a budget measured
-from process start and shared by four modules belongs to none of them
+**`deadline.rs` owns the construct and five modules use it** — the runtimes
+inside `mariadb/` and `mysql/`, the watchdog inside `sqlite/`, the child process
+run from `project/password.rs`, and the render in `render/` — because a budget
+measured from process start and shared by five modules belongs to none of them
 ([`OD-05`](open-decisions.md#od-05--the-module-decomposition),
 [interfaces.md](interfaces.md#the-shared-functions-and-the-phase-clock)).
 
 **It is at the crate root and not under `project/`.** `project/` resolves the
 four values from `[core]`; it does not own the clock they are applied through,
-because three of the four users are not in it and a budget measured from process
+because four of the five users are not in it and a budget measured from process
 start is not a property of the configuration file
 ([`OD-05`](open-decisions.md#od-05--the-module-decomposition),
 [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced)).
@@ -1069,13 +1163,12 @@ Five properties of the built arrangement follow.
   its values dropped, not leaked, before the server read, so the render that
   follows is not charged for them under the memory limit.
 - **A render refuses to start while anything of a catalogue read is alive.**
-  `bounded()` checks `mariadb::quiescent()` first and returns the `70` of a
+  `bounded()` checks `provider::quiescent()` first and returns the `70` of a
   violated invariant otherwise (`FR-RND-040`, `FR-ERR-030`); every caller reaches
   it with the read already closed, so the check is the in-process observation
-  `FR-RND-040` names rather than a reachable path. **Prescribed for the second
-  provider:** the check moves to `provider.rs`, which answers for both readers —
-  no MariaDB connection or runtime, and no SQLite connection or watchdog, on the
-  calling thread
+  `FR-RND-040` names rather than a reachable path. `provider::quiescent()`
+  answers for the three readers — no MariaDB or MySQL connection or runtime, and
+  no SQLite connection or watchdog, on the calling thread
   ([`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader)).
 
 ## Lazy initialisation
@@ -1090,7 +1183,7 @@ it observable rather than reviewable.
 | A discovery walk, a configuration read, a socket | The command is not one of the four `FR-PROJ-025` exempts | `NFR-PERF-005`, `FR-PROJ-025` |
 | A connection — to a server, or of the SQLite library to a database file | The command needs catalogue data and the cache did not answer | `NFR-PERF-006`, `NFR-PERF-003`, `FR-CACHE-011`, `FR-RND-022`, `FR-LITE-037` |
 | The template engine | The invocation renders | `NFR-PERF-006` |
-| The asynchronous runtime | `mariadb/` is reached; never for a `sqlite` entry | [`ADR-005`](../adr/adr-005-async-runtime-scope.md), [`ADR-013`](../adr/adr-013-sqlite-driver.md) |
+| The asynchronous runtime | `mariadb/` or `mysql/` is reached, and at most one of them per invocation; never for a `sqlite` entry | [`ADR-005`](../adr/adr-005-async-runtime-scope.md), [`ADR-013`](../adr/adr-013-sqlite-driver.md) |
 | A thread of the crate's own | A phase bounded without the runtime is entered — the statements on a SQLite connection among them | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) |
 
 Each row is verified by an observation made outside the process and never by
@@ -1103,11 +1196,11 @@ the four instruments reaches which absence, and on which targets, is
 ## The synchronous process, and the runtime boundary
 
 That the process is synchronous, where the asynchronous runtime is built, that
-it serves a `mariadb` entry alone, and which deadlines may use its timers are
-[`ADR-005`](../adr/adr-005-async-runtime-scope.md)'s, registered as
+it serves the two server providers alone, and which deadlines may use its timers
+are [`ADR-005`](../adr/adr-005-async-runtime-scope.md)'s, registered as
 [`OD-11`](open-decisions.md#od-11--the-scope-of-the-async-runtime), and are not
 restated. In this document they decide the *Bounded by* column of
-[The six phase deadlines](#the-six-phase-deadlines), whose mechanisms are
+[The seven phase deadlines](#the-seven-phase-deadlines), whose mechanisms are
 [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and, for
 a `sqlite` entry,
 [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection),

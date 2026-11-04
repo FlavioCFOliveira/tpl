@@ -119,6 +119,22 @@ record, the limit `FR-LITE-018` states.
 which that requirement states. How both are verified is
 [verification.md](verification.md#the-sqlite-provider)'s.
 
+**The six hold for a `mysql` entry as for a `mariadb` entry** (`FR-MYSQL-042`),
+each observed from the server's records of `scripts/mysql/`.
+
+| Requirement | The design decision for a `mysql` entry | Described in |
+|---|---|---|
+| `NFR-PERF-001`, `NFR-PERF-002` | A constant plan of twelve catalogue statements, one per table of `FR-MYSQL-015`, each restricted to the entry's database; a named read issues the same twelve, so the count over the fixture's database equals the count over a database holding no object. The three connection-start statements read no schema and are not counted | [architecture.md](architecture.md#the-mysql-reader) |
+| `NFR-PERF-003` | The cache sits in front of the dispatch, so a hit opens no connection and issues no statement | [architecture.md](architecture.md#the-provider-dispatch) |
+| `NFR-PERF-004` | One connection, opened by `mysql/` when it is about to read and closed with its runtime when the read ends, before any render; the phase a failure reached is learned from the driver rather than from a second connection | [architecture.md](architecture.md#the-mysql-reader) |
+| `NFR-PERF-005`, `NFR-PERF-006` | `mysql/` is reached only through the dispatch, and its runtime is built only there | [architecture.md](architecture.md#lazy-initialisation) |
+
+`mysql/` writes the per-query line of `FR-GLOB-017` once for each of the twelve
+statements, before it is sent, and none for the three connection-start
+statements, so `NFR-PERF-008` compares those lines with the server's statement
+record as for a `mariadb` entry. How each is verified is
+[verification.md](verification.md#the-mysql-provider)'s.
+
 ## Determinism
 
 `NFR-DET-001` fixes the extent of the contract: **stdout**, byte-identical for
@@ -382,6 +398,13 @@ Three bounds keep the exceptions from swallowing the promise:
 - The treatment applied to any difference is one of exactly four (`BR-SRV-006`,
   with `FR-SRV-024`, `FR-SRV-004`, `FR-SRV-025`, `FR-SRV-039`); which treatment
   each field receives is `data-model.md`.
+
+**The property holds for a `mysql` read across the series of `FR-MYSQL-003`**,
+with the same three exceptions and the same bounds (`FR-MYSQL-013`); the
+differences observed between those series are recorded in `FR-MYSQL-014`, and
+none is registered. No requirement compares a MariaDB document with a MySQL
+one: `FR-MYSQL-013` ranges over the set of `FR-MYSQL-003` alone, and
+`FR-MYSQL-040` records the divergences between the two products instead.
 
 **The property does not reach a `sqlite` read.** The library is one release,
 carried by the binary, so there is no second series to be equivalent to

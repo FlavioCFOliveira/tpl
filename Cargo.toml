@@ -102,10 +102,18 @@ rusqlite = { version = "0.41.1", default-features = false, features = ["trace"] 
 # points at, on the first `sqlx` release that carries the fix (`ADR-010`).
 #
 # `sqlx-mysql`: 0.9.0 requests the server's RSA public key over a session TLS
-# does not protect, which `FR-MYSQL-045` forbids. The vendored copy refuses the
-# request with a typed error instead. This entry is deleted, with the directory
-# it points at, on the first `sqlx` release whose `sqlx-mysql` lets a caller
-# refuse the request (`ADR-014`).
+# does not protect, which `FR-MYSQL-045` forbids; sends a scramble of an empty
+# or absent password, which `FR-CONF-055` forbids; and cannot report the phase
+# a connection reached, which `FR-CONF-005` needs. The vendored copy refuses
+# the key request with a typed error, sends the response the servers' own
+# clients send for an empty password, and records the phase in a handle the
+# caller passes (`ADR-014`, points 3, 5 and 6). Each part leaves on its own
+# condition (`ADR-014`, point 7): the refusal, at the first `sqlx` release
+# whose `sqlx-mysql` lets a caller refuse the request; the empty password, at
+# the first that sends those responses at the first response and at every
+# switch; and the handle, at the first that lets a caller learn the phase
+# reached. This entry is deleted, with the directory it points at, with the
+# last of them.
 #
 # Each entry goes on its own condition: the retirement of one leaves the other
 # in force, and the table goes only with the last of them.
