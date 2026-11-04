@@ -31,6 +31,11 @@ unchanged. The same pass added `hex` to the crates a *Sources* row names as
 leaving the graph. The claims re-read that day are those of the *Sources* rows
 dated 2026-11-04.
 
+**Amended in place on 2026-11-04**, for rmp `#327`: the record names `ADR-014`
+among what it does not decide and among the obligations of a move of its pin.
+The driver, its pin and its form did not move, so `decided` is unchanged, and no
+*Sources* row was re-read for this amendment.
+
 ## Context
 
 `/specification` names no driver, and says so in the boundary it draws: "the
@@ -117,7 +122,8 @@ where it is built are `ADR-005`. The mapping of the five modes onto this
 driver's TLS surface is `ADR-002`. The toolchain floor this pin implies is
 `ADR-007`. What the project does about the TLS connect stall carried by the
 pinned version is `ADR-010`. Why the driver is consumed as two crates is
-`ADR-013`.
+`ADR-013`. That the driver also serves the `mysql` provider, and the patch it
+carries for that provider, are `ADR-014`.
 
 ## Alternatives rejected
 
@@ -202,6 +208,11 @@ way, and the defect is in the version, not in the driver.
 **Moving this pin onto the release that carries the upstream fix retires
 `ADR-010`.** That is a third obligation on a version move, beside the two named
 above, and that record states what the move must remove with it.
+
+**Every move of this pin carries the patch of `ADR-014` with it.** That is a
+fourth obligation: until the condition that record names is met, `sqlx-mysql` is
+vendored again at the release moved to, and that record's change is re-applied
+and checked against the release's published source.
 
 **Under R3, the pin and its rationale live here alone.** A document that needs
 to name the driver may name it, as the root coordination document's stack
