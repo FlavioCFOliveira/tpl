@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventy-three editions. All are in force;
+The specification has been written in seventy-four editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -5700,10 +5700,10 @@ which now names *pending observation* beside *a stated limit*. `DIV-059` and
 - **The MySQL contract** — [mysql-contract.md](mysql-contract.md), new,
   beside [server-contract.md](server-contract.md) and
   [sqlite-contract.md](sqlite-contract.md). A `mysql` entry takes the keys of
-  a `mariadb` entry (`FR-MYSQL-001`). The supported series are the newest
+  a `mariadb` entry (`FR-MYSQL-001`). The supported series were the newest
   series of each major family under Oracle Premier or Extended Support,
-  Innovation releases while current (`FR-MYSQL-002`), which on 2026-11-04 are
-  `26.10`, `9.7` and `8.4`, the latest releases `26.10.0`, `9.7.4` and
+  Innovation releases while current (`FR-MYSQL-002`), which on 2026-11-04
+  were `26.10`, `9.7` and `8.4`, the latest releases `26.10.0`, `9.7.4` and
   `8.4.13` (`FR-MYSQL-003`); the set rolls forward by the criterion alone, is
   stated once and is re-verified before every release (`FR-MYSQL-004`,
   `BR-MYSQL-001`, `FR-MYSQL-005`). The probe, the product check with its
@@ -5776,8 +5776,8 @@ which now names *pending observation* beside *a stated limit*. `DIV-059` and
   longer is.
 - **Two decisions are the user's** — [open-questions.md](open-questions.md).
   `OQ-076` asks which releases form one major family under the calendar
-  versioning MySQL adopted with `26.7.0`; every reading selects the same
-  three series today, so the table does not wait on it. `OQ-077` asks how an
+  versioning MySQL adopted with `26.7.0`; every reading selected the same
+  three series that day, so the table did not wait on it. `OQ-077` asks how an
   account is authenticated over a session TLS does not protect, which MySQL's
   default method makes a question of security; the requirement for every
   encrypted session is written.
@@ -5808,15 +5808,130 @@ adopted by citation and not changed; a `mysql` entry writes nothing outside
 `.tpl`, closes its connection before a render, and stays within one
 connection; a cached read keeps the provider of the read that wrote it; and a
 `data_type` only MySQL produces falls through to no family under
-`FR-ENV-046`, as that requirement provides. `FR-PROJ-021` names a supported
-MariaDB database as what the starter template must render against, and is
-left as it stands.
+`FR-ENV-046`, as that requirement provides. `FR-PROJ-021` named a supported
+MariaDB database as what the starter template must render against, and was
+left as it stood.
 
 The fifth validation rule is discharged for this edition: both root
 documents were read at `e72e299` against every requirement the edition
 writes or amends, and the two entries it raises hold every divergence found.
 The reading the seventy-second edition named as owed, of `DIV-036` and
 `DIV-050`, is still owed; this edition does not make it.
+
+### Seventy-fourth edition — LTS series only, a key never asked for, and a starter template for two servers
+
+rmp `#331`, of sprint 28, writes three decisions the user took on 2026-11-04,
+relayed the same day, on what the seventy-third edition left open or noted.
+They are binding:
+
+1. **`OQ-076`.** The supported MySQL series are the latest release of each
+   MySQL LTS line still under Oracle Premier or Extended Support, two series
+   on that date, named by `FR-MYSQL-003`. No Innovation release is
+   supported, `26.10` and every later Innovation release numbered by the
+   calendar among them. A future LTS line joins the set when it is released,
+   and a line leaves when it moves past Extended Support. The
+   compatibility-lineage reading and the calendar-year reading are rejected.
+2. **`OQ-077`.** The server's RSA public key is never requested over a
+   session TLS does not protect, and where the authentication would need it
+   the read fails with a clear error, whose code and message this edition
+   states consistently with the error requirements in force. An opt-in
+   configuration key that allows the request is rejected.
+3. **`FR-PROJ-021`.** The starter template `tpl init` writes also renders
+   against the MySQL fixture, in addition to MariaDB. SQLite is not added.
+
+**One identifier is assigned**: `FR-MYSQL-045`. None is retired and none is
+renumbered. `OQ-076` and `OQ-077` are closed, and the index of
+[open-questions.md](open-questions.md) is empty again. No entry enters or
+leaves [glossary.md](glossary.md); two are amended.
+
+- **The supported series** — [mysql-contract.md](mysql-contract.md).
+  `FR-MYSQL-002` admits an LTS series under Premier or Extended Support and
+  no Innovation release, records the user's two rejected readings and the
+  third reading `OQ-076` named, and closes that entry. `FR-MYSQL-003` loses
+  the row of `26.10` and its major-family column, and `26.10` joins its
+  worked examples. `FR-MYSQL-004` moves the set on the first release of an
+  LTS series and on the end of Extended Support alone, and `FR-MYSQL-005`
+  names those as the next changes. The section on sources keeps the manual of
+  `26.10` for the release model and as corroboration only.
+- **What a server of an Innovation release meets** — the same file.
+  `FR-MYSQL-009` and `FR-MYSQL-010` are unchanged as requirements, and their
+  notes are rewritten. An Innovation release older than the newest supported
+  series is refused with `78`; one newer is read and marked
+  `newer_than_supported`, at exit `0`, which is every Innovation release
+  numbered by the calendar, `26.7` among them where the seventy-third edition
+  refused it. The version does not name a release's track, so the system
+  cannot tell such a server from one of a new LTS series, and refusing every
+  newer series is the outcome `FR-SRV-031` rejects. `FR-MYSQL-043` and
+  `FR-MYSQL-044` require the server outside the set that the refusal is
+  verified against to be older than the newest supported series.
+- **Authentication without TLS** — the same file. `FR-MYSQL-045`, new: the
+  system never requests the server's RSA public key over a session that is
+  not encrypted, whatever the authentication method; a login that needs it
+  ends the connection before the read-only session is set, with `78`, a
+  `cause` naming the user, the host, the `tls` mode and the method the server
+  asked for, and a `hint` carrying
+  `tpl cfg database update <entry> --tls verify-identity`. `77` is rejected
+  because the server refused nothing, and `69` because nothing was
+  unavailable. Whether a login needs the key depends on the server's cache,
+  which is stated as an accepted cost. It closes `OQ-077`, and
+  `FR-MYSQL-021`, `FR-MYSQL-022` and row 25 of `FR-MYSQL-040` cite it.
+- **Notes that applied to `26.10` alone** — the same file. The *Pending
+  observation* note of `FR-MYSQL-006` no longer cites the release notes of
+  `26.10.0`; `FR-MYSQL-014` drops the column of `26.10`, and its duality-view
+  candidate, which rested on that column, is placed by the index of
+  `INFORMATION_SCHEMA` tables of the two remaining manuals, read on
+  2026-11-04; and the note of `FR-MYSQL-022` no longer names `26.10`. A
+  page of the `26.10` manual cited beside a page of a supported series stays,
+  as corroboration, and owes no observation.
+- **The starter template** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-021`
+  renders against any supported MySQL database as well, and is shown against
+  every table of the fixture of `FR-MYSQL-044` on every supported MySQL
+  series; its MariaDB clause is unchanged, and a note says that a `sqlite`
+  entry is not reached.
+- **The questions, the glossary and this file** —
+  [open-questions.md](open-questions.md) moves both entries to the *Closed*
+  table, with the choice and the rejected options, empties the index, and
+  calls the specification complete again by its own definition.
+  [glossary.md](glossary.md) withdraws the MySQL meaning of *major family*
+  from *series / supported series / major family*, and *LTS release /
+  Innovation release* states that the version does not name the track and
+  what the user's *LTS line* means. In this file, the edition count of the
+  Scope, the count of closed questions under the identifier scheme, and two
+  paragraphs of [Maintenance debt](#maintenance-debt) follow.
+
+**No requirement that governs a `mariadb` or a `sqlite` entry changes its
+meaning.** The MariaDB clause of `FR-PROJ-021` is unchanged, and its new
+clause governs MySQL alone; every other change is to the `mysql` provider,
+to the record of open questions, to the MySQL passages of the glossary, and
+to this file. `FR-SRV-016`, `FR-SRV-031`, `FR-CFG-024`, `FR-CFG-043`,
+`FR-CTX-033`, `FR-CTX-034`, `FR-ERR-001`, `FR-ERR-006`, `FR-ERR-034`,
+`FR-ERR-045`, `BR-ERR-004`, `BR-ERR-005`, `FR-CONF-013`, `FR-CONF-033`,
+`FR-CONF-038`, `FR-SEC-021` and the glossary entry *standing* were read
+against the changes, and none is amended: the note on `FR-CFG-043` already
+reads a MySQL series newer than the set and exits `0`, and the condition of
+`FR-MYSQL-045` takes a code and a step those requirements already provide.
+The three sentences on the index of [open-questions.md](open-questions.md)
+in [server-contract.md](server-contract.md),
+[catalogue-coverage.md](catalogue-coverage.md) and
+[sqlite-contract.md](sqlite-contract.md), corrected by the seventy-third
+edition, stay true with the index empty and are not touched.
+
+**Three editorial corrections to the edition above.** Its account of
+[mysql-contract.md](mysql-contract.md) said that the supported series *are*
+those of the seventy-third edition's criterion, which on 2026-11-04 *are*
+three; its account of `OQ-076` said that every reading *selects* the same
+series *today*; and its account of the requirements it read and left
+unchanged said that `FR-PROJ-021` *names* a supported MariaDB database.
+Each is put in the past tense, and none of the three is otherwise changed.
+
+The fifth validation rule is discharged for this edition: both root
+documents were read at `4668fa4` against every requirement it writes or
+amends, and neither paraphrases one. The root `README.md` names no MySQL
+series, and `DIV-059` already owes it a row that cites `FR-MYSQL-002` and
+`FR-MYSQL-003` without a number, which this edition does not change. No
+entry is raised. The reading of `DIV-036` and `DIV-050` named as owed by the
+seventy-second edition is still owed.
 
 ### Still out of scope
 
@@ -5881,8 +5996,8 @@ Where the specification touches one of these boundaries, it names it and stops.
 Identifiers are stable once assigned. They are never renumbered to tidy a file,
 never reused after a requirement is withdrawn, and are the reference used in
 commit messages, task descriptions, and test names. A gap in a sequence is
-therefore expected, not a defect: seventy-five of the seventy-seven open
-questions are closed and their numbers are not reused. The *Closed* table of
+therefore expected, not a defect: all seventy-seven open questions raised
+are closed and their numbers are not reused. The *Closed* table of
 [open-questions.md](open-questions.md#closed) records each and what answered
 it.
 
@@ -6152,16 +6267,19 @@ every field list was recorded verbatim, and each is now a requirement in
 [context-document.md](context-document.md). The document shapes and the field
 lists are frozen, and implementation is no longer blocked on them.
 
-[open-questions.md](open-questions.md) holds two open entries, `OQ-076` and
-`OQ-077`, raised by the seventy-third edition; each waits on a decision of the
-user, and neither is debt of this corpus, because neither is a point the corpus
-could settle on its own. *Amended in the seventy-third edition*: the paragraph
-read that the index was empty. Before them, the last open entry, `OQ-042`, was
-closed and was never debt of this corpus — it waited on evidence no fixture of
-MariaDB servers can produce, and it is very likely unobtainable at all, so the
-limit is written into `FR-SRV-041` instead. Nothing in this specification
-claims a detection it does not have: that requirement states, in its own text,
-that a server determined to pass as MariaDB will pass.
+The index of [open-questions.md](open-questions.md) is empty. `OQ-076` and
+`OQ-077`, raised by the seventy-third edition, waited on decisions of the
+user, and neither was debt of this corpus, because neither was a point the
+corpus could settle on its own; the seventy-fourth edition closed both on
+those decisions. *Amended in the seventy-third edition*: the paragraph read
+that the index was empty. *Amended in the seventy-fourth edition*: the
+paragraph read that the index held the two entries, open. Before them, the
+last open entry, `OQ-042`, was closed and was never debt of this corpus — it
+waited on evidence no fixture of MariaDB servers can produce, and it is very
+likely unobtainable at all, so the limit is written into `FR-SRV-041`
+instead. Nothing in this specification claims a detection it does not have:
+that requirement states, in its own text, that a server determined to pass as
+MariaDB will pass.
 
 One obligation is not debt but recurs, and is recorded so that it is not
 mistaken for either: `FR-SRV-019` requires the table of `FR-SRV-015` to be
@@ -6171,9 +6289,15 @@ it is known to be wrong is 2028-02-16.
 
 *A second obligation of the same kind, added in the seventy-third edition.*
 `FR-MYSQL-005` requires the table of `FR-MYSQL-003` to be re-verified against
-Oracle's sources before every release. It decays faster: the table is known
-to be wrong at the next MySQL Innovation release, which no source read on
-2026-11-04 dates, and the two before it came 84 days apart.
+Oracle's sources before every release. Its set is known to change when
+Oracle first releases a new LTS series, which no source read on 2026-11-04
+dates, and, by the count that requirement derives, in 2032, when the first
+of its series leaves Extended Support; its column of latest releases goes
+stale at every maintenance release. *Amended in the seventy-fourth
+edition*: the paragraph read that the table decays faster than MariaDB's,
+being known to be wrong at the next MySQL Innovation release. Under
+`FR-MYSQL-002` as amended an Innovation release changes nothing in the
+table.
 
 The eighth edition adds one obligation outside this corpus and none inside it.
 `FR-CONF-038` requires the fixture of `scripts/mariadb/` to present, at each

@@ -1,8 +1,8 @@
 ---
 title: Project and Discovery
 status: approved
-last-reviewed: 2026-11-03
-related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md, errors-and-exit-codes.md, global-flags.md, help-and-version.md, sqlite-contract.md]
+last-reviewed: 2026-11-04
+related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md, errors-and-exit-codes.md, global-flags.md, help-and-version.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Project and Discovery
@@ -764,9 +764,29 @@ tpl init [<path>]
 - **FR-PROJ-020**: `tpl init` SHALL NOT create `.tpl/.cache/`.
 
 - **FR-PROJ-021**: `.tpl/templates/example.jinja` SHALL render without error
-  against any table of any supported MariaDB database, SHALL walk the columns of
-  that table, SHALL use at least one filter and at least one test, and SHALL
-  carry in its header the command that runs it.
+  against any table of any supported MariaDB database and of any supported
+  MySQL database, SHALL walk the columns of that table, SHALL use at least one
+  filter and at least one test, and SHALL carry in its header the command that
+  runs it. Its rendering against MySQL SHALL be shown against every table of
+  the fixture of `FR-MYSQL-044`, on every series of `FR-MYSQL-003`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`, by the user's
+  decision of 2026-11-04 that the starter template `tpl init` writes also
+  render against the MySQL fixture, in addition to MariaDB. The words *and of
+  any supported MySQL database* and the last sentence are new. A supported
+  MySQL database is one a `mysql` entry reads from a series `FR-MYSQL-002`
+  admits, as a supported MariaDB database is one a `mariadb` entry reads from
+  a series `FR-SRV-001` admits. The MariaDB clause is unchanged.
+
+  *Not extended to SQLite.* The decision names MySQL alone, and this
+  requirement asks nothing of the template against a `sqlite` entry.
+
+  *Consequence, stated plainly.* The template reads, for a MySQL table, the
+  column properties `FR-MYSQL-027` and `FR-MYSQL-028` fill, among them a
+  `data_type` that no MariaDB read produces and that belongs to none of the
+  three families of `FR-ENV-041`, per `FR-MYSQL-028`. A filter or a test the
+  template applies must therefore render without error over both providers'
+  values, which a template tested against MariaDB alone does not show.
 
 - **FR-PROJ-022**: `tpl init` SHALL write nothing to stdout and SHALL exit `0`,
   per `BR-CLI-004`.
@@ -872,6 +892,9 @@ tpl init [<path>]
   containment rules.
 - [sqlite-contract.md](sqlite-contract.md) — `FR-LITE-008`, the two files
   beside a database in write-ahead-log mode that `FR-PROJ-024` admits.
+- [mysql-contract.md](mysql-contract.md) — `FR-MYSQL-002` and `FR-MYSQL-003`,
+  the supported MySQL series, and the fixture of `FR-MYSQL-044`, against
+  which `FR-PROJ-021` is shown for MySQL.
 
 ## Open questions
 

@@ -658,17 +658,16 @@ carries, `<major>.<minor>` of its version, and no window applies to it, per
 `FR-LITE-002` and `FR-LITE-003`. *Amended in the sixty-fifth edition.*
 
 For a `mysql` entry a **series** is `<major>.<minor>` of the MySQL version —
-`8.4`, `9.7`, `26.10` — and a **supported series** is one `FR-MYSQL-002`
-admits: the newest series of its major family that Oracle has released, under
-Premier or Extended Support. The supported MySQL series are named by
-`FR-MYSQL-003` alone, per `BR-MYSQL-001`. A MySQL **major family** is a
-release lineage: for a release numbered sequentially, up to `9.7`, its
-leading number, `8` or `9`; for a release numbered by the calendar, from
-`26.7.0`, the compatibility lineage MySQL's manual defines — the
-[Innovation releases](#lts-release--innovation-release) before an LTS release
-and the LTS release that closes them. Whether that reading of a calendar
-release is the one the user meant is `OQ-076`. *Amended in the seventy-third
-edition.*
+`8.4`, `9.7`, `26.10` — which MySQL's manual calls a release line, and a
+**supported series** is one `FR-MYSQL-002` admits: an
+[LTS release](#lts-release--innovation-release) under Oracle Premier or
+Extended Support, and never an Innovation release. The supported MySQL series
+are named by `FR-MYSQL-003` alone, per `BR-MYSQL-001`. No major family enters
+the MySQL criterion. *Amended in the seventy-third edition*, which gave a
+MySQL major family a reading under calendar versioning and raised `OQ-076` on
+it. *Amended in the seventy-fourth edition*, for rmp `#331`: the user's
+decision on `OQ-076` admits LTS series alone, so the MySQL meaning of *major
+family* is withdrawn, and the term keeps its MariaDB meaning above.
 
 Version comparison in this specification is always by series, never by point
 release: `10.11.14` and `10.11.2` are the same series, per `FR-SRV-021`. A
@@ -678,15 +677,25 @@ read and marked, per `FR-SRV-031` — see *standing* below.
 ## LTS release / Innovation release
 
 The two tracks of MySQL's release model. An **LTS release** is a series that
-Oracle supports for five years of Premier Support and three of Extended
-Support from its general availability, and that receives only necessary
-fixes: `8.4`, `9.7`. An **Innovation release** carries new features and
-behaviour changes and is supported until the next Innovation release is
-published: `26.10`. MySQL's manual describes both at
+Oracle designates LTS, that receives only necessary fixes, whose later
+releases change only its patch number, and that Oracle supports for five
+years of Premier Support and three of Extended Support from its general
+availability: `8.4`, `9.7`. The user's *LTS line* is an LTS release in this
+sense. An **Innovation release** carries new features and behaviour changes
+and is supported until the next Innovation release is published: `26.7`,
+`26.10`. The version does not say which track a release is on — "A calendar
+version does not determine whether a release is an Innovation or LTS
+release" — and Oracle designates it. MySQL's manual describes both at
 `https://dev.mysql.com/doc/refman/26.10/en/mysql-releases.html`, checked
-2026-11-04. `FR-MYSQL-002` admits both, while each is supported.
+2026-11-04. `FR-MYSQL-002` admits an LTS release while it is under Premier or
+Extended Support, and no Innovation release.
 
-*Added in the seventy-third edition.*
+*Added in the seventy-third edition.* *Amended in the seventy-fourth
+edition*, for rmp `#331`: the last sentence read that `FR-MYSQL-002` admits
+both tracks while each is supported, which the user's decision on `OQ-076`
+reversed for an Innovation release. The entry also states that an LTS
+release keeps its version base, that the version does not name the track,
+and what the user's *LTS line* means.
 
 ## schema (the word, two meanings)
 

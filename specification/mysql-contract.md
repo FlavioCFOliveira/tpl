@@ -76,10 +76,14 @@ grounds, and **neither of them is an observation**:
 
 1. **MySQL's own documentation**, a published external authority in the sense
    of the third provenance of the [README](README.md#provenance), checked on
-   2026-11-04: the reference manuals of the three supported series, at
-   `https://dev.mysql.com/doc/refman/8.4/en/`,
-   `https://dev.mysql.com/doc/refman/9.7/en/` and
-   `https://dev.mysql.com/doc/refman/26.10/en/`; the release notes, at
+   2026-11-04: the reference manuals of the two supported series, at
+   `https://dev.mysql.com/doc/refman/8.4/en/` and
+   `https://dev.mysql.com/doc/refman/9.7/en/`, and the reference manual of
+   the `26.10` Innovation release, at
+   `https://dev.mysql.com/doc/refman/26.10/en/`, which is cited for MySQL's
+   release model and, beside a page of a supported series, as a later manual
+   stating the same fact — `26.10` is not a supported series, per
+   `FR-MYSQL-002`; the release notes, at
    `https://dev.mysql.com/doc/relnotes/mysql/<series>/en/`; the download page,
    at `https://dev.mysql.com/downloads/mysql/`; the end-of-life notices, at
    `https://www.mysql.com/support/eol-notice.html`; and the support tiers, at
@@ -110,6 +114,13 @@ corpus that records it, every one of them an observation of the fixture of
 `scripts/mariadb/`, and carries no marker.
 
 *Added in the seventy-third edition,* for rmp `#324`.
+
+*Amended in the seventy-fourth edition,* for rmp `#331`: the first source
+named the manuals of three supported series. `26.10` is no longer one, by the
+user's decision recorded under `FR-MYSQL-002`, and its manual stays a source
+for the release model and as corroboration only. A *Pending observation* note
+owes an observation on the series of `FR-MYSQL-003` alone, so no note of this
+file owes one of `26.10`.
 
 ## The provider
 
@@ -152,87 +163,112 @@ corpus that records it, every one of them an observation of the fixture of
   no other product, and SHALL support exactly those MySQL release series that
   satisfy **both** of the following conditions:
 
-  1. the series is the newest series Oracle has released in its
-     [major family](glossary.md#series--supported-series--major-family); and
-  2. the series is under Oracle **Premier Support** or **Extended Support** —
-     which, for an [Innovation release](glossary.md#lts-release--innovation-release),
-     lasts until the next Innovation release is published.
+  1. Oracle designates the series an
+     [LTS release](glossary.md#lts-release--innovation-release); and
+  2. the series is under Oracle **Premier Support** or **Extended Support**.
 
-  A series, a major family, an LTS release and an Innovation release have the
+  An [Innovation release](glossary.md#lts-release--innovation-release) SHALL
+  NOT be a supported series, whatever its number and for as long as Oracle
+  supports it. A series, an LTS release and an Innovation release have the
   meanings [glossary.md](glossary.md) gives them. Series SHALL be compared by
   version number — major number first, then minor number, each compared as an
   integer — so that `8.4` is older than `9.7`, `9.7` older than `26.7`, and
   `26.7` older than `26.10`. A point release does not enter the comparison:
   `8.4.13` and `8.4.2` are one series, as `FR-SRV-021` states for MariaDB.
 
-  *Provenance.* The user's requirement for rmp `#324`: only the latest release
-  of each MySQL major series still under Oracle support, in the user's words
-  "8.x.x, 9.x.x, …". The first condition is *the latest of each major series*;
-  the second is *still under Oracle support*.
+  *Provenance.* The user's decision on `OQ-076`, relayed for rmp `#331` on
+  2026-11-04: the supported MySQL series are the latest release of each MySQL
+  LTS line still under Oracle Premier or Extended Support, which on that date
+  are `8.4` and `9.7`; Innovation releases are not supported, `26.10` and every
+  later Innovation release numbered by the calendar among them; and a future
+  LTS line joins the set when it is released, and a line leaves when it moves
+  past Extended Support. The first condition is *LTS line*; the second is
+  *still under Oracle Premier or Extended Support*. The user's statement of
+  the set names series, so *the latest release of each LTS line* admits an LTS
+  series through every release of it, as the seventy-third edition read *the
+  latest release of each major series*.
+
+  *Why no condition names the newest series.* An LTS line is one series for
+  its whole support: "When a release is designated as an LTS release, its
+  YY.M release base remains fixed throughout the support lifecycle, and
+  subsequent maintenance releases increment the P component", per
+  `refman/26.10/en/mysql-releases.html`, checked 2026-11-04. Its latest
+  release is therefore a point release of the series, which the comparison
+  above does not read.
 
   *Why Premier and Extended Support, and not Sustaining Support.* Oracle's
   support page gives Premier Support "MySQL maintenance releases, updates,
   fixes", Extended Support "error correction", and Sustaining Support "No new
   releases, no new fixes", at `https://www.mysql.com/support/`, checked
   2026-11-04. Sustaining Support is indefinite: read as support, it would
-  admit `5.7` and every series before it, which the user's examples exclude.
-  The two tiers admitted are the two under which a series still changes, which
-  is the ground `FR-SRV-001` gives for following MariaDB's community
-  maintenance.
+  admit `5.7` and every series before it, which the user's examples for rmp
+  `#324`, "8.x.x, 9.x.x, …", exclude. The two tiers admitted are the two
+  under which a series still changes, which is the ground `FR-SRV-001` gives
+  for following MariaDB's community maintenance.
 
-  *Why the newest series of a family.* It is the user's rule, and it removes
-  what the second condition alone would admit: until 2026-04-21, when it
-  entered Sustaining Support, `8.0` was supported beside `8.4`, and a
-  criterion of support alone would have admitted both.
+  *What excluding Innovation releases changes.* Oracle supports an Innovation
+  release while it is current: "All LTS and Innovation releases include bug
+  and security fixes, and are considered production-grade quality", and
+  "Innovation releases are supported until the next Innovation release", per
+  `refman/26.10/en/mysql-releases.html`. The exclusion is therefore the user's
+  choice and not a reading of Oracle's policy, where `FR-SRV-016` excludes a
+  MariaDB rolling release by reading MariaDB's: a rolling release receives no
+  maintenance after GA. The set no longer moves when Oracle publishes an
+  Innovation release, which it did on 2026-07-28 and on 2026-10-20, per the
+  release notes of the `26.10` series; it moves when an LTS series is first
+  released and when one leaves Extended Support, per `FR-MYSQL-004`. What a
+  server of an Innovation release meets is `FR-MYSQL-009` below the newest
+  supported series and `FR-MYSQL-010` above it.
 
-  *Why Innovation releases are admitted.* Oracle supports an Innovation
-  release, until the next one, as it supports an LTS release: "All LTS and
-  Innovation releases include bug and security fixes, and are considered
-  production-grade quality", and "Innovation releases are supported until the
-  next Innovation release", per `refman/26.10/en/mysql-releases.html`, checked
-  2026-11-04. A MariaDB rolling release is excluded because it receives no
-  maintenance after GA, per `FR-SRV-016`; a MySQL Innovation release receives
-  it while it is current, so the second condition admits it while it is
-  current and drops it when the next ships.
-
-  *A major family under calendar versioning.* MySQL numbered its releases
-  sequentially up to `9.7`, and numbers them `YY.M.P` from `26.7.0`, per
-  `refman/26.10/en/mysql-releases.html`. Under sequential versioning a major
-  family is the leading number. Under calendar versioning this file takes it
-  to be the compatibility lineage the manual defines — the Innovation releases
-  before an LTS release and the LTS release that closes them — because that is
-  what a sequential major number was: `9.0` to `9.6` and the `9.7` LTS release
-  that closed them. Whether that reading is the user's is
-  [OQ-076](open-questions.md#index). Every reading that question names selects
-  the same series on 2026-11-04, so the table of `FR-MYSQL-003` does not wait
-  on it.
+  *Rejected, by the user: the compatibility lineage.* It was the first reading
+  `OQ-076` named, recommended there, and the one the seventy-third edition
+  applied: under calendar versioning a major family was the Innovation
+  releases before an LTS release and the LTS release that closes them, and
+  the newest series of each family was supported. It admitted the newest
+  Innovation release while it was current, which was `26.10` on 2026-11-04.
+  *Rejected, by the user: the calendar year.* It was the second reading: the
+  leading number of a calendar version, which is the year, taken as the major
+  family. It would have dropped an LTS series from the set as soon as an
+  Innovation release of the same year followed it, while Oracle still
+  supported the LTS series. *Not the rule either: every series under Premier
+  or Extended Support, with no per-family restriction*, the third reading
+  `OQ-076` named. It admits every Innovation release while it is current,
+  which the decision excludes.
 
   *Rejected: the window of `FR-SRV-001`, three most recent families under
   maintenance.* It is MariaDB's criterion, not the user's, and it would admit
   `8.0` beside `8.4` while both were maintained.
 
+  *Closes* `OQ-076`, now listed under [Closed](open-questions.md#closed).
+
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`, by the user's
+  decision on `OQ-076`. The first condition read "the series is the newest
+  series Oracle has released in its major family", and the second added that
+  Premier or Extended Support, "for an Innovation release, lasts until the
+  next Innovation release is published", so that the newest Innovation
+  release was supported while it was current. The criterion now admits LTS
+  series alone, and a major family no longer enters it. The comparison of
+  series, which `FR-MYSQL-009` and `FR-MYSQL-010` apply, is unchanged.
 
 - **FR-MYSQL-003**: The series that satisfy `FR-MYSQL-002` SHALL be the
   following, as verified on the date recorded below:
 
-  | Major family | Series | Track | First release of the series | Latest release, as of 2026-11-04 | Support |
-  |---|---|---|---|---|---|
-  | the calendar lineage opened by `26.7.0` | `26.10` | Innovation | `26.10.0`, 2026-10-20 | `26.10.0`, 2026-10-20 | until the next Innovation release |
-  | `9` | `9.7` | LTS | `9.7.0`, 2026-04-21 | `9.7.4`, 2026-10-20 | five years of Premier and three of Extended Support from general availability |
-  | `8` | `8.4` | LTS | `8.4.0`, 2024-04-30 | `8.4.13`, 2026-10-20 | five years of Premier and three of Extended Support from general availability |
+  | Series | Track | First release of the series | Latest release, as of 2026-11-04 | Support |
+  |---|---|---|---|---|
+  | `9.7` | LTS | `9.7.0`, 2026-04-21 | `9.7.4`, 2026-10-20 | five years of Premier and three of Extended Support from general availability |
+  | `8.4` | LTS | `8.4.0`, 2024-04-30 | `8.4.13`, 2026-10-20 | five years of Premier and three of Extended Support from general availability |
 
   *Source.* The release notes of each series, at
-  `https://dev.mysql.com/doc/relnotes/mysql/26.10/en/`,
   `https://dev.mysql.com/doc/relnotes/mysql/9.7/en/` and
   `https://dev.mysql.com/doc/relnotes/mysql/8.4/en/`, for the releases and
   their dates; the download page, which offers `26.10.0`, `26.7.0`,
-  `9.7.4 LTS`, `8.4.13 LTS` and `8.0.46`; the preface of the 26.10 manual, "the
-  Reference Manual for the MySQL Database System, for the 26.10.0 Innovation
-  release", and of the 9.7 manual, which "covers the 9.7 LTS series"; and
-  `refman/8.4/en/mysql-releases.html`, for "An LTS series follows the Oracle
-  Lifetime Support Policy, which includes 5 years of premier support and 3
-  years of extended support". **Verified 2026-11-04.**
+  `9.7.4 LTS`, `8.4.13 LTS` and `8.0.46`; the preface of the 9.7 manual, which
+  "covers the 9.7 LTS series"; and `refman/8.4/en/mysql-releases.html`, for
+  "An LTS series follows the Oracle Lifetime Support Policy, which includes 5
+  years of premier support and 3 years of extended support". **Verified
+  2026-11-04.**
 
   *Derived, and not read.* The support column of an LTS series states the
   durations the manual gives and no date. Counted from the first release of
@@ -245,30 +281,52 @@ corpus that records it, every one of them an observation of the fixture of
 
   | Series | Excluded because |
   |---|---|
-  | `26.7` | the next Innovation release, `26.10.0`, was published on 2026-10-20, so its support ended, and it is no longer the newest series of its family |
-  | `9.0` to `9.6` | none is the newest series of family `9`, and each Innovation release's support ended with the next |
-  | `8.0` | it is not the newest series of family `8`, and "as of April 21, 2026, MySQL 8.0 is covered under Oracle Sustaining Support", per the end-of-life notices |
+  | `26.10` | it is an Innovation release: the preface of its manual names "the 26.10.0 Innovation release" |
+  | `26.7` | it is an Innovation release, whose support also ended when the next, `26.10.0`, was published on 2026-10-20 |
+  | `9.0` to `9.6` | each is an Innovation release, whose support ended with the next |
+  | `8.0` | "as of April 21, 2026, MySQL 8.0 is covered under Oracle Sustaining Support", per the end-of-life notices |
   | `5.7` | "as of October 25, 2023, MySQL 5.7 is covered under Oracle Sustaining Support", per the same page |
 
+  Where each of these servers is refused and where it is read is stated by
+  `FR-MYSQL-009` and `FR-MYSQL-010`, by comparison with the newest series of
+  the table above.
+
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`, under
+  `FR-MYSQL-002` as amended. The row of `26.10`, an Innovation release, is
+  removed from the table, and the major-family column with it, because the
+  criterion names no family. The two remaining rows are those verified on
+  2026-11-04, unchanged, and the sources of the removed row are no longer
+  cited for it. `26.10` joins the worked examples, and each example now gives
+  the condition it fails under the amended criterion.
 
 - **FR-MYSQL-004**: The set of `FR-MYSQL-003` SHALL change by the two
   conditions of `FR-MYSQL-002` and by nothing else, and its size SHALL NOT be
-  fixed by this specification. Three series across three families is what the
-  criterion admits on the verification date, not a quantity to preserve.
+  fixed by this specification. Two series is what the criterion admits on the
+  verification date, not a quantity to preserve.
 
   | Event | Effect |
   |---|---|
-  | Oracle publishes an Innovation release | It is the newest series of its family and enters; the Innovation release it succeeds, where that is still in the set, leaves; no LTS release leaves |
-  | Oracle publishes an LTS release | It is the newest series of the family it closes and enters; the Innovation release before it, where that is still in the set, leaves |
-  | A series leaves Extended Support | It leaves, and its family with it, since no newer series of that family exists to take its place |
+  | Oracle publishes the first release of a series it designates LTS | The series enters; no series leaves |
+  | Oracle publishes a later release of an LTS series | Nothing enters and nothing leaves: the release belongs to a series of the set, per the comparison of `FR-MYSQL-002` |
+  | Oracle publishes an Innovation release | Nothing enters and nothing leaves |
+  | An LTS series leaves Extended Support | It leaves |
 
-  *Rationale.* It is `FR-SRV-017` and `FR-SRV-018` for MySQL's release model.
-  Innovation releases make the set move faster than MariaDB's: MySQL
-  published Innovation releases on 2026-07-28 and 2026-10-20, per the release
-  notes of the 26.10 series.
+  *Rationale.* It is `FR-SRV-017` and `FR-SRV-018` for MySQL's release model,
+  and the user's words for it: a future LTS line joins the set when it is
+  released, and a line leaves when it moves past Extended Support.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`, under
+  `FR-MYSQL-002` as amended. The table had an Innovation release enter the set
+  and push out the one it succeeded, an LTS release enter and close its
+  family, and a series leave Extended Support together with its family; the
+  rationale added that Innovation releases make the set move faster than
+  MariaDB's. An Innovation release now moves nothing, and no family enters the
+  criterion. The count on the verification date moves from three series to
+  two.
 
 - **BR-MYSQL-001**: The criterion of `FR-MYSQL-002` is the requirement, and
   the table of `FR-MYSQL-003` is its instance on one date, which is part of
@@ -286,16 +344,27 @@ corpus that records it, every one of them an observation of the fixture of
   its verification date, and SHALL be re-verified against those sources before
   every release of `tpl`.
 
-  *The next scheduled change.* The table is known to become wrong when Oracle
-  publishes the next Innovation release, which removes `26.10` and admits the
-  new series. No source read on 2026-11-04 dates it; the two Innovation
-  releases before it were published 84 days apart.
+  *The next scheduled change.* The set of the table is known to change when
+  Oracle publishes the first release of a new LTS series, which no source read
+  on 2026-11-04 dates, and, by the count `FR-MYSQL-003` derives and does not
+  read, when `8.4` leaves Extended Support in 2032. Its column of latest
+  releases goes stale at every maintenance release of either series, which
+  changes no member of the set.
 
-  *Rationale.* It is `FR-SRV-019` for MySQL, and it binds more often: a
-  release of `tpl` built on a stale table admits a series that has left
-  support and refuses one that has entered it.
+  *Rationale.* It is `FR-SRV-019` for MySQL: a release of `tpl` built on a
+  stale table reads a new LTS series as newer than the supported set, under
+  `FR-MYSQL-010`, and reads a series that has left Extended Support as
+  supported.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`, under
+  `FR-MYSQL-002` as amended. The note named the next Innovation release as the
+  event that would make the table wrong, and the rationale said that this
+  requirement binds more often than `FR-SRV-019` and that a stale table
+  refuses a series that has entered the set. An Innovation release no longer
+  changes the set, and a series that enters it is newer than every series a
+  stale table holds, so such a table marks it rather than refusing it.
 
 ## The product and the version
 
@@ -318,17 +387,18 @@ corpus that records it, every one of them an observation of the fixture of
   "The version number for the server. The value might also include a suffix
   indicating server build or configuration information. `-debug` indicates
   that the server was built with debugging support enabled"
-  (`refman/8.4/en/server-system-variables.html`). The 26.10 manual adds a
-  four-part identity read through `VERSION_WITH_UPDATE()`, and states that
-  "Existing interfaces, including `VERSION()`, `version`, the classic
-  handshake, numeric version IDs, and existing C APIs, retain three-part
-  compatibility semantics" (`relnotes/mysql/26.10/en/news-26-10-0.html`); no
-  statement of `FR-MYSQL-015` reads the four-part form. The example above is
-  the form the manual describes for the latest `8.4` release, not a string any
+  (`refman/8.4/en/server-system-variables.html`). The example above is the
+  form the manual describes for the latest `8.4` release, not a string any
   server was seen to return. rmp `#326` records the probe's answer, verbatim,
   on every series of `FR-MYSQL-003`.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`: the note no longer
+  cites the release notes of `26.10.0` on the version identity that release
+  introduced. They applied to `26.10` alone, which is no longer a supported
+  series, per `FR-MYSQL-002`, and is owed no observation by rmp `#326`. The
+  requirement is unchanged.
 
 - **FR-MYSQL-007**: IF the version string the probe returns contains the
   product marker `MariaDB`, or does not begin with three decimal integers
@@ -407,7 +477,7 @@ corpus that records it, every one of them an observation of the fixture of
 
   ```
   error: server series '8.0' is not supported, for database entry 'shop'
-  cause: connected and authenticated; the server reports 8.0.46, and 8.0 is in Oracle Sustaining Support since 2026-04-21. A mysql entry supports 26.10, 9.7 and 8.4
+  cause: connected and authenticated; the server reports 8.0.46, and 8.0 is in Oracle Sustaining Support since 2026-04-21. A mysql entry supports 9.7 and 8.4
   hint:  repoint the entry at a supported server: tpl cfg database update shop --host <host>
   exit:  78 (EX_CONFIG)
   ```
@@ -419,11 +489,21 @@ corpus that records it, every one of them an observation of the fixture of
   *Rationale.* It is `FR-SRV-020` and `FR-SRV-030` for MySQL, on their ground:
   a series below the window is one the project will never observe, because
   observation follows support. Under the comparison of `FR-MYSQL-002`, one
-  rule reaches a series that left support (`8.0`), an Innovation release that
-  was superseded (`26.7`, `9.6`), and a series of a family that has left the
-  set.
+  rule reaches a series that left support (`8.0`), an Innovation release
+  older than the newest supported series (`9.0` to `9.6`), and an LTS series
+  that has left Extended Support. An Innovation release newer than the newest
+  supported series is not reached by this requirement and is read under
+  `FR-MYSQL-010`; on 2026-11-04 that is every Innovation release numbered by
+  the calendar.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`, under
+  `FR-MYSQL-002` as amended. The example's `cause` listed `26.10` among the
+  supported series, and the rationale named `26.7`, a superseded Innovation
+  release, as refused here and a series of a family that has left the set as
+  the third case. `26.7` is now newer than the newest supported series, and
+  no family enters the criterion. The requirement is unchanged.
 
 - **FR-MYSQL-010**: IF the server is MySQL and its series is newer than the
   newest series of `FR-MYSQL-003`, THEN the system SHALL read the catalogue,
@@ -438,15 +518,47 @@ corpus that records it, every one of them an observation of the fixture of
   enumerated field set does not break on a release cadence it does not
   control, and the field says the read is unverified.
 
-  *Consequence, stated plainly.* Oracle published Innovation releases on
-  2026-07-28 and 2026-10-20, per the release notes of `FR-MYSQL-003`, so a
-  binary of `tpl` can meet a series newer than its table within months of its
-  release, and marks the read. A server whose series the binary's table admits
-  is read as `supported` by that binary after Oracle has superseded the series;
-  a later binary, built on a later table, refuses it under `FR-MYSQL-009`. The
-  table a binary carries is the one it was released with, per `FR-MYSQL-005`.
+  *Consequence, stated plainly: an Innovation release is read and marked.*
+  Every Innovation release numbered by the calendar is newer than the newest
+  series of `FR-MYSQL-003`. A server of `26.7` or `26.10`, or of any
+  Innovation release Oracle publishes before it first releases a newer LTS
+  series, is therefore read under this requirement, marked
+  `newer_than_supported`, at exit `0`. None of them is a supported series, per
+  `FR-MYSQL-002`, so `standing` is never `supported` for one, and none will be
+  observed against the fixture, because observation follows support. The
+  system cannot tell such a server from one of a new LTS series: "A calendar
+  version does not determine whether a release is an Innovation or LTS
+  release. Release maturity remains an explicit property of each release",
+  per `refman/26.10/en/mysql-releases.html`, checked 2026-11-04, and
+  `FR-MYSQL-006` derives the series from the version string and from nothing
+  else. Refusing every series newer than the table would refuse a new LTS
+  series until a binary built on a later table is released, which is the
+  outcome `FR-SRV-031` rejects. Once a newer LTS series enters the table, the
+  Innovation releases older than it are refused under `FR-MYSQL-009`, as
+  `9.0` to `9.6` are today.
+
+  *Consequence, stated plainly: a binary carries its table.* A server whose
+  series the binary's table admits is read as `supported` by that binary after
+  the series has left Extended Support; a later binary, built on a later
+  table, refuses it under `FR-MYSQL-009`. A new LTS series is read as
+  `newer_than_supported` by every binary built before its table admitted it.
+  The table a binary carries is the one it was released with, per
+  `FR-MYSQL-005`.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`, under
+  `FR-MYSQL-002` as amended. The one consequence note said that a binary meets
+  a series newer than its table within months of its release, because Oracle
+  published Innovation releases on 2026-07-28 and 2026-10-20, and that a
+  series the table admits is read as `supported` after Oracle has superseded
+  it. Neither describes the set as amended: an Innovation release numbered by
+  the calendar is newer than the table on the day it is published, and a
+  series of the table leaves it only when its Extended Support ends. The first
+  note now states what a server of an Innovation release meets, and the second
+  the stale-table case for an LTS series. The requirement is unchanged: a
+  MySQL series newer than the newest supported series is read and marked,
+  whatever its track.
 
 - **FR-MYSQL-011**: The product check of `FR-MYSQL-007` and `FR-MYSQL-008`,
   the version check of `FR-MYSQL-009` and the marked read of `FR-MYSQL-010`
@@ -516,20 +628,31 @@ corpus that records it, every one of them an observation of the fixture of
   candidates, recorded so that the observation that settles them knows where
   to look:
 
-  | Candidate | `8.4` | `9.7` | `26.10` | What it would oblige |
-  |---|---|---|---|---|
-  | The column-attribute field lists `MASKING POLICY` | not in the manual's list | in the list | in the list | Nothing for the model, which has no property for it; `FR-MYSQL-030` reads past it |
-  | The `VECTOR` type | not checked | documented, `refman/9.7/en/vector.html` | not checked | What the shared DDL of `FR-MYSQL-044` may declare, as difference 14 of `FR-SRV-038` did for MariaDB |
-  | JSON duality views and their four `INFORMATION_SCHEMA` tables | not checked | not checked | documented in the 26.10 manual's index of `INFORMATION_SCHEMA` tables | Whether a duality view is a row of the table catalogue, and so a covered view, per `FR-MYSQL-023` |
+  | Candidate | `8.4` | `9.7` | What it would oblige |
+  |---|---|---|---|
+  | The column-attribute field lists `MASKING POLICY` | not in the manual's list | in the list | Nothing for the model, which has no property for it; `FR-MYSQL-030` reads past it |
+  | The `VECTOR` type | not checked | documented, `refman/9.7/en/vector.html` | What the shared DDL of `FR-MYSQL-044` may declare, as difference 14 of `FR-SRV-038` did for MariaDB |
+  | JSON duality views and their four `INFORMATION_SCHEMA` tables | not in the manual's index of `INFORMATION_SCHEMA` tables | in the index | Whether a duality view is a row of the table catalogue, and so a covered view, per `FR-MYSQL-023` |
 
   *Pending observation.* Every cell of the table is the documentation, cited
-  in each row or in `FR-MYSQL-030`; "not checked" means that no page was read
-  for that series. rmp `#326` compares the catalogue of the fixture of
-  `FR-MYSQL-044` across the three series, as the passes recorded under
-  `FR-SRV-038` did across MariaDB's, and moves every difference it finds into
-  this record and, where it reaches the model, into the register.
+  in each row, in `FR-MYSQL-030`, or, for the duality views, in the index of
+  `INFORMATION_SCHEMA` tables of each manual,
+  `refman/8.4/en/information-schema-table-reference.html` and
+  `refman/9.7/en/information-schema-table-reference.html`, checked
+  2026-11-04; "not checked" means that no page was read for that series.
+  rmp `#326` compares the catalogue of the fixture of `FR-MYSQL-044` across
+  the series of `FR-MYSQL-003`, as the passes recorded under `FR-SRV-038` did
+  across MariaDB's, and moves every difference it finds into this record and,
+  where it reaches the model, into the register.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`: the column of
+  `26.10` is removed with the series, per `FR-MYSQL-002`. The candidate of the
+  duality views rested on that column alone, and is now placed by the index of
+  each remaining manual, read on 2026-11-04: the 9.7 manual lists the four
+  tables and the 8.4 manual lists none of them. The note names the series of
+  `FR-MYSQL-003` where it counted three.
 
 ## The closed statement list
 
@@ -696,8 +819,9 @@ corpus that records it, every one of them an observation of the fixture of
   | `verify-identity` | encrypted, chain and hostname validated | `69` |
 
   The authentication that precedes a plaintext session is governed by
-  `FR-MYSQL-022`, and its one unsettled case is
-  [OQ-077](open-questions.md#index).
+  `FR-MYSQL-022` and `FR-MYSQL-045`. *Amended in the seventy-fourth edition,*
+  for rmp `#331`: the sentence named `OQ-077` as its one unsettled case, which
+  `FR-MYSQL-045` closes.
 
   *Where MySQL differs.* Two facts of the server side differ from what
   `FR-CONF-038` records of MariaDB, and both reach a test rather than a cell:
@@ -735,9 +859,8 @@ corpus that records it, every one of them an observation of the fixture of
   an encrypted session. A database driver that cannot SHALL be disqualified
   from the choice, as `FR-CONF-036` disqualifies one that cannot express the
   five modes. WHERE the session is not encrypted — `disabled`, and
-  `preferred` against a server offering no TLS — the authentication of an
-  account the server has not cached is [OQ-077](open-questions.md#index), and
-  no requirement of this file settles it.
+  `preferred` against a server offering no TLS — `FR-MYSQL-045` governs an
+  authentication that needs the server's RSA public key.
 
   *Source.* "The default plugin is determined by the value of the
   `authentication_policy` system variable; the default is to use
@@ -747,16 +870,128 @@ corpus that records it, every one of them an observation of the fixture of
   "Authentication requires secure connection"
   (`refman/9.7/en/caching-sha2-pluggable-authentication.html`).
 
-  *Pending observation.* The default method on `8.4` and `26.10`, which the
-  page above was read for `9.7` alone; and, on every series, a login of the
-  fixture's reader under each TLS mode, before and after the server has
-  cached the account.
+  *Pending observation.* The default method on `8.4`, the page above having
+  been read for `9.7` alone; and, on every series, a login of the fixture's
+  reader under each TLS mode, before and after the server has cached the
+  account.
 
   *Rationale.* `FR-CONF-036` makes the modes normative over the driver; a
   driver that connects in every mode and cannot authenticate the account a
   supported server creates by default connects nowhere that matters.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`. The last sentence
+  of the requirement read that the authentication of an account the server
+  has not cached, over a session that is not encrypted, was `OQ-077` and that
+  no requirement of this file settled it; the user's decision is
+  `FR-MYSQL-045`. The *Pending observation* note named `26.10` beside `8.4`,
+  and `26.10` is no longer a supported series, per `FR-MYSQL-002`.
+
+- **FR-MYSQL-045**: The system SHALL NOT request a MySQL server's RSA public
+  key over a session that is not encrypted — under `disabled`, and under
+  `preferred` against a server offering no TLS, per `FR-MYSQL-021` — whatever
+  the authentication method. IF the authentication of a `mysql` entry over
+  such a session needs that key, THEN the system SHALL end the connection
+  without completing the authentication, SHALL exit `78` (`EX_CONFIG`), and
+  SHALL NOT read the catalogue. No flag, configuration key or environment
+  condition SHALL change this.
+
+  The `cause` SHALL state that the connection succeeded and that the
+  authentication was not completed; SHALL name the user, the host and the
+  port, and the `tls` mode in force, and, WHERE that mode is `preferred`, that
+  the server offered no TLS; SHALL name the authentication method the server
+  asked for, escaped under `FR-ERR-024`; and SHALL state that `tpl` does not
+  request the server's public key over a session TLS does not protect. The
+  `hint` SHALL carry `tpl cfg database update <entry> --tls verify-identity`,
+  with the entry name filled in, and, WHERE the server offered no TLS, SHALL
+  also state that the server must offer TLS before that mode can connect.
+
+  ```
+  error: cannot authenticate user 'reader' over an unencrypted session, for database entry 'shop'
+  cause: connected to db.example.com:3306 under tls 'disabled', so the session is not encrypted; the server asks for the full caching_sha2_password exchange, which needs its RSA public key, and tpl does not request that key over a session TLS does not protect
+  hint:  encrypt the session: tpl cfg database update shop --tls verify-identity
+  exit:  78 (EX_CONFIG)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  The condition is one of the cache-or-connection step of `FR-ERR-006`, and
+  it is raised at the authentication, before the read-only session of
+  `FR-MYSQL-018` is set. It holds for every command that opens a connection
+  for a `mysql` entry, `tpl cfg database test` among them, which ends at the
+  first step of `FR-CFG-024` with this message.
+
+  *Provenance.* The user's decision on `OQ-077`, relayed for rmp `#331` on
+  2026-11-04: never request the server's RSA public key over a session that
+  TLS does not protect; when the authentication would need it, the read fails
+  with a clear error, whose code and message are stated here consistently
+  with the error requirements in force. It is the first option `OQ-077` named
+  and recommended.
+
+  *Why `78`.* The next step is the configuration's: a `tls` mode that
+  encrypts the session, which is the remedy the `78` row of `FR-ERR-001`
+  gives — fix `.tpl/.cfg`. *Rejected: `77`.* The server refused nothing:
+  `tpl` ended the authentication, and the credentials may be right. The `77`
+  row of `FR-ERR-034` names a refusal that came from the server, and
+  `FR-CONF-033` rejects `77` on the same ground for an authentication that was
+  never attempted. *Rejected: `69`.* Nothing was
+  unavailable: the host answered and the session opened, and the `69` row of
+  `FR-ERR-001` tells the caller that the operation is repeatable, where a
+  repetition under the same configuration ends the same way for as long as
+  the server holds no cached login for the account.
+
+  *Why the `hint` names `verify-identity`.* `BR-ERR-004` asks for the value
+  where it is known, and admits a placeholder only for a value the caller
+  alone knows. The decision exists to keep the password out of an
+  intermediary's reach, and that is the reason `FR-CONF-013` gives for
+  defaulting to `verify-identity`, so that mode is the one the `hint` carries.
+  A weaker mode that encrypts is the caller's to choose, and `FR-CONF-013`
+  states what it costs. The command names the value it writes, so
+  `BR-ERR-005` admits it, and `tls` is not a field `FR-ERR-045` reroutes for an
+  entry defined by `dsn`.
+
+  *Rejected, by the user: an opt-in configuration key that allows the
+  request.* Beside the user's decision, the corpus has two grounds against
+  it: a protection that a key of the entry can turn off is advisory, the
+  ground `FR-SRV-011` gives for the read-only promise; and the key would be
+  one a `mariadb` entry does not take, which `FR-MYSQL-001` excludes.
+  *Rejected: requesting the key on every login*, the second option `OQ-077`
+  named; it is what the decision forbids. *Not adopted: a configuration key
+  naming a file that holds the server's public key*, the third option
+  `OQ-077` named. The decision fails the read whenever the authentication
+  needs the key, and `FR-MYSQL-001` gives a `mysql` entry no key a `mariadb`
+  entry lacks.
+
+  *Accepted cost, stated plainly.* Whether a login needs the key depends on
+  the server's cache and not on the entry. The same entry, under `disabled`,
+  authenticates while the server holds a cached login for the account, and
+  exits `78` once the server has dropped it — at a restart, at
+  `FLUSH PRIVILEGES`, or when the account changes — with nothing in
+  `.tpl/.cfg` changed.
+
+  *Pending observation.* The manual states that "When the cache can be used,
+  the server uses a challenge-response mechanism that does not use cleartext
+  password transmission and does not require a secure connection"; that "If
+  the connection is not secure, an RSA key pair is used. This applies to TCP
+  connections not encrypted using TLS and named-pipe connections"; that "the
+  server does not send the RSA public key to clients by default. Clients can
+  use a client-side copy of the required public key, or request the public key
+  from the server"; and that the server empties the cache "at server
+  shutdown" and when `FLUSH PRIVILEGES` runs, and clears the entry of "any
+  account that is renamed or dropped, or any account for which the
+  credentials or authentication plugin are changed"
+  (`refman/9.7/en/caching-sha2-pluggable-authentication.html`, checked
+  2026-11-04). rmp `#326` records, on every series of `FR-MYSQL-003`, a login
+  of the fixture's reader under `disabled`, and under `preferred` against the
+  server offering no TLS, before and after the server has cached the account,
+  with the exit code and the message of each.
+
+  *Closes* `OQ-077`, now listed under [Closed](open-questions.md#closed).
+
+  *Added in the seventy-fourth edition,* for rmp `#331`.
 
 ## The part of the database a read covers
 
@@ -1426,7 +1661,7 @@ corpus that records it, every one of them an observation of the fixture of
   | 22 | Identifier letter case | not recorded by this corpus | decided by `lower_case_table_names`, which no statement reads | names matched byte for byte, `FR-MYSQL-033` |
   | 23 | An expression's text | backtick-quoted and rewritten, no backslash observed, `FR-CAT-051`, `FR-CTX-037` | not stated; the reference inspector unescapes MySQL's | `FR-MYSQL-029`, `FR-MYSQL-031` |
   | 24 | A server with no TLS material | `10.11` offers no TLS until configured, difference 3 of `FR-SRV-038` | generates material at startup where built with OpenSSL | `FR-MYSQL-021` |
-  | 25 | The default authentication | not recorded by this corpus | `caching_sha2_password` | `FR-MYSQL-022`, [OQ-077](open-questions.md#index) |
+  | 25 | The default authentication | not recorded by this corpus | `caching_sha2_password` | `FR-MYSQL-022`, `FR-MYSQL-045` |
 
   *Pending observation.* Every cell of the MySQL column rests on the page
   cited by the requirement the last column names, and on nothing observed.
@@ -1441,6 +1676,9 @@ corpus that records it, every one of them an observation of the fixture of
   version string and identifier case are rows 3 to 5, 7 to 10, 1 and 22.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`: the last cell of
+  row 25 named `OQ-077`, which `FR-MYSQL-045` closes.
 
 ## Completeness
 
@@ -1505,7 +1743,7 @@ corpus that records it, every one of them an observation of the fixture of
   | `FR-SRV-012` | The closed list of `FR-MYSQL-015`, observed on the server, and the order of `FR-MYSQL-017` |
   | `FR-SRV-013` | Both outcomes of the read-back of `FR-MYSQL-018`, the confirming one on every series, the failing one in process through the seam it authorises |
   | `FR-SRV-014` | The connection count, from the server side |
-  | `FR-SRV-029` | The equivalence of `FR-SRV-026` across the three series, and the refusal of `FR-MYSQL-009` against at least one series outside the set |
+  | `FR-SRV-029` | The equivalence of `FR-SRV-026` across the series of `FR-MYSQL-003`, and the refusal of `FR-MYSQL-009` against at least one series outside the set and older than its newest series |
   | `FR-SRV-035` | The marked read of `FR-MYSQL-010`, through the seam it authorises |
   | `BR-SRV-003` | That the first three are observations made outside the process, with the one exception it names |
 
@@ -1514,6 +1752,13 @@ corpus that records it, every one of them an observation of the fixture of
   series whose read-back a `mysql` entry passes, per `FR-MYSQL-012`.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`, under
+  `FR-MYSQL-002` as amended: the `FR-SRV-029` row counted three series, and
+  named any series outside the set for the refusal. Every series outside the
+  set was older than its newest while `26.10` was in it; an Innovation release
+  numbered by the calendar is now newer, and is read under `FR-MYSQL-010`
+  rather than refused.
 
 ## The fixture
 
@@ -1587,9 +1832,10 @@ corpus that records it, every one of them an observation of the fixture of
   The fixture SHALL also present, at each series of `FR-MYSQL-003`, a server
   whose certificate names the host by which the project's tests reach it;
   SHALL retain a server that offers no TLS; and SHALL present at least one
-  server of a MySQL series outside `FR-MYSQL-003`, for the refusal of
-  `FR-MYSQL-009`. The condition each server runs under that a reading depends
-  on — its TLS material, its `lower_case_table_names`, and its
+  server of a MySQL series outside `FR-MYSQL-003` and older than its newest
+  series, for the refusal of `FR-MYSQL-009`. The condition each server runs
+  under that a reading depends on — its TLS material, its
+  `lower_case_table_names`, and its
   `show_gipk_in_create_table_and_information_schema` — SHALL be recorded
   with every reading taken against it, per the fourth validation rule of the
   [README](README.md#maintenance-debt).
@@ -1601,6 +1847,12 @@ corpus that records it, every one of them an observation of the fixture of
   observations through it.
 
   *Added in the seventy-third edition,* for rmp `#324`.
+
+  *Amended in the seventy-fourth edition,* for rmp `#331`, under
+  `FR-MYSQL-002` as amended: the server outside the set must be older than its
+  newest series, for the reason the amendment to `FR-MYSQL-043` gives. The
+  servers of the set are those of `FR-MYSQL-003`, which on 2026-11-04 holds
+  two series where it held three.
 
 ## Dependencies
 
@@ -1631,24 +1883,28 @@ corpus that records it, every one of them an observation of the fixture of
   rules `FR-MYSQL-041` applies.
 - [errors-and-exit-codes.md](errors-and-exit-codes.md) — `69`, `77` and
   `78`; the condition order of `FR-ERR-006`; and the message rules
-  `FR-MYSQL-008` and `FR-MYSQL-009` follow.
+  `FR-MYSQL-008`, `FR-MYSQL-009` and `FR-MYSQL-045` follow, with the `hint`
+  rules `BR-ERR-004` and `BR-ERR-005` that `FR-MYSQL-045` applies.
 - [performance-requirements.md](performance-requirements.md) —
   `NFR-PERF-001` to `NFR-PERF-008`, which `FR-MYSQL-042` applies.
 - [template-environment.md](template-environment.md) — `FR-ENV-046`, whose
   fall-through places the `data_type` values only MySQL produces.
 - [security.md](security.md) — `BR-SEC-002`, the promise `BR-MYSQL-002`
   states for a `mysql` entry.
-- [open-questions.md](open-questions.md) — `OQ-076` and `OQ-077`.
+- [open-questions.md](open-questions.md) — `OQ-076` and `OQ-077`, which this
+  file raised and which `FR-MYSQL-002` and `FR-MYSQL-045` close.
 
 ## Open questions
 
-Two entries this file raises are open in the index of
-[open-questions.md](open-questions.md#index):
+**None.** The two entries this file raised are closed by the user's
+decisions: `OQ-076` by `FR-MYSQL-002` as amended, and `OQ-077` by
+`FR-MYSQL-045`. Both are listed under [Closed](open-questions.md#closed),
+and the index of [open-questions.md](open-questions.md) holds no entry for
+this file.
 
-| Entry | What it decides | What waits on it |
-|---|---|---|
-| [OQ-076](open-questions.md#index) | Which releases form one major family under calendar versioning, for the first condition of `FR-MYSQL-002` | The re-verification of `FR-MYSQL-005` at the first release on which the readings select different series; not the table of 2026-11-04 |
-| [OQ-077](open-questions.md#index) | How `caching_sha2_password` authenticates an account over a session TLS does not protect | The authentication outcome of `disabled`, and of `preferred` against a server offering no TLS, under `FR-MYSQL-022` |
+*Amended in the seventy-fourth edition,* for rmp `#331`. This section held a
+table of the two entries, open in the index, with what each decided and what
+waited on it.
 
 The statements marked *Pending observation* are not open questions: each has
 an owner, rmp `#326`, and a fixture, `FR-MYSQL-044`, and the
