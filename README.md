@@ -1,6 +1,6 @@
 # tpl
 
-`tpl` is a command-line tool that reads the structure — the DDL, or schema — of a **MariaDB** database and renders it through **[MiniJinja](https://docs.rs/minijinja) templates** to produce text or source code.
+`tpl` is a command-line tool that reads the structure — the DDL, or schema — of a **MariaDB** database or a **SQLite** database file and renders it through **[MiniJinja](https://docs.rs/minijinja) templates** to produce text or source code. Which of the two a database entry reads is its provider.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/FlavioCFOliveira/tpl/main/install.sh | sh
@@ -22,7 +22,7 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 
 > ## Status: implemented, released (latest v0.0.2)
 >
-> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 was the first release of `tpl` and v0.0.2 is the latest; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds.
+> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 was the first release of `tpl` and v0.0.2 is the latest; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds. The SQLite provider is in no release yet: it is recorded under *Unreleased* in that file, and a build from source carries it.
 >
 > | Command | State |
 > |---|---|
@@ -36,7 +36,7 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 > | `tpl template list`, `show`, `check`, `path` | **works** |
 > | `tpl render` | **works** |
 >
-> **The three arms are joined.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB server the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. The four `tpl template` subcommands read `.tpl/templates/` and reach no server at all. `tpl render` composes the two: it assembles the render context from the selected database or from a `--context` document, binds at most one object, renders one template, and writes the result to stdout. When it reads the server, the connection is closed and the driver's runtime shut down before the template starts: nothing of the read is alive while a template runs.
+> **The three arms are joined.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB server or the SQLite database file the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. The four `tpl template` subcommands read `.tpl/templates/` and reach no database at all. `tpl render` composes the two: it assembles the render context from the selected database or from a `--context` document, binds at most one object, renders one template, and writes the result to stdout. When it reads the database, the connection is closed — and, for MariaDB, the driver's runtime shut down — before the template starts: nothing of the read is alive while a template runs.
 >
 > **And they compose.** [`examples/`](examples/README.md) holds four worked examples that build an application's data layer — in Go, Rust, Python and Node.js — out of three known schemas, through the command line alone, and each one ends by submitting what it rendered to that language's own compiler.
 
@@ -74,8 +74,8 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 
 Two properties bound the tool, and both are permanent.
 
-- **Read-only over the database.** `tpl` issues no DDL, no DML and no other write statement, and no flag turns that off. The guarantee is the closed list of statements it will issue; a read-only session set on every connection is defence in depth beside it. See [`server-contract.md`](specification/server-contract.md).
-- **Almost nothing is written to disk.** `tpl` writes inside its own `.tpl` folder and nowhere else, the one exception being the destination directory `tpl init` creates. A render prints to stdout and has no output flag; where its result lands is the caller's business, through a redirection the caller writes.
+- **Read-only over the database.** `tpl` issues no DDL, no DML and no other write statement, and no flag turns that off. The guarantee is the closed list of statements it will issue. Beside it, a MariaDB session is set read-only on every connection, as defence in depth, and a SQLite database file is opened read-only and never created. See [`server-contract.md`](specification/server-contract.md) and [`sqlite-contract.md`](specification/sqlite-contract.md).
+- **Almost nothing is written to disk.** `tpl` writes inside its own `.tpl` folder and nowhere else, with two exceptions: the destination directory `tpl init` creates, and the `<file>-wal` and `<file>-shm` files the SQLite library may create beside a SQLite database in write-ahead-log mode when it is read, and which may remain afterwards. Neither changes the database's content. See [`FR-PROJ-024`](specification/project-and-discovery.md) and [`FR-LITE-008`](specification/sqlite-contract.md). A render prints to stdout and has no output flag; where its result lands is the caller's business, through a redirection the caller writes.
 
 ---
 
@@ -83,8 +83,9 @@ Two properties bound the tool, and both are permanent.
 
 | | |
 |---|---|
-| Database | The MariaDB series that are supported — see [`FR-SRV-001`](specification/server-contract.md) for the window and [`FR-SRV-015`](specification/server-contract.md) for the current members |
-| Privileges | `SELECT` on `INFORMATION_SCHEMA` for the target database |
+| MariaDB | The supported series — see [`FR-SRV-001`](specification/server-contract.md) for the window and [`FR-SRV-015`](specification/server-contract.md) for the current members |
+| MariaDB privileges | `SELECT` on `INFORMATION_SCHEMA` for the target database |
+| SQLite | Read access to the database file, and no privilege. The SQLite library is built into `tpl`, so nothing is installed on the host. A database in write-ahead-log mode also needs a directory that admits its `-wal` and `-shm` files when they are absent. See [`sqlite-contract.md`](specification/sqlite-contract.md) |
 | Build | Rust, edition 2024 |
 | Platform | Linux and macOS, on `aarch64` and `x86_64`. Windows is out of scope |
 
@@ -178,10 +179,12 @@ Every command below is implemented and behaves as shown.
 cd my-project
 tpl init
 
-# 2. Register a database, from discrete fields or from one URL.
+# 2. Register a database: a MariaDB server, from discrete fields or from one
+#    URL, or a SQLite database file, by a path relative to this directory.
 tpl cfg database add shop --host db.example.com --user reader --schema shop
 tpl cfg database add reporting \
     --dsn 'mysql://reader:${REPORTING_PASSWORD}@db.example.com:3306/reporting'
+tpl cfg database add ledger --provider sqlite --path data/ledger.sqlite
 
 # 3. Make one of them the default for invocations that omit -d.
 tpl cfg set core.database shop
@@ -318,13 +321,15 @@ Precedence, strongest first: **command-line flag → `.tpl/.cfg` → built-in de
 
 ### The key space is closed
 
-`.tpl/.cfg` admits exactly eighteen keys — eight under `[core]` and ten per `[database.<name>]` block — each with a declared type and a declared default. The table is [`FR-CONF-002`](specification/configuration-model.md) and is not copied here.
+`.tpl/.cfg` admits a closed set of keys, under `[core]` and per `[database.<name>]` block, each with a declared type and a declared default. The table is [`FR-CONF-002`](specification/configuration-model.md) and is not copied here.
 
 **The file is read strictly.** A key outside that space, **anywhere** in the file, exits `78` naming the key and suggesting the nearest one that exists. A value of the wrong type exits `78` naming the line and column, what was found, and what that key takes. Nothing is ignored and nothing is repaired, because a file that decides where to connect and what to run is not a file to guess at — so a `.cfg` a newer `tpl` wrote and an older one does not understand is refused whole rather than read in part.
 
-### A database entry, two ways
+### A database entry and its provider
 
-An entry is described **either** by `dsn` **or** by the discrete fields. Declaring both in one entry is refused, and so is an invocation that would produce one.
+Every entry has a provider, named by its `provider` key: `mariadb` — the provider of an entry without the key — or `sqlite`. Each provider takes only its own keys — `path` for `sqlite`, the connection keys below for `mariadb` — and the entry an invocation selects is refused with `78` when it carries a key its provider does not take ([`FR-CONF-051`](specification/configuration-model.md), [`FR-CONF-052`](specification/configuration-model.md)).
+
+A `mariadb` entry is described **either** by `dsn` **or** by the discrete fields. Declaring both in one entry is refused, and so is an invocation that would produce one.
 
 ```toml
 [core]
@@ -344,15 +349,39 @@ database         = "reporting"
 tls              = "verify-ca"
 ca_file          = "/etc/ssl/certs/db-ca.pem"
 password_command = ["security", "find-generic-password", "-s", "tpl-reporting", "-w"]
+
+# A SQLite database file.
+[database.ledger]
+provider = "sqlite"
+path     = "data/ledger.sqlite"
 ```
 
 A DSN takes the form `scheme://[user[:password]@]host[:port]/database`, with `mysql://` and `mariadb://` accepted as equivalent. It carries **no query parameters**: a `?` is refused whatever follows it, so a connection string copied from another tool commonly needs its parameters removed. Encryption is the `tls` key's to decide and nothing else's.
 
 `tls` takes one of five modes — `disabled`, `preferred`, `required`, `verify-ca`, `verify-identity` — defaulting to `verify-identity`, which validates the certificate chain and the hostname. `ca_file` and `ca_path` supply trust material to the two verifying modes. See [`FR-CONF-013`](specification/configuration-model.md).
 
+### A SQLite database file
+
+A `sqlite` entry names its database file in `path`, and every command reads it as it reads a server:
+
+```bash
+tpl cfg database add ledger --provider sqlite --path data/ledger.sqlite
+tpl cfg database test ledger
+tpl -d ledger schema tables
+tpl -d ledger render example --table carrier
+```
+
+`path` is read literally: neither `${VAR}` nor a leading `~` is expanded, and a value containing `${` is refused. A relative path is resolved against the directory that holds the `.tpl` folder, never against the working directory, so every invocation inside the project reads the same file. The path must name a regular file, a symbolic link to one included; the file is opened read-only and never created.
+
+The file is treated as untrusted input. `tpl` reads it through the SQLite library built into the binary, which cannot load an extension, and applies and reads back a fixed set of safeguards and limits before the first statement that reads the file; no flag or key relaxes any of them, and one that does not take effect exits `70`. The safeguards are [`FR-LITE-010`](specification/sqlite-contract.md) and the limits [`FR-LITE-011`](specification/sqlite-contract.md). A path that names nothing or cannot be opened exits `74`; a path that names something other than a regular file, or a file that is not a SQLite database, is damaged, or holds a schema `tpl` refuses, exits `78`; a database a writer keeps locked past `core.query_timeout` exits `69`. See [`FR-LITE-007`](specification/sqlite-contract.md).
+
+A database in write-ahead-log mode keeps `<file>-wal` and `<file>-shm` beside it, and the library may create both on a read: the only write outside `.tpl` a read can cause. Where they are absent and the directory refuses them, the read exits `74` ([`FR-LITE-008`](specification/sqlite-contract.md)).
+
+The model a SQLite read fills is the same model: `database.provider` is `sqlite`, the database is named `main`, its `collation` is `null`, `server` describes the SQLite library, and `routines` is always empty, because SQLite has none. SQLite has no privileges either, so a read is complete or fails. A template tells the two providers apart by `database.provider`, per [`FR-CTX-043`](specification/context-document.md); how each property is filled is [`sqlite-contract.md`](specification/sqlite-contract.md).
+
 ### Keeping a password off disk
 
-Two mechanisms, and each is a key of the space above. Both take effect when the configuration is **resolved for a connection** — which is what every command that opens one does: the `schema` subcommands, `tpl cache load`, `tpl cfg database test`, and `tpl render` when its context comes from the database rather than from `--context`. The commands that only read or write `.tpl/.cfg` expand no variable and run no `password_command`.
+Two mechanisms, and each is a key of a `mariadb` entry; a `sqlite` entry has no password. Both take effect when the configuration is **resolved for a connection** — which is what every command that opens one does: the `schema` subcommands, `tpl cache load`, `tpl cfg database test`, and `tpl render` when its context comes from the database rather than from `--context`. The commands that only read or write `.tpl/.cfg` expand no variable and run no `password_command`.
 
 - **`${VAR}`** expands from the environment in six fields: `dsn`, `host`, `port`, `user`, `password`, and `database`. It is a single pass — an expanded value is never re-expanded — `$$` is a literal `$`, and in the file an undefined variable, an unclosed `${` or a name that is not `[A-Za-z_][A-Za-z0-9_]*` exits `78` rather than substituting nothing; on the command line the last two are refused with `64`. It is deliberately **not** expanded anywhere else, so no environment variable can weaken transport or choose the program that runs: `ca_file`, `ca_path` and `core.database` refuse a `${`, and in `password_command` it reaches the program as written.
 - **`password_command`** is an argument **array**, executed directly, with no shell. Shell metacharacters are literal arguments. Its trimmed standard output is the password, read to a bounded length; its standard error goes to the null device; a non-zero exit fails the invocation. The bound and the exit codes are [`FR-CONF-031`](specification/configuration-model.md) and [`FR-CONF-033`](specification/configuration-model.md). On the command line you write it as one string and `tpl` stores the array it splits into; a string that yields no word, leaves a quote unclosed, ends in a backslash or begins with `[` is refused with `64`:
@@ -393,7 +422,7 @@ Four properties hold across every write.
 - **`add` creates and `update` changes.** Neither does the other's job: `add` against a name that exists is refused and points at `update`, and `update` against a name that does not exist is refused. There is no `--force`. The exit code of each is in `tpl help cfg database add` and `tpl help cfg database update`.
 - **An update touches only the fields its flags name.** The rest of the entry is left exactly as it was.
 - **Comments and key order survive.** The file is rewritten through a format-preserving parser, so the commented example `tpl init` writes is still there after the first `tpl cfg set`, and a comment you wrote beside a key stays beside it.
-- **A write that would break the file is refused before the file is touched.** Writing `dsn` into an entry that carries `host`, or a `password` into one that carries `password_command`, exits `64` with the file unchanged, names both keys, and hands you a command that makes the change without deleting anything you did not name — for an entry defined by `dsn`, `tpl cfg database update <name> --dsn <url>`.
+- **A write that would break the file is refused before the file is touched.** Writing `dsn` into an entry that carries `host`, or a `password` into one that carries `password_command`, exits `64` with the file unchanged, names both keys, and hands you a command that makes the change without deleting anything you did not name — for an entry defined by `dsn`, `tpl cfg database update <name> --dsn <url>`. A write that would leave an entry carrying a key its provider does not take — `host` into a `sqlite` entry, or `provider = "mariadb"` into one that carries `path` — is refused the same way, with `64` and the file unchanged.
 
 Removing the entry `core.database` names also clears `core.database`, silently and in the same rewrite, so the file stays coherent. Both `tpl cfg database remove shop` and `tpl cfg unset database.shop` do it; `tpl cfg unset database.shop.host` does not, because the entry survives.
 
@@ -419,7 +448,7 @@ Seven flags, accepted at **every** node of the tree and in any position — befo
 
 Those five short forms are the whole short-flag space of the tool. **No other flag has one**, so a single letter means one thing wherever it appears.
 
-Local flags belong to the commands that declare them. `--format <text|json>` and `--pretty` are declared by the commands that answer with a document; `--format` defaults to `text`, fixed, with no terminal detection anywhere. `--direct` and `--no-cache` are declared by the commands that read a server. The full list is [`global-flags.md`](specification/global-flags.md).
+Local flags belong to the commands that declare them. `--format <text|json>` and `--pretty` are declared by the commands that answer with a document; `--format` defaults to `text`, fixed, with no terminal detection anywhere. `--direct` and `--no-cache` are declared by the commands that read the database. The full list is [`global-flags.md`](specification/global-flags.md).
 
 **No environment variable configures behaviour.** `${VAR}` inside `.tpl/.cfg` is the only environment read `tpl` performs. There is no colour anywhere, so there is no flag and no variable to turn it off.
 
@@ -429,7 +458,7 @@ Results go to stdout; diagnostics go to stderr. **stdout is byte-identical for t
 
 ## Deadlines
 
-Every blocking phase has a deadline, so an invocation cannot hang with no diagnosis. Four `[core]` keys supply them: `connect_timeout`, shared by DNS resolution, TCP connect and the TLS handshake; `query_timeout`, per catalogue query; `password_timeout`, for `password_command`; and `render_timeout`, for one render. Each falls back to the built-in default declared for it in [`FR-CONF-002`](specification/configuration-model.md).
+Every blocking phase has a deadline, so an invocation cannot hang with no diagnosis. Four `[core]` keys supply them: `connect_timeout`, shared by DNS resolution, TCP connect and the TLS handshake; `query_timeout`, per catalogue query; `password_timeout`, for `password_command`; and `render_timeout`, for one render. Each falls back to the built-in default declared for it in [`FR-CONF-002`](specification/configuration-model.md). For a `sqlite` entry, `query_timeout` bounds every statement on the file, a wait for a writer's lock included, and `connect_timeout` and `password_timeout` have no effect ([`FR-LITE-009`](specification/sqlite-contract.md)).
 
 `--timeout` is separate. It is an overall budget measured from process start, it has no default, and it does not replace a phase deadline: a phase ends at the first of the two to expire. The diagnostic names which one it was and its resolved value.
 
@@ -512,3 +541,5 @@ Both workflows run only when started by hand, through `workflow_dispatch`: `ci.y
 Tests that need a live database use the containers defined in `scripts/mariadb/`: one server per supported MariaDB series, seeded from `setup.sql` and `seed.sql` and presenting the fixture's own TLS certificate, and one further server offering no TLS at all. The integration tests that reach a server use them, and skip with a notice when the fixture is not up.
 
 The fixture is driven by its own scripts, and they are the supported way to operate it: they bring the servers up and verify each one, take them down and prove nothing was left behind, answer whether the fixture is up before a server-dependent test runs, and instrument the observations that have to be made from outside the process. Use them rather than Docker commands of your own. What the directory holds, which scripts drive it, how to invoke them and how to verify the result are described in [`scripts/mariadb/README.md`](scripts/mariadb/README.md). External database instances are not used, and neither are mocks standing in for a real engine.
+
+The tests of the SQLite provider build their databases at test time from the SQL text in `scripts/sqlite/`, through the SQLite library `tpl` carries; nothing is started, and no binary database file is committed. What each file builds is described in [`scripts/sqlite/README.md`](scripts/sqlite/README.md).

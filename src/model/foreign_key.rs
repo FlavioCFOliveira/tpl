@@ -105,8 +105,9 @@ pub struct ForeignKeyColumn<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ForeignKey<'a> {
-    /// The constraint name the DDL gave.
-    pub name: Cow<'a, str>,
+    /// The constraint name the DDL gave, or [`None`] for a `sqlite` read,
+    /// whose statements report no constraint name (`FR-LITE-031`).
+    pub name: Option<Cow<'a, str>>,
 
     /// The referencing and referenced columns, paired by position and ordered
     /// by the referencing column's ordinal position.
@@ -199,7 +200,7 @@ mod tests {
 
     fn key<'a>(name: &'a str, columns: Vec<ForeignKeyColumn<'a>>) -> ForeignKey<'a> {
         ForeignKey {
-            name: Cow::Borrowed(name),
+            name: Some(Cow::Borrowed(name)),
             columns,
             referenced_table: Some(Cow::Borrowed("consignment")),
             referenced_key: Some(Cow::Borrowed("PRIMARY")),
@@ -308,7 +309,7 @@ mod tests {
 
         assert_eq!(unresolved.referenced_table, None);
         assert_eq!(unresolved.referenced_key, None);
-        assert_eq!(unresolved.name, "fk_leg_consignment");
+        assert_eq!(unresolved.name.as_deref(), Some("fk_leg_consignment"));
         assert_eq!(unresolved.columns.len(), 1);
         assert_eq!(unresolved.on_update, ReferentialAction::Cascade);
     }

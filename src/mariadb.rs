@@ -75,8 +75,8 @@ use std::ops::{Deref, DerefMut};
 use std::panic::Location;
 use std::thread::LocalKey;
 
-use sqlx::Connection as _;
-use sqlx::mysql::MySqlConnection;
+use sqlx_core::connection::Connection as _;
+use sqlx_mysql::MySqlConnection;
 use tokio::runtime::{Builder, Runtime};
 
 use crate::deadline::Clock;

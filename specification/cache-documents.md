@@ -1,8 +1,8 @@
 ---
 title: Cache Documents
 status: approved
-last-reviewed: 2026-09-24
-related: [cache-commands.md, context-document.md, output-formats.md, catalogue-coverage.md]
+last-reviewed: 2026-11-03
+related: [cache-commands.md, context-document.md, output-formats.md, catalogue-coverage.md, sqlite-contract.md]
 ---
 
 # Cache Documents
@@ -148,6 +148,10 @@ Out of scope: when the cache is consulted or written, which is
   itself. Both were foreseen by the rationale of `FR-CDOC-010` and neither is a
   breaking change, per `FR-OUT-014`.
 
+  *Note added in the sixty-fifth edition.* A live read through a `sqlite`
+  entry is `server`, per `FR-OUT-026`: the value answers whether the read is
+  live, and the file is read on this invocation as a server is.
+
 - **FR-CDOC-010**: `source` SHALL be an enumerated string and SHALL NOT be a
   boolean.
 
@@ -174,6 +178,35 @@ Out of scope: when the cache is consulted or written, which is
   forbids. `tpl cache status` is the place where the age of the cache is the
   answer rather than an incidental detail, and `BR-CACHE-003` already names it
   as the only signal that a cache is stale.
+
+## The provider of a cached read
+
+- **FR-CDOC-018**: The system SHALL record in the cache, with the database
+  record of an entry, the provider of `FR-CONF-051` through which the read that
+  wrote it was made, and a read served from the cache SHALL carry that
+  provider in the `provider` field of `FR-CTX-043`, whatever the entry's
+  provider is when the read is served. A record that carries no provider was
+  written before the sixty-fifth edition by a `mariadb` read, and SHALL be
+  served as a `mariadb` record. Neither `cache_format` nor `schema_version`
+  SHALL change on account of the provider.
+
+  *Rationale.* A cache-served document describes the read that filled it, as
+  `BR-CTX-006` states for the `server` object; the provider is part of that
+  read. `FR-CACHE-028` lets no configuration change replace what is stored, so
+  an entry whose provider changes keeps serving what the previous provider
+  read until it is cleaned, per `FR-CACHE-029`, and the document must say which
+  provider that was. A record of an older binary has no provider and could only
+  have come from a server, because no other provider existed. The versions do
+  not move: adding a field is not breaking, per `FR-OUT-014` and
+  `FR-CDOC-005`, and the arrangement of the files is unchanged.
+
+  *Rejected: taking the provider from the entry at the time of the read
+  served.* After a change of provider it labels a MariaDB catalogue `sqlite`,
+  at exit `0`. *Rejected: treating a record whose provider differs from the
+  entry's as a miss.* It is the automatic invalidation `BR-CACHE-004` refuses,
+  arriving through a comparison on the read path.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
 
 ## Cached routines
 

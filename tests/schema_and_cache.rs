@@ -42,6 +42,7 @@
 //! | `FR-CDOC-015`, `FR-CDOC-016` | A document served from the store is a snapshot of no server, and `"source":"cache"` is the signal |
 //! | `FR-CAT-054` | A table carries its engine and its collation, and a view carries neither field |
 //! | `BR-SCH-001` | A pattern selects the same set from a live read and from a cached one |
+//! | `FR-ERR-024`, `FR-OUT-018` | A C1 control and a bidirectional formatting character reach a diagnostic of a `mariadb` entry escaped; a value of the catalogue carrying neither is written in `text` and `json` as before |
 //!
 //! # Every negative assertion carries a control
 //!
@@ -1479,10 +1480,11 @@ fn fr_cache_024_the_cache_arm_names_a_routine_by_the_same_rules_the_schema_arm_d
 // ------------------------------------------------- the reduction of info ---
 
 #[test]
-fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() {
+fn fr_sch_031_info_carries_five_members_and_does_not_emit_what_the_dump_emits() {
     // FR-SCH-031 as the twenty-seventh edition amended it: `data.database` is
-    // a **named subset** — `name`, `charset`, `collation` and the `server`
-    // object — and it does not carry the three collections of FR-CTX-035. The
+    // a **named subset** — `name`, `charset`, `collation`, `provider` (since
+    // the sixty-fifth edition) and the `server` object — and it does not carry
+    // the three collections of FR-CTX-035. The
     // requirement states the consequence in its own text: `tpl schema info
     // --format json` and `tpl schema dump` SHALL NOT emit the same bytes.
     //
@@ -1491,7 +1493,7 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
     // subcommands indistinguishable to a caller that reads only the bytes.
     let _guard = fixture::exclusive();
     let Some(series) = fixture::series(
-        "fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits",
+        "fr_sch_031_info_carries_five_members_and_does_not_emit_what_the_dump_emits",
     ) else {
         return;
     };
@@ -1515,9 +1517,10 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
             .as_object()
             .unwrap_or_else(|| panic!("{name}: data.database is not an object: {info}"));
 
-        // Exactly four members, and the four FR-SCH-031 names. The count is
-        // asserted beside the membership because a fifth member is the defect
-        // the amendment removed.
+        // Exactly five members, and the five FR-SCH-031 names: the sixty-fifth
+        // edition adds the `provider` of FR-CTX-043 as a fourth metadata
+        // field. The count is asserted beside the membership because a member
+        // beyond them is the defect the twenty-seventh edition removed.
         //
         // The membership is read from the parsed document and the **order**
         // from the bytes below: `preserve_order` is off, per FR-OUT-013, so a
@@ -1527,8 +1530,8 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
 
         assert_eq!(
             members,
-            ["charset", "collation", "name", "server"],
-            "{name}: FR-SCH-031 fixes exactly these four members"
+            ["charset", "collation", "name", "provider", "server"],
+            "{name}: FR-SCH-031 fixes exactly these five members"
         );
 
         for absent in ["tables", "views", "routines"] {
@@ -1543,7 +1546,7 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
         // half of what FR-SCH-031 promises a caller.
         let dump = document(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
 
-        for shared in ["name", "charset", "collation", "server"] {
+        for shared in ["name", "charset", "collation", "provider", "server"] {
             assert_eq!(
                 info["data"]["database"][shared], dump["data"]["database"][shared],
                 "{name}: {shared} differs between the two commands"
@@ -1569,7 +1572,13 @@ fn fr_sch_031_info_carries_four_members_and_does_not_emit_what_the_dump_emits() 
         // from the end, per OD-18 — read where it is observable, in the bytes.
         let mut at = 0;
 
-        for key in ["\"name\"", "\"charset\"", "\"collation\"", "\"server\""] {
+        for key in [
+            "\"name\"",
+            "\"charset\"",
+            "\"collation\"",
+            "\"provider\"",
+            "\"server\"",
+        ] {
             let found = info_bytes[at..]
                 .find(key)
                 .unwrap_or_else(|| panic!("{name}: {key} is out of order in {info_bytes}"));
@@ -3520,4 +3529,116 @@ fn fr_cdoc_015_a_document_served_from_the_store_is_a_snapshot_of_no_server() {
             .expect("the live dump carries the table too")["comment"],
         SENTINEL
     );
+}
+
+// ------------------------------------------------- FR-ERR-024, FR-OUT-018 ---
+
+/// Whether `written` carries a C1 control or a bidirectional formatting
+/// character raw.
+fn carries_the_set_raw(written: &str) -> bool {
+    written.chars().any(|character| {
+        matches!(
+            character,
+            '\u{80}'..='\u{9f}'
+                | '\u{61c}'
+                | '\u{200e}'
+                | '\u{200f}'
+                | '\u{202a}'..='\u{202e}'
+                | '\u{2066}'..='\u{2069}'
+        )
+    })
+}
+
+#[test]
+fn fr_err_024_a_c1_control_and_a_bidirectional_character_are_escaped_in_a_mariadb_diagnostic() {
+    // FR-ERR-024 as amended in the sixty-ninth edition, for a `mariadb` entry
+    // as for a `sqlite` one: a name carrying U+202E and U+009B, given on the
+    // command line and not found in the catalogue, comes back escaped in the
+    // `error` and `cause` lines, in the form of a C0 escape.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_err_024_a_c1_control_and_a_bidirectional_character_are_escaped_in_a_mariadb_diagnostic",
+    ) else {
+        return;
+    };
+    let missing = "charge\u{202e}gpj.exe\u{9b}31m";
+
+    for server in series {
+        let sandbox = project(server, ROOT);
+        let outcome = run(
+            &sandbox,
+            &["schema", "table", missing, "--direct", "--no-cache"],
+        );
+
+        assert_eq!(outcome.code, Some(66), "{}: {}", server.name(), outcome.err);
+        for label in ["error:", "cause:"] {
+            assert!(
+                line(&outcome.err, label).contains("charge\\u{202e}gpj.exe\\u{9b}31m"),
+                "{}: {label} {:?}",
+                server.name(),
+                outcome.err
+            );
+        }
+        assert!(
+            !carries_the_set_raw(&outcome.err),
+            "{}: {:?}",
+            server.name(),
+            outcome.err
+        );
+        assert!(outcome.out.is_empty(), "FR-ERR-033 leaves stdout empty");
+    }
+}
+
+#[test]
+fn fr_out_018_a_mariadb_value_carrying_no_character_of_the_set_is_written_unchanged() {
+    // FR-OUT-018 as amended in the sixty-ninth edition changes a MariaDB value
+    // only where it holds a C1 control or a bidirectional formatting
+    // character. The fixture's comments hold neither, and carry Portuguese,
+    // Japanese, `Å` and the em dash: each reaches `text` and `json` raw, as
+    // before, and the JSON document parses to the same string.
+    let _guard = fixture::exclusive();
+    let Some(series) = fixture::series(
+        "fr_out_018_a_mariadb_value_carrying_no_character_of_the_set_is_written_unchanged",
+    ) else {
+        return;
+    };
+    let facility = "Terminais e postos de acostagem, com a respectiva geometria \u{2014} \
+                    \u{6e2f}\u{6e7e}\u{65bd}\u{8a2d}";
+    let local = "binary collation, since \u{c5}lesund and Alesund are different ports";
+
+    for server in series {
+        let sandbox = project(server, ROOT);
+
+        let text = succeeds(
+            &sandbox,
+            &["schema", "table", "port", "--direct", "--no-cache"],
+        );
+        assert!(text.contains(local), "{}: {text}", server.name());
+        assert!(!text.contains("\\u{"), "{}: {text}", server.name());
+
+        let listing = succeeds(&sandbox, &["schema", "tables", "--direct", "--no-cache"]);
+        assert!(listing.contains(facility), "{}: {listing}", server.name());
+
+        let json = succeeds(
+            &sandbox,
+            &[
+                "schema",
+                "table",
+                "port_facility",
+                "--format",
+                "json",
+                "--direct",
+                "--no-cache",
+            ],
+        );
+        assert!(json.contains(facility), "{}: {json}", server.name());
+        assert!(!carries_the_set_raw(&json), "{}", server.name());
+        let parsed: serde_json::Value = serde_json::from_str(&json).expect("the output is JSON");
+        assert_eq!(
+            parsed["data"]["table"]["comment"],
+            facility,
+            "{}",
+            server.name()
+        );
+    }
 }

@@ -30,7 +30,7 @@ use super::shape::{
     OutgoingKey, TableDocument, TableShape,
 };
 use crate::error::{Error, ensure_invariant};
-use crate::model::database::Database;
+use crate::model::database::{Database, Provider};
 use crate::model::foreign_key::ForeignKey;
 use crate::model::table::Table;
 
@@ -70,13 +70,14 @@ fn database<'a>(database: &'a Database<'a>) -> Result<DatabaseDocument<'a>, Erro
 
     let mut tables = Vec::with_capacity(carried.len());
     for table in &carried {
-        tables.push(document(table, &carried)?);
+        tables.push(document(table, &carried, database.provider)?);
     }
 
     Ok(DatabaseDocument {
         name: database.name.clone(),
         charset: database.charset.clone(),
         collation: database.collation.clone(),
+        provider: database.provider,
         server: database.server.clone(),
         tables,
         views: order::by_name(&database.views),
@@ -89,6 +90,7 @@ fn database<'a>(database: &'a Database<'a>) -> Result<DatabaseDocument<'a>, Erro
 fn document<'a>(
     table: &'a Table<'a>,
     carried: &[&'a Table<'a>],
+    provider: Provider,
 ) -> Result<TableDocument<'a>, Error> {
     let mut foreign_keys: Vec<OutgoingKey<'a>> = Vec::with_capacity(table.foreign_keys().len());
     for outgoing in table.foreign_keys() {
@@ -102,25 +104,65 @@ fn document<'a>(
             .map(|name| find(carried, name))
             .transpose()?;
 
-        foreign_keys.push(key(outgoing, referenced.map(embedded)));
+        foreign_keys.push(key(
+            outgoing,
+            referenced.map(|table| embedded(table, provider)),
+        ));
     }
-    order::sort_by_name(&mut foreign_keys);
+    match provider {
+        Provider::Mariadb => order::sort_by_name(&mut foreign_keys),
+        // FR-LITE-031: no key has a name, so the order is by content.
+        Provider::Sqlite => foreign_keys.sort_by(|left, right| {
+            order::compare_by_content(
+                (
+                    table.name(),
+                    &left.columns,
+                    left.referenced_table
+                        .as_ref()
+                        .map(|embedded| &*embedded.name),
+                ),
+                (
+                    table.name(),
+                    &right.columns,
+                    right
+                        .referenced_table
+                        .as_ref()
+                        .map(|embedded| &*embedded.name),
+                ),
+            )
+        }),
+    }
 
     let mut referenced_by: Vec<IncomingKey<'a>> = Vec::with_capacity(table.referenced_by().len());
     for incoming in table.referenced_by() {
         referenced_by.push(IncomingKey {
-            table: embedded(find(carried, &incoming.table)?),
+            table: embedded(find(carried, &incoming.table)?, provider),
             key: named(&incoming.key),
         });
     }
-    // An entry of this collection is a pair and has no single name, so the
-    // default rule of `NFR-DET-002` is read over the two names it does have:
-    // the referencing table first, because that is the entry's subject, and the
-    // constraint second, because a table may reference this one more than once.
-    referenced_by.sort_by(|left, right| {
-        order::compare(&left.table.name, &right.table.name)
-            .then_with(|| order::compare(&left.key.name, &right.key.name))
-    });
+    match provider {
+        // An entry of this collection is a pair and has no single name, so the
+        // default rule of `NFR-DET-002` is read over the two names it does
+        // have: the referencing table first, because that is the entry's
+        // subject, and the constraint second, because a table may reference
+        // this one more than once.
+        Provider::Mariadb => referenced_by.sort_by(|left, right| {
+            order::compare(&left.table.name, &right.table.name).then_with(|| {
+                order::compare(
+                    left.key.name.as_deref().unwrap_or_default(),
+                    right.key.name.as_deref().unwrap_or_default(),
+                )
+            })
+        }),
+        // FR-LITE-031: the same keys read from the other end, ordered by
+        // content; the referenced table is this one.
+        Provider::Sqlite => referenced_by.sort_by(|left, right| {
+            order::compare_by_content(
+                (&left.table.name, &left.key.columns, Some(table.name())),
+                (&right.table.name, &right.key.columns, Some(table.name())),
+            )
+        }),
+    }
 
     Ok(TableDocument {
         foreign_keys,
@@ -135,10 +177,29 @@ fn document<'a>(
 /// The cut is the whole difference from [`document`]: `FR-CTX-007` keeps the
 /// columns, the indexes and the primary key in full, and the two reference
 /// collections become the names of the tables at the far end.
-fn embedded<'a>(table: &'a Table<'a>) -> EmbeddedTable<'a> {
-    let mut foreign_keys: Vec<Option<Cow<'a, str>>> = table
-        .foreign_keys()
-        .iter()
+fn embedded<'a>(table: &'a Table<'a>, provider: Provider) -> EmbeddedTable<'a> {
+    let mut keys: Vec<&ForeignKey<'a>> = table.foreign_keys().iter().collect();
+    // FR-LITE-031: the keys of a `sqlite` table carry no name and are ordered
+    // by content; the projection below keeps the order the keys are in, and
+    // the default rule then has nothing to compare but the names it projects.
+    if provider == Provider::Sqlite {
+        keys.sort_by(|left, right| {
+            order::compare_by_content(
+                (
+                    table.name(),
+                    &left.columns,
+                    left.referenced_table.as_deref(),
+                ),
+                (
+                    table.name(),
+                    &right.columns,
+                    right.referenced_table.as_deref(),
+                ),
+            )
+        });
+    }
+    let mut foreign_keys: Vec<Option<Cow<'a, str>>> = keys
+        .into_iter()
         .map(|key| key.referenced_table.clone())
         .collect();
     // The default rule of `NFR-DET-002` is name, ascending, byte-wise, and an
@@ -149,19 +210,31 @@ fn embedded<'a>(table: &'a Table<'a>) -> EmbeddedTable<'a> {
     // rather than dropped because the collection carries one entry per key,
     // per `FR-CTX-008`, and dropping it would present an embedded table with
     // fewer keys than it declares.
-    foreign_keys.sort_by(|left, right| match (left, right) {
-        (None, None) => std::cmp::Ordering::Equal,
-        (None, Some(_)) => std::cmp::Ordering::Less,
-        (Some(_), None) => std::cmp::Ordering::Greater,
-        (Some(left), Some(right)) => order::compare(left, right),
-    });
+    if provider == Provider::Mariadb {
+        foreign_keys.sort_by(|left, right| match (left, right) {
+            (None, None) => std::cmp::Ordering::Equal,
+            (None, Some(_)) => std::cmp::Ordering::Less,
+            (Some(_), None) => std::cmp::Ordering::Greater,
+            (Some(left), Some(right)) => order::compare(left, right),
+        });
+    }
 
-    let mut referenced_by: Vec<Cow<'a, str>> = table
-        .referenced_by()
-        .iter()
+    let mut incoming: Vec<_> = table.referenced_by().iter().collect();
+    if provider == Provider::Sqlite {
+        incoming.sort_by(|left, right| {
+            order::compare_by_content(
+                (&left.table, &left.key.columns, Some(table.name())),
+                (&right.table, &right.key.columns, Some(table.name())),
+            )
+        });
+    }
+    let mut referenced_by: Vec<Cow<'a, str>> = incoming
+        .into_iter()
         .map(|incoming| incoming.table.clone())
         .collect();
-    order::sort_by_name(&mut referenced_by);
+    if provider == Provider::Mariadb {
+        order::sort_by_name(&mut referenced_by);
+    }
 
     EmbeddedTable {
         foreign_keys,
@@ -272,53 +345,59 @@ mod tests {
 
     /// `vessel`, which references `voyage` and is referenced by it.
     fn vessel() -> Table<'static> {
-        Table::assemble(TableParts {
-            columns: vec![
-                fixture::column("vessel", "vessel_imo", 1, fixture::identifier()),
-                fixture::column("vessel", "current_voyage_id", 2, fixture::identifier()),
-            ],
-            indexes: vec![fixture::index(PRIMARY_KEY_NAME, &["vessel_imo"])],
-            foreign_keys: vec![fixture::key(
-                "fk_vessel_voyage",
-                "voyage",
-                &[("current_voyage_id", "voyage_id")],
-            )],
-            referenced_by: vec![fixture::incoming(
-                "voyage",
-                fixture::key(
-                    "fk_voyage_vessel",
-                    "vessel",
-                    &[("vessel_imo", "vessel_imo")],
-                ),
-            )],
-            ..TableParts::new(Cow::Borrowed("vessel"), TableType::Base)
-        })
+        Table::assemble(
+            TableParts {
+                columns: vec![
+                    fixture::column("vessel", "vessel_imo", 1, fixture::identifier()),
+                    fixture::column("vessel", "current_voyage_id", 2, fixture::identifier()),
+                ],
+                indexes: vec![fixture::index(PRIMARY_KEY_NAME, &["vessel_imo"])],
+                foreign_keys: vec![fixture::key(
+                    "fk_vessel_voyage",
+                    "voyage",
+                    &[("current_voyage_id", "voyage_id")],
+                )],
+                referenced_by: vec![fixture::incoming(
+                    "voyage",
+                    fixture::key(
+                        "fk_voyage_vessel",
+                        "vessel",
+                        &[("vessel_imo", "vessel_imo")],
+                    ),
+                )],
+                ..TableParts::new(Cow::Borrowed("vessel"), TableType::Base)
+            }
+            .with_primary_index(),
+        )
         .expect("every key names a column its table carries")
     }
 
     /// `voyage`, the other end of the same two-table cycle.
     fn voyage() -> Table<'static> {
-        Table::assemble(TableParts {
-            columns: vec![
-                fixture::column("voyage", "voyage_id", 1, fixture::identifier()),
-                fixture::column("voyage", "vessel_imo", 2, fixture::identifier()),
-            ],
-            indexes: vec![fixture::index(PRIMARY_KEY_NAME, &["voyage_id"])],
-            foreign_keys: vec![fixture::key(
-                "fk_voyage_vessel",
-                "vessel",
-                &[("vessel_imo", "vessel_imo")],
-            )],
-            referenced_by: vec![fixture::incoming(
-                "vessel",
-                fixture::key(
-                    "fk_vessel_voyage",
-                    "voyage",
-                    &[("current_voyage_id", "voyage_id")],
-                ),
-            )],
-            ..TableParts::new(Cow::Borrowed("voyage"), TableType::Base)
-        })
+        Table::assemble(
+            TableParts {
+                columns: vec![
+                    fixture::column("voyage", "voyage_id", 1, fixture::identifier()),
+                    fixture::column("voyage", "vessel_imo", 2, fixture::identifier()),
+                ],
+                indexes: vec![fixture::index(PRIMARY_KEY_NAME, &["voyage_id"])],
+                foreign_keys: vec![fixture::key(
+                    "fk_voyage_vessel",
+                    "vessel",
+                    &[("vessel_imo", "vessel_imo")],
+                )],
+                referenced_by: vec![fixture::incoming(
+                    "vessel",
+                    fixture::key(
+                        "fk_vessel_voyage",
+                        "voyage",
+                        &[("current_voyage_id", "voyage_id")],
+                    ),
+                )],
+                ..TableParts::new(Cow::Borrowed("voyage"), TableType::Base)
+            }
+            .with_primary_index(),
+        )
         .expect("every key names a column its table carries")
     }
 
@@ -330,16 +409,19 @@ mod tests {
             &[("supersedes_id", "tariff_id")],
         );
 
-        Table::assemble(TableParts {
-            columns: vec![
-                fixture::column("tariff", "tariff_id", 1, fixture::identifier()),
-                fixture::column("tariff", "supersedes_id", 2, fixture::identifier()),
-            ],
-            indexes: vec![fixture::index(PRIMARY_KEY_NAME, &["tariff_id"])],
-            foreign_keys: vec![supersedes.clone()],
-            referenced_by: vec![fixture::incoming("tariff", supersedes)],
-            ..TableParts::new(Cow::Borrowed("tariff"), TableType::SystemVersioned)
-        })
+        Table::assemble(
+            TableParts {
+                columns: vec![
+                    fixture::column("tariff", "tariff_id", 1, fixture::identifier()),
+                    fixture::column("tariff", "supersedes_id", 2, fixture::identifier()),
+                ],
+                indexes: vec![fixture::index(PRIMARY_KEY_NAME, &["tariff_id"])],
+                foreign_keys: vec![supersedes.clone()],
+                referenced_by: vec![fixture::incoming("tariff", supersedes)],
+                ..TableParts::new(Cow::Borrowed("tariff"), TableType::SystemVersioned)
+            }
+            .with_primary_index(),
+        )
         .expect("every key names a column its table carries")
     }
 
@@ -385,8 +467,9 @@ mod tests {
                 .primary_key
                 .as_ref()
                 .expect("consignment has a primary key")
-                .name,
-            PRIMARY_KEY_NAME
+                .name
+                .as_deref(),
+            Some(PRIMARY_KEY_NAME)
         );
         assert_eq!(embedded.triggers.len(), 1);
         assert_eq!(embedded.check_constraints.len(), 1);
@@ -470,22 +553,25 @@ mod tests {
         // (vessel_imo, voyage_number, leg_sequence); sorted by name it becomes
         // (leg_sequence, vessel_imo, voyage_number), which is a different key.
         let declared = ["vessel_imo", "voyage_number", "leg_sequence"];
-        let leg = Table::assemble(TableParts {
-            columns: declared
-                .iter()
-                .enumerate()
-                .map(|(at, name)| {
-                    fixture::column(
-                        "voyage_leg",
-                        name,
-                        u64::try_from(at).expect("three columns fit") + 1,
-                        fixture::identifier(),
-                    )
-                })
-                .collect(),
-            indexes: vec![fixture::index(PRIMARY_KEY_NAME, &declared)],
-            ..TableParts::new(Cow::Borrowed("voyage_leg"), TableType::Base)
-        })
+        let leg = Table::assemble(
+            TableParts {
+                columns: declared
+                    .iter()
+                    .enumerate()
+                    .map(|(at, name)| {
+                        fixture::column(
+                            "voyage_leg",
+                            name,
+                            u64::try_from(at).expect("three columns fit") + 1,
+                            fixture::identifier(),
+                        )
+                    })
+                    .collect(),
+                indexes: vec![fixture::index(PRIMARY_KEY_NAME, &declared)],
+                ..TableParts::new(Cow::Borrowed("voyage_leg"), TableType::Base)
+            }
+            .with_primary_index(),
+        )
         .expect("every key names a column its table carries");
 
         let model = fixture::database_of(vec![leg]);
@@ -515,22 +601,28 @@ mod tests {
         // independently pairs each column with the wrong counterpart. One list
         // of pairs makes that unrepresentable, and the declared order is kept.
         let pairs = [("zone_code", "region_code"), ("area_code", "zone_id")];
-        let tariff = Table::assemble(TableParts {
-            columns: vec![
-                fixture::column("tariff", "zone_code", 1, fixture::varchar(8)),
-                fixture::column("tariff", "area_code", 2, fixture::varchar(8)),
-            ],
-            foreign_keys: vec![fixture::key("fk_tariff_zone", "zone", &pairs)],
-            ..TableParts::new(Cow::Borrowed("tariff"), TableType::Base)
-        })
+        let tariff = Table::assemble(
+            TableParts {
+                columns: vec![
+                    fixture::column("tariff", "zone_code", 1, fixture::varchar(8)),
+                    fixture::column("tariff", "area_code", 2, fixture::varchar(8)),
+                ],
+                foreign_keys: vec![fixture::key("fk_tariff_zone", "zone", &pairs)],
+                ..TableParts::new(Cow::Borrowed("tariff"), TableType::Base)
+            }
+            .with_primary_index(),
+        )
         .expect("every key names a column its table carries");
-        let zone = Table::assemble(TableParts {
-            columns: vec![
-                fixture::column("zone", "region_code", 1, fixture::varchar(8)),
-                fixture::column("zone", "zone_id", 2, fixture::varchar(8)),
-            ],
-            ..TableParts::new(Cow::Borrowed("zone"), TableType::Base)
-        })
+        let zone = Table::assemble(
+            TableParts {
+                columns: vec![
+                    fixture::column("zone", "region_code", 1, fixture::varchar(8)),
+                    fixture::column("zone", "zone_id", 2, fixture::varchar(8)),
+                ],
+                ..TableParts::new(Cow::Borrowed("zone"), TableType::Base)
+            }
+            .with_primary_index(),
+        )
         .expect("a table with no keys satisfies FR-CAT-044 vacuously");
 
         let model = fixture::database_of(vec![tariff, zone]);
@@ -570,27 +662,30 @@ mod tests {
         // NFR-DET-002's default rule, applied where each collection is built
         // and not where it is emitted, so the answer is the same whatever order
         // the model arrived in.
-        let unordered_members = Table::assemble(TableParts {
-            columns: vec![fixture::column(
-                "berth",
-                "berth_id",
-                1,
-                fixture::identifier(),
-            )],
-            indexes: vec![
-                fixture::index("uq_berth_code", &["berth_id"]),
-                fixture::index(PRIMARY_KEY_NAME, &["berth_id"]),
-            ],
-            triggers: vec![
-                fixture::trigger("trg_berth_stamp"),
-                fixture::trigger("trg_berth_audit"),
-            ],
-            check_constraints: vec![
-                fixture::check("ck_berth_depth"),
-                fixture::check("ck_berth_code"),
-            ],
-            ..TableParts::new(Cow::Borrowed("berth"), TableType::Base)
-        })
+        let unordered_members = Table::assemble(
+            TableParts {
+                columns: vec![fixture::column(
+                    "berth",
+                    "berth_id",
+                    1,
+                    fixture::identifier(),
+                )],
+                indexes: vec![
+                    fixture::index("uq_berth_code", &["berth_id"]),
+                    fixture::index(PRIMARY_KEY_NAME, &["berth_id"]),
+                ],
+                triggers: vec![
+                    fixture::trigger("trg_berth_stamp"),
+                    fixture::trigger("trg_berth_audit"),
+                ],
+                check_constraints: vec![
+                    fixture::check("ck_berth_depth"),
+                    fixture::check("ck_berth_code"),
+                ],
+                ..TableParts::new(Cow::Borrowed("berth"), TableType::Base)
+            }
+            .with_primary_index(),
+        )
         .expect("every key names a column its table carries");
 
         let disordered = Database {

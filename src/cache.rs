@@ -111,6 +111,7 @@ use serde::{Deserialize, Serialize};
 use crate::at::{self, Fault};
 use crate::error::Error;
 use crate::model::ToStatic as _;
+use crate::model::database::Provider;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::order::{self, Named};
 use crate::model::document::shape::TableDocument;
@@ -143,9 +144,14 @@ const TEMPORARY: &str = ".tpl-cache";
 /// The database's own metadata, as the cache holds it.
 ///
 /// It is the part of the `database` object of `FR-CTX-036` that belongs to no
-/// collection: the three metadata fields and the `server` object of
+/// collection: the four metadata fields and the `server` object of
 /// `FR-CTX-031`. The key order is the field order, per `OD-18`, and it is the
 /// order that requirement writes them in.
+///
+/// `provider` is the record of `FR-CDOC-018`: the provider of the read that
+/// wrote the record, served whatever the entry's provider is when the record
+/// is read. A record without it was written before the sixty-fifth edition by
+/// a `mariadb` read, and decodes as one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Metadata<'a> {
     /// The schema's name.
@@ -154,9 +160,12 @@ struct Metadata<'a> {
     /// The schema's default character set.
     #[serde(borrow)]
     charset: Cow<'a, str>,
-    /// The schema's default collation.
+    /// The schema's default collation, `null` for a `sqlite` read.
     #[serde(borrow)]
-    collation: Cow<'a, str>,
+    collation: Option<Cow<'a, str>>,
+    /// The provider of the read that wrote the record (`FR-CDOC-018`).
+    #[serde(default)]
+    provider: Provider,
     /// The server the read was made against.
     #[serde(borrow)]
     server: Server<'a>,
@@ -255,6 +264,7 @@ impl Loaded {
             name: metadata.name,
             charset: metadata.charset,
             collation: metadata.collation,
+            provider: metadata.provider,
             server: metadata.server,
             tables: decode(&self.tables)?,
             views: Cow::Owned(decode(&self.views)?),
@@ -332,6 +342,7 @@ impl Shelved {
             name: metadata.name,
             charset: metadata.charset,
             collation: metadata.collation,
+            provider: metadata.provider,
             server: metadata.server,
             tables: Vec::new(),
             views: Cow::Owned(Vec::new()),
@@ -540,6 +551,7 @@ impl Summarised {
             name: metadata.name,
             charset: metadata.charset,
             collation: metadata.collation,
+            provider: metadata.provider,
             server: metadata.server,
             tables,
             views,
@@ -564,8 +576,10 @@ pub(crate) struct Summary<'a> {
     pub(crate) name: Cow<'a, str>,
     /// The schema's default character set.
     pub(crate) charset: Cow<'a, str>,
-    /// The schema's default collation.
-    pub(crate) collation: Cow<'a, str>,
+    /// The schema's default collation, `null` for a `sqlite` read.
+    pub(crate) collation: Option<Cow<'a, str>>,
+    /// The provider the read was made through (`FR-CTX-043`, `FR-SCH-031`).
+    pub(crate) provider: Provider,
     /// The server the read was made against.
     pub(crate) server: Server<'a>,
     /// How many tables the database holds.
@@ -582,7 +596,8 @@ impl<'a> Summary<'a> {
         Self {
             name: Cow::Borrowed(&document.name),
             charset: Cow::Borrowed(&document.charset),
-            collation: Cow::Borrowed(&document.collation),
+            collation: document.collation.as_deref().map(Cow::Borrowed),
+            provider: document.provider,
             server: document.server.clone(),
             tables: document.tables.len(),
             views: document.views.len(),
@@ -999,6 +1014,7 @@ impl Cache {
             name: document.name.clone(),
             charset: document.charset.clone(),
             collation: document.collation.clone(),
+            provider: document.provider,
             server: document.server.clone(),
         };
         let mut buffers = Buffers::default();
@@ -1792,8 +1808,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        Buffers, Cache, Collection, Layout, Listed, MODE, Meta, Summary, TEMPORARY, count, store,
-        store_object,
+        Buffers, Cache, Collection, Covered, Layout, Listed, MODE, Meta, Metadata, Provider,
+        Summary, TEMPORARY, count, read_metadata, store, store_object,
     };
     use crate::project::scratch::Scratch;
     use std::path::Path;
@@ -2539,5 +2555,46 @@ mod tests {
             .clean_one(Collection::Tables, cache.table_file("carrier"))
             .expect("removable");
         assert!(cache.shelved().is_none(), "a collection not recorded whole");
+    }
+
+    #[test]
+    fn fr_cdoc_018_a_record_without_a_provider_is_served_as_a_mariadb_record() {
+        // FR-CDOC-018: a record written before the sixty-fifth edition carries
+        // no provider and was written by a `mariadb` read.
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        std::fs::create_dir_all(layout.folder()).expect("the scratch directory is writable");
+        std::fs::write(
+            layout.database(),
+            r#"{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{"version":"11.4.13-MariaDB","series":"11.4","standing":"supported"}}"#,
+        )
+        .expect("writable");
+        let held = read_metadata(&layout).expect("the record is readable");
+        let metadata: Metadata<'_> = serde_json::from_str(&held).expect("the record decodes");
+
+        assert_eq!(metadata.provider, Provider::Mariadb);
+    }
+
+    #[test]
+    fn fr_cdoc_018_a_served_read_carries_the_provider_of_the_read_that_wrote_it() {
+        // FR-CDOC-018 and FR-CACHE-029: the record names the provider of the
+        // read that filled it, whatever the entry's provider is now — the
+        // store is keyed by entry name alone, so a changed entry is served the
+        // record as it was written.
+        let scratch = Scratch::new();
+        let tpl = scratch.directory(".tpl");
+        let mut database = crate::model::document::fixture::whole();
+        database.provider = Provider::Sqlite;
+        database.collation = None;
+        let document = crate::model::document::context(&database).expect("the document builds");
+
+        Cache::of(&tpl, "ledger").write(&document, Covered::Everything);
+
+        let served = Cache::of(&tpl, "ledger")
+            .summary()
+            .expect("the record is there");
+        let summary = served.summary().expect("the record decodes");
+        assert_eq!(summary.provider, Provider::Sqlite);
+        assert_eq!(summary.collation, None);
     }
 }

@@ -44,18 +44,50 @@ clap = { version = "4.6.6", default-features = false, features = [
 # `fuel` bounds every render by a count of evaluation steps (`FR-RND-036`).
 minijinja = { version = "~2.24.0", features = ["fuel"] }
 minijinja-contrib = "~2.24.0"
+# The SQLite driver and library of `ADR-013` (`FR-LITE-001`), built from the
+# bundled source with the options `.cargo/config.toml` adds. `limits` sets and
+# reads back the limits of `FR-LITE-011`. `load_extension` stays off: the
+# build compiles extension loading out, and that feature would not link.
+rusqlite = { version = "0.41.1", default-features = false, features = ["bundled", "limits"] }
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "process"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-sqlx = { version = "0.9.0", features = [
-    "mysql",
-    "runtime-tokio",
-    "tls-rustls-ring-webpki",
+# The MariaDB driver of `ADR-003`, taken as its two crates rather than through
+# the `sqlx` facade. The facade's optional `sqlx-sqlite` requires
+# `libsqlite3-sys` below 0.38, Cargo resolves optional dependencies into the
+# lock file, and `links = "sqlite3"` then keeps `rusqlite` off the SQLite
+# release `FR-LITE-039` requires. Each feature list is the set the facade
+# resolved for these two crates with `mysql`, `runtime-tokio`,
+# `tls-rustls-ring-webpki` and its own defaults, so both compile as before.
+# The `_`-prefixed features are the ones the facade itself forwards; they are
+# not public API, and the pin keeps them from moving.
+sqlx-core = { version = "=0.9.0", features = [
+    "_rt-tokio",
+    "_tls-rustls-ring-webpki",
+    "any",
+    "json",
+    "migrate",
+    "offline",
+] }
+sqlx-mysql = { version = "=0.9.0", default-features = false, features = [
+    "any",
+    "json",
+    "migrate",
+    "offline",
 ] }
 thiserror = "2.0.20"
 tokio = { version = "~1.53.1", features = ["rt", "time", "net"] }
 toml = "1.1.6"
 toml_edit = "0.25.15"
+
+# `trace` is the statement trace of `FR-LITE-018`, recorded by a
+# `#[cfg(test)]` hook (`OD-37`). Under the edition-2024 resolver a feature
+# enabled here reaches the test build and not `cargo build --release`, so the
+# shipped binary carries neither the hook nor the binding (`ADR-013`, point 1).
+# `default-features = false` keeps the test build from compiling `rusqlite`'s
+# defaults, which the shipped build does not.
+[dev-dependencies]
+rusqlite = { version = "0.41.1", default-features = false, features = ["trace"] }
 
 # `sqlx-core` 0.9.0 never calls `set_nodelay`, which costs ~40 ms on every
 # connection that negotiates TLS. The vendored copy adds the one statement

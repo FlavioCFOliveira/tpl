@@ -1,7 +1,7 @@
 ---
 title: Output Formats
 status: approved
-last-reviewed: 2026-09-21
+last-reviewed: 2026-11-03
 related: [cli-contract.md, schema-commands.md, errors-and-exit-codes.md, help-and-version.md]
 ---
 
@@ -251,6 +251,13 @@ owns the shape of its `data`.
   takes. Adding a value to the set is not a breaking change, per `FR-OUT-014`
   and `FR-CDOC-010`.
 
+  *Note added in the sixty-fifth edition.* A read of the database file of a
+  `sqlite` entry on this invocation is `server`. The value says the read is
+  live, which is the question this field answers, and `database.provider`,
+  per `FR-CTX-043`, says what was read. *Rejected: a fifth value for a SQLite
+  read.* It would give one answer — live — two spellings, and every consumer
+  that branches on `server` would have to learn the second.
+
   *Rejected.* `null` wherever neither `server` nor `cache` applies, which would
   say "not known" where the truth is "not applicable", and would leave a caller
   unable to tell a project read from a failure to record the source.
@@ -350,12 +357,20 @@ owns the shape of its `data`.
   server holds, and a template generating code from a comment receives U+FFFD
   rather than the original byte — which was not representable anyway.
 
-- **FR-OUT-018**: The system SHALL escape C0 control characters in the `text`
-  and `json` output of the read commands — `schema`, `template`, `cfg`, and
-  `cache`. Tab is excepted in `text` output alone. In `json` output there is no
-  exception to make: the format admits no raw control character inside a
-  string, so a tab SHALL be emitted as the escape JSON defines for it, which is
-  how this requirement is satisfied there.
+- **FR-OUT-018**: The system SHALL escape C0 control characters, C1 control
+  characters — U+0080 to U+009F — and
+  [bidirectional formatting characters](glossary.md#bidirectional-formatting-character)
+  in the `text` and `json` output of the read commands — `schema`,
+  `template`, `cfg`, and `cache` — for a `mariadb` and a `sqlite` entry alike.
+  In `text` output, a C1 control character and a bidirectional formatting
+  character SHALL be escaped in the form a C0 control character is, and tab
+  is excepted, in `text` output alone. In `json` output there is no exception
+  to make: the format admits no raw C0 control character inside a string, so
+  a tab SHALL be emitted as the escape JSON defines for it, which is how this
+  requirement is satisfied there for the C0 range; a C1 control character and
+  a bidirectional formatting character SHALL be emitted as JSON's escape `\u`
+  followed by the four hexadecimal digits of the code point, which a JSON
+  parser reads back as the same character.
 
   *Rationale.* No catalogue byte may reach the terminal uninterpreted. An escape
   character in a column comment must not be able to rewrite what the user sees.
@@ -382,6 +397,32 @@ owns the shape of its `data`.
   now names the output it governs and the `json` path states what satisfies the
   rule there. No emitted byte changes: this is the wording catching up with the
   only behaviour either format ever admitted.
+
+  *Amended in the sixty-ninth edition,* for rmp `#321`: the C1 range and the
+  bidirectional formatting characters join the escaped set, by the user's
+  decision of 2026-11-03 recorded under `FR-ERR-024`, where the observation,
+  the rationale and the rejected options common to both requirements are
+  stated once. What is particular to this requirement is `json`, and the
+  user confirmed it on the same date, relayed for rmp `#321`: these characters
+  take JSON's own `\u` escape there. The format admits them raw, so it does
+  not keep them from a consumer as it keeps the C0 range, and the observation
+  found them raw in a document. JSON
+  lets any character be written as `\u` and four hexadecimal digits, per
+  RFC 8259, section 7, at `https://www.rfc-editor.org/rfc/rfc8259`, checked
+  2026-11-03, so the escape is the format's own and the parsed document is
+  unchanged: a consumer that parses it reads the same string, and only a
+  reader of the raw bytes — a terminal a document is written to — sees a
+  difference. The tab exception and the byte-for-byte outputs of `FR-OUT-019`
+  are unchanged.
+
+  *Rejected: leaving these characters raw in `json` output, as JSON permits.*
+  A document written to a terminal would carry U+009B to it, which the
+  rationale above, that no catalogue byte reaches the terminal uninterpreted,
+  exists to prevent. *Rejected: the escape of `text` output inside a JSON
+  string.* It changes the parsed value: a consumer would read the escape's
+  characters where the catalogue holds one, and a template rendered with
+  `--context` from a dump would emit the escape where a render from the
+  database emits the character.
 
 - **FR-OUT-019**: The escaping of `FR-OUT-018` SHALL apply to every value
   interpolated into that output, whatever its source: the catalogue, a

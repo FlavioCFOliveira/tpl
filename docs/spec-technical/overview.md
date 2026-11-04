@@ -1,7 +1,7 @@
 ---
 title: Overview
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-03
 related: [README.md, traceability.md, open-decisions.md]
 ---
 
@@ -45,9 +45,9 @@ removed, and what `specification/glossary.md` names.
 
 | Property | How the built system holds it | Forced by |
 |---|---|---|
-| Read-only over the database | Only the statements of the closed list are ever sent, whatever the server would permit; the session setting is defence in depth, confirmed before any catalogue read by a read of `@@session.tx_read_only`, and its failure stops the read; no flag, key or environment condition disables either half | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001`, `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `FR-SRV-011`, `BR-SRV-002` |
+| Read-only over the database | Only the statements of the closed list are ever sent, whatever the server would permit; the session setting is defence in depth, confirmed before any catalogue read by a read of `@@session.tx_read_only`, and its failure stops the read; no flag, key or environment condition disables either half. A SQLite database file is opened read-only, sent only its own closed list, and held to `query_only` besides | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001`, `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `FR-SRV-011`, `BR-SRV-002`; `BR-LITE-001` |
 | One render per invocation | An invocation yields one result, so the design questions a multi-object render would force are not questions this artefact has to answer | `FR-RND-002` |
-| No file-writing surface | The rendered result goes to stdout and nowhere else, and no destination flag exists; every write the process makes is inside `.tpl`, with one enumerated exception; a read command's only write is the cache | `FR-RND-028`, `BR-RND-003`, `FR-PROJ-024`, `BR-PROJ-002` |
+| No file-writing surface | The rendered result goes to stdout and nowhere else, and no destination flag exists; every write the process makes is inside `.tpl`, with two enumerated exceptions — the destination of `tpl init`, and the two files the SQLite library may write beside a database in write-ahead-log mode ([data-model.md](data-model.md#tpl-on-disk-and-its-five-writers)); a read command's only write of its own is the cache | `FR-RND-028`, `BR-RND-003`, `FR-PROJ-024`, `BR-PROJ-002`, `FR-LITE-008` |
 
 `BR-RND-003` is what makes the third row a property of the artefact rather than
 a feature that happens to be absent: if a destination is ever brought back into
@@ -58,8 +58,8 @@ scope, the two findings it preserves are re-applied and not re-derived.
 | Not | Because |
 |---|---|
 | A tool that writes to a database | `FR-SRV-007`, `BR-SRV-001` |
-| A reader of table data | The closed list reaches `INFORMATION_SCHEMA` and nothing else (`FR-SRV-006`) |
-| A reader of any product but MariaDB | `FR-SRV-001`, `FR-SRV-003` |
+| A reader of table data | The closed list reaches `INFORMATION_SCHEMA` and nothing else (`FR-SRV-006`); for a database file, the schema table and the pragma functions of `FR-LITE-015` |
+| A reader of any database but a MariaDB server or a SQLite database file | `FR-CONF-051`, `FR-SRV-001`, `FR-SRV-003`, `FR-LITE-001` |
 | Interactive | No prompt, no pager, no stdin but an explicit `--context -` (`BR-CLI-003`) |
 | Configurable from the environment | The command line and the project decide everything; `${VAR}` inside the configuration file is the single exception (`FR-CLI-021`, `FR-CLI-023`, `BR-CLI-002`) |
 | Terminal-aware | No terminal detection, no colour, no ANSI byte on either stream (`NFR-DET-003`, `NFR-DET-004`) |

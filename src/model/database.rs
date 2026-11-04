@@ -16,6 +16,9 @@
 //! [catalogue coverage](super) covers, under the names every command of the
 //! first arm already presents them by.
 //!
+//! `provider` is the fourth metadata field (`FR-CTX-036`, `FR-CTX-043`): which
+//! of the two providers of `FR-CONF-051` made the read.
+//!
 //! *`charset` and `collation` are passed through verbatim, per `FR-SRV-039`,
 //! and this is one of the two places the divergence register of `FR-SRV-036`
 //! reaches.* A database created without an explicit collation yields a
@@ -26,11 +29,69 @@
 //! collations, not two spellings of one.
 
 use std::borrow::Cow;
+use std::fmt;
+
+use serde::{Deserialize, Serialize};
 
 use super::routine::Routine;
 use super::server::Server;
 use super::table::Table;
 use super::view::View;
+
+/// The provider through which a read was made (`FR-CONF-051`, `FR-CTX-043`).
+///
+/// One closed enumeration, declared here because `FR-CTX-043` makes it a value
+/// of the document, and carried unchanged by the entry of `.tpl/.cfg`, the
+/// resolved settings, the dispatch of `crate::provider` and the model (`OD-35`).
+/// Every site where behaviour differs matches it exhaustively.
+///
+/// The spelling is the one the configuration and the document share, lower
+/// case and compared exactly: `SQLite` is not `sqlite` (`FR-CONF-051`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+#[non_exhaustive]
+pub enum Provider {
+    /// A MariaDB server, read through the contract of `server-contract.md`.
+    ///
+    /// The default: an entry with no `provider` key is a `mariadb` entry
+    /// (`FR-CONF-051`), and a `--context` document without the field is read
+    /// as a `mariadb` document (`FR-CTX-043`, item 3).
+    #[default]
+    Mariadb,
+
+    /// A SQLite database file, read through the contract of
+    /// `sqlite-contract.md`.
+    Sqlite,
+}
+
+impl Provider {
+    /// The two providers, in the order `FR-CONF-051` states them.
+    pub const ALL: [Self; 2] = [Self::Mariadb, Self::Sqlite];
+
+    /// The provider as the configuration and the document spell it.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Mariadb => "mariadb",
+            Self::Sqlite => "sqlite",
+        }
+    }
+
+    /// The provider `name` spells, compared exactly, or [`None`] where it
+    /// spells neither (`FR-CONF-051`).
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|provider| provider.name() == name)
+    }
+}
+
+impl fmt::Display for Provider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
 
 /// The database a model was read from (`FR-CTX-036`).
 ///
@@ -49,8 +110,12 @@ pub struct Database<'a> {
     pub charset: Cow<'a, str>,
 
     /// The schema's default collation, passed through verbatim per
-    /// `FR-SRV-039`.
-    pub collation: Cow<'a, str>,
+    /// `FR-SRV-039`, or [`None`] for a `sqlite` read, which has no
+    /// database-level collation (`FR-LITE-023`).
+    pub collation: Option<Cow<'a, str>>,
+
+    /// The provider the read was made through (`FR-CTX-043`).
+    pub provider: Provider,
 
     /// The server the read was made against (`FR-CTX-031`).
     ///
@@ -71,7 +136,7 @@ pub struct Database<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::Database;
+    use super::{Database, Provider};
     use crate::model::server::{Server, Standing};
     use crate::model::table::{Table, TableParts, TableType};
     use std::borrow::Cow;
@@ -80,7 +145,8 @@ mod tests {
         Database {
             name: Cow::Borrowed("freight"),
             charset: Cow::Borrowed("utf8mb4"),
-            collation: Cow::Borrowed("utf8mb4_unicode_520_ci"),
+            collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
+            provider: Provider::Mariadb,
             server: Server::probed(
                 Cow::Borrowed("11.4.13-MariaDB-ubu2404"),
                 Standing::Supported,
@@ -99,7 +165,8 @@ mod tests {
 
         assert_eq!(freight.name, "freight");
         assert_eq!(freight.charset, "utf8mb4");
-        assert_eq!(freight.collation, "utf8mb4_unicode_520_ci");
+        assert_eq!(freight.collation.as_deref(), Some("utf8mb4_unicode_520_ci"));
+        assert_eq!(freight.provider, Provider::Mariadb);
     }
 
     #[test]

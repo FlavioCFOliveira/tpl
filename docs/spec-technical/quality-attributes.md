@@ -1,7 +1,7 @@
 ---
 title: Quality Attributes
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md, open-decisions.md, overview.md]
 ---
 
@@ -86,6 +86,38 @@ that is `operations.md`, settled in
 [`OD-17`](open-decisions.md#od-17--observability). Since the sixty-second
 edition `NFR-PERF-008` is verified by counting those lines at `-v` against the
 server's statement record for the same invocation, which is `verification.md`.
+
+**The six hold for a `sqlite` entry**, with a connection read as one connection
+of the library to the database file (`FR-LITE-037`, `NFR-PERF-004`'s note).
+What each forces there:
+
+| Requirement | The design decision for a `sqlite` entry | Described in |
+|---|---|---|
+| `NFR-PERF-001`, `NFR-PERF-002` | A fixed plan of seven catalogue statements after the probe — the check of `FR-LITE-041`, then six, each joining the schema table to the function it reads where that function takes one object — so the count over the fixture equals the count over an empty file. The `BEGIN DEFERRED` and `COMMIT` around them are issued once each whatever the objects, and are not catalogue statements, so neither is counted (`FR-LITE-042`; the note on `FR-LITE-037` of the seventieth edition). No path is excepted, and no statement invokes `pragma_table_list`, so the time each takes is linear in the objects; the fold groups once every collection it reads by name and scans none, so its own work does not grow with their square either (`FR-LITE-037`, as amended in the sixty-ninth edition; `FR-LITE-009`) | [architecture.md](architecture.md#the-sqlite-reader) |
+| `NFR-PERF-003` | The cache sits in front of the dispatch, so a hit opens no file and issues no statement | [architecture.md](architecture.md#the-provider-dispatch) |
+| `NFR-PERF-004` | One connection, opened by `sqlite/` when it is about to read and closed when the read ends, before any render | [architecture.md](architecture.md#the-sqlite-reader) |
+| `NFR-PERF-005`, `NFR-PERF-006` | `sqlite/` is reached only through the dispatch, which a command needing no catalogue never reaches | [architecture.md](architecture.md#the-provider-dispatch) |
+
+A statement the library runs to carry out a pragma function or a module is
+nested, and is not counted (`FR-LITE-018`): the pragma functions run one for
+each table or index, and counting them would make the count grow with the
+objects.
+
+**`NFR-PERF-008` compares the `FR-GLOB-017` lines of a `sqlite` read with the
+statement record of `FR-LITE-018`**, over the statements of `FR-LITE-015`'s
+last row (`NFR-PERF-008`, as amended in the sixty-seventh edition). `sqlite/`
+therefore writes the line once for each statement of that row it issues — the
+catalogue plan, whose first statement, the check of `FR-LITE-041`, is also the
+probe of `FR-CFG-056` — once the statement's bound is
+checked and before it is prepared, as `mariadb/` writes it
+before a statement is sent; it writes none for a control, a limit, the version
+probe or either statement of the read transaction of `FR-LITE-042`, and a
+nested statement is the library's and has none. A statement the
+library fails to prepare is then counted on the stream and absent from the
+record, the limit `FR-LITE-018` states.
+`NFR-PERF-004` for a `sqlite` entry is observed on the two Linux targets alone,
+which that requirement states. How both are verified is
+[verification.md](verification.md#the-sqlite-provider)'s.
 
 ## Determinism
 
@@ -313,12 +345,13 @@ under `NFR-PERF-020`. Neither gates anything (`BR-PERF-008`).
 
 | Property | How the built system holds it | Forced by |
 |---|---|---|
-| No invocation blocks without bound | A deadline on every blocking phase, composed with the overall budget measured from process start, exiting with the code of the phase in progress; the `password_command` phase runs until the child has exited and its output has closed, and a descendant holding the pipe cannot extend it. The three mechanisms are settled in [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and described in `architecture.md` | `FR-SEC-022`, `FR-CONF-005`, `FR-CONF-028`, `FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013` |
+| No invocation blocks without bound | A deadline on every blocking phase, composed with the overall budget measured from process start, exiting with the code of the phase in progress; the `password_command` phase runs until the child has exited and its output has closed, and a descendant holding the pipe cannot extend it. The three mechanisms are settled in [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and described in `architecture.md`. Every statement on a SQLite connection is bounded by the busy timeout and a watchdog ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)), the probe whose loading of a crafted schema grows faster than its objects included; **the open of a database file is not**, and a file swapped for a FIFO after its kind was established blocks it — the accepted cost of `FR-LITE-005` | `FR-SEC-022`, `FR-CONF-005`, `FR-CONF-028`, `FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-LITE-009` |
 | No render runs unbounded in work, output or memory | Render fuel, the render output limit and the render memory limit beside the deadline; the first crossed ends the render with `65`. The memory limit is observed every 10 ms and can be overshot within one interval, and an allocation the OS refuses aborts without a `cause` ([architecture.md](architecture.md#the-render-bounds), [`ADR-011`](../adr/adr-011-render-memory-accounting.md)) | `FR-SEC-025`, `FR-RND-036` … `FR-RND-039` |
 | A failed render leaves at most one incomplete result on stdout | The render writes nothing to stdout until it returns; a bound that ends it from the watchdog exits without flushing, and one invocation renders once | `FR-RND-033`, `FR-RND-034`, `FR-RND-037`, `FR-RND-039`, `FR-RND-002` |
 | A cache file is never half-written, and a killed process leaves nothing locked | Each object is written through a temporary file in the same directory and renamed over the target; no lock is taken, so two writers yield one whole result or the other | `FR-CACHE-030`, `FR-CACHE-031` |
 | A cache failure is never an event in the contract | An unreadable file or an unknown format version is treated as a miss and reported neither as error nor as warning; an unwritable cache still answers from what was read, exits `0`, and changes no byte of stdout | `FR-CACHE-033`, `FR-CACHE-036` |
 | An interrupted load loses nothing already stored | An unreachable server during `tpl cache load` exits `69` and leaves stored objects unchanged | `FR-CACHE-032` |
+| A database file that cannot be read is never an empty database | Every failure to read it ends the invocation with the code of its condition; a fault that prevents the schema from loading fails the whole read, a schema table the check refuses ends it with `78` before any statement reads through a pragma function, and no object is presented marked: a view that does not compile is read whole (`FR-LITE-035` is withdrawn) | `FR-LITE-007`, `FR-LITE-033`, `FR-LITE-036`, `FR-LITE-041` |
 | Each distinct condition has its own exit code, and the code is sufficient on its own to choose the next step | The classification is stated with the condition: a `69` is repeatable precisely because the operation is read-only | `FR-ERR-001`, `FR-ERR-002` |
 | Referential integrity is promised where it can be, and a snapshot is never promised | A server-read document contains every object referenced from another object in it; it does not promise to be point-in-time, and a cache-served document promises neither | `FR-CTX-023`, `FR-CTX-024`, `FR-CDOC-015` |
 
@@ -349,6 +382,10 @@ Three bounds keep the exceptions from swallowing the promise:
 - The treatment applied to any difference is one of exactly four (`BR-SRV-006`,
   with `FR-SRV-024`, `FR-SRV-004`, `FR-SRV-025`, `FR-SRV-039`); which treatment
   each field receives is `data-model.md`.
+
+**The property does not reach a `sqlite` read.** The library is one release,
+carried by the binary, so there is no second series to be equivalent to
+(`FR-LITE-003`).
 
 Verification is an integration test executed against every series
 (`FR-SRV-029`), which cannot be written until `tpl` can emit a document and is

@@ -36,6 +36,87 @@ workflow, before it closes.
 
 ## Unreleased
 
+### Added
+
+- **SQLite as a second database provider.** An entry's new `provider` key is
+  `mariadb` — the provider of an entry without the key — or `sqlite`; a
+  `sqlite` entry names its database file in the new `path` key, read literally
+  and resolved against the directory that holds `.tpl`. The eight `schema` subcommands,
+  `tpl cache load`, `tpl render` and `tpl cfg database test` read such a file
+  through the SQLite library built into `tpl`, opened read-only, never
+  created, and hardened as untrusted input. SQLite has no routines, so
+  `routines` is always `[]`, and a routine named on the command line exits
+  `66`.
+- **`--provider` and `--path` on `tpl cfg database add` and `update`**, and
+  the keys `database.<name>.provider` and `database.<name>.path` for
+  `tpl cfg set`, `get` and `unset`. Each of these exits `64`, writing
+  nothing: a provider other than `mariadb` or `sqlite`; `--path` beside a
+  MariaDB flag, or given to `add` without `--provider sqlite`; an empty
+  `--path` or one holding `${`; and a write that would leave an entry carrying
+  a key its provider does not take. Writing or removing `provider` or `path`
+  keeps the entry's cache and warns, as writing or removing a connection key
+  does. The warning says the entry may now read another database where the
+  write names `provider` or `path` or leaves a `sqlite` entry, and that it may
+  now point at another server otherwise.
+- **`database.provider` in every document.** The `database` object of the
+  JSON documents and of the render context carries `provider`, `mariadb` or
+  `sqlite`; a cache-served read carries the provider of the read that filled
+  the cache. A `--context` document without the key is read as `mariadb`, and
+  one with any other value exits `65`. `schema_version` and `cache_format`
+  stay at `1`.
+- **A `provider` row in `tpl schema info`.** The text output carries it
+  between `collation` and `server`, for both providers.
+- **The exit codes of a `sqlite` entry.** `74` when the path names nothing or
+  the file cannot be opened or read; `78` when the path names something other
+  than a regular file, the file is not a SQLite database, is damaged or holds
+  a schema `tpl` refuses, or the entry has no `path` or carries a key its
+  provider does not take; `69` when a writer keeps the database locked past
+  `core.query_timeout`; `70` when a safeguard of the read does not take
+  effect.
+- **The write-ahead-log files of a SQLite database.** A read of a database in
+  write-ahead-log mode may create `<file>-wal` and `<file>-shm` beside it,
+  which may remain: the only files a read writes outside `.tpl`. Where they are
+  absent and the directory refuses them, the read exits `74`.
+- **Templates over a SQLite read.** The `numeric` test is true for the
+  `data_type` values `integer`, `numeric` and `real`, and `primary_key` and
+  `unique` answer from the table's `primary_key`, so a SQLite rowid key, which
+  has no index, satisfies both. No answer over a MariaDB document changes.
+
+### Changed
+
+- **Help text.** `tpl help cfg database add` and `update` document
+  `--provider` and `--path`, with a SQLite example, and name `--path` among
+  the flags each MariaDB flag excludes; `tpl help cfg set` lists the two new
+  keys; `tpl help cfg database test` states what its four answers mean for a
+  `sqlite` entry; the exit codes of the `schema` subcommands, `tpl render`,
+  `tpl cache load` and `tpl cfg database test` name the conditions of a
+  `sqlite` entry; and `tpl render --help` and the `context_variables` of
+  `tpl help --format json` describe the `database` variable as "The whole
+  database: name, charset, collation, provider, server, tables, views and
+  routines."
+- **Library API.** `tpl::Error` gained twelve variants, for the SQLite
+  provider and its configuration. `tpl::model` gained
+  `database::Provider`, `index::PrimaryKey` and the field
+  `Database::provider`; `Table::primary_key` now returns a `PrimaryKey`
+  rather than an `Index`; and fields a SQLite read cannot fill became
+  `Option`, among them `Database::collation` and every view field but `name`
+  and `definition`. The library carries no stability promise (`DIV-032`).
+
+### Security
+
+- **C1 controls and bidirectional formatting characters are escaped.** In
+  the text output of the read commands and in every diagnostic, a character
+  from U+0080 to U+009F, and each of the twelve characters Unicode marks
+  `Bidi_Control`, is now written as `\u{…}`, as a C0 control already was; in
+  JSON output it is written as `\u` and four hexadecimal digits. This holds
+  for both providers, so a name in a catalogue can no longer reorder what a
+  terminal shows.
+- **Dependencies moved to releases with security fixes.** `rustls` 0.23.46,
+  `rustls-webpki` 0.103.16, `webpki-roots` 1.0.10 and `tokio` 1.53.3,
+  which close RUSTSEC-2026-0346, RUSTSEC-2026-0347, RUSTSEC-2026-0348,
+  RUSTSEC-2026-0349, RUSTSEC-2026-0381, RUSTSEC-2026-0382 and
+  RUSTSEC-2026-0386.
+
 ## [0.0.2] - 2026-09-25
 
 ### Added

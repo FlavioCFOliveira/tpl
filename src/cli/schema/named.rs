@@ -31,6 +31,7 @@ use std::path::Path;
 use crate::cache::Shelf;
 use crate::diagnostics::suggest::{self, Population};
 use crate::error::{CatalogueObjectKind, Error};
+use crate::model::database::Provider;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::order::Named;
 use crate::model::document::shape::TableDocument;
@@ -154,13 +155,19 @@ fn lower(kind: &RoutineKind<'_>) -> Option<&'static str> {
 /// connection and `FR-RND-019` resolves no entry.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Sought<'a> {
-    /// A catalogue read, served by the cache or by a server.
+    /// A catalogue read, served by the cache or by a server or a database
+    /// file.
     Catalogue {
         /// The database entry of `.tpl/.cfg` the read was made through.
         entry: &'a str,
 
-        /// The server-side database the object was sought in (`FR-CONF-041`).
+        /// The server-side database the object was sought in (`FR-CONF-041`),
+        /// or `main` for a `sqlite` read (`FR-LITE-019`).
         database: &'a str,
+
+        /// The provider of the read, which decides what a `cause` says was
+        /// searched (`FR-CTX-043`).
+        provider: Provider,
     },
 
     /// A `--context` document (`FR-RND-016`).
@@ -325,7 +332,9 @@ pub(crate) fn routine_member<'m, M: RoutineMember>(
 
     if matched.next().is_some() {
         return Err(match at {
-            Sought::Catalogue { entry, database } => Error::AmbiguousRoutineName {
+            Sought::Catalogue {
+                entry, database, ..
+            } => Error::AmbiguousRoutineName {
                 name: name.to_owned(),
                 entry: entry.to_owned(),
                 database: database.to_owned(),
@@ -360,11 +369,16 @@ where
     let nearest: Vec<String> = nearest.names().map(str::to_owned).collect();
 
     match at {
-        Sought::Catalogue { entry, database } => Error::CatalogueObjectNotFound {
+        Sought::Catalogue {
+            entry,
+            database,
+            provider,
+        } => Error::CatalogueObjectNotFound {
             kind,
             name: name.to_owned(),
             entry: entry.to_owned(),
             database: database.to_owned(),
+            provider,
             nearest,
         },
         Sought::Document { path, database } => Error::ContextObjectNotFound {
@@ -491,6 +505,7 @@ mod tests {
         Sought::Catalogue {
             entry: "shop",
             database: "freight",
+            provider: crate::model::database::Provider::Mariadb,
         }
     }
 
@@ -584,5 +599,82 @@ mod tests {
         let refused = super::view(&document, "v_sales", at()).expect_err("the view is marked");
 
         assert_eq!(refused.exit_code(), 77);
+    }
+
+    /// The SQLite fixture of `FR-LITE-038`, read through the provider
+    /// dispatch, under a scratch directory the caller keeps alive.
+    fn sqlite_read(
+        build: impl FnOnce(&std::path::Path) -> std::path::PathBuf,
+    ) -> (crate::project::scratch::Scratch, crate::provider::Read) {
+        let scratch = crate::project::scratch::Scratch::new();
+        let root = scratch.directory("fixture");
+        let path = build(&root);
+        let settings = crate::project::settings::FileSettings::new(
+            "ledger",
+            &path,
+            crate::deadline::Deadlines::default(),
+        );
+        let read = crate::provider::read(
+            crate::provider::Source::File(&settings),
+            &crate::project::settings::clock(None),
+        )
+        .expect("the file reads");
+
+        (scratch, read)
+    }
+
+    /// Where a lookup over a `sqlite` read was made.
+    fn in_file() -> Sought<'static> {
+        Sought::Catalogue {
+            entry: "ledger",
+            database: "main",
+            provider: crate::model::database::Provider::Sqlite,
+        }
+    }
+
+    #[test]
+    fn fr_lite_036_naming_a_view_that_does_not_compile_returns_it_whole() {
+        // FR-LITE-036 and FR-PRIV-003 as amended in the sixty-eighth edition:
+        // a `sqlite` read presents no incomplete object, so each of the three
+        // views of item 10 of FR-LITE-038 that do not compile is returned
+        // whole and unmarked when a request names it, as a view that compiles
+        // is.
+        let (_scratch, read) = sqlite_read(|root| crate::sqlite::fixture::build(root).main.clone());
+        let database = read.model().expect("it folds");
+        let document = context(&database).expect("the document builds");
+
+        for name in [
+            "v_document_paths",
+            "v_quay_schedule",
+            "v_ranked_notes",
+            "v_vessel_fleet",
+        ] {
+            let found = super::view(&document, name, in_file())
+                .unwrap_or_else(|refused| panic!("{name} is refused: {refused:?}"));
+            assert_eq!(found.name, name);
+            assert_eq!(found.restricted, None, "{name} is marked");
+            assert!(
+                found.definition.starts_with("CREATE VIEW "),
+                "{name}: {}",
+                found.definition
+            );
+        }
+    }
+
+    #[test]
+    fn fr_lite_022_a_routine_named_on_a_sqlite_read_is_66_and_names_no_catalogue() {
+        // FR-LITE-022: SQLite has no routines, and a routine named is answered
+        // as one a server's database does not hold — without naming the
+        // INFORMATION_SCHEMA a SQLite read never reached.
+        let (_scratch, read) = sqlite_read(|root| crate::sqlite::fixture::build(root).main.clone());
+        let database = read.model().expect("it folds");
+        let document = context(&database).expect("the document builds");
+
+        let refused = super::routine(&document, &Wanted::Bare("calc_vat"), in_file(), INVOCATION)
+            .expect_err("SQLite has no routines");
+        assert_eq!(refused.exit_code(), 66);
+        let rendered = crate::diagnostics::rendered(&refused);
+        assert!(!rendered.contains("INFORMATION_SCHEMA"), "{rendered}");
+        assert!(rendered.contains("SQLite"), "{rendered}");
     }
 }

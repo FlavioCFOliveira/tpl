@@ -434,8 +434,8 @@ pub(crate) const VARIABLES: &[Variable] = &[
         name: "database",
         kind: Kind::Object,
         bound_by: None,
-        purpose: "The whole database: name, charset, collation, server, tables, views and \
-                  routines.",
+        purpose: "The whole database: name, charset, collation, provider, server, tables, views \
+                  and routines.",
     },
     Variable {
         name: "table",

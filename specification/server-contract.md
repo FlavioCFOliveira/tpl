@@ -1,8 +1,8 @@
 ---
 title: Server Contract
 status: approved
-last-reviewed: 2026-09-24
-related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md]
+last-reviewed: 2026-11-03
+related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md, sqlite-contract.md]
 ---
 
 # Server Contract
@@ -19,6 +19,13 @@ to supporting them. The third is the read-only promise, which
 the first edition stated as a session setting and which is restated here in the
 two parts it actually has — a closed list of statements `tpl` will issue, and a
 session setting that catches what the list already prevents.
+
+*Note added in the sixty-fifth edition.* This file governs a database entry
+whose provider is `mariadb`, per `FR-CONF-051`, and every requirement in it is
+read with that scope. An entry whose provider is `sqlite` is governed by
+[sqlite-contract.md](sqlite-contract.md), which states which of the rules here
+it adopts and on what ground. No requirement of this file changes for a
+`mariadb` entry.
 
 ## Scope
 
@@ -66,9 +73,9 @@ record has not been observed, and SHALL NOT be written down.
 
 ## The supported version window
 
-- **FR-SRV-001**: The system SHALL support MariaDB and no other product, and
-  SHALL support exactly those MariaDB release series that satisfy **both** of
-  the following conditions:
+- **FR-SRV-001**: For a `mariadb` entry, the system SHALL support MariaDB and
+  no other product, and SHALL support exactly those MariaDB release series that
+  satisfy **both** of the following conditions:
 
   1. the series belongs to one of the **three most recent MariaDB major
      families**; and
@@ -79,6 +86,14 @@ record has not been observed, and SHALL NOT be written down.
   withdrawn: 10.6 left community maintenance on 2026-07-06 and is no longer a
   version `tpl` can claim to serve. The window above replaces it and, for the
   first time, states a ceiling as well as a floor.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The opening clause is
+  new. The requirement read "The system SHALL support MariaDB and no other
+  product", and the system now also reads SQLite, through an entry whose
+  provider is `sqlite`, per `FR-CONF-051` and
+  [sqlite-contract.md](sqlite-contract.md). A server reached through a
+  `mariadb` entry that is not MariaDB is still refused, per `FR-SRV-003`, and
+  the window is unchanged.
 
   *Rationale.* Both conditions are load-bearing and neither is sufficient alone.
   The family condition alone would admit `10.5` and `10.6`, which no longer
@@ -473,6 +488,10 @@ record has not been observed, and SHALL NOT be written down.
 
   *Closes* `OQ-074`, now listed under [Closed](open-questions.md#closed). The
   consequence for what that command reports is `FR-CFG-039`.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry the same
+  commands open the database file, and `FR-LITE-003` states that none of the
+  three checks applies to it.
 
 - **FR-SRV-021**: The comparison of `FR-SRV-020` SHALL be made against the
   series, not the point release, and series SHALL be ordered by version number —
@@ -1599,6 +1618,10 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   `INFORMATION_SCHEMA`, and SHALL NOT invoke an external process such as a dump
   utility to read structure.
 
+  *Note added in the sixty-fifth edition.* `FR-SRV-006` and this requirement
+  close the statements of a `mariadb` entry. The closed list of a `sqlite`
+  entry is `FR-LITE-015`, with `FR-LITE-016`.
+
 - **BR-SRV-001**: The closed list is the read-only guarantee. It is a property of
   what `tpl` is built to send, it holds whatever the server permits, and it is
   the only part of the promise that prevents rather than detects.
@@ -2010,6 +2033,8 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 
 ## Dependencies
 
+- [sqlite-contract.md](sqlite-contract.md) — the contract of a `sqlite` entry,
+  which stands beside this one.
 - [catalogue-coverage.md](catalogue-coverage.md) — the fields whose absence
   `FR-SRV-004` turns into `null`, and `FR-CAT-029`, the ambiguous-meaning
   exclusion list that `FR-SRV-025` writes into.

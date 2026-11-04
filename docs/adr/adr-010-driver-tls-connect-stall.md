@@ -3,7 +3,7 @@ id: ADR-010
 title: The TLS connect stall in the pinned driver
 status: accepted
 decided: 2026-09-11
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-03
 requirements: [FR-CONF-013, FR-CONF-036, NFR-PERF-014]
 supersedes: []
 superseded-by: null
@@ -38,6 +38,15 @@ unchanged and only `last-reviewed` moves; the gap between the two dates is the
 re-check, not an amendment nobody dated. **The retiring condition
 was re-checked in the same pass and has not been met**: `sqlx` 0.9.0 is still
 the maximum stable release, so no release yet carries PR `#4336`.
+
+**Three sentences were amended in place on 2026-11-03**, when `ADR-003` changed
+how the package consumes the driver — as `sqlx-core` and `sqlx-mysql` directly
+rather than through the `sqlx` facade. Each named the facade as the package's
+dependency; each now names the driver, and holds under either form. The
+decision, its form and its expiry are untouched, so `decided` is unchanged. The
+retiring condition and the compensating lookup were made again in the same
+pass: `sqlx` and `sqlx-core` 0.9.0 are still the maximum stable releases, and
+the advisory repository still holds no directory for `sqlx-core`.
 
 ## Context
 
@@ -112,9 +121,9 @@ establishes its socket. That statement is the change upstream made in PR
 `#4336`, and the patched source SHALL differ from published 0.9.0 in that and in
 nothing else.
 
-**The pin of `ADR-003` is unchanged.** The dependency remains `sqlx` 0.9.0; the
-patch applies over that version and replaces no version. This record holds the
-patch; `ADR-003` holds the pin.
+**The pin of `ADR-003` is unchanged.** The driver remains `sqlx` 0.9.0, consumed
+as that record states; the patch applies over that version and replaces no
+version. This record holds the patch; `ADR-003` holds the pin.
 
 Two mechanical constraints follow from how Cargo reads a patch: the entry SHALL
 be declared in the
@@ -345,8 +354,9 @@ obligations follow, and none of them existed under the fork form:
   when Cargo fetched it from the registry, and a copy of it sitting in the tree
   does not make it this project's to conform.
 - The vendored crate is **not a new dependency** and does not enter the
-  dependency budget as one. The dependency is still `sqlx` 0.9.0 under
-  `ADR-003`; only where one of its crates is read from has changed.
+  dependency budget as one. It is a crate of the driver `ADR-003` pins at
+  0.9.0, whichever way that record has the package consume it; only where it is
+  read from has changed.
 
 **The licence files are not licence texts, and preserving them is not enough.**
 Upstream keeps `LICENSE-APACHE` and `LICENSE-MIT` in `sqlx-core/` as symbolic
@@ -402,8 +412,8 @@ visit at which the retiring condition is checked. One crate, one fixed version,
 one lookup, and it ends when the patch does. The check was exercised on
 2026-09-12 and the database records no advisory for `sqlx-core`. The gap
 reaches that crate and no other: every remaining package in the lockfile keeps
-its `source`, `sqlx` itself included, and command 5 matches them exactly as it
-did before the patch.
+its `source`, the driver's other crates included, and command 5 matches them
+exactly as it did before the patch.
 
 **`ADR-003`'s open defect is closed by this record.** That record carried the
 anomaly as unexplained, tracked as task `#8`, and described it as a property of
@@ -434,7 +444,7 @@ not by this register.
 | The floor is paid on all four supported server series, over loopback and over the docker bridge path, and is absent only on the macOS host path, where a userland proxy terminates the connection | same entry, *Independent of server series and of network interface* | 2026-09-11 |
 | The regression chronology: present in 0.7.4 through 0.8.6, zero occurrences in 0.9.0, present again on `main`; dropped by the runtime rewrite; re-reported as issue `#4335` on 2026-07-10; fixed on `main` by PR `#4336`, merged 2026-08-17. Repository `https://github.com/transact-rs/sqlx` | same entry, *Whose defect it is, and its status upstream* | 2026-09-11 |
 | `StdSocket` still lacks a `write_vectored` implementation on `main`, so the `rustls` flight still leaves split upstream | same entry, *What is not reported upstream* | 2026-09-11 |
-| `sqlx` 0.9.0, published 2026-05-21, is still the maximum stable release; 0.8.6 was published 2025-05-19. No release carries PR `#4336`, so the retiring condition has not been met | crates.io index API, crate `sqlx`, `max_stable_version` and version list | 2026-09-11, re-checked 2026-09-12 and 2026-09-25 (`sqlx` and `sqlx-core`) |
+| `sqlx` 0.9.0, published 2026-05-21, is still the maximum stable release; 0.8.6 was published 2025-05-19. No release carries PR `#4336`, so the retiring condition has not been met | crates.io index API, crate `sqlx`, `max_stable_version` and version list | 2026-09-11, re-checked 2026-09-12, 2026-09-25 and 2026-11-03 (`sqlx` and `sqlx-core`) |
 | `sqlx::mysql::MySqlSslMode` declares the same five variants — `Disabled`, `Preferred`, `Required`, `VerifyCa`, `VerifyIdentity` — at 0.8.6 and at 0.9.0 | docs.rs, `sqlx` 0.8.6 and `sqlx` 0.9.0, `sqlx::mysql::MySqlSslMode` | 2026-09-11 |
 | The cell-by-cell behaviour of the five modes was established against running servers on 2026-09-10, against the version `ADR-003` pins and against no other; the failure this guards against is silent and is not visible from an API listing | `ADR-002`, *Context*; `ADR-003`, *Alternatives rejected* | 2026-09-11 |
 | The toolchain floor of 1.94.0 is declared by the crate at the version `ADR-003` pins, and moves with it | `ADR-007`, *Decision* | 2026-09-11 |
@@ -450,4 +460,4 @@ not by this register.
 | `LICENSE-APACHE` and `LICENSE-MIT` in the published artefact are 17- and 14-byte files whose entire content is `../LICENSE-APACHE` and `../LICENSE-MIT`; upstream keeps them as symbolic links into its workspace root. The declared offer is `MIT OR Apache-2.0` | `vendor/sqlx-core-0.9.0/LICENSE-APACHE`, `LICENSE-MIT` and `Cargo.toml`, read directly | 2026-09-12 |
 | The texts those stubs point at exist at the repository root of the revision the crate was published from, `003b698e99e024f3621b8043a2426fde5b741171`: `LICENSE-MIT`, 1109 bytes, sha256 `5abbdd84…32b339d`, carrying the copyright notice; `LICENSE-APACHE`, 10297 bytes, sha256 `c8f54536…1b50ac99` | `transact-rs/sqlx` at that revision, which `vendor/sqlx-core-0.9.0/.cargo_vcs_info.json` names | 2026-09-12 |
 | A redistributor must give any other recipient of the work a copy of the Apache License; and the MIT copyright notice and permission notice must be included in all copies or substantial portions of the software | Apache License 2.0, section 4(a), and the MIT permission notice, read from the two files above | 2026-09-12 |
-| The RustSec advisory database records no advisory for `sqlx-core` | `rustsec/advisory-db`, the absence of a `crates/sqlx-core` directory, cross-checked against the per-crate page on `rustsec.org` | 2026-09-12, re-checked 2026-09-25 |
+| The RustSec advisory database records no advisory for `sqlx-core` | `rustsec/advisory-db`, the absence of a `crates/sqlx-core` directory, cross-checked against the per-crate page on `rustsec.org` | 2026-09-12, re-checked 2026-09-25; re-checked 2026-11-03 against the repository only, the `rustsec.org` page not answering |

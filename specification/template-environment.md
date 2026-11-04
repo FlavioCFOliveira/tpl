@@ -1,8 +1,8 @@
 ---
 title: The Template Environment
 status: approved
-last-reviewed: 2026-09-23
-related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md]
+last-reviewed: 2026-11-03
+related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md, catalogue-coverage.md, sqlite-contract.md]
 ---
 
 # The Template Environment
@@ -586,10 +586,39 @@ row is a case the implementation SHALL satisfy.
   | `nullable` | The column's nullability, as the model states it, says the column admits `NULL` | The column alone |
   | `auto_increment` | The column carries the auto-increment attribute of `FR-CAT-027` | The column alone |
   | `primary_key` | The column is named in its table's primary key | `table_name`, resolved against the render context, per `FR-ENV-015` |
-  | `unique` | The column is named in an index of its table that the model reports as unique | `table_name`, resolved against the render context, per `FR-ENV-015` |
+  | `unique` | The column is named in an index of its table that the model reports as unique, or in its table's primary key | `table_name`, resolved against the render context, per `FR-ENV-015` |
   | `numeric` | The column's `data_type` belongs to the numeric family | The column alone |
   | `temporal` | The column's `data_type` belongs to the date-and-time family | The column alone |
   | `textual` | The column's `data_type` belongs to the character-string family | The column alone |
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the `unique` row
+  names the primary key. A `sqlite` read carries a rowid-alias primary key
+  that has no index, and reports it unique, per `FR-LITE-029`. The row
+  consulted the index collection alone, so a rowid-alias column failed the
+  test while a MariaDB primary-key column passed it, as `FR-CAT-043` records.
+  **The answer for every MariaDB document is unchanged.** Its primary key is
+  always the index named `PRIMARY`, which the table's index collection
+  carries and the model reports as unique, per `FR-CAT-042` and `FR-CAT-043`,
+  so every column the new clause reaches the first clause already reached. On
+  a `sqlite` read the clause changes the answer for a rowid-alias column
+  alone: every other primary key is an index of origin `pk` in the
+  collection, per `FR-LITE-029` and `FR-LITE-030`, and was observed on
+  2026-11-03, through the Python library 3.54.1, to report `unique` `1` —
+  `INT PRIMARY KEY`, `INTEGER PRIMARY KEY DESC`, a `WITHOUT ROWID` key and a
+  composite key alike.
+
+  *Rejected: the primary key only WHERE the model reports it unique.* Every
+  primary key the model carries is reported unique, so the condition would
+  test nothing and would read as though a primary key could fail it.
+  *Rejected: carrying the rowid alias in the index collection as an index of
+  its own.* `FR-LITE-030` carries the indexes the library reports and no
+  other, and an index the library does not report would be invented, where
+  `BR-LITE-002` fills the model only from what the library reports or what
+  SQLite's documentation fixes. *Rejected: leaving the row, and
+  stating that the two providers differ.* A template that branches on
+  `unique` would take a different branch for the commonest primary key of a
+  SQLite table than for any MariaDB one, which is the difference `FR-LITE-029`
+  removed from the key itself.
 
 - **FR-ENV-042**: The three families of `FR-ENV-041` SHALL be disjoint. A
   column SHALL satisfy at most one of `numeric`, `temporal`, and `textual`, and
@@ -624,8 +653,14 @@ row is a case the implementation SHALL satisfy.
   | `textual` | `char`, `enum`, `longtext`, `mediumtext`, `set`, `text`, `tinytext`, `varchar` |
   | none of the three | `binary`, `blob`, `geometry`, `geometrycollection`, `inet4`, `inet6`, `linestring`, `longblob`, `mediumblob`, `multilinestring`, `multipoint`, `multipolygon`, `point`, `polygon`, `tinyblob`, `uuid`, `varbinary` |
 
-  A `data_type` value that appears in none of the four rows SHALL satisfy none
-  of the three tests, per `FR-ENV-042`, and SHALL NOT fail the render.
+  A `data_type` value that appears in none of the four rows, nor in the table
+  of `FR-ENV-048`, SHALL satisfy none of the three tests, per `FR-ENV-042`,
+  and SHALL NOT fail the render.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The clause *nor in the
+  table of `FR-ENV-048`* is new. The four rows record what a MariaDB server
+  returns and are unchanged; the `data_type` values a `sqlite` read produces
+  are placed by that requirement.
 
   *Observed.* The fixture's 301 columns yielded **exactly 39 distinct
   `data_type` values**, byte-identical on all four series, and the four rows
@@ -656,6 +691,32 @@ row is a case the implementation SHALL satisfy.
   newer than the window introduces, which reaches `FR-CTX-018` and then this
   requirement's fall-through. Neither may be assigned to a family without an
   observation.
+
+- **FR-ENV-048**: The five `data_type` values a `sqlite` read produces, which
+  are the type affinities of `FR-LITE-026`, SHALL belong to the families of
+  `FR-ENV-041` as follows:
+
+  | Family | `data_type` values |
+  |---|---|
+  | `numeric` | `integer`, `numeric`, `real` |
+  | `temporal` | none |
+  | `textual` | `text` |
+  | none of the three | `blob` |
+
+  *Rationale.* An affinity names how SQLite stores a value, per
+  `https://sqlite.org/datatype3.html`: `integer`, `real` and `numeric` store
+  numbers, `text` stores text, and `blob` stores a value as received. The
+  families are disjoint, per `FR-ENV-042`, and the tests answer from the
+  column alone, so one table over every `data_type` value serves both
+  providers: `text` and `blob` are already where `FR-ENV-046` places them, and
+  `integer`, `numeric` and `real` are values no MariaDB read produces.
+
+  *Consequence, stated plainly.* SQLite has no date-and-time type, so
+  `temporal` is never true for a column of a `sqlite` read, and a column
+  declared `DATETIME` or `BOOLEAN` has `numeric` affinity and satisfies
+  `numeric`. A template that needs the declared type reads `column_type`.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
 
 - **FR-ENV-043**: `primary_key` and `unique` SHALL fail the render with `65`
   WHEN the table named by the operand's `table_name` is absent from the render

@@ -1,13 +1,13 @@
 ---
 title: Architecture Decision Records
 status: approved
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-03
 related: [../spec-technical/README.md, ../spec-technical/open-decisions.md]
 ---
 
 # Architecture Decision Records
 
-This folder is the project's **architecture decision register** — the place two
+This folder is the project's **architecture decision register** — the place three
 requirements in force name as the home of a fact the functional corpus refuses
 to hold:
 
@@ -19,12 +19,16 @@ to hold:
   five TLS modes onto the driver "SHALL be recorded in the project's
   architecture decision records and cited from there … and SHALL NOT be
   restated in this corpus".
+- `FR-LITE-039` (`specification/sqlite-contract.md`): "The project's decision
+  records SHALL record, beside the release carried, the judgement of clause 3"
+  for every vulnerability listed with a later fix, and the reason a newer
+  release is not carried wherever its clause 4 applies.
 
-Both cite this register **by role and not by address**. Neither names a path, a
-filename, or a record number, and neither ever will. That is deliberate, and
+All three cite this register **by role and not by address**. None names a path,
+a filename, or a record number, and none ever will. That is deliberate, and
 rule R1 below is what preserves it.
 
-Two more requirements delegate in a weaker form. `FR-ERR-030`
+Four more requirements delegate in a weaker form. `FR-ERR-030`
 (`specification/errors-and-exit-codes.md`) states that which mechanism produces
 the `70` outcome "is an architecture decision, and this corpus names none". It
 hands the fact out of the corpus without naming this register as its home, so it
@@ -32,8 +36,13 @@ is not a delegation R1 constrains — but it is the delegation `ADR-004` answers
 `FR-RND-036` (`specification/render-command.md`) states that "which allocator
 counts is a matter for the technical specification and the architecture decision
 records, not for this corpus"; it names this register by role, beside the
-technical specification, and `ADR-011` answers it. A reader arriving from either
-requirement resolves it through the index below.
+technical specification, and `ADR-011` answers it. `FR-LITE-001`
+(`specification/sqlite-contract.md`) states in its rationale that the SQLite
+release the binary carries is "recorded in the project's decision records and
+cited from there", and `FR-LITE-004` hands this register a choice among driver
+candidates only where more than one survives its rule; `ADR-013` answers both.
+A reader arriving from any of these requirements resolves it through the index
+below.
 
 ## This is not a fifth source of truth
 
@@ -211,6 +220,7 @@ specification, which is how a fourth place starts drifting.
 | [ADR-010](adr-010-driver-tls-connect-stall.md) | The TLS connect stall in the pinned driver | Accepted 2026-09-11 | `FR-CONF-013`, `NFR-PERF-014` | — |
 | [ADR-011](adr-011-render-memory-accounting.md) | The heap count behind the render memory limit | Accepted 2026-09-23 | `FR-RND-039`, `FR-RND-036` | — |
 | [ADR-012](adr-012-ci-and-release-distribution.md) | Continuous integration and release distribution | Accepted 2026-09-24 | `NFR-PERF-018`, `FR-SRV-019` | — |
+| [ADR-013](adr-013-sqlite-driver.md) | The SQLite driver and the library it carries | Accepted 2026-11-03 | `FR-LITE-039`, `FR-LITE-001`, `FR-LITE-004` | — |
 
 The `Serves` column names the requirements a reader is most likely to arrive
 from. The complete list per record is its `requirements:` field, which is the

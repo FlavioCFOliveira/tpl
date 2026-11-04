@@ -3,7 +3,7 @@ id: ADR-003
 title: The database driver
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-24
+last-reviewed: 2026-11-04
 requirements: [FR-CONF-013, FR-CONF-036, FR-CONF-038, FR-SEC-021, NFR-PERF-004]
 supersedes: []
 superseded-by: null
@@ -14,6 +14,22 @@ superseded-by: null
 ## Status
 
 Accepted, 2026-09-10.
+
+**Amended in place on 2026-11-03**, for rmp `#315`: the package now consumes the
+driver as two of its crates rather than through its facade, so that the SQLite
+driver of `ADR-013` can resolve beside it. The driver was not chosen again and
+its pin did not move, so this is an edit in place and not a supersession, and
+`decided` is unchanged; `last-reviewed` carries the amendment.
+
+**Amended in place on 2026-11-04**, for rmp `#317`: the Decision named `tokio`
+1.53.1, the release the selection was measured on, where the manifest has
+required the 1.53 line, `~1.53.1`, since it was created; rmp `#320` then moved
+`Cargo.lock` to 1.53.3, within that line. The Decision now states the line, by
+the session coordinator's decision of that day, which states what the manifest
+already required and is not a new choice. No version moved, so `decided` is
+unchanged. The same pass added `hex` to the crates a *Sources* row names as
+leaving the graph. The claims re-read that day are those of the *Sources* rows
+dated 2026-11-04.
 
 ## Context
 
@@ -47,7 +63,11 @@ startup, binary size and resident memory in an ephemeral process.
 
 ## Decision
 
-**`sqlx` 0.9.0 is the driver, on `tokio` 1.53.1.** `mysql` 28.0.2 is rejected.
+**`sqlx` 0.9.0 is the driver, on the `tokio` 1.53 line.** `mysql` 28.0.2 is
+rejected. The manifest requires `tokio` as `~1.53.1`: 1.53.1, the release the
+selection was measured on, or any later 1.53 release. Which release of the line
+is built is `Cargo.lock`'s, and a move within the line moves no pin of this
+record.
 
 **What settled it was `FR-CONF-036`, not the measurement.** The rejected
 candidate is disqualified by that requirement on two independent counts, both
@@ -70,11 +90,34 @@ this record extends it to a figure recorded against no measurement point:
 a reading of a point of `NFR-PERF-014` recorded under `NFR-PERF-020`, and a
 selection figure copied into a second file stops being true just as quietly.
 
+**The package consumes the driver as two of its crates, not through its
+facade.** It depends on `sqlx-core` and `sqlx-mysql`, each at `=0.9.0`, and not
+on the crate `sqlx`, which re-exports them; where this record says `sqlx` 0.9.0
+it names the driver and its release, not that crate. The exact requirement is
+the one the facade itself places on each of its crates. The features are the
+ones the facade enabled on those two crates under `mysql`, `runtime-tokio`,
+`tls-rustls-ring-webpki` and its own defaults: on `sqlx-core`, `_rt-tokio`,
+`_tls-rustls-ring-webpki`, `any`, `json`, `migrate` and `offline`; on
+`sqlx-mysql`, `any`, `json`, `migrate` and `offline`. Why the facade was left,
+the evidence that the crates linked into the binary did not change, and the
+alternatives refused are `ADR-013`.
+
+**The arrangement ends at the first `sqlx` release whose `sqlx-sqlite` admits
+the `libsqlite3-sys` release carrying the SQLite release `FR-LITE-039`
+requires**, which `ADR-013` names. At that release the package returns to the
+`sqlx` facade, with facade features that give the two crates the effective set
+above, and this paragraph is amended in place; the pin moves to that release
+under the obligations below. The return is owed because both crates are marked
+by upstream as not for direct use — "Not intended to be used directly" and "Not
+for direct use; see the `sqlx` crate for details" — and the `_`-prefixed
+features are internal to `sqlx`. The user decided the return on 2026-11-03.
+
 **What this record does not decide.** The runtime's flavour, its scope, and
 where it is built are `ADR-005`. The mapping of the five modes onto this
 driver's TLS surface is `ADR-002`. The toolchain floor this pin implies is
 `ADR-007`. What the project does about the TLS connect stall carried by the
-pinned version is `ADR-010`.
+pinned version is `ADR-010`. Why the driver is consumed as two crates is
+`ADR-013`.
 
 ## Alternatives rejected
 
@@ -123,6 +166,15 @@ with a new `decided` date, and it carries two obligations that nothing else will
 raise: re-checking the five-variant mapping of `ADR-002`, and re-checking the
 toolchain floor of `ADR-007`.
 
+**Under the consumption above, a move changes two requirements and re-derives
+two feature lists.** Both crates move together, at the release moved to. Their
+crates.io descriptions mark both as not for direct use, and the `_`-prefixed
+features are what the facade forwards rather than a public interface
+(`ADR-013`), so nothing promises that the lists recorded above carry across a
+release: they are re-derived from the facade of the release moved to, as the
+features it enables on the two crates under the same three features and its
+defaults.
+
 **A version move is also a measurement move.** A figure is comparable only with
 another taken from the same build. A driver version other than the one pinned
 here builds a different artefact from the one every recorded figure was taken
@@ -152,9 +204,10 @@ way, and the defect is in the version, not in the driver.
 above, and that record states what the move must remove with it.
 
 **Under R3, the pin and its rationale live here alone.** A document that needs
-to name the driver may name the crate, as the root coordination document's stack
-table does; the version, the rule that settled the choice, and the candidate
-rejected are cited as `ADR-003` rather than restated —
+to name the driver may name it, as the root coordination document's stack
+table does; the version, the form in which it is consumed, the rule that
+settled the choice, and the candidate rejected are cited as `ADR-003` rather
+than restated —
 `docs/spec-technical/technology-stack.md`, the root coordination document, and
 `docs/spec-technical/open-decisions.md` entry `OD-11`, which cites this record
 for the composition it records.
@@ -168,7 +221,13 @@ for the composition it records.
 | There is no third candidate: `mysqlclient-sys` is an FFI binding, `diesel` an ORM over the same C library, and `mariadb`, `libmariadb-sys` and `mariadb-connector-c` do not exist on crates.io | `BENCHMARKS.md`, same entry | 2026-09-10 |
 | The async candidate led on startup, stripped binary size and peak resident memory in every TLS-equalised comparison | `BENCHMARKS.md`, same entry, "Like for like, TLS equalised, paired per round" | 2026-09-10 |
 | A blocking cost inside connection establishment, recorded on 2026-09-10 as unexplained and specific to `musl` over raw loopback. **That account is superseded**: task `#8` established a TLS connect stall in `sqlx-core` 0.9.0, on every supported series and over both network paths measured, and `ADR-010` holds the response | `BENCHMARKS.md`, "The musl anomaly — resolved on 2026-09-11" and "2026-09-11 — The TLS connect stall on Linux loopback" | 2026-09-11 |
-| `sqlx` 0.9.0 is the maximum stable release of the crate, published 2026-05-21 | crates.io crate index, `sqlx`, version 0.9.0 | 2026-09-11 |
+| The manifest has required `tokio = { version = "~1.53.1", … }` since it was created, and `Cargo.lock` resolves 1.53.3; the move from 1.53.1 is rmp `#320`'s | `git log -S` over `Cargo.toml`, which finds the requirement only in `d8e7e8a`, the commit that created the manifest; `Cargo.lock` at `229edc8`; the message of commit `2fd98f8` | 2026-11-04 |
+| `~1.53.1` admits `>=1.53.1, <1.54.0`: a tilde requirement with major, minor and patch allows patch-level changes only | The Cargo Book, *Specifying Dependencies*, *Tilde requirements* | 2026-11-04 |
+| The session coordinator decided that the Decision states the 1.53 line, as what the manifest already required and not a new choice | The coordinator's message of 2026-11-04 for rmp `#317` | 2026-11-04 |
+| `sqlx` 0.9.0 is the maximum stable release of the crate, published 2026-05-21 | crates.io crate index, `sqlx`, version 0.9.0 | 2026-09-11, re-checked 2026-11-03 |
+| `sqlx` 0.9.0 requires each of its crates at `=0.9.0`; its defaults are `any`, `macros`, `migrate` and `json`; under those and `mysql`, `runtime-tokio` and `tls-rustls-ring-webpki` it enables on `sqlx-core` the features `_rt-tokio`, `_tls-rustls-ring-webpki`, `any`, `json`, `migrate` and `offline`, and on `sqlx-mysql` the features `any`, `json`, `migrate` and `offline` | crates.io API, `sqlx` 0.9.0, features and dependencies | 2026-11-03 |
+| Consumed directly, `sqlx-core` and `sqlx-mysql` are linked at the same versions and with the same features as through the facade; only the facade, its macro crates, `hex`, which only they used, and what was compiled for them alone leave the graph | `cargo tree -e normal,build -f '{p} [{f}]'`, once per target of `ADR-008`; recorded in `ADR-013`, *Sources* | 2026-11-03, `hex` added 2026-11-04 |
+| `sqlx-core` is "Not intended to be used directly" and `sqlx-mysql` "Not for direct use"; the `_`-prefixed features are listed upstream "for conditional compilation" | crates.io, crate descriptions; `transact-rs/sqlx` at tag `v0.9.0`, `Cargo.toml` and `sqlx-core/Cargo.toml` | 2026-11-03 |
 | The five modes are normative over the driver; a driver that cannot express all five distinctly is disqualified; the choice may not be settled by reducing the mode set | `specification/configuration-model.md`, `FR-CONF-036` | 2026-09-11 |
 | A recorded measurement names its target and, where it reaches a server, its series, and names no artefact | `specification/performance-requirements.md`, `NFR-PERF-012` | 2026-09-24 |
 | The corpus names no driver and states that which one is chosen is an architecture decision | `specification/README.md`, *Still out of scope* | 2026-09-11 |

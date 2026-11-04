@@ -14,7 +14,7 @@
 //! | `nullable` | The column admits `NULL` | The column alone |
 //! | `auto_increment` | The column carries the attribute of `FR-CAT-027` | The column alone |
 //! | `primary_key` | The column is named in its table's primary key | The render context |
-//! | `unique` | The column is named in an index of its table the model reports as unique | The render context |
+//! | `unique` | The column is named in an index of its table the model reports as unique, or in its primary key | The render context |
 //! | `numeric` | The column's `data_type` is in the numeric family | The column alone |
 //! | `temporal` | The column's `data_type` is in the date-and-time family | The column alone |
 //! | `textual` | The column's `data_type` is in the character-string family | The column alone |
@@ -35,24 +35,30 @@
 //!
 //! `FR-ENV-015` makes `primary_key` and `unique` resolve `table_name` against
 //! the render context, and `FR-ENV-043` makes a table that is absent a `65`
-//! rather than a `false`. Both answer from the table's **index collection**,
-//! which carries the primary key among the others per `FR-CAT-043`, so neither
-//! has a second source that could disagree with the first.
+//! rather than a `false`. Both read the table's key from its `primary_key`,
+//! never from an index found by the name `PRIMARY`: a SQLite key is named after
+//! its index of origin or has no index at all (`FR-LITE-029`), and
+//! `primary_key` is the one place every table's key is held. `unique` also
+//! answers from the index collection (`FR-ENV-041`).
 
 use minijinja::{Error, State, Value};
 
 use super::lookup;
 use super::operand::{Column, Role};
 
-/// The `numeric` family of `FR-ENV-046`, sorted.
-const NUMERIC: [&str; 9] = [
+/// The `numeric` family of `FR-ENV-046`, with the three SQLite affinities
+/// `FR-ENV-048` places in it, sorted.
+const NUMERIC: [&str; 12] = [
     "bigint",
     "bit",
     "decimal",
     "double",
     "float",
     "int",
+    "integer",
     "mediumint",
+    "numeric",
+    "real",
     "smallint",
     "tinyint",
 ];
@@ -75,9 +81,6 @@ const TEXTUAL: [&str; 8] = [
     "tinytext",
     "varchar",
 ];
-
-/// The name of the index a primary key is carried under (`FR-CAT-043`).
-const PRIMARY: &str = crate::model::index::PRIMARY_KEY_NAME;
 
 /// `nullable` (`FR-ENV-041`).
 ///
@@ -139,15 +142,20 @@ pub(super) fn primary_key(state: &State<'_, '_>, value: &Value) -> Result<bool, 
     let table = lookup::table_of(state, &column, "primary_key")?;
     let name = column.name()?;
 
-    Ok(lookup::indexes(&table)
-        .filter(named_primary)
-        .any(|index| lookup::covers(&index, &name)))
+    // FR-ENV-041: the table's `primary_key`, never an index found by the
+    // name `PRIMARY` — a SQLite key is named after its index of origin, or
+    // has no index at all (FR-LITE-029).
+    Ok(lookup::primary_key(&table).is_some_and(|key| lookup::covers(&key, &name)))
 }
 
 /// `unique` (`FR-ENV-041`, `FR-ENV-015`).
 ///
-/// The primary key is one of the unique indexes the collection carries, per
-/// `FR-CAT-043`, so a column of a primary key satisfies this test too.
+/// True where the column is named in an index the model reports unique, or in
+/// the table's primary key (`FR-ENV-041`, as amended in the sixty-seventh
+/// edition): a SQLite rowid alias is a primary key with no index
+/// (`FR-LITE-029`). On a MariaDB document every primary key is also the unique
+/// index `PRIMARY` (`FR-CAT-043`), so the second clause changes no answer
+/// there.
 ///
 /// # Errors
 ///
@@ -161,7 +169,8 @@ pub(super) fn unique(state: &State<'_, '_>, value: &Value) -> Result<bool, Error
 
     Ok(lookup::indexes(&table)
         .filter(lookup::unique)
-        .any(|index| lookup::covers(&index, &name)))
+        .any(|index| lookup::covers(&index, &name))
+        || lookup::primary_key(&table).is_some_and(|key| lookup::covers(&key, &name)))
 }
 
 /// The three family tests, written once.
@@ -176,18 +185,15 @@ fn family(value: &Value, name: &str, members: &[&str]) -> Result<bool, Error> {
         .is_some_and(|data_type| members.binary_search(&data_type).is_ok()))
 }
 
-/// Whether an index is the one `FR-CAT-043` makes the primary key.
-fn named_primary(index: &Value) -> bool {
-    index
-        .get_attr("name")
-        .is_ok_and(|name| name.as_str() == Some(PRIMARY))
-}
-
 #[cfg(test)]
 mod tests {
     use super::{NUMERIC, TEMPORAL, TEXTUAL, auto_increment, nullable, numeric, temporal, textual};
     use crate::render::{fixture, surface};
     use minijinja::{Environment, UndefinedBehavior, Value};
+
+    /// The three affinities of `FR-ENV-048` the numeric family gains, which no
+    /// MariaDB read produces and which [`fixture::column_of_affinity`] builds.
+    const AFFINITIES: [&str; 3] = ["integer", "numeric", "real"];
 
     /// The `data_type` values of `FR-ENV-046` that belong to no family.
     const NEITHER: [&str; 17] = [
@@ -236,6 +242,7 @@ mod tests {
         // the three rather than failing.
         let rows = NUMERIC
             .iter()
+            .filter(|data_type| !AFFINITIES.contains(data_type))
             .map(|data_type| (*data_type, [true, false, false]))
             .chain(
                 TEMPORAL
@@ -267,14 +274,16 @@ mod tests {
 
     #[test]
     fn fr_env_046_the_four_rows_partition_the_thirty_nine_observed_values() {
-        // The observation records nine, five, eight and seventeen.
-        assert_eq!(NUMERIC.len(), 9);
+        // The observation records nine, five, eight and seventeen; FR-ENV-048
+        // adds the three numeric affinities no MariaDB read produces, and
+        // places `text` and `blob` where FR-ENV-046 already has them.
+        assert_eq!(NUMERIC.len(), 9 + 3);
         assert_eq!(TEMPORAL.len(), 5);
         assert_eq!(TEXTUAL.len(), 8);
         assert_eq!(NEITHER.len(), 17);
         assert_eq!(
             NUMERIC.len() + TEMPORAL.len() + TEXTUAL.len() + NEITHER.len(),
-            39
+            39 + 3
         );
 
         for family in [NUMERIC.as_slice(), TEMPORAL.as_slice(), TEXTUAL.as_slice()] {
@@ -282,6 +291,28 @@ mod tests {
             sorted.sort_unstable();
 
             assert_eq!(sorted, family, "the binary search requires a sorted family");
+        }
+    }
+
+    #[test]
+    fn fr_env_048_the_five_affinities_land_in_the_families_the_requirement_fixes() {
+        // FR-ENV-048: integer, numeric and real are numeric; text is textual;
+        // blob is in none; and no affinity is temporal.
+        for (affinity, expected) in [
+            ("integer", [true, false, false]),
+            ("numeric", [true, false, false]),
+            ("real", [true, false, false]),
+            ("text", [false, false, true]),
+            ("blob", [false, false, false]),
+        ] {
+            let column = fixture::column_of_affinity(affinity);
+            let answered = [
+                numeric(&column).expect("it is a column"),
+                temporal(&column).expect("it is a column"),
+                textual(&column).expect("it is a column"),
+            ];
+
+            assert_eq!(answered, expected, "{affinity}");
         }
     }
 

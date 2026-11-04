@@ -1,7 +1,7 @@
 ---
 title: Render Command (Third Arm)
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-11-03
 related: [schema-commands.md, template-commands.md, cache-commands.md, output-formats.md, configuration-model.md, context-document.md]
 ---
 
@@ -196,6 +196,11 @@ tpl render <template> --routine <name>      binds routine
 
   *Note added in the sixtieth edition.* `FR-RND-042` states the document
   whose `schema_version` the binary does not emit.
+
+  *Note added in the sixty-fifth edition.* A document with no
+  `database.provider` matches the contract and is read as a `mariadb`
+  document; one whose `provider` is neither `mariadb` nor `sqlite` does not,
+  and is `65` here, per `FR-CTX-043`.
 
 - **FR-RND-042**: IF the document supplied to `--context` carries a
   `schema_version` other than the one the running binary emits, per

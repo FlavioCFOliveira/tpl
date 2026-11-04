@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-04
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -25,11 +25,136 @@ Every document listed below is **written**. A document not yet written would be
 listed as *waiting*, where it waits on a named entry of `open-decisions.md`, or
 as *unblocked*, where no entry stands against it; none is either today.
 
-As of 2026-09-25 one entry of `open-decisions.md` is open — `OD-33`, whether
+As of 2026-11-03 one entry of `open-decisions.md` is open — `OD-33`, whether
 `UC-013` joins the acceptance skeleton — and **no document waits**: what it
-blocks is a statement in a written document, not a document. Every other entry
-is settled. `OD-30`, the one entry that was settled and **interim**, was
-discharged on 2026-09-22, when the last leaf of the tree was implemented.
+blocks is a statement, not a document. Every other entry is settled. `OD-30`,
+the one entry that was settled and **interim**, was discharged on 2026-09-22,
+when the last leaf of the tree was implemented.
+
+**Changes of 2026-11-04, second pass**, for rmp `#323` — against the SQLite
+reader as that task changes it, not yet committed: no catalogue statement
+orders its rows, the fold produces every order and groups rows by sorted runs,
+the read keeps a repeated value once per run, and a name whose conversion
+replaced invalid UTF-8 keeps its bytes, which break ties as the removed
+`ORDER BY` did.
+
+- `architecture.md`: the read's ownership, the fold's grouping and the
+  reader's implementation note follow the code; names that convert alike are
+  ordered by their bytes; the discharged discrepancy records what replaced the
+  maps of `Grouped`.
+- `quality-attributes.md` and `traceability.md` state the fold's grouping
+  without naming its means.
+
+**Changes of 2026-11-04**, for rmp `#317` and `#321` — against the seventieth
+and seventy-first editions of `/specification` (`2991b7e`, `9171337`) and the
+code at `19abb1f`, which implements both: the check and the catalogue read in
+one read transaction (`FR-LITE-042`), the seven kinds of row the check refuses,
+names matched by ASCII case folding (`BR-LITE-003`); and every statement that
+described the SQLite code as not yet built is corrected against it.
+
+- `architecture.md`: the read transaction around the check and the plan; the
+  check's decisions for its four new kinds; a value of the schema table after
+  the check read in the check's snapshot; the fold keyed by the names
+  `BR-LITE-003` matches, its recorded discrepancy discharged at `82eb1d4`.
+- `interfaces.md`: the fault table gains stage `Transaction`, the check's row
+  names seven rows of `FR-LITE-007`, and the row of a value read after the
+  check no longer blames a file changed after it; the `cause` of each new kind.
+- `technology-stack.md`: the four controls go through `prepare`, as the code
+  issues them, and the table no longer names `pragma_update` or
+  `pragma_query_value`; the manifest at `19abb1f`.
+- `open-decisions.md`: `OD-36`'s discrepancy is discharged; `OD-37` builds
+  eight more databases, twelve written under `writable_schema`.
+- `verification.md`: rows 28 to 33 are whole and named; the owed tests of the
+  sixty-ninth edition are discharged and named; `FR-LITE-042`, `BR-LITE-003`,
+  `FR-LITE-015`/`FR-LITE-016` and the escaping gain rows; the writer test's
+  seam.
+- `security.md`, `data-model.md`, `quality-attributes.md` and `operations.md`
+  follow; `traceability.md` harvests both editions.
+
+**Changes of 2026-11-03, fourth pass**, for rmp `#317` and `#321` — against
+the sixty-ninth edition of `/specification` (`f2d1753`): the check of
+`FR-LITE-041`, views disabled as a ninth control, a read with no
+`pragma_table_list`, and C1 and bidirectional formatting characters escaped for
+both providers. The code at `f2d1753` implements the sixty-eighth edition.
+
+- `architecture.md`: stage 5 disables views; the plan is seven statements, the
+  check first and none through `pragma_table_list`; the check's verdict is
+  `sqlite/catalogue/check.rs`'s; the fold indexes by name, a discrepancy with
+  the code recorded.
+- `interfaces.md`: the fault table gains the check's `78`; `tpl cfg database
+  test` probes with the check; the escaped set past C0 and its three forms.
+- `open-decisions.md`: `OD-18` escapes through a formatter of the crate on the
+  `json` path; `OD-36` saturates the busy timeout; `OD-37` builds seven more
+  databases.
+- `verification.md`: rows 28 to 31 carry tests at `f2d1753`; rows 32 and 33
+  are new and owed; the tests the edition changes are named.
+- `security.md`, `technology-stack.md`, `data-model.md`,
+  `quality-attributes.md`, `traceability.md` and this file's summaries follow;
+  `traceability.md` harvests the edition.
+
+**Changes of 2026-11-03, third pass**, for rmp `#317` — against the
+sixty-eighth edition of `/specification` (`325e125`), which withdraws
+`FR-LITE-035`: a SQLite view is read like a MariaDB view, no view's columns are
+read and no view is compiled.
+
+- `architecture.md`: the catalogue plan is six statements, with no per-view
+  fallback.
+- `interfaces.md`: contract 37 is withdrawn; the fault mapping follows the three
+  steps of `FR-LITE-040`; no `sqlite` read reaches `77`.
+- `open-decisions.md`: `OD-35` loses its fourth consequence for the model, and
+  `OD-38` applies three steps.
+- `verification.md`: the register of mandated tests gains row 31, the third
+  verification of `FR-LITE-018`.
+- `data-model.md`, `security.md`, `quality-attributes.md`, `traceability.md`
+  and this file's summaries of `architecture.md` and `interfaces.md` follow;
+  `traceability.md` harvests the edition.
+
+**Changes of 2026-11-03, second pass**, for rmp `#316` — against the
+sixty-seventh edition of `/specification` (`5805b5d`) and
+[`ADR-013`](../adr/adr-013-sqlite-driver.md),
+[`ADR-005`](../adr/adr-005-async-runtime-scope.md) and
+[`ADR-002`](../adr/adr-002-tls-mode-mapping.md) as amended at `f8e2e34`:
+
+- `open-decisions.md`: `OD-38` is settled by `FR-LITE-040` and records how
+  `sqlite/fault.rs` applies it; `OD-37` records the test-only `trace` feature;
+  `OD-11` cites `ADR-005`; the three amended records are re-read.
+- `architecture.md`: the connection start confirms the build's `TEMP_STORE` and
+  sets `temp_store`; the section on the synchronous process cites `ADR-005`
+  rather than restating it, per rule R3.
+- `interfaces.md`: the fault mapping follows `FR-LITE-040`; the diagnostic
+  renderer applies the bound of `FR-ERR-046`, with one recorded reading on the
+  cache; `primary_key` and `unique` read the key the table holds
+  (`FR-ENV-041`); the first pass's three readings are discharged.
+- `data-model.md`: its reading on a rowid-alias key, its discrepancy on the
+  files outside `.tpl` and its reading on a linked `.tpl` are discharged.
+- `technology-stack.md`, `security.md`, `quality-attributes.md`,
+  `verification.md`, `overview.md` and `traceability.md` follow.
+  `verification.md` discharges its two gaps on `NFR-PERF-004` and
+  `NFR-PERF-008`; `traceability.md` harvests the edition and moves a row of
+  section 14 into the table it belongs to.
+
+**Changes of 2026-11-03**, for rmp `#316` — the second provider, against the
+sixty-fifth and sixty-sixth editions of `/specification`,
+[`ADR-013`](../adr/adr-013-sqlite-driver.md), the amended `ADR-003` and
+`ADR-010`, and the code at `7738619`, which has not yet implemented any of it:
+
+- `open-decisions.md` gains `OD-35`, the provider dispatch and the SQLite
+  reader; `OD-36`, the deadline of a statement on a SQLite connection; `OD-37`,
+  the SQLite fixture and the statement record; and `OD-38`, open. It amends
+  `OD-05`, `OD-11` and `OD-12`, records the re-read of `ADR-003` and `ADR-010`,
+  and prepares one correction owed to `CLAUDE.md`.
+- `architecture.md` gains [The provider dispatch](architecture.md#the-provider-dispatch)
+  and [The SQLite reader](architecture.md#the-sqlite-reader), with the reference
+  projects studied; the module map gains `provider.rs` and `sqlite/`.
+- `interfaces.md` gains [The SQLite reader](interfaces.md#the-sqlite-reader) —
+  the fault mapping and three recorded readings — and a seventh ordering
+  exception; `data-model.md` gains [A SQLite read](data-model.md#a-sqlite-read),
+  `provider` and `path`, two recorded readings and one recorded discrepancy; `security.md` gains the
+  seventh untrusted input and the three-part promise of a `sqlite` entry.
+- `technology-stack.md`, `operations.md`, `quality-attributes.md`,
+  `verification.md` and `traceability.md` follow, the last harvesting both
+  editions into a new section 27. `overview.md` loses the three statements
+  the second provider made false.
 
 **The folder was audited on 2026-09-25 against the sixty-fourth edition of
 `/specification` and the code at `c360c80`**, for rmp `#308`. Every internal
@@ -223,7 +348,7 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: thirty-three settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: thirty-seven settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | written |
 | `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | written |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | written |
@@ -266,7 +391,11 @@ engine construction, loader, undefined behaviour, the output formatter,
 auto-escape, context assembly. Deadlines on six named blocking phases. The four
 render bounds, their composition, and the poll interval of the memory limit.
 Lazy initialisation. The
-synchronous process and the runtime boundary inside `mariadb/`. The module map
+synchronous process and the runtime boundary inside `mariadb/`. The provider
+dispatch, and the SQLite reader: its submodules, its six connection stages, its
+fixed plan, the check that opens it, the read transaction that holds both, the
+fold's indexing and its close. The
+module map
 and the layout conventions. The division inside `project/` and the four
 decisions that produce it: reading apart from resolving, reading apart from
 writing, the environment as a parameter, and a credential as a type. The
@@ -285,7 +414,8 @@ was chosen, what was rejected, and the official source consulted with the date.
 The template engine and its pin. Which engine built-ins are guaranteed, which
 are shadowed by a registration of a different signature, and which carry no
 guarantee. The database driver, already decided on measured evidence. The five
-TLS modes as a criterion that disqualifies a driver. The argument parser and
+TLS modes as a criterion that disqualifies a driver. The SQLite driver's
+surface as `tpl` calls it. The argument parser and
 the default features that must be off. The TOML read and write paths.
 Serialisation. The error crates. Diagnostics. MSRV, edition, and the release
 profile. The dependency budget, and the consequence of forbidding `unsafe`.
@@ -296,12 +426,15 @@ profile. The dependency budget, and the consequence of forbidding `unsafe`.
 ### `interfaces.md`
 
 **Answers.** The catalogue reader's surface and how a short read is reported.
+The SQLite reader's surface, and where its results become exit codes.
 The three privilege cross-checks. The error type, its exit-code derivation, and
 the per-code obligation on the `cause` line. The diagnostic renderer, its
-escaping, and suggestion selection. The document emitter: one envelope,
+escaping, the bound on a value of a SQLite file, and suggestion selection. The
+document emitter: one envelope,
 seventeen payload shapes, fixed key order, the two omissions, the compact and
-indented forms, C0 escaping, lossy UTF-8, the pipe state. The ordering rule and
-its six exceptions. The help surface as built: the two sources the renderer
+indented forms, the escaping of C0, C1 and bidirectional formatting characters
+and its forms, lossy UTF-8, the pipe state. The ordering rule and
+its seven exceptions. The help surface as built: the two sources the renderer
 reads, the five facts of a flag it introspects and the sixth it does not, the
 six forms that reach one renderer, and the runtime-introspected command tree
 with the two shapes of its document. The template surface as registered.
@@ -330,14 +463,15 @@ ordered classification. The `database` object. The four treatments of a
 cross-series difference. `.tpl/.cfg`: format, key space, mode, rewrite
 discipline. `.tpl/.cache/`: layout, keying, encoding, filenames, atomic write.
 `meta.json` and its two independent versions. Migration. What a cached document
-does not promise. The five writers inside `.tpl`.
+does not promise. The five writers inside `.tpl`. What a SQLite read obliges of
+the model's types, and the provider a cached read carries.
 
 **Must not contain.** The JSON document contract, which
 `specification/context-document.md` owns and this file cites.
 
 ### `security.md`
 
-**Answers.** The six untrusted inputs and the component that first sees each.
+**Answers.** The seven untrusted inputs and the component that first sees each.
 Credential handling, the type that denies a credential any way of being printed,
 and the three read paths over `.cfg`. The six categories
 never written to a diagnostic stream. The sentinel property. `${VAR}` expansion
@@ -346,7 +480,10 @@ canonicalisation, ownership and mode checks. Template containment. The
 injection surfaces. Transport, including the mode set explicitly on every
 connection, the trust material that widens rather than narrows, and how a
 directory of trust material is resolved and when it refuses. The
-read-only promise in its two parts. The four template capability prohibitions.
+read-only promise in its two parts, and in the three of a `sqlite` entry. The
+controls a SQLite database file is read under, and the check that refuses a
+schema able to forge the catalogue. The four template capability
+prohibitions.
 
 **Must not contain.** A second statement of any rule. Each entry cites its
 owning requirement, as `BR-SEC-001` requires of the functional file it mirrors.
@@ -354,7 +491,8 @@ owning requirement, as `BR-SEC-001` requires of the functional file it mirrors.
 ### `operations.md`
 
 **Answers.** The four targets, the static `musl` linkage and its observable
-consequence. The mandatory validation pipeline. The release profile. MSRV, the
+consequence. The C compile and the build option the bundled SQLite library
+adds, the release gate on its release, and the SQLite fixture. The mandatory validation pipeline. The release profile. MSRV, the
 toolchain and tools as installed on the development host, and the cross-build
 path for the musl targets. The measurement harness, and why it can enforce
 nothing. The release gates. The four version numbers and what a breaking change
@@ -369,8 +507,9 @@ the protocol, which are `quality-attributes.md`.
 
 ### `quality-attributes.md`
 
-**Answers.** The six requirements of form, the design decisions each forces, and
-why they are the part of this subject that can fail anything. Determinism over
+**Answers.** The six requirements of form, the design decisions each forces —
+for a `sqlite` entry as well — and why they are the part of this subject that
+can fail anything. Determinism over
 stdout, and the single source of non-reproducibility. The nine measurement
 points, what each is measured over and with what cache posture, the distinction
 between an adopted and a recorded figure, and what has been measured so far and
@@ -395,7 +534,7 @@ The two test seams that must not reach the published surface. Help snapshots at
 every depth, and which tests of them exist. The parser mapping, one test per
 kind. The invocation surface observed on the process. The dump round-trip. The
 twelve end-to-end flows. Test naming by requirement identifier, and the suite's
-divergence from it.
+divergence from it. The SQLite provider's fixture, tests and instruments.
 
 **Must not contain.** Targets or measurement points, which are
 `quality-attributes.md`; the build pipeline and the measurement harness, which

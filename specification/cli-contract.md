@@ -1,7 +1,7 @@
 ---
 title: CLI Contract
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-11-03
 related: [global-flags.md, help-and-version.md, errors-and-exit-codes.md, output-formats.md]
 ---
 
@@ -484,7 +484,12 @@ tpl
   | A foreign key's columns, and the referenced columns paired with them | The order the catalogue states | `FR-CAT-045` |
   | An `ENUM` or `SET` member list | The order the catalogue states | `FR-CTX-016` |
   | A routine's parameters | Declaration order | `FR-CAT-018` |
+  | A table's `foreign_keys` and `referenced_by`, for a `sqlite` read, whose keys carry no name | The content order `FR-LITE-031` states | `FR-LITE-031` |
   | Every other collection | Name, ascending, byte-wise | This requirement |
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The row for the foreign
+  keys of a `sqlite` read is new. SQLite reports no name for a foreign key, so
+  the default rule had nothing to order by.
 
   *Amended in the third edition.* The default rule and the table of exceptions
   are new. The first edition named three orders — tables by name, columns by
@@ -576,6 +581,13 @@ tpl
   alone can still carry a C1 control to a terminal that honours it. That is a
   question for those two requirements, and it is recorded as an item in the
   [README](README.md#maintenance-debt).
+
+  *Note added in the sixty-ninth edition,* for rmp `#321`. The consequence the
+  paragraph above leaves standing is closed where it said the question
+  belonged: `FR-ERR-024` and `FR-OUT-018` now escape the C1 range, and the
+  bidirectional formatting characters with it, by the user's decision
+  recorded under the first, and the item is discharged. This requirement is
+  unchanged, and its subject is still colour and terminal decoration.
 
 - **NFR-DET-005**: The `now` render variable is the single documented source of
   non-reproducibility. A template that uses it produces output that differs

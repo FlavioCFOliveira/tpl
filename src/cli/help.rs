@@ -549,32 +549,32 @@ const DSN: Documented = Documented {
     name: "--dsn",
     purpose: "Sets the whole connection as one URL, mysql://user:password@host:port/database, \
               instead of --host, --port, --user and --schema.",
-    excludes: &["--host", "--port", "--user", "--schema"],
+    excludes: &["--host", "--port", "--user", "--schema", "--path"],
 };
 /// `--host`, as every node that declares it states it.
 const HOST: Documented = Documented {
     name: "--host",
     purpose: "Sets the host name or IP address of the MariaDB server.",
-    excludes: &["--dsn"],
+    excludes: &["--dsn", "--path"],
 };
 /// `--port`, as every node that declares it states it.
 const PORT: Documented = Documented {
     name: "--port",
     purpose: "Sets the TCP port of the MariaDB server, from 1 to 65535.",
-    excludes: &["--dsn"],
+    excludes: &["--dsn", "--path"],
 };
 /// `--user`, as every node that declares it states it.
 const USER: Documented = Documented {
     name: "--user",
     purpose: "Sets the user name tpl logs in to the server with.",
-    excludes: &["--dsn"],
+    excludes: &["--dsn", "--path"],
 };
 /// `--schema`, as every node that declares it states it.
 const SCHEMA: Documented = Documented {
     name: "--schema",
     purpose: "Sets the name of the database on the MariaDB server, stored as \
               database.<entry>.database; this is not the entry name that -d selects.",
-    excludes: &["--dsn"],
+    excludes: &["--dsn", "--path"],
 };
 /// `--tls`, as every node that declares it states it.
 const TLS: Documented = Documented {
@@ -583,7 +583,7 @@ const TLS: Documented = Documented {
               server offers it), required (TLS, certificate not checked), verify-ca (certificate \
               chain checked) or verify-identity (chain and host name checked); a local server \
               without a trusted certificate needs disabled or preferred.",
-    excludes: &[],
+    excludes: &["--path"],
 };
 /// `--password-command`, as every node that declares it states it.
 const PASSWORD_COMMAND: Documented = Documented {
@@ -595,7 +595,7 @@ const PASSWORD_COMMAND: Documented = Documented {
               starts with an unquoted [, or ends in a backslash outside quotes, is refused. The \
               command runs without a shell, and no password is stored in the file. ${VAR} is not \
               expanded in it: its words are passed to the program as written.",
-    excludes: &[],
+    excludes: &["--path"],
 };
 /// `--ca-file`, as every node that declares it states it.
 const CA_FILE: Documented = Documented {
@@ -603,7 +603,7 @@ const CA_FILE: Documented = Documented {
     purpose: "Names a file of CA certificates that verify-ca and verify-identity trust in addition \
               to the certificates the system already trusts. The path is read as written: \
               ${VAR} is not expanded in it, and a value containing ${ is refused.",
-    excludes: &[],
+    excludes: &["--path"],
 };
 /// `--ca-path`, as every node that declares it states it.
 const CA_PATH: Documented = Documented {
@@ -611,7 +611,36 @@ const CA_PATH: Documented = Documented {
     purpose: "Names a directory of CA certificate files that verify-ca and verify-identity trust \
               in addition to the certificates the system already trusts. The path is read as \
               written: ${VAR} is not expanded in it, and a value containing ${ is refused.",
+    excludes: &["--path"],
+};
+
+/// `--provider`, as every node that declares it states it.
+const PROVIDER: Documented = Documented {
+    name: "--provider",
+    purpose: "Sets how the entry is read: mariadb, a MariaDB server described by --dsn or by \
+              --host, --port, --user, --schema, --tls, --password-command, --ca-file and \
+              --ca-path; or sqlite, a SQLite database file described by --path alone. An entry \
+              with no provider is a mariadb entry.",
     excludes: &[],
+};
+/// `--path`, as every node that declares it states it.
+const PATH: Documented = Documented {
+    name: "--path",
+    purpose: "Names the SQLite database file of a sqlite entry. The path is read as written: \
+              ${VAR} is not expanded in it, and a value containing ${ is refused. A relative \
+              path is resolved against the directory that holds the .tpl folder, not against \
+              the current directory.",
+    excludes: &[
+        "--dsn",
+        "--host",
+        "--port",
+        "--user",
+        "--schema",
+        "--tls",
+        "--password-command",
+        "--ca-file",
+        "--ca-path",
+    ],
 };
 
 // `tpl cache load` declares `--direct` and `--no-cache` because
@@ -951,6 +980,8 @@ const ARGUMENTS: [(&[&str], &[Documented]); 28] = [
             PASSWORD_COMMAND,
             CA_FILE,
             CA_PATH,
+            PROVIDER,
+            PATH,
         ],
     ),
     (&["cfg", "database", "list"], &[FORMAT, PRETTY]),
@@ -971,6 +1002,8 @@ const ARGUMENTS: [(&[&str], &[Documented]); 28] = [
             PASSWORD_COMMAND,
             CA_FILE,
             CA_PATH,
+            PROVIDER,
+            PATH,
         ],
     ),
     (&["cfg", "database", "remove"], &[ENTRY_REMOVE_NAME]),
@@ -1244,12 +1277,13 @@ const SCHEMA_LISTING: &[Outcome] = &[
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a connection step took longer than its time limit.",
+        "The server could not be reached, or a connection step took longer than its time limit; \
+         for a sqlite entry, the database file stayed locked or busy past core.query_timeout.",
     ),
     outcome(
         Code::IoError,
-        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written, or \
-         stdout could not be written.",
+        "A file under .tpl, the entry's ca_file or ca_path, or the database file of a sqlite \
+         entry could not be read or written, or stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
@@ -1261,7 +1295,9 @@ const SCHEMA_LISTING: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version.",
+         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         sqlite entry, the entry has no path or carries a key its provider does not take, or the \
+         path is not a regular file or not a readable SQLite database.",
     ),
 ];
 
@@ -1281,12 +1317,13 @@ const SCHEMA_OBJECT: &[Outcome] = &[
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a connection step took longer than its time limit.",
+        "The server could not be reached, or a connection step took longer than its time limit; \
+         for a sqlite entry, the database file stayed locked or busy past core.query_timeout.",
     ),
     outcome(
         Code::IoError,
-        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written, or \
-         stdout could not be written.",
+        "A file under .tpl, the entry's ca_file or ca_path, or the database file of a sqlite \
+         entry could not be read or written, or stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
@@ -1298,7 +1335,9 @@ const SCHEMA_OBJECT: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version.",
+         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         sqlite entry, the entry has no path or carries a key its provider does not take, or the \
+         path is not a regular file or not a readable SQLite database.",
     ),
 ];
 
@@ -1318,12 +1357,13 @@ const SCHEMA_ROUTINE: &[Outcome] = &[
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a connection step took longer than its time limit.",
+        "The server could not be reached, or a connection step took longer than its time limit; \
+         for a sqlite entry, the database file stayed locked or busy past core.query_timeout.",
     ),
     outcome(
         Code::IoError,
-        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written, or \
-         stdout could not be written.",
+        "A file under .tpl, the entry's ca_file or ca_path, or the database file of a sqlite \
+         entry could not be read or written, or stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
@@ -1335,7 +1375,9 @@ const SCHEMA_ROUTINE: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version.",
+         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         sqlite entry, the entry has no path or carries a key its provider does not take, or the \
+         path is not a regular file or not a readable SQLite database.",
     ),
 ];
 
@@ -1354,12 +1396,13 @@ const SCHEMA_DUMP: &[Outcome] = &[
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a connection step took longer than its time limit.",
+        "The server could not be reached, or a connection step took longer than its time limit; \
+         for a sqlite entry, the database file stayed locked or busy past core.query_timeout.",
     ),
     outcome(
         Code::IoError,
-        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written, or \
-         stdout could not be written.",
+        "A file under .tpl, the entry's ca_file or ca_path, or the database file of a sqlite \
+         entry could not be read or written, or stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
@@ -1371,7 +1414,9 @@ const SCHEMA_DUMP: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version.",
+         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         sqlite entry, the entry has no path or carries a key its provider does not take, or the \
+         path is not a regular file or not a readable SQLite database.",
     ),
 ];
 
@@ -1401,12 +1446,13 @@ const RENDER: &[Outcome] = &[
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a connection step took longer than its time limit.",
+        "The server could not be reached, or a connection step took longer than its time limit; \
+         for a sqlite entry, the database file stayed locked or busy past core.query_timeout.",
     ),
     outcome(
         Code::IoError,
-        "A file under .tpl, the --context file, or the entry's ca_file or ca_path could not be \
-         read or written, or stdout could not be written.",
+        "A file under .tpl, the --context file, the entry's ca_file or ca_path, or the database \
+         file of a sqlite entry could not be read or written, or stdout could not be written.",
     ),
     outcome(
         Code::NoPermission,
@@ -1418,7 +1464,9 @@ const RENDER: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version.",
+         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         sqlite entry, the entry has no path or carries a key its provider does not take, or the \
+         path is not a regular file or not a readable SQLite database.",
     ),
 ];
 
@@ -1567,7 +1615,9 @@ const CACHE_LOAD: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version.",
+         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         sqlite entry, the entry has no path or carries a key its provider does not take, or the \
+         path is not a regular file or not a readable SQLite database.",
     ),
 ];
 
@@ -1818,11 +1868,13 @@ const CFG_DATABASE_TEST: &[Outcome] = &[
     outcome(Code::NoInput, "NAME names no entry of .tpl/.cfg."),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a connection step took longer than its time limit.",
+        "The server could not be reached, or a connection step took longer than its time limit; \
+         for a sqlite entry, the database file stayed locked or busy past core.query_timeout.",
     ),
     outcome(
         Code::IoError,
-        "Reading .tpl, or the entry's ca_file or ca_path, failed, or stdout could not be written.",
+        "Reading .tpl, the entry's ca_file or ca_path, or the database file of a sqlite entry \
+         failed, or stdout could not be written.",
     ),
     outcome(Code::NoPermission, "The server refused the login."),
     outcome(
@@ -1831,7 +1883,8 @@ const CFG_DATABASE_TEST: &[Outcome] = &[
          could not be made read-only; the entry is incomplete (no host, or no server database \
          name) or its password cannot be obtained (a ${VAR} is undefined, or password_command \
          failed); ca_path holds no certificate; or no project was found, or .tpl/.cfg cannot be \
-         used.",
+         used. For a sqlite entry, the entry has no path or carries a key its provider does not \
+         take, or the path is not a regular file or not a readable SQLite database.",
     ),
 ];
 
@@ -2818,6 +2871,18 @@ const ENTRIES: [Entry; 35] = [
                         "A directory of extra CA certificate files to trust. Read as written; a \
                          value containing ${ is refused.",
                     ),
+                    row(
+                        "database.<name>.provider",
+                        "mariadb or sqlite. Default mariadb. A sqlite entry takes path and no \
+                         other key; a mariadb entry takes every key above and not path.",
+                    ),
+                    row(
+                        "database.<name>.path",
+                        "The SQLite database file of a sqlite entry. Read as written; a value \
+                         containing ${ is refused; a relative path is resolved against the \
+                         directory that holds the .tpl folder, not against the current \
+                         directory.",
+                    ),
                 ],
             },
             Block::Prose(
@@ -2835,9 +2900,9 @@ const ENTRIES: [Entry; 35] = [
                  = \"${SHOP_PORT}\".",
             ),
             Block::Prose(
-                "After writing host, port, user, database, tls or dsn of an entry, any data \
-                 cached for it under .tpl/.cache/NAME/ is kept and still served; clear it with \
-                 tpl -d NAME cache clean.",
+                "After writing host, port, user, database, tls, dsn, provider or path of an \
+                 entry, any data cached for it under .tpl/.cache/NAME/ is kept and still served; \
+                 clear it with tpl -d NAME cache clean.",
             ),
         ],
         touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),
@@ -2874,9 +2939,9 @@ const ENTRIES: [Entry; 35] = [
              .tpl/.cache/NAME/ is kept; an entry added later under the same name reads it; \
              clear it with tpl -d NAME cache clean, also after the entry is gone. Where KEY is \
              database, every entry is removed, and the same holds for each entry. Where KEY is \
-             host, port, user, database, tls or dsn of an entry, after removing it any data \
-             cached for the entry under .tpl/.cache/NAME/ is kept and still served; clear it \
-             with tpl -d NAME cache clean.",
+             host, port, user, database, tls, dsn, provider or path of an entry, after \
+             removing it any data cached for the entry under .tpl/.cache/NAME/ is kept and still \
+             served; clear it with tpl -d NAME cache clean.",
         )],
         touches: Some(local_only(NO_ENTRY, WRITES_CFG, PRINTS_NOTHING)),
         examples: &[
@@ -2934,15 +2999,17 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "database", "add"],
-        description: "Creates a database entry named NAME. Give --dsn, or at least one of --host, \
-                      --port, --user and --schema, but not both kinds; --tls, --password-command, \
-                      --ca-file and --ca-path may be added to either. A NAME already in use is \
-                      refused; change an entry with tpl cfg database update. To connect, the \
-                      entry needs --host and --schema, or a --dsn that names both; --port defaults \
-                      to 3306 and --user is optional. An entry without them is stored, but every \
-                      later command that connects with it exits 78. -d/--database has no effect \
-                      here: the database on the server is set with --schema, or is the path part \
-                      of --dsn for an entry defined by dsn.",
+        description: "Creates a database entry named NAME. For a MariaDB server, give --dsn, or at \
+                      least one of --host, --port, --user and --schema, but not both kinds; --tls, \
+                      --password-command, --ca-file and --ca-path may be added to either. For a \
+                      SQLite database file, give --provider sqlite and --path, and no other flag. \
+                      A NAME already in use is refused; change an entry with tpl cfg database \
+                      update. To connect, a MariaDB entry needs --host and --schema, or a --dsn \
+                      that names both; --port defaults to 3306 and --user is optional. An entry \
+                      without them is stored, but every later command that connects with it exits \
+                      78. -d/--database has no effect here: the database on the server is set \
+                      with --schema, or is the path part of --dsn for an entry defined by dsn. \
+                      The database file of a sqlite entry is set with --path.",
         blocks: &[
             Block::Prose(
                 "Without --tls, the entry uses verify-identity, which needs a server \
@@ -2992,6 +3059,20 @@ const ENTRIES: [Entry; 35] = [
                     "reporting",
                     "--dsn",
                     "mysql://reader@db.example.com:3306/reporting",
+                ])],
+            },
+            Example {
+                caption: "Register a SQLite database file kept beside the .tpl folder.",
+                lines: &[run(&[
+                    "tpl",
+                    "cfg",
+                    "database",
+                    "add",
+                    "ledger",
+                    "--provider",
+                    "sqlite",
+                    "--path",
+                    "data/ledger.sqlite",
                 ])],
             },
             Example {
@@ -3074,9 +3155,9 @@ const ENTRIES: [Entry; 35] = [
         path: &["cfg", "database", "update"],
         description: "Changes the fields of one database entry that the flags given name; every \
                       other field keeps its value, and at least one flag is required. After \
-                      changing --host, --port, --user, --schema, --tls or --dsn, any data cached \
-                      for the entry is kept and still served; clear it with tpl -d NAME cache \
-                      clean.",
+                      changing --host, --port, --user, --schema, --tls, --dsn, --provider or \
+                      --path, any data cached for the entry is kept and still served; clear it \
+                      with tpl -d NAME cache clean.",
         blocks: &[Block::Prose(
             "A value given here is visible to other users in the process list while tpl runs, \
              so give a password through --password-command, as a reference such as \
@@ -3086,7 +3167,8 @@ const ENTRIES: [Entry; 35] = [
         touches: Some(local_only(
             "Needs the entry that NAME names; -d/--database and core.database are not used, \
              and the database on the server is set with --schema, or is the path part of --dsn \
-             for an entry defined by dsn.",
+             for an entry defined by dsn. The database file of a sqlite entry is set with \
+             --path.",
             "Writes .tpl/.cfg; the cache is left as it was.",
             PRINTS_NOTHING,
         )),
@@ -3153,7 +3235,10 @@ const ENTRIES: [Entry; 35] = [
                       connected and logged in, whether the session was made read-only, which \
                       MariaDB server answered, and whether the database user may read the database \
                       structure (can_read_catalogue). Exit 0 means the four checks ran, not that \
-                      all of them passed: read can_read_catalogue.",
+                      all of them passed: read can_read_catalogue. For a sqlite entry the four \
+                      answers are whether the file opened read-only, whether every safeguard of \
+                      the read took effect, which SQLite library answered, and whether the \
+                      schema could be read, which is true whenever the command exits 0.",
         blocks: &[],
         touches: Some(Touches {
             server: "Always connects to the server the entry describes.",
@@ -3528,7 +3613,8 @@ mod tests {
     fn fr_help_013_the_four_exclusions_this_corpus_obliges_are_all_stated() {
         // A floor under the walks above, which would pass over a table that
         // stated no exclusion at all. The four are FR-CLI-015, FR-RND-005,
-        // FR-RND-018 and FR-CFG-029, named by the node that refuses each.
+        // FR-RND-018 and FR-CFG-029, named by the node that refuses each, and
+        // FR-CFG-055 since the sixty-fifth edition.
         let stated = |path: &[&str], name: &str| -> &'static [&'static str] {
             documented(path, name)
                 .unwrap_or_else(|| panic!("{} states nothing about {name}", written(path)))
@@ -3564,11 +3650,28 @@ mod tests {
         ] {
             assert_eq!(
                 stated(path, "--dsn"),
-                ["--host", "--port", "--user", "--schema"]
+                ["--host", "--port", "--user", "--schema", "--path"]
             );
 
             for discrete in ["--host", "--port", "--user", "--schema"] {
-                assert_eq!(stated(path, discrete), ["--dsn"]);
+                assert_eq!(stated(path, discrete), ["--dsn", "--path"]);
+            }
+
+            // FR-CFG-055: --path describes a sqlite entry, and no flag of a
+            // mariadb entry stands beside it.
+            for server in [
+                "--dsn",
+                "--host",
+                "--port",
+                "--user",
+                "--schema",
+                "--tls",
+                "--password-command",
+                "--ca-file",
+                "--ca-path",
+            ] {
+                assert!(stated(path, "--path").contains(&server), "{server}");
+                assert!(stated(path, server).contains(&"--path"), "{server}");
             }
         }
     }

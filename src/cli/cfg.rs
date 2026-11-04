@@ -65,12 +65,14 @@ pub(crate) mod keys;
 
 use std::path::{Path, PathBuf};
 
+use clap::builder::TypedValueParser as _;
 use clap::{ArgAction, Args, Subcommand};
 
 use super::globals::Globals;
 use super::local::{self, Format};
 use crate::deadline::{Clock, Seconds};
 use crate::error::Error;
+use crate::model::database::Provider;
 use crate::output::Form;
 use crate::project::Project;
 use crate::project::config::entry::TlsMode;
@@ -174,6 +176,17 @@ pub(crate) struct Cfg {
 }
 
 /// The five children of `tpl cfg`.
+// One value of this type exists per process, parsed once and routed once, for
+// the reason `cli::Form` gives for its own allowance: boxing `Database` to
+// level the variants would add an allocation to the path every `tpl cfg
+// database` invocation takes, against stack this process does not want. The
+// variant grew past the lint's threshold with `--provider` and `--path`
+// (`FR-CFG-055`).
+#[allow(
+    clippy::large_enum_variant,
+    reason = "one value per process: levelling the variants would buy stack this process does \
+              not want and cost an allocation on the ordinary path"
+)]
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 pub(crate) enum Command {
     /// Reads one configuration key.
@@ -243,7 +256,7 @@ pub(crate) struct Database {
 // and `FR-HELP-021` derives them by introspecting this tree; declaring a second
 // copy here would let the flag and the file disagree about what a mode is.
 
-/// The nine flags of `FR-CFG-027`, each mapping to one key of a
+/// The eleven flags of `FR-CFG-027`, each mapping to one key of a
 /// `[database.<name>]` block.
 ///
 /// They are declared once and flattened into `add` and `update`, which is what
@@ -335,6 +348,40 @@ pub(crate) struct Entry {
     /// written to `database.<name>.ca_path` (`FR-CONF-014`).
     #[arg(long = "ca-path", value_name = "PATH", action = ArgAction::Append)]
     pub(crate) ca_path: Vec<PathBuf>,
+
+    /// The provider of the entry, written to `database.<name>.provider`
+    /// (`FR-CONF-051`); an entry with none is a `mariadb` entry.
+    #[arg(long = "provider", value_name = "PROVIDER", value_enum, action = ArgAction::Append)]
+    pub(crate) provider: Vec<Provider>,
+
+    /// The SQLite database file, written to `database.<name>.path`
+    /// (`FR-CONF-053`, `FR-CONF-054`): stored as written, never expanded, and
+    /// resolved against the directory that holds `.tpl` when it is read.
+    // The parser admits the empty value, which clap's own path parser refuses
+    // as a missing one: `FR-CONF-053` refuses it as `FR-CONF-050` refuses an
+    // empty host, and that refusal is made where the item is built.
+    #[arg(
+        long = "path",
+        value_name = "PATH",
+        action = ArgAction::Append,
+        value_parser = clap::builder::OsStringValueParser::new().map(PathBuf::from)
+    )]
+    pub(crate) path: Vec<PathBuf>,
+}
+
+/// The two providers as `--provider` takes them (`FR-CONF-051`,
+/// `FR-HELP-013`).
+///
+/// The enumeration is the model's own, declared once in `model/database.rs`
+/// (`OD-35`); this is how the parser and the help read its values from it.
+impl clap::ValueEnum for Provider {
+    fn value_variants<'a>() -> &'a [Self] {
+        &Provider::ALL
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(clap::builder::PossibleValue::new(self.name()))
+    }
 }
 
 impl Entry {
@@ -355,6 +402,8 @@ impl Entry {
             password_command: self.password_command.first().map(String::as_str),
             ca_file: self.ca_file.first().map(PathBuf::as_path),
             ca_path: self.ca_path.first().map(PathBuf::as_path),
+            provider: self.provider.first().copied(),
+            path: self.path.first().map(PathBuf::as_path),
         }
     }
 }

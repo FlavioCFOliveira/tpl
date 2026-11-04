@@ -1,8 +1,8 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-25
-related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
+last-reviewed: 2026-11-04
+related: [glossary.md, cli-contract.md, catalogue-coverage.md, sqlite-contract.md, open-questions.md, upstream-divergences.md]
 ---
 
 # tpl Functional Specification
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-four editions. All are in force;
+The specification has been written in seventy-two editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4931,13 +4931,759 @@ The fifth validation rule is discharged for this edition: both root
 documents were read against every requirement amended since the register was
 last re-read.
 
+### Sixty-fifth edition — a second provider
+
+rmp `#314`, of sprint 27, gives `tpl` read support for SQLite. The user asked
+that each database engine be a distinct provider, abstracted through the
+configuration; that the provider set there decide how `tpl` behaves; that
+templates render from a SQLite database on the principles they render from a
+MariaDB one; and that MariaDB support not change. Three further decisions of
+the user, of 2026-11-03, fix how the SQLite driver is chosen.
+
+**Fifty identifiers are assigned**: `FR-LITE-001` through `FR-LITE-038`,
+`BR-LITE-001` and `BR-LITE-002`, in a new file; `FR-CONF-051` through
+`FR-CONF-054`; `FR-CFG-055` and `FR-CFG-056`; `FR-CTX-043`; `FR-CDOC-018`;
+`FR-ENV-048`; and `FR-SEC-028`. None is retired and none is renumbered.
+[glossary.md](glossary.md) gains eight entries — *connection*, *project
+directory*, *provider*, *rowid alias*, *SQLite table kinds*, *type affinity*,
+*hardening control* and *official driver* — and amends five. `DIV-057` and
+`DIV-058` are raised in [upstream-divergences.md](upstream-divergences.md),
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The SQLite contract** — [sqlite-contract.md](sqlite-contract.md), new,
+  beside [server-contract.md](server-contract.md). The binary carries its own
+  library, whose version, series and a `standing` that is always `supported`
+  fill the `server` object, with no window and no refusal
+  (`FR-LITE-001` to `FR-LITE-003`). The driver is chosen by a closed rule:
+  an official driver where one exists and passes the hardening, otherwise
+  security, then catalogue visibility (`FR-LITE-004`). The file is read only
+  if it is a regular file, opened read-only and never created, and refused
+  with `74`, `78` or `69` by condition (`FR-LITE-005` to `FR-LITE-009`); a
+  database in write-ahead-log mode may leave two files beside it
+  (`FR-LITE-008`). The file is untrusted: seven controls and three limits are
+  applied and read back on every connection, a control that does not take
+  effect is `70`, and no integrity check runs (`FR-LITE-010` to
+  `FR-LITE-014`). A closed statement list, its order and its verification
+  (`FR-LITE-015` to `FR-LITE-018`, `BR-LITE-001`). The read covers `main`,
+  with seven enumerated exclusions, and no routines (`FR-LITE-019` to
+  `FR-LITE-022`). Every model property's SQLite source or its absence, with
+  one derivation from stored text — a trigger's event and timing
+  (`BR-LITE-002`, `FR-LITE-023` to `FR-LITE-034`). A view that does not
+  compile is incomplete and marked; anything else is complete or fails
+  (`FR-LITE-035`, `FR-LITE-036`). The requirements of form and the fixture of
+  `scripts/sqlite/` (`FR-LITE-037`, `FR-LITE-038`).
+- **The provider in the configuration** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-051` gives every
+  entry a `provider`, `mariadb` where the key is absent, so every existing
+  `.tpl/.cfg` keeps its meaning; `FR-CONF-052` fixes the keys each provider
+  takes and refuses, at entry resolution; `FR-CONF-053` requires `path`; and
+  `FR-CONF-054` reads it as a literal path, never expanded, resolved against
+  the project directory. `FR-CONF-002` grows to twenty key forms.
+- **The commands** — [cfg-commands.md](cfg-commands.md). `--provider` and
+  `--path` join `FR-CFG-027`; `FR-CFG-055` fixes the flags each provider
+  admits; `FR-CFG-056` states the four steps of `tpl cfg database test` for a
+  `sqlite` entry. `FR-CFG-016`, `FR-CFG-020`, `FR-CFG-048`, `FR-CFG-051`,
+  `FR-CFG-053` and `FR-CFG-033` are amended, with `FR-CACHE-029` in
+  [cache-commands.md](cache-commands.md) and `FR-HELP-036` in
+  [help-and-version.md](help-and-version.md).
+- **The document** — [context-document.md](context-document.md).
+  `FR-CTX-043` adds `database.provider`, present for both providers, and it
+  is the only change a MariaDB document undergoes. `schema_version` does not
+  move, because adding a field is not breaking, and a `--context` document
+  without the field is read as a `mariadb` one. `FR-CTX-036` and `FR-SCH-031`
+  in [schema-commands.md](schema-commands.md) carry it as a fourth metadata
+  field; `FR-CDOC-018` in [cache-documents.md](cache-documents.md) records the
+  provider of a cached read.
+- **The model** — notes on `FR-CAT-015`, `FR-CAT-033` and `FR-CAT-055` in
+  [catalogue-coverage.md](catalogue-coverage.md); `FR-ENV-048` in
+  [template-environment.md](template-environment.md) places the five type
+  affinities in the type families; `NFR-DET-002` in
+  [cli-contract.md](cli-contract.md) orders the unnamed foreign keys.
+- **The scope of the MariaDB rules** — `FR-SRV-001` is scoped to a `mariadb`
+  entry, and [server-contract.md](server-contract.md) says once that it
+  governs that provider; nothing it requires of a `mariadb` entry changes.
+  The cells of `FR-ERR-001` and the steps of `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) name the `sqlite`
+  conditions, and notes reach
+  [privileges-and-completeness.md](privileges-and-completeness.md),
+  [performance-requirements.md](performance-requirements.md),
+  [output-formats.md](output-formats.md) and
+  [render-command.md](render-command.md). [security.md](security.md) gains
+  the trust boundary and `FR-SEC-028`.
+
+`FR-CONF-007`, `FR-CONF-034`, `FR-CONF-048`, `FR-CONF-050`, `FR-PROJ-030`,
+`FR-GLOB-024`, `FR-GLOB-026`, `FR-OUT-014`, `FR-OUT-038`, `FR-RND-022`,
+`FR-RND-042`, `FR-CACHE-028`, `BR-CACHE-004`, `FR-CTX-023`, `FR-CTX-042`,
+`FR-PRIV-008`, `FR-ERR-027`, `FR-ERR-030`, `FR-SRV-042` and `NFR-PERF-003`
+were read against the changes. None conflicts with them, so none is amended.
+Every statement of SQLite behaviour rests on an observation of 2026-11-03,
+recorded with its conditions in
+[sqlite-contract.md](sqlite-contract.md#observations), or on SQLite's
+documentation, cited by page and date. The fifth validation rule is discharged
+for this edition: both root documents were read at `6203216` against every
+requirement the edition writes or amends, and the two entries it raises hold
+every divergence found.
+
+### Sixty-sixth edition — the library the binary carries, read again
+
+rmp `#319`, of sprint 27, amends the sixty-fifth edition after rmp `#315`
+applied `FR-LITE-004` to four candidate drivers in compiled spikes, and writes
+the user's requirement of 2026-11-03 that the SQLite library `tpl` carries be
+the most recent release possible, and secure. Every reading it relies on was
+re-taken on two builds of the library, 3.51.3 and 3.54.1, recorded with their
+conditions in [sqlite-contract.md](sqlite-contract.md#observations); the two
+returned the same readings wherever both were taken.
+
+**One identifier is assigned: `FR-LITE-039`.** None is retired and none is
+renumbered. [glossary.md](glossary.md) gains *nested statement* and amends
+*SQLite table kinds* and *hardening control*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The release the binary carries** — `FR-LITE-039` requires the most recent
+  SQLite release obtainable through the driver `FR-LITE-004` selects, judged
+  against SQLite's release history, and admits no release that a listed
+  vulnerability reachable under `tpl`'s controls affects. An older release
+  needs a reason in the decision records, and the choice is re-verified before
+  every release of `tpl`. It overrides neither `FR-LITE-004` nor anything a
+  `mariadb` entry does. `FR-LITE-001` and the file's scope point at it.
+- **Extension loading, compiled out** — by the user's decision of 2026-11-03,
+  `FR-LITE-010` makes extension loading absent from the carried library, built
+  with `SQLITE_OMIT_LOAD_EXTENSION`, instead of a switch set off that no
+  candidate driver could read back without `unsafe` code. `PRAGMA
+  compile_options`, which reads nothing from the file, confirms the omission
+  before the probe, and a missing `OMIT_LOAD_EXTENSION` row ends the
+  invocation with `70` under `FR-LITE-012`. The control is strengthened, not
+  removed, so `FR-LITE-004` stands. `FR-LITE-015` lists the pragma and
+  `FR-LITE-017` names it in the order. The read-back at every open answers
+  SQLite's own caveat that its `SQLITE_OMIT_*` options are unsupported with
+  the amalgamation; the omission was observed to take effect on both builds.
+  A `SELECT` of the same option was rejected: it loads the untrusted schema
+  before it answers.
+- **What the statement trace can verify** — `FR-LITE-018` now records what the
+  trace reports, a statement as it begins running, and asserts the list and
+  the order over the statements reported at top level. A nested statement,
+  which the library runs to carry out a pragma function or a module, is
+  neither checked nor counted, and a statement that fails when it is prepared,
+  or is never run, is stated as absent from the record.
+- **An oversized schema** — `FR-LITE-007` gives the length limit of
+  `FR-LITE-011` a row of its own: `SQLITE_TOOBIG`, with `78`.
+- **A `CHECK` that does not stop the read** — the sixty-fifth edition's
+  reading that a `CHECK` calling a function not marked innocuous makes the
+  schema fail to load under `trusted_schema` off is withdrawn: it does not
+  hold on the two builds, and could not be reproduced in the shell it was
+  taken from. `FR-LITE-010` records what `trusted_schema` off costs on the
+  builds, `FR-LITE-007` drops the case from its damaged-schema row, and
+  `FR-LITE-038` replaces the fixture database that relied on it with a
+  length-limit database and moves the `CHECK` into the main database. It also
+  gains a view that `trusted_schema` off refuses, the third cause
+  `FR-LITE-035` names, which no fixture case exercised. The expression-depth
+  reading of `FR-LITE-011` was re-taken and holds.
+- **Shadow tables of a module the library lacks** — the bounded claim of
+  `FR-LITE-020` is settled by observation: a library built without FTS5
+  reports the shadow tables of an `fts5` table as `table`. The requirement now
+  states that the carried library's report decides the covered set.
+- **The writing conventions** — `FR-LITE-018` is the fifth requirement whose
+  limit is on the evidence rather than on the guarantee, and the list in
+  *[Writing conventions](#writing-conventions)* names it.
+
+`FR-LITE-002`, `FR-LITE-004`, `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-016`,
+`FR-LITE-021`, `FR-LITE-034`, `FR-LITE-035`, `FR-LITE-036`, `FR-LITE-037`,
+`FR-SEC-028`, `FR-CFG-056`, `FR-ERR-001`, `FR-ERR-006` and `NFR-PERF-001` were
+read against the changes. None conflicts with them, so none is amended:
+`FR-CFG-056` reports every control of `FR-LITE-010` at its second step,
+whichever way each is confirmed. The fifth validation rule owes nothing for
+this edition: neither root document, read at `349560e`, states extension
+loading, the statement trace, the length limit, the `CHECK` reading,
+shadow-table coverage or the release of the SQLite library.
+
+### Sixty-seventh edition — what the technical design of the second provider found
+
+rmp `#314`, reopened in sprint 27, settles the seven points the technical
+specification of the `sqlite` provider, written at `ad653f5`, recorded against
+this corpus and did not resolve: one question on result codes that held back
+a part of the reader, three passages that contradicted a requirement in force,
+and three facts no requirement fixed. Within the same edition the coordinator
+added four further defects of the SQLite specification, found while the
+seven were settled. Each is settled by the narrowest amendment that removes
+it, and no requirement changes its meaning for a `mariadb` entry.
+
+**Two identifiers are assigned: `FR-LITE-040` and `FR-ERR-046`.** None is
+retired and none is renumbered. [glossary.md](glossary.md) gains *result
+code* and amends *project directory* and *differential run*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Every SQLite result code has an exit code** — `FR-LITE-040`, new, in
+  [sqlite-contract.md](sqlite-contract.md). After `FR-LITE-012`,
+  `FR-LITE-035` and the rows of `FR-LITE-007`, now read by result code
+  wherever the library returns it, every primary result code SQLite publishes
+  is classified by whose the fault is: `70` where `tpl` misused the library,
+  the library failed itself, or the outcome needs an operation `tpl` never
+  performs; `74` where the host or the filesystem did not supply what the read
+  needed, memory included; `69` where another connection holds or changes the
+  database; and `70` for a primary result code published later. The split the
+  technical specification recommended is taken with two corrections, each by
+  `FR-ERR-002`: `SQLITE_PROTOCOL` and `SQLITE_SCHEMA` are `69`, not `74`, and
+  `SQLITE_LOCKED` is `70`. The `69` and `74` cells of `FR-ERR-001`, the note
+  on `FR-ERR-006` and a note on `FR-LITE-007` follow, and a note on
+  `FR-ERR-036` states that it governs a `mariadb` entry only.
+- **Two files outside `.tpl`** — by the user's decision of 2026-11-03,
+  `FR-LITE-008` stands. `FR-PROJ-024` in
+  [project-and-discovery.md](project-and-discovery.md) now admits a second
+  exception, the `-wal` and `-shm` files the library may create and write
+  beside a database in write-ahead-log mode, and `BR-PROJ-002`,
+  `FR-CACHE-016` in [cache-commands.md](cache-commands.md) and `BR-SCH-003`
+  in [schema-commands.md](schema-commands.md), which state the same pure read,
+  admit them beside it. A read was observed to write the shared-memory file,
+  so the exception admits writing as well as creating.
+- **What a `cause` carries from the library** — `FR-GLOB-018` in
+  [global-flags.md](global-flags.md) states what the raw driver error is for a
+  `sqlite` entry: the driver's error value, in any rendering. The result code
+  and the library's message are not it, and a `cause` a requirement obliges to
+  state them carries both, escaped under `FR-ERR-024`, and nothing of the
+  driver's value. `FR-SEC-005` points at it.
+- **A deadline that met no lock** — the note on `FR-ERR-034` for a `sqlite`
+  entry names a lock only where the library returned `SQLITE_BUSY`, and
+  otherwise the deadline and its resolved value.
+- **The project directory of a linked `.tpl`** — `FR-CONF-054` in
+  [configuration-model.md](configuration-model.md) resolves a relative `path`
+  against the parent of the canonical `.tpl` folder, the one path the project
+  holds after `FR-PROJ-009`, and not against the directory holding a link.
+- **A rowid-alias primary key** — `FR-LITE-029` fixes the rest of its
+  properties: `unique` true, as SQLite's documentation states of the rowid;
+  and the member's prefix length, `type`, the comment and `ignored` as
+  `FR-LITE-030` gives them to every SQLite index.
+- **Two assertions on a `sqlite` entry** — `NFR-PERF-004` in
+  [performance-requirements.md](performance-requirements.md) is verified by
+  the syscall trace on the two Linux targets and skipped, with its reason, on
+  the two macOS targets, where no instrument observes it; `NFR-PERF-008`
+  compares the diagnostic count with the statement record of `FR-LITE-018`
+  over the SQLite fixture, on all four targets. The table under
+  *Requirements of form* gains both rows, and `NFR-PERF-004` becomes the sixth
+  requirement whose limit is on the evidence, listed in
+  *[Writing conventions](#writing-conventions)*. `FR-LITE-037` points at both.
+- **The `unique` test and a rowid alias** — the `unique` test of `FR-ENV-041`
+  in [template-environment.md](template-environment.md) consults the table's
+  primary key as well as its unique indexes, so a rowid-alias column answers
+  true, as a MariaDB primary-key column does. Every MariaDB document answers
+  as before, because its primary key is always the unique index `PRIMARY`.
+- **A path that names nothing** — `FR-LITE-005` routes a path whose kind
+  cannot be established, because its lookup fails, to the first row of
+  `FR-LITE-007`, which now begins at the check of the kind: one rule gives it
+  `74` and its `cause`, whichever of the check and the open finds it.
+- **Temporary files** — `FR-LITE-010` gains an eighth control, `temp_store`
+  at `MEMORY`, confirmed by its read-back and by `PRAGMA compile_options`.
+  Observed on another build of the release the binary carries, a sorting
+  statement over a large schema wrote a temporary file in the host's
+  temporary directory, outside `.tpl`, and with the control it wrote none.
+  `FR-LITE-015`, `FR-LITE-017`, `FR-LITE-008` and `FR-SEC-028` follow.
+  `FR-PROJ-002` is not amended: such a file lies outside `.tpl`, so the
+  requirements it contradicted were `FR-PROJ-024` and `FR-LITE-008`, which
+  now hold.
+- **A name sized to flood a diagnostic** — `FR-ERR-046`, new, in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), bounds a value read
+  from a SQLite database file, or returned by its library, in any diagnostic
+  line: past 256 characters, its first and last 128 are kept around a marker
+  that counts what was left out. `FR-ERR-024`, `FR-GLOB-018`, the note on
+  `FR-ERR-034` and `FR-SEC-028` point at it. Stdout, a MariaDB server's
+  values, a `--context` document and the argument vector are not bounded.
+- **One list that had missed the new requirement** — `FR-CFG-056` in
+  [cfg-commands.md](cfg-commands.md) takes its exit codes under
+  `FR-LITE-040` as well; the codes are unchanged.
+
+`FR-LITE-009`, `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-018`, `FR-LITE-030`,
+`FR-LITE-035`, `FR-ERR-022`, `FR-ERR-027`, `FR-ERR-030`, `FR-ERR-032`,
+`FR-CAT-042`, `FR-CAT-043`, `FR-PROJ-002`, `FR-PROJ-009`, `FR-PROJ-023`,
+`FR-PROJ-027`, `FR-GLOB-017`, `NFR-PERF-005` and `NFR-PERF-007` were read
+against the changes. None conflicts with them, so none is amended. Every new
+statement of SQLite behaviour rests on SQLite's documentation, cited by page
+and date, or on an observation of 2026-11-03 through the Python library
+3.54.1 — the release the binary carries, built with the same `TEMP_STORE` —
+recorded beside the requirement it grounds. The fifth validation rule owes
+nothing new for this edition: both root documents were read at `ad653f5`
+against every requirement it amends, and the one passage each holds that an
+amendment reaches — the root `README.md` on writes outside `.tpl`, and the
+root `CLAUDE.md` on the disk writes `tpl` makes — is already held by
+`DIV-057` and `DIV-058`.
+
+### Sixty-eighth edition — a view read for what nothing carried
+
+rmp `#317`, of sprint 27, corrects one defect the implementation of the
+`sqlite` provider found. `FR-LITE-033` gave a SQLite view its columns, and the
+view object of `FR-CAT-047` has nine properties and no key for columns, for
+either provider; adding one would change every MariaDB document. The
+implementation read a view's columns only to learn whether the view compiles,
+for the marking of `FR-LITE-035`. By the user's decision of 2026-11-03, `tpl`
+reads no view's columns and marks no view, as on MariaDB. No requirement
+changes its meaning for a `mariadb` entry.
+
+**One identifier is withdrawn: `FR-LITE-035`.** It keeps its heading with a
+withdrawal note, and is retired and never reused. None is assigned or
+renumbered. [glossary.md](glossary.md) is unchanged. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The view object** — `FR-LITE-033` in
+  [sqlite-contract.md](sqlite-contract.md) gives a SQLite view exactly the
+  nine properties of `FR-CAT-047`, states the parity with a `mariadb` read,
+  which carries no column of a view either, and forbids reading a view's
+  columns. It records the user's decision on four grounds: parity with
+  MariaDB, where no requirement asks whether a view compiles; nothing missing
+  from the document; no statement of the read compiling a view's definition;
+  and the cache and `--context` treating the read as any complete read. Three
+  options are recorded as rejected: keeping the marking, under which a
+  document that lacks nothing was refused as a `--context` and never recorded
+  whole in the cache; a `columns` key on the view of both providers; and one
+  on a SQLite view alone. The accepted cost is stated: a view that does not
+  compile is no longer flagged. A note on `FR-CAT-052` in
+  [catalogue-coverage.md](catalogue-coverage.md) states that a view's columns,
+  not excluded by coverage, are not carried either.
+- **What the read no longer does** — `FR-LITE-015` forbids a statement that
+  reads from a view or makes the library compile one; the read is the probe
+  and six catalogue statements, one fewer, with no per-view statement.
+  `FR-LITE-035` is withdrawn, and `FR-LITE-036` holds a `sqlite` read complete
+  or failed without exception, a view that does not compile presented whole
+  and unmarked. `FR-LITE-037` drops the one path on which the count grew with
+  the objects. `FR-LITE-018` verifies that no statement compiles a view by
+  the read of the fixture succeeding, and `FR-LITE-038` keeps the views that
+  do not compile in the fixture for that purpose. `FR-LITE-040` loses the
+  step that gave `SQLITE_ERROR` on a view read to `FR-LITE-035`: no statement
+  that remains can produce it, and the `SQLITE_ERROR` row takes every one
+  with `70`. `FR-LITE-010` keeps disabling views rejected, on the ground it
+  gives for triggers, and `FR-LITE-039` names what the read still reaches.
+- **What one reason reaches, observed** — the decision's ground on attack
+  surface holds for the compile of a view's definition and not for module
+  code. Observed on 2026-11-03 through the Python library 3.54.1: listing
+  the objects reported a column count of `0` for every view, one that
+  compiles included, so it compiles none; and the first statement invoking `pragma_table_list` connected an `fts5` table
+  and ran its module's read of `<table>_config`, with no view read.
+  `FR-LITE-033` records the ground as narrowed, and `FR-LITE-018` records
+  where the nested statement now runs.
+- **The cross-references** — the note on `FR-PRIV-003` and the Overview of
+  [privileges-and-completeness.md](privileges-and-completeness.md), the `77`
+  cell of `FR-ERR-001` and the note on `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), `FR-GLOB-018` in
+  [global-flags.md](global-flags.md), and the note on `NFR-PERF-001` and
+  `NFR-PERF-008` in [performance-requirements.md](performance-requirements.md)
+  no longer describe a marked view or a `77` for one. A `sqlite` entry now
+  reaches `77` through no condition.
+
+`FR-CAT-047`, `FR-CTX-043`, `BR-LITE-002`, `FR-LITE-017`, `FR-PRIV-001` to
+`FR-PRIV-008`, `FR-PRIV-016`, `FR-CACHE-037`, `BR-CDOC-006` and `FR-ERR-030`
+were read against the changes. None conflicts with them, so none is amended:
+`FR-LITE-017` names no view statement in its order, and the definitions of a
+complete read and of the `restricted` array hold for a `sqlite` read without
+a sentence of their own. The fifth validation rule owes nothing for this
+edition: neither root document, read at `2fd98f8`, states a view's columns,
+a marking of a SQLite view, or the statements a SQLite read issues.
+
+### Sixty-ninth edition — a catalogue a file could forge, views compiled after all, and controls past C0
+
+rmp `#317`, of sprint 27, closes four defects a security review of the
+SQLite reader at `cb99236` found, and rmp `#321` closes a fifth for both
+providers. Two user decisions of 2026-11-03 shape it: the objects of a
+`sqlite` read are read from the schema table alone, and C1 and bidirectional
+formatting characters are escaped, in `json` with JSON's own escape. Every
+new statement of SQLite behaviour rests on SQLite's documentation, cited by
+page and date, on an observation of 2026-11-03 through the Python library
+3.54.1 — the release of the library the binary carries — or through the
+release build of `tpl` at `cb99236`, or on the library's own source as the
+driver's published package bundles it, read at that public source. No
+requirement changes its meaning for a `mariadb` entry, save the escaping the
+user decided for both providers.
+
+**One identifier is assigned: `FR-LITE-041`.** None is withdrawn or
+renumbered. [glossary.md](glossary.md) gains *bidirectional formatting
+character* and *storage class*, and amends *SQLite table kinds*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+the index of [open-questions.md](open-questions.md) stays empty, and the one
+item of *[Maintenance debt](#maintenance-debt)* is discharged.
+
+- **A name that replaces a function** — SQLite resolves a name among the
+  file's tables and views before a pragma table-valued function of that name,
+  ignoring ASCII case. A view named `pragma_table_list` made `tpl` list a
+  forged table at exit `0`, and a table named `PRAGMA_TABLE_XINFO` made it
+  end with a false `70`. `FR-LITE-041`, new, in
+  [sqlite-contract.md](sqlite-contract.md), issues one statement against the
+  schema table after the probe and before every other catalogue statement,
+  and refuses with `78` a file whose schema holds a table or a view whose
+  name begins with `pragma_`: the prefix is SQLite's own namespace for those
+  functions, and a list of the names the read uses would age with
+  `FR-LITE-015`. Rejected: Unicode case folding, which SQLite does not apply;
+  qualifying the functions with `temp.`, which SQLite documents as not
+  working; and refusing indexes and triggers, which replace nothing. The
+  accepted cost is stated: a table named `pragma_settings` is refused.
+  `FR-LITE-015`, `FR-LITE-017` and `FR-LITE-007` place the check and give it
+  its rows, and `FR-CFG-056` in [cfg-commands.md](cfg-commands.md) makes it
+  the catalogue probe of `tpl cfg database test`, so that a file every read
+  refuses is not reported as readable.
+- **The objects read from the schema table** — `PRAGMA table_list` compiled
+  inside the library every view and connected every virtual table whose
+  column count it did not know, discarding the outcome, and restarted its scan
+  of the schema after each, whatever its argument: 6.4 s over 40 000 views,
+  past every deadline over the review's mutually nested views. By the user's
+  decision, recorded under `FR-LITE-020`, on the criterion that the provider
+  be the most secure, **no statement invokes `pragma_table_list`**:
+  `FR-LITE-015` drops it from the closed list and admits `pragma_index_info`,
+  every catalogue statement joins `main.sqlite_schema`, and no statement
+  compiles a view or connects a virtual table. `FR-LITE-020` recognises a view
+  by its row's type, a virtual table by a root page of `0`, and a
+  `WITHOUT ROWID` table by `pragma_index_info` returning its primary key,
+  which agreed with the old reading on every table observed. The two costs the
+  user accepted are written in: a shadow table is covered as a `BASE TABLE`,
+  per `FR-LITE-020` and `FR-LITE-021`, and a `STRICT` table's `ANY` column
+  takes `numeric` and loses `blob`, per `FR-LITE-026`. The rejected option,
+  keeping the function with its cost stated as a limit, is recorded beside
+  them. `BR-LITE-002`, `FR-LITE-003`, `FR-LITE-019`, `FR-LITE-024` and
+  `FR-LITE-028` follow. Observed: the review's file of 16 KB reads in
+  0.0022 s, 80 000 views in 0.11 s, and 320 000 in 0.61 s; `FR-LITE-009`
+  records the figures, and that the one part that grows faster, the
+  library's loading of the schema at the probe, is ended by the deadline
+  within 0.07 s. `FR-LITE-018` verifies by its statement record, over a new
+  fixture database holding an `fts5` table and a view over it, that no
+  module runs. The sixty-eighth edition's reading that listing compiles no
+  view is withdrawn in `FR-LITE-015` and `FR-LITE-033`, whose third ground now
+  holds by the closed list.
+- **Views disabled, as defence in depth** — `FR-LITE-010` gains a ninth
+  control, views disabled, confirmed by its read-back, and its rejection of
+  disabling views is reversed. With the statements of `FR-LITE-015` the
+  control closes nothing: every statement returned the same rows in the same
+  time with views enabled and disabled. It is kept because it closes, as
+  observed, what a defective statement would open: a view's name passed to a
+  pragma function failed in 0.002 s instead of running past 25 s, and a view
+  named `pragma_encoding` failed instead of forging the encoding.
+- **A value or a root page that contradicts the schema table** — a view's
+  `sql` stored as a BLOB made `tpl` report a defect of its own with `70`, and
+  a trigger's `type` stored as a BLOB removed the trigger from the read at
+  exit `0`. `FR-LITE-041` refuses with `78` a `type`, `name` or `tbl_name`
+  that is not text, an `sql` that is neither text nor `NULL`, a `rootpage`
+  that is neither an integer nor `NULL`, and, because the read now trusts the
+  root page, a table row whose root page contradicts its text — read from the
+  first word after `CREATE`, which agreed with the library on all 26 table
+  rows observed. `FR-LITE-040` states that such a value is a damaged schema
+  and not a defect of `tpl`. `FR-LITE-038` gains the fixture databases.
+- **Escaping past C0** — `FR-ERR-024` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and `FR-OUT-018` in
+  [output-formats.md](output-formats.md) escape the C1 range, U+0080 to
+  U+009F, and the twelve bidirectional formatting characters of Unicode's
+  `Bidi_Control` property, as they escape C0, for both providers. Observed:
+  U+009B and U+202E left `tpl` unescaped in `text`, in `json` and in a
+  diagnostic. In `json` they take JSON's own `\u` escape, by the user's
+  decision, so the parsed document is unchanged. A MariaDB value changes only
+  where it holds one of these characters. `FR-ERR-046` applies unchanged: it
+  counts characters after escaping and never cuts an escape. Rejected: a
+  backlog task; the `sqlite` provider alone; Unicode's whole format category.
+  `FR-SEC-020` in [security.md](security.md) and a note on `NFR-DET-004` in
+  [cli-contract.md](cli-contract.md) follow, and the item the twentieth
+  edition recorded is discharged.
+- **The cross-references** — the note on `FR-ERR-006` places the check in
+  step 6, `FR-SEC-028` names the check and the threats the edition closes,
+  and `FR-ERR-046` carries a note on the widened escaping.
+
+`FR-LITE-004`, `FR-LITE-012`, `FR-LITE-013`, `FR-LITE-014`, `FR-LITE-016`,
+`FR-LITE-029`, `FR-LITE-030`, `FR-LITE-031`, `FR-LITE-032`, `FR-LITE-036`,
+`FR-ERR-001`, `FR-ERR-002`, `FR-ERR-030`, `FR-ERR-034`, `FR-GLOB-018`,
+`FR-OUT-014`, `FR-OUT-019`, `FR-CFG-024`, `FR-ENV-041`, `FR-ENV-048`,
+`NFR-PERF-001` and `NFR-PERF-008` were read against the changes. None
+conflicts with them, so none is amended: the selected driver sets and reads
+back the views control through its safe configuration interface, so step 1
+of `FR-LITE-004` still holds; the check is a statement of the last row of
+`FR-LITE-015`, which `NFR-PERF-001` and `NFR-PERF-008` already count; the
+`cause` of the check is reached through the rows of `FR-LITE-007` that
+`FR-ERR-034` and `FR-GLOB-018` already name; and a shadow table is covered
+with the properties every table carries, under the requirements that give
+them. The fifth validation rule owes nothing for this edition: neither root
+document, read at `cb99236`, states the escaping of a value, the hardening of
+a SQLite read, what it covers, or the statements it issues.
+
+### Seventieth edition — the check and the catalogue in one snapshot
+
+rmp `#317`, of sprint 27, closes one defect the technical specification
+found at `bc7885a` against the sixty-ninth edition. The check of
+`FR-LITE-041` ran as a statement of its own, before the six catalogue
+statements, and `FR-LITE-016` forbade every transaction statement, so each
+statement read the file as last committed when it began. A writer that
+committed a table named like a pragma table-valued function after the check
+and before a later statement replaced that function and forged the catalogue
+at exit `0`; a view so added is stopped by the views control of
+`FR-LITE-010`. The choice between the candidates is made on the criterion
+the user set for the provider, that it be the most secure, recorded under
+`FR-LITE-020`, and on observations of 2026-11-04 through the Python library
+3.54.1, the release the binary carries, under the read-only connection and
+every control of `FR-LITE-010`. No requirement changes its meaning for a
+`mariadb` entry.
+
+**One identifier is assigned: `FR-LITE-042`.** None is withdrawn or
+renumbered. [glossary.md](glossary.md) gains *read transaction*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **One read transaction** — `FR-LITE-042`, new, in
+  [sqlite-contract.md](sqlite-contract.md), issues `BEGIN DEFERRED`
+  immediately before the check and `COMMIT` immediately after the last
+  catalogue statement, so that the check and every catalogue statement read
+  one snapshot: in rollback-journal mode a writer cannot commit until the
+  read ends, and in write-ahead-log mode what it commits stays invisible to
+  the read. A read that ends early issues no `COMMIT`, and the close of the
+  connection rolls the transaction back; `tpl cfg database test`, whose only
+  catalogue statement is the check, issues neither. Observed: without the
+  transaction, in both modes, a writer's table `pragma_encoding` made the
+  read return the encoding `forged` and list the table; with it, the read
+  returned `UTF-8` and no such table, the writer failing with `SQLITE_BUSY`
+  in rollback-journal mode and committing unseen in write-ahead-log mode.
+  The statement record of `FR-LITE-018` verifies the placement. The accepted
+  cost is stated: in rollback-journal mode an application's writer waits, or
+  fails with `SQLITE_BUSY`, for as long as the read's statements take; and a
+  process that writes the file's bytes without the library's locks is
+  outside what any read can withstand, as SQLite's documentation states.
+  `FR-CTX-024` is unchanged: the document still promises no snapshot.
+- **The rejected option, and two others** — bracketing the read with
+  `PRAGMA schema_version` and ending with `69` when it moved. The statement
+  form was observed not to be replaced by a table of that name, but the
+  option detects only after the statements have read through what the writer
+  added, and it rests on a value the writer sets: a writer that set the
+  cookie back after the forged read left both readings equal, and the read
+  would have ended at exit `0`. It also adds a pragma to the closed list and
+  a condition of `69`. Bracketing with `PRAGMA data_version`, which a writer
+  cannot set, moves on every commit, data included, and would fail a read of
+  any database written during it; repeating the check is passed by a table
+  added and dropped between the two checks.
+- **The statements and their order** — `FR-LITE-015` gains a third row,
+  `BEGIN DEFERRED` and `COMMIT`, and the catalogue row stays the last; the
+  two are not catalogue statements, so `FR-LITE-037`, `NFR-PERF-008` and
+  `FR-GLOB-017` count neither, and `FR-LITE-037` says so in a note.
+  `FR-LITE-016` admits those two and no other transaction statement, and
+  records the ground its prohibition had: a transaction that writes, that
+  stops other connections reading, or that ends with a rollback aborting the
+  statements in progress. `BEGIN IMMEDIATE` and `BEGIN EXCLUSIVE` were
+  observed to fail on the read-only connection. `FR-LITE-017` places
+  `BEGIN DEFERRED` between the probe and the check and `COMMIT` after the
+  last catalogue statement, and the note on `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) puts the first in
+  step 6, with no new code.
+- **The read-only promise and the deadline** — `BR-LITE-001` states that the
+  deferred transaction takes the shared lock every statement takes and writes
+  nothing; observed, a read inside it left the file's bytes, size and
+  modification time unchanged in both modes, and no file appeared in
+  rollback-journal mode. A note on `FR-LITE-009` states that a writer's lock
+  is now met at the check and at no later statement, and that an interrupt
+  inside the transaction leaves it to the close; the requirement is
+  unchanged.
+- **The cross-references** — a note on `FR-LITE-041` and on `FR-LITE-018`,
+  and `FR-SEC-028` in [security.md](security.md), which requires the one
+  snapshot and names, among its threats, a table or a view another
+  connection adds during the read.
+
+`FR-LITE-008`, `FR-LITE-019`, `FR-LITE-040`, `FR-CFG-056`, `FR-CONF-005`,
+`FR-RND-040`, `FR-CTX-024`, `FR-CTX-025`, `FR-CDOC-015`, `NFR-PERF-001` and
+`NFR-PERF-008` were read against the changes. None conflicts with them, so
+none is amended: the files of write-ahead-log mode are those the read
+already made; the two statements name no schema; each result code they can
+return is in a row of `FR-LITE-040`, and with `COMMIT` chosen over
+`ROLLBACK`, `tpl` still requests no abort or rollback; the test issues one
+statement and no transaction; every statement keeps its own deadline; the
+transaction ends before the connection closes and so before any render; no
+document promises a snapshot; and the count those two requirements take is
+of the last row of `FR-LITE-015` alone. The fifth validation rule owes
+nothing for this edition: neither root document, read at `bc7885a`, states
+the transactions or the statements of a SQLite read.
+
+### Seventy-first edition — what SQLite loads and never writes, and names in another letter case
+
+rmp `#317`, of sprint 27, closes one defect the implementation found at
+`82eb1d4` against the seventieth edition, and every case a sweep of the
+schema table and of the pragma functions' values then found. The library
+loads a row of the schema table whose `type` differs in letter case from the
+four texts SQLite writes, and uses its object, while `FR-LITE-041` and
+`FR-LITE-020` compared `type` exactly: a table typed `TABLE` and named
+`pragma_encoding` passed the check and forged the encoding at exit `0`, and
+a table typed `Table` was missing from the model at exit `0`. The sweep
+asked, of each shape the library loads, whether it makes a read drop, invent
+or mis-attach an object, or end with a false `70`. The choices are made on
+the criterion the user set for the provider, that it be the most secure,
+recorded under `FR-LITE-020` — several by the coordinator of rmp `#317`
+under that criterion, as each passage states — and on observations of
+2026-11-04 through the Python library 3.54.1, the release the binary
+carries, under the read-only connection and every control of
+`FR-LITE-010`. Damaged shapes SQLite never writes are refused with `78`;
+shapes SQLite writes are read correctly or, where the model has no shape for
+them, excluded as earlier exclusions are. No requirement changes its meaning
+for a `mariadb` entry.
+
+**One identifier is assigned: `BR-LITE-003`.** None is withdrawn or
+renumbered. [glossary.md](glossary.md) is unchanged. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Four new kinds of row the check refuses** — `FR-LITE-041`, in
+  [sqlite-contract.md](sqlite-contract.md), refuses with `78`, beside its
+  first three kinds:
+  - **a type SQLite does not write**: a `type` that is text and is not
+    exactly `table`, `index`, `view` or `trigger`, compared over the whole
+    value with no letter case folded. The library loaded, for all four
+    types, the type in upper, title and mixed case and the type followed by
+    a NUL character, and the object worked. Every comparison of `type` in
+    the file is exact, which this kind makes complete;
+  - **a row with no text that is not an index's**: an `sql` that is `NULL`
+    or the empty text on a row whose `type` is not `index`. The library
+    reads every such row as an index's; retyped `table`, `view` or
+    `trigger` for an existing index, it loaded and was read as a table with
+    no column, a view with no definition, or a trigger with no text, which
+    `FR-LITE-032` would end with a false `70`;
+  - **a NUL character in a name or a text**: in `name`, `tbl_name` or `sql`.
+    The library reads each only up to the NUL. A trigger whose `tbl_name`
+    ended in one matched no table and would have been dropped; an `sql`
+    beginning with one was read as an index's row; and a view's definition
+    carried text after one that the library never parsed;
+  - **a trigger's header SQLite does not write**: a text that does not
+    begin `CREATE TRIGGER`, or whose next word is an unquoted `IF`. SQLite
+    removes `TEMP`, `TEMPORARY` and `IF NOT EXISTS`, and the library loaded
+    a text holding each, which `FR-LITE-032`, reading the name after
+    `CREATE TRIGGER`, would have misread.
+
+  Over every database SQLite wrote, the main fixture database included, the
+  seven kinds returned no row. `FR-LITE-007` gains the four rows.
+- **The rejected options** — comparing `type` as the library does, folding
+  ASCII letter case: a comparison under `NOCASE` found `TABLE` and did not
+  find `table` followed by a NUL character, over which the encoding still
+  read `forged`, and matching the library in full would imitate behaviours
+  of its loader that its documentation does not state; and, for the same
+  reason, reading a value up to its first NUL character or skipping the
+  words SQLite removes from a header. Reading a row with no text as its
+  `type` says would present objects the file does not hold.
+- **Names matched as SQLite matches them** — `BR-LITE-003`, new, states the
+  three places the file finds a table, a view or a column by a name another
+  row or field carries: a trigger's `tbl_name`, and a foreign key's parent
+  table and parent columns. Two names match when they are equal with the 26
+  ASCII letters folded, over the whole of each name, and the object found is
+  carried under its own name. SQLite wrote a trigger's `tbl_name` as its
+  `ON` clause wrote it, and reported a key's parent table and columns as the
+  key wrote them; it folded ASCII letters and not `É`; and it refused two
+  objects or two columns whose names differ only in ASCII letter case.
+  `FR-LITE-032` attaches a trigger by that match, `FR-LITE-031` carries a
+  key's referenced table and columns under the names matched, `FR-LITE-021`
+  decides a trigger on a view and a dangling key by it, and `FR-LITE-030`
+  states that a member's name is its column's own. Rejected: an exact
+  comparison, which drops the trigger and excludes the key at exit `0`; and
+  Unicode case folding, which would attach a key to a table SQLite does not
+  resolve it to.
+- **A header read in any letter case** — SQLite upper-cases the leading
+  `CREATE TRIGGER` alone and stored `create trigger t1 after insert on x` as
+  `CREATE TRIGGER t1 after insert on x`. `FR-LITE-032` now recognises the
+  header's keywords ignoring ASCII letter case and carries them in upper
+  case, so a file SQLite wrote no longer reaches its `70`, and its *Source*,
+  which read "the keywords upper-cased", now quotes the page.
+- **A key whose parent key differs in number** — SQLite created
+  `FOREIGN KEY (x, y) REFERENCES p1`, where `p1` has a one-column primary
+  key, and refused every insert it governs with `foreign key mismatch`.
+  `FR-LITE-021` excludes a key that names no parent column when the parent's
+  primary key has another number of columns, as it excludes a dangling key;
+  carried, it would pair two columns with one.
+- **The fixture** — `FR-LITE-038` gains item 14 of the main database, names
+  written in another letter case for each match of `BR-LITE-003` and two
+  tables that differ outside ASCII; a key of the other arity in item 8; a
+  trigger written in lower case and one named `temp` in item 11; and eight
+  databases written under `writable_schema`, each of which a read ends with
+  `78`: a table `pragma_encoding` typed `TABLE`, an ordinary table typed
+  `Table`, a trigger typed `trigger` followed by a NUL character, a second
+  row for an existing index with `sql` `NULL` typed `table` and with the
+  empty text typed `view`, a trigger whose `tbl_name` ends in a NUL
+  character, a view whose `sql` carries text after a NUL character, and a
+  trigger whose text begins `CREATE TEMP TRIGGER`. `FR-LITE-020` states that
+  its comparison of `type` is exact.
+- **Shapes the sweep found already handled** — the library refused at the
+  probe, with `SQLITE_CORRUPT`: a `type` with a space, a tab, a line feed, an
+  extra or a missing letter, a non-ASCII letter, or another of the four; a
+  root page that is `NULL` on any row, other than `0` on a view, negative,
+  past the end of the file, or `1`; an `sql` with a leading space, a second
+  statement after the first, a schema qualifier before the name, `AS SELECT`,
+  or the text of another kind of object than its `type`; a trigger on a table
+  the file does not hold, on a view with `AFTER`, on `sqlite_sequence` or on a
+  virtual table, an `INSTEAD OF` trigger on a table, a `FOR EACH STATEMENT`,
+  and a `tbl_name` naming another table than the text; a row of no text
+  naming no index; and two tables named `a` and `A`. The library loaded, and
+  the read presents correctly or not at all: a name or a `tbl_name` in
+  another letter case than the text; an automatic index's `tbl_name` naming
+  another table, because no statement reads an index's row; a trigger's root
+  page other than `0`, and two tables sharing a root page, or a table on an
+  index's, which no catalogue fact depends on; and `TEMP`, `TEMPORARY` or
+  `IF NOT EXISTS` in a table's text, or `TEMP` and lower case in a view's,
+  whose text no property reads or which a view carries as stored. On files
+  SQLite writes: an index on `rowid`, a `UNIQUE` or `PRIMARY KEY` on it, and
+  a foreign key from it were refused at creation; a column named `rowid` was
+  read as a column; an empty table or column name read as the empty text; a
+  type holding `HIDDEN` read `hidden` `0`; an index repeating a column
+  listed it twice, as declared; and foreign keys to a view, a virtual table,
+  an internal table, a `rowid`, a missing column, or a table without a
+  primary key are excluded by `FR-LITE-021` as they were.
+
+`FR-LITE-015`, `FR-LITE-017`, `FR-LITE-024`, `FR-LITE-025`, `FR-LITE-040`,
+`FR-LITE-042`, `FR-CFG-056`, `FR-ERR-006`, `FR-ERR-024`, `FR-SEC-028`,
+`FR-CAT-044`, `FR-CTX-023` and `FR-CTX-042` were read against the changes.
+None conflicts with them, so none is amended: the check stays one statement
+against the schema table, in the place `FR-LITE-017` and `FR-LITE-042` give
+it, so the closed list and the order are unchanged; a table and a column
+keep the names their rows report, which are the names their statements
+declared; the new rows are no result code, so `FR-LITE-040` does not reach
+them; the catalogue probe of `FR-CFG-056` is the check, and refuses what it
+refuses; the check stays in step 6 of the note on `FR-ERR-006`; a NUL
+character a `cause` names is a C0 control character, which `FR-ERR-024`
+escapes; `FR-SEC-028` names the forgery the fourth kind closes on another
+path and points to `FR-LITE-041` for the check, through which the new kinds
+are reached as the third is; and a key carried under the names of the table
+and columns it matched names a table and columns the document holds, which
+is what `FR-CAT-044`, `FR-CTX-023` and `FR-CTX-042` require of it. The fifth
+validation rule owes nothing for this edition: neither root document, read
+at `82eb1d4`, states how a SQLite read compares the schema table's values,
+which rows it refuses, how it matches names, or how it reads a trigger's
+header.
+
+### Seventy-second edition — two root documents that caught up, and an example that had not
+
+rmp `#317` and `#318`, of sprint 27, close the record of the second provider
+outside this corpus and one example inside it. `60bf9df`, for rmp `#318`,
+documented SQLite in both root documents, and `60b0fb3`, for rmp `#317`, gave
+the `purpose` of the `database` variable every field the object carries.
+Both were read on 2026-11-04 at `a9d8fed`. No requirement changes its
+meaning.
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md), and the index of
+[open-questions.md](open-questions.md) stays empty.
+
+- **The register, read for the two entries the second provider raised** —
+  [upstream-divergences.md](upstream-divergences.md). `DIV-057` and `DIV-058`
+  are discharged by `60bf9df`, which made every part of each correction. The
+  counts, and their two restatements in `DIV-032` and `DIV-041`, move to three
+  due, fifty-one discharged and four partly discharged, with seven entries
+  owing, five to `CLAUDE.md` and two to `README.md`.
+  [Maintenance debt](#maintenance-debt) records that two of the three
+  obligations the sixty-fifth edition placed outside this corpus are paid.
+- **An example that no longer matched its rule** —
+  [help-and-version.md](help-and-version.md). The `database` line of the
+  example of `FR-HELP-033` named neither `charset` and `collation` nor
+  `provider`, which `FR-CTX-036` and `FR-CTX-043` give the object. It now
+  carries the `purpose` of `FR-HELP-032` that the binary prints, wrapped at
+  the 80 columns of `FR-HELP-009`.
+
+The fifth validation rule is met for the two entries and no further. No other
+entry was re-read for status, although `60bf9df` also edited the project tree
+and the testing section of `CLAUDE.md` that `DIV-036` and `DIV-050` target,
+and `6203216` translated that file whole. That reading is owed under the
+rule; this edition names it and does not make it. Neither root document
+paraphrases the example this edition corrects.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
   library API. Only the JSON document and the command line are contract, so the
   shape of the library is an architecture decision and not a requirement. The
   database driver is part of this: `FR-CONF-036` states what one must be able
-  to express, and no requirement names one.
+  to express, and no requirement names one. The SQLite driver is chosen by the
+  rule of `FR-LITE-004`, which names none either, and the release of the
+  SQLite library the binary carries is chosen under `FR-LITE-039` and recorded
+  in the project's decision records, per `FR-LITE-001`.
 - The text of any catalogue query. What is read is specified; how it is read is
   not.
 - Every **measured** performance figure and every reading. Those live in
@@ -4978,6 +5724,7 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [template-environment.md](template-environment.md) | `ENV` | Filters, tests, global functions, and what is contract |
 | [render-semantics.md](render-semantics.md) | `SEM` | Whitespace, operands, null versus absence, boolean rendering, author-signalled failure |
 | [server-contract.md](server-contract.md) | `SRV` | The supported version window, differences between series, the closed statement list, the read-only promise |
+| [sqlite-contract.md](sqlite-contract.md) | `LITE` | The `sqlite` provider: the library, the driver selection, the database file, its hardening, the closed statement list, what a read covers, and how SQLite fills the model |
 | [privileges-and-completeness.md](privileges-and-completeness.md) | `PRIV` | Complete and incomplete reads, and how a short read is reported |
 | [cache-documents.md](cache-documents.md) | `CDOC` | Cache versions, completeness records, and the `source` field |
 | [performance-requirements.md](performance-requirements.md) | `PERF` | Requirements of form, reference workloads, measurement protocol, the measurement set |
@@ -5057,12 +5804,13 @@ because they constrain the whole module rather than one interaction.
   is named here so that it is not read as drift.** Where a requirement fixes an
   artefact of the repository rather than a behaviour of the binary, the
   artefact is the subject: `FR-CONF-038`'s second paragraph obliges the fixture
-  of `scripts/mariadb/`, and every requirement of [examples.md](examples.md)
-  obliges a worked example. The test is whether the statement could be
-  satisfied by a change to `tpl` at all; where it could not, `tpl` is the wrong
-  subject and naming it would make the requirement unsatisfiable rather than
-  conventional. *Stated in the thirty-fourth edition, which wrote the second of
-  the two.*
+  of `scripts/mariadb/`, `FR-LITE-038` the fixture of `scripts/sqlite/`, and
+  every requirement of [examples.md](examples.md) obliges a worked example.
+  The test is whether the statement could be satisfied by a change to `tpl` at
+  all; where it could not, `tpl` is the wrong subject and naming it would make
+  the requirement unsatisfiable rather than conventional. *Stated in the
+  thirty-fourth edition, which wrote the second of the two; the sixty-fifth
+  wrote the third.*
 - Exit codes are always written as the bare number and, on first mention in a
   section, with the `sysexits.h` name: `78` (`EX_CONFIG`).
 - Command lines are shown in fenced blocks without a shell prompt, unless the
@@ -5100,14 +5848,19 @@ because they constrain the whole module rather than one interaction.
   members cite each other. A limit on the **evidence** for a guarantee — the
   observation that cannot be made, rather than the promise that cannot be kept
   — takes the same note shapes, as many of them as it has content for, without
-  joining that family, because it qualifies a different kind of claim. Four
+  joining that family, because it qualifies a different kind of claim. Six
   requirements are written this way:
   `FR-ERR-031`, where no invocation of the distributed binary is observed
   returning `70`; `NFR-PERF-005`, where the file-open observation is made
   on the Linux targets and not on the macOS ones; `FR-PRIV-021`, where no
-  invocation is observed producing a schema read that returns no row; and
+  invocation is observed producing a schema read that returns no row;
   `FR-SRV-013`, where no server is observed producing a read-back that does not
-  confirm the read-only session, so that half of it is exercised in process.
+  confirm the read-only session, so that half of it is exercised in process;
+  `FR-LITE-018`, where a statement that fails when it is prepared, or is
+  never run, is absent from the statement trace; and `NFR-PERF-004`, where the
+  connection count of a `sqlite` entry is observed on the Linux targets and
+  not on the macOS ones. *The fifth was added in the sixty-sixth edition, and
+  the sixth in the sixty-seventh.*
 
 ## Status legend
 
@@ -5196,14 +5949,14 @@ them; moving it to a paragraph below would leave the list looking open.
 
 ## Maintenance debt
 
-**One item is outstanding**, recorded by the twentieth edition and listed
-below. The eight items this section has held before it are all discharged; the
-most recent of those was recorded by the thirty-second edition and discharged
-by the thirty-third, inside one sprint. The item this section carried through
-the sixth edition — twenty catalogue field lists that no observation had
-recorded — was discharged by the
-seventh: the fixture was read against all four series of `FR-SRV-015` on
-2026-09-10, every field list was recorded verbatim, and each is now a
+**No item is outstanding.** The nine items this section has held are all
+discharged. The last, recorded by the twentieth edition, was discharged by the
+sixty-ninth; the one before it was recorded by the thirty-second edition and
+discharged by the thirty-third, inside one sprint. The item this section
+carried through the sixth edition — twenty catalogue field lists that no
+observation had recorded — was discharged by the seventh: the fixture was
+read against all four series of `FR-SRV-015` on 2026-09-10, every field list
+was recorded verbatim, and each is now a
 requirement in [catalogue-coverage.md](catalogue-coverage.md) or
 [context-document.md](context-document.md). The document shapes and the field
 lists are frozen, and implementation is no longer blocked on them.
@@ -5661,10 +6414,36 @@ narrowed here, and whether an entry is owed for it is a judgement for a reading
 of that section. It is debt only in the sense `DIV-036` is, and it blocks
 nothing. The item below was untouched by this edition and stays outstanding.
 
-The section therefore carries the item the twentieth edition recorded, and the
-eight it has held before are all accounted for below.
+The sixty-fifth edition adds no obligation inside this corpus and **three
+outside it**. `DIV-057` and `DIV-058` are corrections owed to the two root
+documents, which the edition makes incomplete by giving `tpl` a second
+provider. The third is the fixture of `scripts/sqlite/`, which `FR-LITE-038`
+requires and which does not exist yet; like the fixture obligation of the
+eighth edition, it is work with an owner and a trigger, and every observation
+[sqlite-contract.md](sqlite-contract.md) records is re-taken against it when it
+exists. No requirement of this corpus waits on any of the three, and the item
+below was untouched by the edition.
 
-One item is outstanding.
+**Two of those three obligations are discharged, by the seventy-second
+edition's reading.** `DIV-057` and `DIV-058` are discharged by `60bf9df`,
+which made every part of both corrections; the register records each and the
+commit. The third, the fixture of `scripts/sqlite/`, was not read for this
+and stays as the paragraphs here leave it.
+
+The sixty-ninth edition adds no obligation inside this corpus and one outside
+it: the fixture of `scripts/sqlite/` gains the seven databases `FR-LITE-038`
+now lists, which, like the fixture obligations before it, is work with an
+owner and a trigger. It **discharges the item the twentieth edition
+recorded**, by the user's decision of 2026-11-03: `FR-ERR-024` and
+`FR-OUT-018` now escape the C1 range and the bidirectional formatting
+characters, for both providers.
+
+The section therefore carries no outstanding item, and the nine it has held
+are all accounted for below.
+
+Nine items recorded here have been discharged. The ninth is the first below,
+recorded by the twentieth edition and discharged by the sixty-ninth; the
+eighth is the sweep after it, recorded and discharged inside one sprint.
 
 - **Escaping stops at C0, and a C1 control can still reach a terminal.**
   Recorded by the twentieth edition. `FR-ERR-024` escapes `\n`, `\r`, `\t`
@@ -5685,10 +6464,13 @@ One item is outstanding.
   editorial tidy, which is why it is a task of its own, on the ground the
   thirteenth edition used for the two readings with no home. Nothing in this
   corpus is ambiguous while it stands: both requirements say exactly what they
-  escape, and a reader of either is told where the gap is.
-
-Eight items previously recorded here have been discharged. The eighth is the
-sweep below, recorded and discharged inside this sprint.
+  escape, and a reader of either is told where the gap is. **Discharged in the
+  sixty-ninth edition**, for rmp `#321`, by the user's decision of 2026-11-03
+  to close the gap in sprint 27 for both providers: `FR-ERR-024` and
+  `FR-OUT-018` escape the C1 range and the twelve bidirectional formatting
+  characters as they escape the C0 range, `text` keeps its tab exception,
+  `json` writes them as JSON's own `\u` escape so that the parsed document is
+  unchanged, and the byte-for-byte outputs of `FR-OUT-019` are untouched.
 
 - **The corpus has not been swept for terms defined outside the glossary.**
   Recorded by the thirty-second edition, which wrote the rule that every

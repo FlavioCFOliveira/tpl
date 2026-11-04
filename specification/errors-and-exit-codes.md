@@ -1,8 +1,8 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-09-24
-related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md]
+last-reviewed: 2026-11-04
+related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md, sqlite-contract.md]
 ---
 
 # Errors and Exit Codes
@@ -46,12 +46,12 @@ Out of scope: the wording of any individual message.
   | `64` | `EX_USAGE` | Unknown command or flag, missing required argument, mutually exclusive flags, malformed flag value, unknown configuration key, per `FR-ERR-035` | Fix the invocation; consult `--help` |
   | `65` | `EX_DATAERR` | Template syntax error, render failure, malformed `--context` document, render deadline or render bound exceeded, template path escaping the root | Fix the template or the context |
   | `66` | `EX_NOINPUT` | A named object does not exist: table, view, routine, template, database entry, configuration key, per `FR-ERR-035` | List what exists and choose another name |
-  | `69` | `EX_UNAVAILABLE` | Server unreachable: DNS, connection refused, network deadline exceeded, TLS failure | Check host and network; the operation is read-only and therefore repeatable |
+  | `69` | `EX_UNAVAILABLE` | Server unreachable: DNS, connection refused, network deadline exceeded, TLS failure; or a SQLite database that another connection holds or keeps changing, or that a statement reads past the catalogue-query deadline | Check host and network, or what holds the database; the operation is read-only and therefore repeatable |
   | `70` | `EX_SOFTWARE` | Internal error — a defect in `tpl` | Report it; not fixable by the caller |
   | `73` | `EX_CANTCREAT` | `tpl init` cannot create `.tpl`, or `.tpl` already exists at the destination | Check permissions, or choose another destination |
-  | `74` | `EX_IOERR` | I/O failure on a file or stream the invocation reads or writes: `.tpl` and what it holds, a `--context` document, trust material named by `ca_file` or `ca_path`, or stdout, including a pipe closed part-way through a JSON document | Check permissions and free space |
-  | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue | Fix the credentials, or request read access |
-  | `78` | `EX_CONFIG` | No `.tpl` found, or a `--tpl-dir` that names no `.tpl` folder; unsafe `.cfg` ownership or mode, or a `.tpl` folder without `.cfg` owned by another user; malformed `.cfg`, including a `${VAR}` in `ca_file` or `ca_path`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported | Fix `.tpl/.cfg`, or run `tpl init` |
+  | `74` | `EX_IOERR` | I/O failure on a file or stream the invocation reads or writes: `.tpl` and what it holds, a `--context` document, trust material named by `ca_file` or `ca_path`, a SQLite database file an entry names together with the files and the memory the library needs to read it, or stdout, including a pipe closed part-way through a JSON document | Check permissions and free space, and, for a SQLite read, free memory |
+  | `77` | `EX_NOPERM` | Authentication refused, or insufficient privileges on the catalogue; or an object requested by name that comes back incomplete, per `FR-PRIV-003` | Fix the credentials, or request read access |
+  | `78` | `EX_CONFIG` | No `.tpl` found, or a `--tpl-dir` that names no `.tpl` folder; unsafe `.cfg` ownership or mode, or a `.tpl` folder without `.cfg` owned by another user; malformed `.cfg`, including a `${VAR}` in `ca_file` or `ca_path`; a key outside the enumerated space, per `FR-ERR-035`; `password_command` not an array; invalid entry; a DSN query parameter; undefined `${VAR}`; `password_command` deadline exceeded, output cap exceeded, or non-zero exit; read-only session could not be enforced; no database entry selected; the server is not MariaDB; the server series is not supported; a `provider` outside its two values, or an entry key its provider refuses; a SQLite path that is not a regular file, or a file that is not a SQLite database or whose schema cannot be loaded | Fix `.tpl/.cfg`, or run `tpl init` |
 
   The codes are a closed set and the *Condition* column is not. *And no
   others* above fixes the list of codes; each *Condition* cell characterises
@@ -126,6 +126,37 @@ Out of scope: the wording of any individual message.
   The cell named the deadline and would otherwise have characterised the class
   as bounded in time alone. The code set is unchanged and the column still
   characterises rather than enumerates.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`: four cells name the
+  conditions a `sqlite` entry adds to their classes. The `69` cell names a
+  database still locked at the catalogue-query deadline, per `FR-LITE-009`;
+  the `74` cell a SQLite database file, per `FR-LITE-007`; the `78` cell the
+  provider and the file faults of `FR-CONF-051`, `FR-CONF-052`, `FR-LITE-005`
+  and `FR-LITE-007`; and the `77` cell the incomplete named object of
+  `FR-PRIV-003`, which a SQLite view that does not compile reaches, per
+  `FR-LITE-035`, with no privilege involved. `70` takes a hardening control
+  that does not take effect, per `FR-LITE-012`, which its cell already
+  characterises as a defect in `tpl`. The code set is unchanged and the column
+  still characterises rather than enumerates.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the `69` and `74`
+  cells name what `FR-LITE-040` adds to their classes. `69` takes a SQLite
+  database another connection holds or keeps changing — `SQLITE_BUSY` before
+  the deadline as well as at it, `SQLITE_PROTOCOL` and `SQLITE_SCHEMA` — and a
+  statement the catalogue-query deadline ends whether or not it met a lock.
+  `74` takes the files and the memory the library needs to read a database
+  file, and its next step names free memory, the one resource a SQLite read
+  reaches that the cell did not name. `70` takes the result codes that mean
+  the binary is at fault, which its cell already characterises as a defect in
+  `tpl`. Nothing a `mariadb` entry produces moves; the code set is unchanged
+  and the column still characterises rather than enumerates.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`: the `77` cell no
+  longer tells the caller to repair a SQLite view. A view that does not
+  compile reached `77` under `FR-LITE-035`, which is withdrawn by the user's
+  decision recorded under `FR-LITE-033`; a `sqlite` entry now reaches `77`
+  through no condition, per `FR-LITE-036`. The cell's condition is unchanged,
+  and nothing a `mariadb` entry produces moves.
 
   *Amended in the forty-eighth edition: the `78` cell names three conditions
   the class already held.* `FR-PROJ-027` refuses a `--tpl-dir` that names a
@@ -637,6 +668,37 @@ Out of scope: the wording of any individual message.
   conditions of step 2, and a project without `.cfg` passes step 3 with an
   empty configuration, per `FR-PROJ-028`.
 
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry the steps hold
+  these conditions: step 3 refuses a `provider` outside its two values, per
+  `FR-CONF-051`, and a `path` holding `${`, per `FR-CONF-054`; step 5 refuses
+  a key the provider does not take, per `FR-CONF-052`, and a missing `path`,
+  per `FR-CONF-053`; and step 6, the connection, is the kind check, the open,
+  the hardening, the probe, the `BEGIN DEFERRED` of `FR-LITE-042` where a read
+  issues it, and the check, in the order of `FR-LITE-017`, which can end with
+  `69`, `70`, `74` or `78`, per `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-009`,
+  `FR-LITE-012`, `FR-LITE-040` and `FR-LITE-041`. Step 7 reaches no `77`: a
+  `sqlite` read presents no incomplete object, per `FR-LITE-036`. The order of
+  the steps is unchanged.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: `FR-LITE-040`
+  joins the list, because it gives a code to every result code the other four
+  do not classify. The codes step 6 can end with are unchanged.
+
+  *Amended in the sixty-eighth edition,* for rmp `#317`: step 7 reached `77`
+  for a named view that does not compile, under `FR-LITE-035`, which is
+  withdrawn by the user's decision recorded under `FR-LITE-033`. Such a view
+  is returned whole at exit `0`. The order of the steps is unchanged.
+
+  *Amended in the sixty-ninth edition,* for rmp `#317`: the check of
+  `FR-LITE-041`, which `FR-LITE-017` places after the probe, belongs to step 6
+  and can end it with `78`. The order of the steps is unchanged.
+
+  *Amended in the seventieth edition,* for rmp `#317`: the `BEGIN DEFERRED`
+  of `FR-LITE-042`, which `FR-LITE-017` places between the probe and the
+  check, belongs to step 6. It reads nothing from the file, and a result code
+  it returns takes the code `FR-LITE-040` gives it, so the codes step 6 can
+  end with are unchanged. The order of the steps is unchanged.
+
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
 
@@ -769,6 +831,39 @@ Out of scope: the wording of any individual message.
   | `78` | The key and the file, with the value found and the value expected; or, where the fault is not a key, the specific condition — the directory the walk ended at without finding `.tpl`; or, WHERE `--tpl-dir` suppressed the walk, the path it named, why that path is not usable, and that no upward search was made, per `FR-PROJ-008`; the name of the undefined variable, or the series found and why it is not supported, per `FR-SRV-030` |
 
   `0` is the tenth code of `FR-ERR-001` and produces no message.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry, no host or
+  port is attempted. A `69` `cause` SHALL name the path of the database file,
+  the statement that was running, and what ended it:
+
+  - WHERE the library returned `SQLITE_BUSY`, that the database was locked,
+    with what the library returned, and, WHERE the catalogue-query deadline
+    expired while the statement waited, that deadline and its resolved value;
+  - WHERE the catalogue-query deadline ended a statement for which the library
+    returned no `SQLITE_BUSY`, that the deadline expired and its resolved
+    value; the `cause` SHALL NOT state that the database was locked;
+  - WHERE the library returned `SQLITE_PROTOCOL` or `SQLITE_SCHEMA`, what it
+    returned, per `FR-LITE-040`.
+
+  A `74` or `78` `cause` SHALL name the path and the condition `FR-LITE-005`,
+  `FR-LITE-007` or `FR-LITE-040` states, with what the library returned or,
+  for the check of the file's kind, what the filesystem returned. What the
+  library returned is stated in the form `FR-GLOB-018` fixes, and every value
+  read from the file within the bound of `FR-ERR-046`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the `69` sentence
+  named a lock on every deadline. The catalogue-query deadline can end a
+  statement that met no lock — one reading a large schema under a short
+  deadline, for instance — and a `cause` naming a lock there is a wording
+  false of the failure it reports, which this requirement bans. The `cause`
+  now names a lock only on the library's word, `SQLITE_BUSY`, and otherwise
+  the deadline alone; the two causes `FR-LITE-040` adds to `69` name what the
+  library returned. The `74` and `78` sentence names `FR-LITE-040` beside the
+  two it named.
+  *Rejected: naming a lock wherever the deadline expires, as the likelier
+  cause.* It is a guess written as a fact, and the caller who goes looking for
+  a writer that does not exist has been sent the wrong way by the one line
+  that carries the instance.
 
   *Rationale.* The exit code says which class of thing went wrong; the `cause`
   line is now the only place the instance can be named, because `FR-ERR-033`
@@ -1391,11 +1486,16 @@ Out of scope: the wording of any individual message.
   followed by `/.tpl` into its `hint`. The set is unchanged, and the suffix
   holds only characters of it.
 
-- **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, and every C0 control
-  character in every value it interpolates into a message — catalogue names,
-  comments, defaults, `--context` values, and the argument vector. This
-  requirement owns escaping in a diagnostic message; `FR-OUT-018` owns
-  escaping in the output of a read command, where tab is excepted in `text`.
+- **FR-ERR-024**: The system SHALL escape `\n`, `\r`, `\t`, every C0 control
+  character, every C1 control character — U+0080 to U+009F — and every
+  [bidirectional formatting character](glossary.md#bidirectional-formatting-character)
+  in every value it interpolates into a message — catalogue names, comments,
+  defaults, `--context` values, and the argument vector — for a `mariadb` and
+  a `sqlite` entry alike. A C1 control character and a bidirectional
+  formatting character SHALL be escaped in the form a C0 control character
+  is. This requirement owns escaping in a diagnostic message; `FR-OUT-018`
+  owns escaping in the output of a read command, where tab is excepted in
+  `text`.
 
   *Rationale.* Escaping newlines separately protects the line-oriented
   `error:` / `cause:` / `hint:` / `exit:` format from having a whole diagnostic
@@ -1424,6 +1524,117 @@ Out of scope: the wording of any individual message.
   pass-through — is a question about this requirement and `FR-OUT-018`
   together, and it is recorded as an item in the
   [README](README.md#maintenance-debt) rather than settled from one side of it.
+
+  *Note added in the sixty-seventh edition.* `FR-ERR-046` bounds, as escaped
+  here, a value read from a SQLite database file.
+
+  *Amended in the sixty-ninth edition,* for rmp `#321`: the C1 range and the
+  bidirectional formatting characters join the escaped set, by the user's
+  decision of 2026-11-03 to close the gap in sprint 27 for both providers.
+  The gap is the item of the README's
+  *[Maintenance debt](README.md#maintenance-debt)* that the note above
+  recorded and left to this requirement and `FR-OUT-018` together; both are
+  amended in this edition, and the item is discharged.
+
+  *Observed, on 2026-11-03, with the release build of `tpl` at `cb99236`.*
+  Over a SQLite database whose table holds a default carrying U+009B and a
+  column whose name begins with U+202E, `tpl schema table` wrote every C0
+  character of both values escaped, and wrote U+009B as the bytes `C2 9B` and
+  U+202E as `E2 80 AE`, unescaped, in its `text` and in its `json` output. A
+  table name carrying both, given on the command line and not found, came
+  back unescaped in the `error` and `cause` lines of the diagnostic.
+
+  *Rationale.* U+009B is the one-character form of the control sequence
+  introducer, which a terminal that honours 8-bit controls reads as `ESC [`,
+  the sequence that escaping `ESC` exists to stop; the rest of the C1 range
+  holds the other one-character controls of that family. A bidirectional
+  formatting character changes the order in which a reader sees the
+  characters around it: U+202E shows the rest of a name reversed, so the name
+  a reader sees is not the name the line holds. Escaping either keeps every
+  character of the value, written so that it is seen.
+
+  *What changes for a `mariadb` entry.* Only a value holding one of these
+  characters is written differently, and it is written as a value holding a
+  C0 character already is. A comment in a right-to-left script that carries a
+  directional mark shows the mark escaped.
+
+  *With `FR-ERR-046`.* That requirement applies unchanged: it counts the
+  characters of the value as escaped here, and neither cut falls inside an
+  escape, so the escape of a C1 or bidirectional formatting character is kept
+  whole or left out whole, as the escape of a C0 character is.
+
+  *Rejected: recording the gap as a task for a later sprint.* The user decided
+  to close it in this one. *Rejected: escaping these characters for a
+  `sqlite` entry alone.* The same character reaches the same line from a
+  MariaDB name or comment and from the argument vector, and the user decided
+  both providers. *Rejected: escaping every character of Unicode's format
+  category, `Cf`.* It holds characters a script needs in order to be
+  written, the zero-width joiner among them, which reorder nothing.
+
+- **FR-ERR-046**: A value the system read from a SQLite database file, or
+  that the SQLite library returned — an object name, or the library's message
+  — SHALL be bounded wherever it is interpolated into a diagnostic line, at
+  any verbosity. IF the value, as escaped under `FR-ERR-024`, is longer than
+  256 characters, THEN the system SHALL write in its place its leading
+  characters, at most 128, the marker `[... <n> characters omitted ...]`,
+  where `<n>` is the number of characters left out, and its trailing
+  characters, at most 128, and neither cut SHALL fall inside an escape
+  sequence of `FR-ERR-024`. A value of 256 characters or
+  fewer SHALL be written whole. The bound SHALL NOT reach stdout, where a
+  name is written whole, and SHALL NOT reach a value a MariaDB server
+  returned, a `--context` value, or the argument vector.
+
+  *Rationale.* The diagnostic line is the one channel of detail an error has,
+  per `FR-ERR-033`, and the calling agent reads it whole. SQLite sets no
+  length on a name, so a crafted file chooses how long one is, up to the
+  length limit of `FR-LITE-011`, and the library repeats the name in its
+  message: the observation below produced a message that, written into a
+  `cause`, would have made the line almost a megabyte long. Keeping both ends
+  keeps what each kind of value needs. A name keeps its beginning and its
+  end, which tell most names apart. A library message keeps its opening words
+  and its close, where SQLite places the reason, as in
+  `malformed database schema (<object>) - <reason>`. 256 characters is four
+  times the longest identifier MariaDB admits, 64 characters, per MariaDB's
+  documentation at `https://mariadb.com/kb/en/identifier-names/`, checked
+  2026-11-03, and far above every library message this corpus records for a
+  name of ordinary length, so no value a reader needs is shortened in
+  practice.
+
+  *Why the bound is confined to SQLite.* A MariaDB server admits no name
+  longer than 64 characters, per the same page, so its names never approach
+  the bound. A `--context` document and the argument vector are the caller's
+  own input, which `FR-ERR-034` echoes as written. Bounding them as well would
+  change what a `mariadb` path writes, and would reach no value a crafted
+  database file controls.
+
+  *Observed, on 2026-11-03, through the Python library 3.54.1.* A view
+  selecting from a missing table whose name was 900 001 characters long
+  failed, when its columns were read, with `SQLITE_ERROR` and a message of
+  900 021 characters: `no such table: main.` followed by the whole name.
+
+  *Rejected: no bound.* The line would be as long as the file chooses, in the
+  channel `FR-ERR-033` makes the only one, and an agent that reads it pays for
+  every character. *Rejected: cutting the end only.* It drops the reason a
+  library message closes with, which `FR-LITE-007` obliges the `cause` to
+  carry. *Rejected: refusing a database whose names exceed a length.* It
+  refuses a database `tpl` can read, for a reason that concerns only how a
+  diagnostic is written; the model and stdout carry every name whole.
+  *Rejected: bounding every interpolated value in every message.* It changes
+  what the `mariadb` path and the `--context` path write, and `FR-ERR-022`
+  already bounds the names a `hint` may build into a command at 64
+  characters.
+
+  *Accepted cost.* A `--context` document made from a dump of such a file
+  carries the same names, and a diagnostic on the `--context` path that names
+  one writes it whole. The document is the caller's input, and the bound is
+  not extended to it, so that no `--context` diagnostic changes.
+
+  *Added in the sixty-seventh edition,* for rmp `#314`.
+
+  *Note added in the sixty-ninth edition,* for rmp `#321`. `FR-ERR-024` now
+  escapes the C1 range and the bidirectional formatting characters as well,
+  and this requirement applies unchanged: it counts the characters of the
+  value as escaped, and neither cut falls inside the escape of one of them.
 
 - **FR-ERR-045**: WHERE a `hint` carries a command that changes the host, the
   port, the user, the password or the database of an entry defined by `dsn`,
@@ -1464,6 +1675,11 @@ Out of scope: the wording of any individual message.
   stored one may carry a password, which `BR-ERR-003` bars from every message.
 
   *Added in the fiftieth edition,* for rmp `#282`.
+
+  *Note added in the sixty-fifth edition.* A `hint` that repoints a `sqlite`
+  entry carries `tpl cfg database update <entry> --path <path>`, per
+  `FR-LITE-005`, `FR-LITE-007` and `FR-CONF-053`, and never a flag that
+  `FR-CFG-055` refuses for that provider.
 
 ## `EPIPE`
 
@@ -1581,6 +1797,12 @@ no requirement of this file is amended.
   `cause` was emitted for a failure it does not describe. A phase a caller
   reads is contract under `FR-ERR-034`, and this corpus states it rather than
   letting the choice of a nearest neighbour decide it.
+
+  *Note added in the sixty-seventh edition,* for rmp `#314`. This requirement
+  governs a `mariadb` entry. A `sqlite` entry has no session that can stop
+  answering, because the library that reads the file runs inside the process;
+  every failure the library reports on it carries the code `FR-LITE-040`
+  assigns, and none reaches this requirement.
 
 ## Template codes
 

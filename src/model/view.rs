@@ -38,31 +38,34 @@ pub struct View<'a> {
 
     /// The check option, carried verbatim. `NONE`, `LOCAL` and `CASCADED` were
     /// all three observed.
-    pub check_option: Cow<'a, str>,
+    ///
+    /// This field and the six after it are [`None`] for a `sqlite` read, which
+    /// reports none of them (`FR-LITE-033`); a `mariadb` read fills each.
+    pub check_option: Option<Cow<'a, str>>,
 
     /// Whether the view is updatable, read from a field that returns `YES` or
     /// `NO`; both were observed.
-    pub is_updatable: bool,
+    pub is_updatable: Option<bool>,
 
     /// The definer, which read one user across the fixture's five views.
-    pub definer: Cow<'a, str>,
+    pub definer: Option<Cow<'a, str>>,
 
     /// The security type. `DEFINER` and `INVOKER` were both observed.
-    pub security_type: Cow<'a, str>,
+    pub security_type: Option<Cow<'a, str>>,
 
     /// The session character set, passed through verbatim per `FR-SRV-039`.
-    pub character_set_client: Cow<'a, str>,
+    pub character_set_client: Option<Cow<'a, str>>,
 
     /// The session collation, passed through verbatim per `FR-SRV-039`.
     ///
     /// This is one of the two fields the divergence register of `FR-SRV-036`
     /// holds: it differs between `10.11` and the other three series from
     /// identical DDL, because the servers' own default collations differ.
-    pub collation_connection: Cow<'a, str>,
+    pub collation_connection: Option<Cow<'a, str>>,
 
     /// The algorithm, which read `UNDEFINED` on all five views of the fixture;
     /// no second value was observed.
-    pub algorithm: Cow<'a, str>,
+    pub algorithm: Option<Cow<'a, str>>,
 
     /// The properties of this view that could not be read, or [`None`] where
     /// it is complete (`FR-PRIV-005` … `FR-PRIV-007`).
@@ -109,13 +112,13 @@ mod tests {
         View {
             name: Cow::Borrowed("v_consignment_manifest"),
             definition: Cow::Borrowed("select `freight`.`consignment`.`reference` AS `reference`"),
-            check_option: Cow::Borrowed("NONE"),
-            is_updatable: false,
-            definer: Cow::Borrowed("root@localhost"),
-            security_type: Cow::Borrowed("DEFINER"),
-            character_set_client: Cow::Borrowed("utf8mb4"),
-            collation_connection: Cow::Borrowed("utf8mb4_uca1400_ai_ci"),
-            algorithm: Cow::Borrowed("UNDEFINED"),
+            check_option: Some(Cow::Borrowed("NONE")),
+            is_updatable: Some(false),
+            definer: Some(Cow::Borrowed("root@localhost")),
+            security_type: Some(Cow::Borrowed("DEFINER")),
+            character_set_client: Some(Cow::Borrowed("utf8mb4")),
+            collation_connection: Some(Cow::Borrowed("utf8mb4_uca1400_ai_ci")),
+            algorithm: Some(Cow::Borrowed("UNDEFINED")),
             restricted,
         }
     }
@@ -141,11 +144,17 @@ mod tests {
         // values below are two different collations, not two spellings of one.
         let newer = view(None);
         let older = View {
-            collation_connection: Cow::Borrowed("utf8mb4_general_ci"),
+            collation_connection: Some(Cow::Borrowed("utf8mb4_general_ci")),
             ..view(None)
         };
 
-        assert_eq!(newer.collation_connection, "utf8mb4_uca1400_ai_ci");
-        assert_eq!(older.collation_connection, "utf8mb4_general_ci");
+        assert_eq!(
+            newer.collation_connection.as_deref(),
+            Some("utf8mb4_uca1400_ai_ci")
+        );
+        assert_eq!(
+            older.collation_connection.as_deref(),
+            Some("utf8mb4_general_ci")
+        );
     }
 }

@@ -622,6 +622,7 @@ mod tests {
             name: "ordrs".to_owned(),
             entry: "shop".to_owned(),
             database: "shop_prod".to_owned(),
+            provider: crate::model::database::Provider::Mariadb,
             nearest: Vec::new(),
         });
 
@@ -1111,6 +1112,7 @@ mod tests {
                 name: HOSTILE.to_owned(),
                 entry: hostile_entry,
                 database: HOSTILE.to_owned(),
+                provider: crate::model::database::Provider::Mariadb,
                 nearest: vec![HOSTILE.to_owned()],
             },
             Error::UndefinedVariable {
@@ -1308,6 +1310,7 @@ mod tests {
                 name: hostile(),
                 entry: hostile(),
                 database: hostile(),
+                provider: crate::model::database::Provider::Mariadb,
                 nearest: vec![hostile()],
             },
             Error::TemplateNotFound {
@@ -1696,6 +1699,7 @@ mod tests {
             name: "ordrs".to_owned(),
             entry: "shop".to_owned(),
             database: "shop".to_owned(),
+            provider: crate::model::database::Provider::Mariadb,
             nearest: vec!["orders".to_owned()],
         });
 

@@ -91,6 +91,15 @@ pub(super) fn column_of_type(data_type: &str) -> Value {
     })
 }
 
+/// A column of a `sqlite` read whose `data_type` is the type affinity
+/// `affinity` (`FR-LITE-026`).
+pub(super) fn column_of_affinity(affinity: &'static str) -> Value {
+    Value::from_serialize(&Column {
+        column_type: ColumnType::affinity(Cow::Borrowed("DECLARED"), affinity),
+        ..plain()
+    })
+}
+
 /// A column whose type the system does not recognise (`FR-CTX-018`).
 pub(super) fn column_of_unrecognised_type() -> Value {
     column_of_type("quaternion")

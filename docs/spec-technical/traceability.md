@@ -1,7 +1,7 @@
 ---
 title: Traceability
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-04
 related: [README.md, open-decisions.md]
 ---
 
@@ -12,7 +12,7 @@ related: [README.md, open-decisions.md]
 The mapping between the functional specification and this folder, in both
 directions.
 
-- **Forward**, sections 1 to 26: one section per file of `specification/`,
+- **Forward**, sections 1 to 27: one section per file of `specification/`,
   stating the technical concerns that file's requirements **force** on the
   implementation, the requirement identifiers or file section each is drawn
   from, and the technical document that answers it.
@@ -20,9 +20,10 @@ directions.
   that answer it, and the five concerns the corpus forces as a whole rather
   than through any one file.
 
-`specification/` holds **27 files**: 26 requirement modules and `README.md`,
-the index. **26 are covered**: `examples.md`, added in the thirty-fourth
-edition, has no section here. The mapping was harvested against the seventh
+`specification/` holds **28 files**: 27 requirement modules and `README.md`,
+the index. **27 are covered**: `examples.md`, added in the thirty-fourth
+edition, has no section here, and `sqlite-contract.md`, added in the
+sixty-fifth, is section 27. The mapping was harvested against the seventh
 edition and is **current with the ninth**, reconciled on 2026-09-11. The eighth
 edition changed the rows drawn from `cli-contract.md`,
 `configuration-model.md`, `project-and-discovery.md`,
@@ -95,6 +96,29 @@ identifiers those editions added are not mapped here, among them
 `FR-CDOC-017`, `FR-CACHE-042` … `FR-CACHE-044`, `FR-SEC-026`, `FR-SEC-027`,
 `FR-PROJ-030` and `FR-TMPL-033`; the documents that answer them cite them
 directly.
+
+**The sixty-fifth and sixty-sixth editions are harvested ahead of the gap**, on
+2026-11-03 for rmp `#316`, whole and out of order, because the second provider
+had no technical answer in this folder: section 27 is new, and rows move in
+sections 2, 9, 10, 11, 14, 15, 18, 19, 23 and 26. **The sixty-seventh is
+harvested on the same terms the same day**: rows move in sections 3, 5, 11, 12,
+14, 19, 23 and 27. Counting all three, the mapping is behind by forty editions,
+the same forty as before. **The sixty-eighth is harvested on the same terms the
+same day**, for rmp `#317`: the withdrawal of `FR-LITE-035` moves rows in
+sections 23 and 27, and the third verification it adds to `FR-LITE-018` moves
+the reverse mapping. **The sixty-ninth is harvested on the same terms the same
+day**, for rmp `#317` and `#321`: `FR-LITE-041` and the amendments around it
+move rows in sections 10, 15, 23 and 27; the escaping of C1 and bidirectional
+formatting characters moves the note of section 2 and rows in sections 13, 14
+and 15; the two glossary
+terms move section 24; and the fourth verification of `FR-LITE-018` and the
+refusals `FR-LITE-038` requires move the concerns that cross every file.
+**The seventieth and seventy-first are harvested on the same terms on
+2026-11-04**, for rmp `#317`: `FR-LITE-042` and the amendments around it move
+rows in sections 14, 15 and 27, and its glossary term moves section 24;
+`BR-LITE-003`, the four new kinds of `FR-LITE-041` and the amendments around
+them move rows in section 27. Counting both, the mapping is behind by the same
+forty editions.
 
 This file derives concerns. It states no requirement, adds no requirement, and
 reproduces no requirement text. Where a concern is cited to an identifier, the
@@ -171,6 +195,7 @@ row of section 2. None is overwritten silently.
 | Every collection is ordered explicitly, byte-wise by name, with six named exceptions — three of which the default rule would corrupt. The ordering must be applied by the emitter, not inherited from the server or the filesystem | `NFR-DET-002` | `interfaces`, `verification` |
 | No `isatty()`, no terminal detection, no colour: clap's default `color` feature must be off. `NFR-DET-004` governs **what the system composes for presentation** and not a byte carried from the catalogue, a template, a `--context` value or the argument vector, so escaping stays with the three requirements that own it | `NFR-DET-003`, `NFR-DET-004` (twentieth edition), with `FR-ERR-024`, `FR-OUT-018`, `FR-OUT-019` | `technology-stack`, `operations`, `security` |
 | `now` is the single documented source of non-reproducibility | `NFR-DET-005`, `FR-CTX-028` | `architecture` (`OD-25`) |
+| The foreign keys of a `sqlite` read carry no name, so `foreign_keys` and `referenced_by` take a content order, selected by the provider where the document is assembled | `NFR-DET-002` (sixty-fifth edition), `FR-LITE-031` | `interfaces` |
 
 **Contradiction recorded — the previous reading of `NFR-DET-004`.** The row
 above read *no ANSI byte on either stream*, without qualification. The
@@ -179,9 +204,11 @@ catalogue name carrying the single-character CSI would make an absolute
 unsatisfiable, and the wider reading would forbid `tpl render` the byte-for-byte
 output `FR-OUT-019` guarantees it. The row is corrected rather than overwritten:
 what it asserted is recorded here, and what replaces it is the requirement as
-amended. One consequence stands and is the corpus's own maintenance item — a
-value escaped over the C0 range alone can still carry a C1 control to a terminal
-that honours it.
+amended. The consequence it left standing — a value escaped over the C0 range
+alone could still carry a C1 control to a terminal that honours it — was the
+corpus's own maintenance item until the **sixty-ninth edition** discharged it:
+`FR-ERR-024` and `FR-OUT-018` now escape the C1 range and the bidirectional
+formatting characters, and `NFR-DET-004` is unchanged.
 
 ---
 
@@ -195,6 +222,7 @@ that honours it.
 | A timeout exits with the code of the **phase**, so the deadline machinery must know which phase it is in | `FR-GLOB-013`, `FR-ERR-027` | `architecture`, `interfaces` (`OD-12`) |
 | Four diagnostic levels, one line per catalogue query at `INFO`, **distinguishable from every other line**, and cache hit/miss at `DEBUG`; the count of those lines at `-v` must equal the catalogue statements the server's statement record shows | `FR-GLOB-014` … `FR-GLOB-017`, `NFR-PERF-008` (sixty-second edition) | `operations` (`OD-17`), `verification` |
 | Six categories of content must never reach any diagnostic stream at any level: argv, resolved DSN, `password_command` and its stderr, raw driver error, `.cfg` contents. A raw driver error is what a naive `tracing` call on an `Err` emits | `FR-GLOB-018`, `FR-SEC-005` | `security`, `operations` (`OD-17`) |
+| For a `sqlite` entry the raw driver error is the driver's error value in any rendering; a `cause` obliged to state what the library returned carries the result code's name and the library's message, escaped and bounded, so the reader must take both from the driver without its rendering | `FR-GLOB-018` (sixty-seventh edition) | `interfaces`, `security` (`OD-38`) |
 | Five short forms exist in the whole tool and no local flag may declare one | `FR-GLOB-024` | `interfaces` |
 | The refusal of `-q` with `-v` is stated **where both flags are declared**, so an implementer resolving the pair meets it without reading another file; no precedence is admitted, because quiet-over-verbose and last-wins both make the result depend on how a script grew | `FR-GLOB-015` (twentieth edition), `FR-CLI-015`, `FR-CLI-014` | `interfaces` |
 
@@ -229,7 +257,7 @@ that honours it.
 | The dump is one JSON document, complete by construction: `--pattern` on it is `64`, and it must round-trip through `--context` byte-identically against a live read | `FR-SCH-016`, `FR-SCH-021`, `FR-SCH-022`, `BR-SCH-004` | `verification`, `interfaces` (`OD-19`); [`ADR-009`](../adr/adr-009-foreign-key-embedding-representation.md) |
 | A `--context` document must carry the whole envelope; a bare `data` object is refused | `FR-SCH-036` | `interfaces` |
 | `text` listings are aligned columns under a header row and are **not** contract; only `--format json` is | `FR-SCH-026`, `FR-SCH-027`, `FR-OUT-004` | `interfaces` |
-| A read command **writes** to `.tpl/.cache/` on a miss; only `--direct --no-cache` touches no file | `BR-SCH-003`, `FR-CACHE-016` | `architecture`, `operations` |
+| A read command **writes** to `.tpl/.cache/` on a miss; only `--direct --no-cache` touches no file, save the two files the SQLite library may write beside a database in write-ahead-log mode | `BR-SCH-003`, `FR-CACHE-016` (sixty-seventh edition) | `architecture`, `operations`, `data-model` |
 
 ---
 
@@ -295,6 +323,7 @@ that honours it.
 | A cached routine's path carries its kind: `routines/<kind>.<name>.json` — the only on-disk name the functional spec fixes, and it implies a JSON encoding | `FR-CDOC-014` | `data-model` (`OD-10`) |
 | A cache-served document promises neither referential integrity nor a snapshot; the assembler must not claim either | `FR-CDOC-015`, `FR-CDOC-016`, `BR-CDOC-004` | `data-model`, `interfaces` |
 | The on-disk **encoding** is explicitly out of scope of the functional spec — it is the technical spec's to fix | *Scope*, "Out of scope: … the on-disk encoding" | `data-model` (`OD-10`) |
+| The cache records the **provider** of the read that wrote it, beside the database record, and serves it whatever the entry says now; a record without one is a `mariadb` record; no version moves | `FR-CDOC-018` | `data-model` |
 
 ---
 
@@ -317,6 +346,8 @@ that honours it.
 | The privilege probe is **exactly one** `SELECT` against `INFORMATION_SCHEMA`, restricted to the named database, read for two facts only | `FR-CFG-044` | `interfaces`, `quality-attributes` |
 | `can_read_catalogue` false does **not** change the exit code | `FR-CFG-045` | `interfaces` |
 | `cfg list` is the first of exactly **two** exceptions to "absent is `null`": an absent key is absent from the document | `FR-CFG-037` | `interfaces` (`OD-18`) |
+| `--provider` and `--path`, and the flag combinations each provider admits, decided at argument parsing where the command line suffices and against the entry after the write otherwise | `FR-CFG-027`, `FR-CFG-055`, `FR-CFG-016`, `FR-CFG-048` (sixty-fifth edition) | `interfaces` |
+| The connectivity command's four steps for a `sqlite` entry, reported in the same five fields; the fourth is the check of `FR-LITE-041`, so a file every read refuses is `78` here too | `FR-CFG-056` (sixty-ninth edition), `FR-CFG-039` | `interfaces`, `architecture` |
 
 ---
 
@@ -349,6 +380,9 @@ that honours it.
 | The child is bounded and silent: 4096-byte stdout cap then terminate, stderr to the null device, non-zero exit is `78` naming the command and status | `FR-CONF-031` … `FR-CONF-033` | `security`, `architecture` |
 | A deadline on every blocking phase, **six phases against four keys**: catalogue query, `password_command` and render take a budget each from `core.query_timeout`, `core.password_timeout` and `core.render_timeout`; DNS resolution, TCP connect and TLS handshake **share one** budget of `core.connect_timeout`, measured from the first of the three that runs. The deadline machinery therefore carries one clock across three phases, and reports an expiry against the phase in progress when it expired | `FR-CONF-005`, `FR-CONF-004`; `FR-ERR-034` | `architecture` (`OD-12`) |
 | The `musl` static linkage changes DNS behaviour, and the `cause` line owes the caller the distinction | `FR-CONF-005` note; `NFR-PERF-018` | `operations`, `interfaces` |
+| Every entry has a **provider** that decides which reader reads it; an absent key is `mariadb`, so every older file keeps its meaning — the provider is one closed type, matched exhaustively | `FR-CONF-051` | `architecture`, `data-model` (`OD-35`) |
+| The keys a provider refuses are decided at entry resolution, for the selected entry only, before any expansion or child | `FR-CONF-052`, `FR-CONF-053` | `architecture`, `interfaces` |
+| `path` is literal, never expanded, and resolved against the **project directory** — the parent of the canonical `.tpl` folder, whichever link reached it — never the working directory | `FR-CONF-054` (sixty-seventh edition), `FR-PROJ-009` | `data-model`, `security`, `interfaces` |
 
 ---
 
@@ -364,7 +398,7 @@ that honours it.
 | `tpl init` creates five artefacts, `.cfg` at `0600`, missing parents included, and refuses an existing `.tpl` with `73` changing nothing | `FR-PROJ-013` … `FR-PROJ-019` | `interfaces`, `operations` |
 | Two artefacts are **shipped content**: `example.jinja` and `rust/_types.jinja`; the example must render against any table of any supported series and use at least one filter and one test | `FR-PROJ-017`, `FR-PROJ-021`, `FR-ENV-011` | `operations`, `verification` |
 | The generated `.cfg` carries a **commented-out** example entry — the file must survive later rewrites with its comments | `FR-PROJ-017`, `FR-PROJ-018` | `data-model` (`OD-09`) |
-| Exactly five writers inside `.tpl`, and exactly one file-system exception outside it | `FR-PROJ-023`, `FR-PROJ-024` | `architecture`, `security` |
+| Exactly five writers inside `.tpl`, and exactly two file-system exceptions outside it: the destination of `tpl init`, and the two files the SQLite library may write beside a database in write-ahead-log mode, which no writer of `tpl` writes | `FR-PROJ-023`, `FR-PROJ-024` (sixty-seventh edition), `BR-PROJ-002` | `architecture`, `security`, `data-model` |
 | A nested project warns on stderr and exits `0` | `FR-PROJ-016` | `interfaces` |
 | An **absent** `.cfg` passes the trust checks and reads as an empty configuration: there is nothing to own and nothing to grant, the project is the folder, and the write surface may create the file again | `FR-PROJ-001`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-004` | `architecture`, `security` |
 | Ownership is judged **before** the mode, because a file belonging to another user is refused whatever its mode says | `FR-PROJ-010`, `FR-PROJ-011` | `architecture` |
@@ -386,6 +420,7 @@ that honours it.
 | An error is never formatted: `--format` is ignored, stdout stays empty, the four lines go to stderr | `FR-OUT-015`, `FR-ERR-033` | `interfaces` |
 | Invalid UTF-8 from the catalogue becomes U+FFFD and the read continues — so catalogue values must be read as **bytes** and converted lossily, not as validated strings | `FR-OUT-017` | `architecture`, `interfaces` |
 | C0 escaping in read output applies to **every interpolated value whatever its source**, and the two paths differ: in `text` tab is excepted, because the aligned columns of `FR-OUT-006` are laid out with it; in `json` there is no exception, a tab being emitted as the escape the format defines. `render` and `template show` are exempt and byte-for-byte | `FR-OUT-018`, `FR-OUT-019`, `FR-OUT-006` | `security`, `interfaces` |
+| C1 controls and bidirectional formatting characters are escaped as C0 is, for both providers: in `text` in the form of a C0 escape, and in `json` as JSON's own `\u` escape, which the encoder does not write and a parser reads back as the same character | `FR-OUT-018` (sixty-ninth edition) | `interfaces` (`OD-18`) |
 | An empty result is `0`: the header row alone in `text`, the collection key with `[]` in `json` | `FR-OUT-033` … `FR-OUT-037` | `interfaces` |
 | Results to stdout, everything else to stderr, nothing else on stdout for a piped command | `FR-OUT-020`, `FR-OUT-021` | `architecture` |
 
@@ -407,10 +442,12 @@ that honours it.
 | Nearest match: at most three candidates within edit distance two, ordered by distance then name, over eight populations. The **measure** is the corpus's — the restricted Damerau-Levenshtein distance, optimal string alignment — because the two forms disagree inside the threshold and so decide which candidates a `66` offers; how it is computed is this folder's | `FR-ERR-019` … `FR-ERR-021`, `FR-ERR-039` | `interfaces`, `quality-attributes` (`OD-20`) |
 | A runnable hint separates a **spelling this corpus enumerates** — a command or alias of the tree, a flag a node declares, a key of `FR-CONF-002` — which is a literal and is admissible as written, from every other value whatever its source, which is what `[A-Za-z0-9_]{1,64}` tests. Values are tested one at a time and the separators joining them are literals, so a dotted key and a command path are admissible exactly as far as their own segments are; a value outside the set is not presented **at all** | `FR-ERR-022`, `FR-ERR-023` (twentieth edition), `FR-ERR-021`, `FR-SEC-019` | `security` |
 | A `cause` restates the `error` line when it **adds nothing** to it; where a row of `FR-ERR-034` obliges a fact the `error` line also carries, the row governs. A `cause` that subtracted whatever the `error` line happened to say would make a testable obligation depend on the wording of one message | `FR-ERR-010` (twentieth edition), `FR-ERR-034`, `FR-ERR-008` | `interfaces` |
-| Every interpolated value in a message escapes `\n`, `\r`, `\t` and C0 — a different rule from the `text` read output, which is the one path that excepts tab | `FR-ERR-024`, `FR-OUT-018` | `security`, `interfaces` |
+| Every interpolated value in a message escapes `\n`, `\r`, `\t`, C0, C1 and the bidirectional formatting characters — a different rule from the `text` read output, which is the one path that excepts tab. None of the two new sets is a byte below `0x20` in UTF-8, so a path that passes a line with no C0 byte unchanged must test for them too | `FR-ERR-024` (sixty-ninth edition), `FR-OUT-018` | `security`, `interfaces` |
 | `EPIPE` is `0` normally and `74` if a JSON document was mid-flight: the writer must know whether it is inside a document | `FR-ERR-025`, `FR-ERR-026` | `architecture`, `interfaces` |
 | Nine codes carry at least one integration test, part of the definition of done; `70` is the single exception and is exercised in process | `BR-ERR-001` | `verification` |
 | A render bound's `cause` names the bound, its resolved value and the key that raises it, so each bound is its own variant; a bound an abandoned render crosses is step 8's `65`, with no return to the cache-or-connection step | `FR-ERR-034` row `65`, `FR-ERR-001`, `FR-ERR-006` (forty-second edition) | `interfaces`, `architecture` |
+| For a `sqlite` entry, step 6 is the kind check, the open, the hardening, the probe, the `BEGIN DEFERRED` of a read and the check, ending `69`, `70`, `74` or `78`; the transaction statement adds no code, its result codes taking those `FR-LITE-040` gives; the `cause` names the path and what the library or, for the kind check, the filesystem returned, and no host or port. A `69` names a lock only where the library returned `SQLITE_BUSY`, so the error value records what ended the statement | `FR-ERR-006`, `FR-ERR-045` (sixty-fifth edition notes); `FR-ERR-006` notes (sixty-ninth and seventieth editions); `FR-ERR-034` note (sixty-seventh edition) | `interfaces` (`OD-38`), `architecture` |
+| A value read from a SQLite file, or returned by its library, is bounded at 256 characters in every diagnostic line, ends kept around a counted marker, and no other value is: the bound needs to know where a value came from, so it is a property of the value's type and is applied after escaping | `FR-ERR-046` | `interfaces`, `security` |
 
 **Two contradictions recorded, both from the harvest of editions ten to
 twenty.**
@@ -438,6 +475,8 @@ what replaced it.
 | The `password_command` deadline and cap end the child's whole process group; a descendant that left the group survives, and the invocation still ends at the deadline | `FR-SEC-012`, `FR-SEC-024` (forty-second edition) | `security` (`OD-12`) |
 | A render is bounded on work, output and memory as well as time; the memory limit's two residuals are stated, not closed | `FR-SEC-025` | `security` ([`ADR-011`](../adr/adr-011-render-memory-accounting.md)) |
 | This file is a cross-reference, not a second source: the technical `security.md` must likewise cite its owning requirement and not restate it | `BR-SEC-001` | `security` |
+| A seventh untrusted input, the SQLite database file: a regular file, opened read-only, read under SQLite's hardening, each control confirmed before the file is parsed, a schema table that could forge the catalogue refused before it is read, and that check and every catalogue statement reading one snapshot, so that nothing another connection adds during the read is read through | `FR-SEC-028`, *Trust boundaries* (sixty-fifth edition; amended in the sixty-ninth and seventieth) | `security` |
+| The escaping rule names its two owners and covers C0, C1 and the bidirectional formatting characters, whatever the source and the provider | `FR-SEC-020` (sixty-ninth edition) | `security`, `interfaces` |
 
 ---
 
@@ -492,6 +531,7 @@ what replaced it.
 | A supplied document whose foreign key names a table `tables` does not carry is `65`, never `70`; a column's `table_name` is not such a reference | `FR-CTX-042` | `interfaces`, `security` |
 | `now` is one RFC 3339 UTC second-precision string, evaluated **once per invocation** | `FR-CTX-028`, `FR-CTX-029` | `architecture` (`OD-25`) |
 | A server read promises referential integrity and **not** a point-in-time snapshot; a cache-served document promises neither | `FR-CTX-023` … `FR-CTX-025` | `data-model` |
+| `database.provider`, on every document and the only key a MariaDB document gains; absent from a `--context` document it reads as `mariadb`; `schema_version` does not move | `FR-CTX-043`, `FR-CTX-036` (sixty-fifth edition) | `data-model`, `interfaces` |
 
 ---
 
@@ -511,11 +551,13 @@ what replaced it.
 | `sql_type` is a read of `data_type` and nothing else — no parsing, no consulting `column_type` | `FR-ENV-039` | `interfaces` |
 | Seven tests accept a **column object and nothing else**; a wrong operand fails, never answers `false` | `FR-ENV-040`, `FR-SEM-005`, `FR-SEM-007` | `interfaces` |
 | `primary_key` and `unique` resolve `table_name` **against the render context**, so a filter/test needs access to the context, and an absent table is `65` | `FR-ENV-015`, `FR-ENV-017`, `FR-ENV-043` | `architecture`, `interfaces` |
+| `unique` also answers for a member of the table's primary key, which a rowid alias carries without an index, so both tests read the key the table holds rather than an index name | `FR-ENV-041` (sixty-seventh edition), `FR-LITE-029` | `interfaces`, `data-model` |
 | Three disjoint type families over an exact 39-value partition; a value in none satisfies none and does not fail | `FR-ENV-042`, `FR-ENV-046` | `interfaces`, `data-model` |
 | Fourteen inherited filters, closed; everything else the engine offers is group 3 and unguaranteed | `FR-ENV-018`, `FR-ENV-019` | `technology-stack`, `interfaces` |
 | Five global functions and no more; four capability prohibitions — no environment, no file, no network, no clock | `FR-ENV-020` … `FR-ENV-025`, `BR-ENV-004` | `security`, `architecture` |
 | Auto-escaping is **off always**, and must not be keyed on any property of a name — the engine's default callback does key on extension | `FR-ENV-026`, `FR-ENV-027`; minijinja `set_auto_escape_callback` (verified) | `architecture`, `security` (`OD-14`) |
 | The behaviour tables are simultaneously specification and test vector; a changed cell is a breaking change | `BR-ENV-007`, `FR-ENV-029` | `verification`, `operations` |
+| The five affinities a `sqlite` read produces belong to the type families, with `temporal` never true for one | `FR-ENV-048` | `interfaces`, `data-model` |
 
 ---
 
@@ -593,6 +635,8 @@ what replaced it.
 | What does fail is the requirements of form, and the `WL-002` scalar with them: deterministic counts, absences and a size, where a breach is a **functional defect** and not a slow run | `NFR-PERF-001` … `NFR-PERF-006`, `WL-002`, `BR-PERF-008` | `quality-attributes`, `verification` |
 | Three reference workloads and a byte scalar, `WL-001` kept separate from the correctness fixture so that one does not hide an N+1 in the other. `seed-bench.sql` carries it, and was written on 2026-09-21 | `WL-001` … `WL-003`, `BR-PERF-002`, `BR-PERF-007` | `verification` (`OD-27`) |
 | The failure path is a measurement point because nearest match computes an edit distance against every existing name; that it should cost what `tpl --version` costs is a **design expectation** to be checked against a reading, never an obligation on a figure | `BR-PERF-004` | `quality-attributes` (`OD-20`) |
+| The six hold for a `sqlite` entry, a connection being the library's to the file; the count is taken in process, and no path makes it grow with the objects: the probe and seven catalogue statements, the check of `FR-LITE-041` first | `FR-LITE-037` (sixty-ninth edition); `NFR-PERF-001`, `NFR-PERF-004` (sixty-fifth edition notes) | `quality-attributes`, `verification` |
+| For a `sqlite` entry the connection count is observed by the syscall trace on the two Linux targets and skipped, with its reason, on the two macOS targets; the query-count lines are compared with the in-process statement record over the fixture, on all four, so the comparison runs in process | `NFR-PERF-004`, `NFR-PERF-008` (sixty-seventh edition) | `quality-attributes`, `verification` |
 
 ---
 
@@ -600,7 +644,7 @@ what replaced it.
 
 | Technical concern | Drawn from | Doc |
 |---|---|---|
-| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, measurement point, reference figure, series, and — since the forty-second edition — render bound, render fuel, render output limit, render memory limit. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
+| The functional vocabulary is fixed and must be **reused, not paralleled**: arm, model, catalogue, context, context document, envelope, source, standing, restricted, coverage, target, measurement point, reference figure, series, and — since the forty-second edition — render bound, render fuel, render output limit, render memory limit, and — since the sixty-ninth — bidirectional formatting character and storage class, and — since the seventieth — read transaction. No second glossary is proposed, for this reason | whole file; *"A term used in a requirement without being defined here is a defect"* | `README` |
 | `plumbing` / `porcelain` name the two output audiences; the technical spec's naming of modules and types should not invent a third vocabulary | *plumbing*, *porcelain* | `interfaces` |
 | One term already carries two meanings by decision — `schema` (the arm, and the `--schema` flag) — and code naming must disambiguate rather than pick one | *schema (the word, two meanings)*; `FR-CFG-028` | `interfaces` |
 | `target` is defined as one of four build targets: the word is reserved and must not be reused for a render target | *target*; `NFR-PERF-018` | `operations`, `quality-attributes` |
@@ -643,6 +687,34 @@ is named only where a row would otherwise imply a correction is outstanding.
 | **A register describing a file this corpus does not own decays whenever somebody else edits that file**, and no reference check, recount or sweep of the corpus can see it happen. Every entry therefore carries a state, and a discharged entry names the **commit** that discharged it, so that when it stopped being owed is auditable. This folder adopted the same rule for its own statements about a file it does not own | *Maintenance debt*, fifth validation rule (fifteenth edition) | `README`, `decisions` |
 | The register admits a third kind of entry, **Overstatement**: a file states as a present fact about the repository something the repository does not contain. It contradicts no requirement, owes this folder nothing, and acting on it fails anyway — so no technical decision discharges one, and a row of this table must not imply that one does | *Overview*, the three kinds (sixteenth edition) | `README` |
 | **A passage that directs is not a passage that asserts.** A deontic statement about which targets a verification runs on is an intention and not a claim of a state, and this corpus states verification in that same mode in requirements in force — so a conclusion that nothing is owed is itself recorded, or the next reader re-opens it from scratch | *A candidate read, and not recorded* (seventeenth edition) | `README`, `verification` |
+| The second provider is owed to the two root documents: neither may present MariaDB as the only database, `INFORMATION_SCHEMA` as the only catalogue, or `.tpl` as the only place a read writes | `DIV-057`, `DIV-058` | `data-model`; the `CLAUDE.md` *Stack* correction is [open-decisions.md](open-decisions.md#corrections-owed-to-claudemd)'s |
+
+---
+
+## 27. `sqlite-contract.md` — the second provider
+
+| Technical concern | Drawn from | Doc |
+|---|---|---|
+| A second reader, beside `mariadb/`, owning every statement a `sqlite` entry issues, and one dispatch over the provider that three callers share | `FR-CONF-051`, `FR-LITE-015`, `FR-LITE-016` | `architecture` (`OD-35`) |
+| The binary carries its own library, chosen by a closed rule and the most recent secure release the chosen driver carries; the release lives in the decision register and nowhere else | `FR-LITE-001`, `FR-LITE-004`, `FR-LITE-039` | `technology-stack` ([`ADR-013`](../adr/adr-013-sqlite-driver.md)) |
+| The `server` object describes the library; `standing` is always `supported`, with no window and no refusal | `FR-LITE-002`, `FR-LITE-003` | `architecture`, `interfaces` |
+| The file's kind is established before the open, without opening it; the open is read-only and creates nothing | `FR-LITE-005`, `FR-LITE-006` | `architecture`, `security` |
+| A failure to read the file has a code per condition and is never an empty database; a path whose kind cannot be established is the first such condition | `FR-LITE-005`, `FR-LITE-007`, `FR-LITE-036` (sixty-seventh edition) | `interfaces`, `architecture` |
+| Every result code the library can return ends the invocation with exactly one code, by an ordered classification over the stage and the result code, extended codes included — so the reader classifies the integer the library returned and not a driver's coarser enumeration, with a wildcard for a code published later | `FR-LITE-040` | `interfaces`, `technology-stack` (`OD-38`) |
+| A database in write-ahead-log mode may leave two files beside it, which `FR-PROJ-024` admits as its second exception | `FR-LITE-008`, `FR-PROJ-024` (sixty-seventh edition) | `data-model`, `security` |
+| Every statement runs under the catalogue-query deadline, with no runtime to time it; a bound past the longest wait the library takes is handed to it saturated, because `FR-CONF-002` gives the key no upper bound | `FR-LITE-009`, `FR-CONF-002` | `architecture` (`OD-36`) |
+| Nine controls and three limits applied and read back on every connection; two depend on the build and are confirmed by a statement that reads nothing from the file, one of them by its read-back as well; the ninth, views disabled, is defence in depth; one not in effect is `70` before the file is parsed | `FR-LITE-010` … `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-017` (sixty-ninth edition) | `architecture`, `security`, `technology-stack` |
+| No integrity check runs | `FR-LITE-013` | `security` |
+| A closed statement list, its order, and its verification through the library's trace from the test seam, nested statements apart; two transaction statements and no other; no statement invokes `pragma_table_list`, compiles a view or connects a virtual table, which the record of a database holding an `fts5` table shows; the read-only promise observed from outside the process | `FR-LITE-015` … `FR-LITE-018` (sixty-ninth edition; amended or noted in the seventieth), `BR-LITE-001` (seventieth) | `architecture`, `verification` (`OD-37`) |
+| One statement after the probe and before every statement that reads through a pragma function refuses with `78` a schema table that could forge the catalogue — a table or a view in the pragma functions' namespace, a value of an excluded storage class, a root page contradicting its text, and four shapes SQLite never writes and its loader accepts: another spelling of a type, a row with no text that is not an index's, a NUL character in a name or a text, a trigger header SQLite does not write — and is also the catalogue probe of the connectivity command. Every later comparison of `type` is exact, which the fourth kind makes complete. Its third and seventh kinds read the words after `CREATE` under SQLite's comment syntax, which the trigger header reader already reads | `FR-LITE-041` (seventy-first edition), `FR-LITE-017`, `FR-LITE-007`, `FR-LITE-040`, `FR-CFG-056` | `architecture`, `interfaces`, `security` |
+| The check and every catalogue statement of a read run in one deferred read transaction, begun after the probe and committed after the last catalogue statement only; a read that ends early leaves the transaction to the connection's close, and the connectivity command opens none. Neither statement is a catalogue statement: no query line, and not counted | `FR-LITE-042`, `FR-LITE-016`, `FR-LITE-017`, `FR-LITE-037` note (seventieth edition) | `architecture`, `interfaces`, `security`, `quality-attributes` |
+| The read covers `main`: the rows of its schema table, told apart by type, compared exactly, and root page, `WITHOUT ROWID` read from `pragma_index_info`, a shadow table covered as a table, six exclusions, and no routines | `FR-LITE-019` … `FR-LITE-022` (sixty-ninth edition; `FR-LITE-020` and `FR-LITE-021` amended in the seventy-first) | `architecture`, `data-model` |
+| A name another catalogue row or field carries — a trigger's table, a key's parent table and parent columns — matches with the 26 ASCII letters folded over the whole name, and the object found is carried under its own name, so every reference resolves in the document; the trigger header's keywords are read in any letter case; a key naming no parent column of a parent whose primary key differs in number is excluded | `BR-LITE-003`, `FR-LITE-021`, `FR-LITE-030` … `FR-LITE-032` (seventy-first edition) | `data-model`, `architecture` |
+| Every model property has a SQLite source or is `null`; one fact is read from stored text. The model's types make optional every field a SQLite read leaves `null`, and a table holds its primary key rather than deriving it from an index name | `BR-LITE-002`, `FR-LITE-023` … `FR-LITE-034` | `data-model` (`OD-35`) |
+| No view's columns are read and no view is compiled, so a view that does not compile is read whole and unmarked, and a `sqlite` read is complete or fails | `FR-LITE-015`, `FR-LITE-033`, `FR-LITE-036` (sixty-eighth edition); `FR-LITE-035`, withdrawn in that edition | `architecture`, `interfaces`, `verification` |
+| The requirements of form hold, with the count taken in process | `FR-LITE-037` | `quality-attributes`, `verification` |
+| The read takes time linear in the objects apart from the library's schema load, which the deadline ends, so the in-process fold looks up by name through collections grouped once rather than by scanning | `FR-LITE-009`, `FR-LITE-020` (sixty-ninth edition) | `architecture`, `quality-attributes` |
+| A fixture built from versioned SQL text at test time, never committed as a binary; twelve of its databases are written under `writable_schema`, on a connection without defensive mode, and a read of each of those and of the two named like a pragma function ends with `78` | `FR-LITE-038` (sixty-ninth and seventy-first editions) | `verification`, `operations` (`OD-37`) |
 
 ---
 
@@ -679,6 +751,7 @@ folder.
 | `glossary.md` | `README` |
 | `open-questions.md` | `overview`, `decisions` |
 | `upstream-divergences.md` | `README`, `interfaces`, `operations` |
+| `sqlite-contract.md` | `architecture`, `interfaces`, `data-model`, `security`, `verification` |
 
 ## Concerns that cross every file
 
@@ -691,7 +764,7 @@ and each is the reason a document of this folder exists.
 | **One model, three sources.** A live read, a cached read and a `--context` document must present the same objects and fields, so the model is the single junction of three producers and three consumers — `text`, `json`, and the render | `catalogue-coverage.md` *Overview*; `BR-SCH-001`, `FR-SCH-022` | `architecture`, `interfaces` |
 | **Silent wrongness is the failure mode the corpus is written against.** Every fail-loud rule — no coercion, strict field access, `77` for a named short read, refusal of a marked context, exclusion of volatile fields — is one design stance applied repeatedly | `BR-SEM-004`, `BR-PRIV-001`, `BR-CAT-002`, `FR-SRV-003` | `overview`, `architecture` |
 | **The seventeen JSON documents share one envelope and one emitter.** Seventeen payload shapes, one outer shape, one ordering rule, one escaping rule, one encoding rule | `FR-OUT-024`, `BR-OUT-002` | `interfaces` |
-| **Fifteen mandated tests are part of the contract, not of the plan.** `BR-ERR-001`, `BR-HELP-001`, `BR-HELP-003` (three), `BR-SCH-004`, `BR-SEC-003`, `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-029` (two), `FR-SRV-035`, `FR-RND-040` (forty-second edition), and the published test vectors of `FR-ENV-032`, `FR-ENV-033`, `FR-ENV-041` and `FR-ENV-046` | as cited | `verification` |
+| **Twenty-one mandated tests are part of the contract, not of the plan.** `BR-ERR-001`, `BR-HELP-001`, `BR-HELP-003` (three), `BR-SCH-004`, `BR-SEC-003`, `FR-SRV-012`, `FR-SRV-013`, `FR-SRV-029` (two), `FR-SRV-035`, `FR-RND-040` (forty-second edition), `FR-LITE-018` (four, the third from the sixty-eighth edition and the fourth from the sixty-ninth), `FR-LITE-037` (sixty-fifth edition) and `FR-LITE-038` (sixty-ninth edition), and the published test vectors of `FR-ENV-032`, `FR-ENV-033`, `FR-ENV-041` and `FR-ENV-046`. The count was left at eighteen when the sixty-eighth edition added the third of `FR-LITE-018`, and is corrected here | as cited | `verification` |
 
 ## Editorial defects found while harvesting
 

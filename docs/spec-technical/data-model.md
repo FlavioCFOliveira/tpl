@@ -1,7 +1,7 @@
 ---
 title: Data Model
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md, open-decisions.md, overview.md, quality-attributes.md]
 ---
 
@@ -160,13 +160,15 @@ totality:
 
 ## The `database` object
 
-`FR-CTX-036` fixes three metadata fields, `FR-CTX-031` a `server` object of
+`FR-CTX-036` fixes four metadata fields, `FR-CTX-031` a `server` object of
 exactly three keys, and `FR-CTX-035` three collections. One property of the
-built system is decided by where each comes from:
+built system is decided by where each comes from; for a `sqlite` read the
+sources are [A SQLite read](#a-sqlite-read)'s.
 
 | Part | Source | Consequence |
 |---|---|---|
-| The three metadata fields | The schema catalogue row | Read with the rest of the catalogue |
+| `name`, `charset`, `collation` | The schema catalogue row | Read with the rest of the catalogue |
+| `provider` | The entry the read was made through; on a cache hit, the record that wrote the cache | Present in every document, never `null`; the only key a MariaDB document gains (`FR-CTX-043`, `FR-CDOC-018`) |
 | `server` | The version probe of `FR-SRV-002`, **not** the catalogue | Available before any catalogue read, and derived from a statement of the closed list of `FR-SRV-006` (`BR-CTX-006`) |
 | `series` | Derived from `version` as `FR-SRV-040` requires, by `<major>.<minor>` alone | A field of its own; a template cannot derive it, per `FR-CTX-032` |
 | `standing` | The resolved series against the window of `FR-SRV-015` | Unconditionally present, because `FR-SEM-012` fails a render that reads an absent field, so a conditional marker would fail the guard that looks for it (`FR-CTX-034`, `BR-SRV-008`) |
@@ -204,6 +206,76 @@ requires a fixed column list to be common to all four series or selected per
 series, because naming an absent column fails hard at the server. That is
 `interfaces.md`.
 
+## A SQLite read
+
+A `sqlite` read fills the same model, and `specification/sqlite-contract.md`
+states the source or the absence of every property (`BR-LITE-002`,
+`FR-LITE-023` … `FR-LITE-034`); this section states what that obliges of the
+model's types and of the fold, and cites the rest. The four treatments above do
+not reach it: the library is one release, so there is no second series to
+differ from (`FR-LITE-003`).
+
+**Fields the model holds as optional, because a `sqlite` read leaves them
+`null`.** A `mariadb` read fills each, and a present value serialises as the
+value, so no MariaDB document changes
+([`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader)).
+
+| Object | Fields | Forced by |
+|---|---|---|
+| The database | `collation` | `FR-LITE-023` |
+| An index | `type` | `FR-LITE-030` |
+| A foreign key | `name` | `FR-LITE-031` |
+| A trigger | `action_order`, `sql_mode`, `character_set_client`, `collation_connection`, `database_collation` | `FR-LITE-032` |
+| A view | `check_option`, `is_updatable`, `definer`, `security_type`, `character_set_client`, `collation_connection`, `algorithm` | `FR-LITE-033` |
+| A generated column | Its expression | `FR-LITE-025` |
+
+Every other field `sqlite-contract.md` makes `null` — a table's `engine` and
+`collation`, the size, sign, character-set, collation and member parts of a
+column's type, a member's prefix length, `referenced_key` and a trigger's
+`definer` — is already optional in the model's types, read at `7738619`.
+
+**What the fold derives, and where.**
+
+| Fact | Rule | Lives in |
+|---|---|---|
+| Which rows are tables and views | A schema-table row's type, compared exactly, and its root page; a shadow table is covered as a `BASE TABLE`, so a virtual table's data appears as the tables its module keeps it in | `sqlite/catalogue/fold.rs` (`FR-LITE-020`, `FR-LITE-021`; the fourth kind of `FR-LITE-041` makes the exact comparison complete) |
+| `data_type` | The five affinity rules, in order, over the declared type, for every column; a `STRICT` column declared `ANY` takes `numeric`, because no statement reports that a table is `STRICT` | `sqlite/catalogue/fold.rs` (`FR-LITE-026`); the families are `FR-ENV-048`'s, applied by `render/` |
+| A column default | The eight ordered rows over `dflt_value` and the column's nullability, into the discriminant `model/column_default.rs` already carries | `sqlite/catalogue/fold.rs` (`FR-LITE-027`); the apostrophe rule is the one `model.rs` holds |
+| The rowid alias | `pragma_index_info` returns no row for the table's name, one `pk` column, and no index of origin `pk`; the keyword is never read | `sqlite/catalogue/fold.rs` (`FR-LITE-028`) |
+| A trigger's timing and event | The tokens between its name and `ON`, each keyword recognised ignoring ASCII letter case and carried in upper case | `sqlite/catalogue/trigger.rs` (`FR-LITE-032`) |
+| The table a trigger is on; a foreign key's referenced table and columns | The `tbl_name` of the trigger's row, and the `table` and `to` fields of the key, each matched under `BR-LITE-003` — equal once the 26 ASCII letters are folded, over the whole name — and the object found carried under its own name, never the spelling that found it. A trigger matching a view is excluded; an incoming key is listed under the table its parent matched. A key's own columns and an index's members are carried as reported, unmatched | `sqlite/catalogue/fold.rs` (`BR-LITE-003`, `FR-LITE-021`, `FR-LITE-030` … `FR-LITE-032`) |
+| A foreign key's referenced columns where `to` is `NULL` | The referenced table's primary key, in the order of `FR-LITE-029`; the foreign key is excluded where that primary key has another number of columns than it has | `sqlite/catalogue/fold.rs` (`FR-LITE-031`, `FR-LITE-021`), after every table's key is known |
+
+**The primary key is held by the table, not derived from an index name.** A
+MariaDB table's key **is** its index named `PRIMARY` (`FR-CAT-043`). A SQLite
+key is read from the `pk` field, named after its index of origin `pk` or
+`null` where it is the rowid alias, which has no index (`FR-LITE-029`), so no
+index name can stand for it. The table therefore carries its key as a value the
+producer sets: the MariaDB fold sets the index named `PRIMARY`, unchanged, and
+the SQLite fold sets `FR-LITE-029`'s. Reading a document back, the key of a
+`mariadb` document is still taken from its indexes and its `primary_key` not
+read ([interfaces.md](interfaces.md#the-two-directions-over-the-document)); the
+key of a `sqlite` document is read from `primary_key`, the one place a rowid
+alias is written. A cached table is decoded under the provider its entry's
+`database.json` records (`FR-CDOC-018`)
+([`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader)).
+
+**The rowid-alias key carries what a key read from an index of origin `pk`
+carries**: the fold sets on the key it builds the remaining properties
+`FR-LITE-029` fixes, as amended in the sixty-seventh edition, `unique` true
+among them. The two tests that read a key answer from that value
+([interfaces.md](interfaces.md#context-access-from-a-filter-or-a-test)).
+
+**Discharged in the sixty-seventh edition — the remaining properties of a
+rowid-alias key.** This section recorded them as a reading of `BR-LITE-002`;
+`FR-LITE-029` now states the same values.
+
+**What a `sqlite` read never produces.** A routine (`FR-LITE-022`), a `CHECK`
+constraint (`FR-LITE-034`), a view's columns (`FR-LITE-033`), a `restricted`
+marking on any object (`FR-LITE-036`), a model of a file the check of
+`FR-LITE-041` refuses, and a value the four treatments above would act on. `SET DEFAULT`, which a MariaDB read cannot report
+(`FR-CAT-033`), is carried as the value `FR-CAT-055` gives an unrecorded rule.
+
 ## The model in memory
 
 | Question | Answer | Recorded in |
@@ -233,8 +305,11 @@ versioned and what is not. Two of the three parts are local to the machine and
 are dotfiles; the one part that travels with the repository is not
 (`FR-CACHE-001`).
 
-`FR-PROJ-023` names five writers and no others, and `FR-PROJ-024` admits one
-exception outside `.tpl`:
+`FR-PROJ-023` names five writers and no others. `FR-PROJ-024` admits two
+exceptions outside `.tpl`: the destination of `tpl init`, below, and the two
+files beside a SQLite database in write-ahead-log mode, which the library the
+binary carries may create and write and no writer below writes
+(`FR-LITE-008`).
 
 | Writer | What it writes |
 |---|---|
@@ -245,10 +320,25 @@ exception outside `.tpl`:
 | `tpl cache clean` | Removes from `.tpl/.cache/` what `FR-CACHE-023` and `FR-CACHE-041` name, and rewrites `meta.json` under `FR-CACHE-043` |
 
 The fourth writer is why `BR-PROJ-002` denies that a read command is read-only
-with respect to the filesystem unless it is invoked with `--direct --no-cache`.
+with respect to the filesystem unless it is invoked with `--direct --no-cache`;
+even so invoked, a read of a `sqlite` entry may write the two files of
+`FR-LITE-008`, and nothing else (`BR-PROJ-002`, `FR-CACHE-016`, `BR-SCH-003`).
 `DIV-005` is the register entry that carried this count against the root
 coordination document, discharged by commit `0ea5624`; it is cited, not
 restated.
+
+**No `sqlite/` code creates, changes or removes a file outside `.tpl`**, and
+the library writes none but the two files above: the `temp_store` control keeps
+the temporary data of a sort, a materialised subquery or a transient index in
+memory, where it would otherwise go to the host's temporary directory
+(`FR-LITE-008`, `FR-LITE-010`;
+[architecture.md](architecture.md#the-sqlite-reader), stages 4 and 5).
+
+**Discharged in the sixty-seventh edition — the files a SQLite read leaves
+outside `.tpl`.** This section recorded `FR-LITE-008` against `FR-PROJ-024` and
+`BR-PROJ-002`, and took the first as governing; the user decided on 2026-11-03
+that it stands, and the other two, with `FR-CACHE-016` and `BR-SCH-003`, now
+admit the two files.
 
 **Recorded discrepancy — the temporary files.** `FR-PROJ-002` reads that `.tpl`
 holds *"exactly the artefacts above and nothing else that `tpl` reads or
@@ -268,7 +358,8 @@ removes it. The wording is the functional owner's to settle.
 | Property | Decision | Forced by |
 |---|---|---|
 | Format | TOML, one file. No global configuration, no home, XDG or `/etc` fallback, so the project alone determines behaviour | `FR-CONF-001`, `FR-CONF-003`, `BR-PROJ-001` |
-| Key space | Exactly eighteen key forms, eight under `[core]` and ten per database entry, each with a declared type and a declared default. One table serves two jobs: the validator's population, and the source of every built-in default a phase deadline or a render bound resolves from | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CONF-004`, `FR-CONF-045` |
+| Key space | Exactly twenty key forms, eight under `[core]` and twelve per database entry, each with a declared type and a declared default. One table serves two jobs: the validator's population, and the source of every built-in default a phase deadline or a render bound resolves from. Which of the twelve an entry may carry depends on its provider (`FR-CONF-052`) | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CONF-004`, `FR-CONF-045` |
+| `provider` and `path` | `provider` is one of `mariadb` and `sqlite`, the type the model also carries, and an absent key is `mariadb`, so every file written before the sixty-fifth edition keeps its meaning; nothing writes `provider = "mariadb"` on an entry that did not carry it. `path` is a literal path, stored as written, never expanded, refused with `${` in it | `FR-CONF-051`, `FR-CFG-055`, `FR-CONF-054` |
 | The three render-bound keys | Integers within the range `FR-CONF-002` declares for each; none admits `0` or a value meaning "no bound". A value outside it is `78` from the file and `64` from `tpl cfg set`. Each range is a type in `render/bounds.rs`, so an out-of-range value cannot be held once read | `FR-CONF-045`, `FR-CFG-010` |
 | Mode | Created `0600`; refused at any looser mode and when not owned by the current user; retained at `0600` across every rewrite, including the temporary file | `FR-PROJ-019`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-034`, `FR-CFG-041` |
 | Rewrite | Temporary file in `.tpl/`, renamed over the target; a failure part-way leaves the previous file unchanged and removes the temporary; **no lock**, so two writers yield one whole file or the other | `FR-CFG-041`, `FR-CFG-042` |
@@ -315,6 +406,21 @@ recorded, leaving every comment, key order and space outside a credential
 untouched. [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path)
 records the choice and what it costs.
 
+**A relative `path` is resolved at entry resolution, against the project
+directory** — the parent of the `.tpl` folder's canonical path, which is the one
+path the project holds after step 2, whether or not the folder was reached
+through a link (`FR-CONF-054`, `FR-PROJ-009`) — and `sqlite/` receives the
+absolute result. The file keeps the value as written.
+
+**Discharged in the sixty-seventh edition — the project directory of a `.tpl`
+reached through a link.** This section recorded the canonical parent as a
+reading; `FR-CONF-054` now states it.
+
+**A file written for the second provider cannot be read by an older binary.**
+`FR-CONF-034` refuses a key it does not know, so a `.tpl/.cfg` naming
+`provider` or `path` is refused whole by a binary released before the
+sixty-fifth edition, which is `FR-CONF-051`'s accepted cost.
+
 Credential handling, `${VAR}` expansion and the child process are
 `security.md`; the commands that read and write the file are `interfaces.md`.
 
@@ -323,7 +429,8 @@ Credential handling, `${VAR}` expansion and the child process are
 | Property | Decision | Forced by |
 |---|---|---|
 | Location | `.tpl/.cache/<entry>/`, one folder per database entry | `FR-CACHE-001` |
-| Key | The database entry **name** and nothing else — not the host, not the resolved DSN | `FR-CACHE-002` |
+| Key | The database entry **name** and nothing else — not the host, not the resolved DSN, not the provider or the path | `FR-CACHE-002`, `FR-CACHE-029` |
+| The provider of a cached read | Recorded in `database.json`, as the `provider` field of the `database` object the record already carries, and served from there whatever the entry's provider is when the read is served. A record without it was written by a `mariadb` read before the sixty-fifth edition and is read as one. A record whose provider differs from the entry's is not a miss. Neither `cache_format` nor `schema_version` moves | `FR-CDOC-018`, `FR-CTX-043`, `BR-CACHE-004` |
 | Creation | On the first read that populates it, never by `tpl init`; excluded from version control by the generated `.gitignore` | `FR-CACHE-003`, `FR-PROJ-020`, `FR-CACHE-004` |
 | Filenames | The object kind plus the literal object name: `tables/<name>.json`, `views/<name>.json`, `routines/<kind>.<name>.json`. No encoding layer and no hash | `FR-CDOC-014`, with [`OD-10`](open-decisions.md#od-10--cache-filenames-and-the-case-collision) |
 | Encoding | JSON, UTF-8, compact, no trailing newline, written by the serialiser of [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | The `.json` suffix of `FR-CDOC-001` and `FR-CDOC-014`; `BR-CACHE-001` keeps the form outside the contract |
@@ -355,8 +462,8 @@ project (relayed by the session coordinator, 2026-09-24; not re-run here).
 **Why the record bound is 1 MiB.** `FR-CDOC-017` requires a bound no record
 `tpl` writes reaches, and leaves its value to this folder. Neither record grows
 with the catalogue: `meta.json` holds two versions, a timestamp and three
-completeness flags, and `database.json` three identifiers and the `server`
-object, so each is under 1 KiB (the committed caches under `examples/` hold
+completeness flags, and `database.json` three identifiers, the provider and the
+`server` object, so each is under 1 KiB (the committed caches under `examples/` hold
 records of 158 to 183 bytes, measured on 2026-09-24). 1 MiB is over a thousand
 times that, and it keeps the read of a planted file far below the 8 MiB lower
 bound `FR-CONF-002` sets for the render memory limit.
@@ -517,6 +624,11 @@ and enacted in `operations.md`, and it is not a requirement.
 Where a bump is enacted in a release, and what a release gate checks, are
 `operations.md`.
 
+**The second provider moves none of the three integers.** `database.provider`
+is an added field, which `FR-OUT-014` does not count as breaking, so
+`schema_version` stays (`FR-CTX-043`, `FR-OUT-038`); the arrangement of the
+cache's files is unchanged, so `cache_format` stays (`FR-CDOC-018`).
+
 **Note on the state of the repository, read at commit `243c4d6`.** All four
 numbers now have a site, and no row is prescription alone. The binary version is
 the manifest's `version` field; `schema_version` is the one constant `output/`
@@ -570,13 +682,17 @@ more than is held:
 - Repointing an entry invalidates nothing (`FR-CACHE-029`), so a read after a
   repoint serves the previous server's catalogue at exit `0` with nothing in
   the output saying so. `BR-CACHE-003` accepts the cost and names
-  `tpl cache status`'s load time as the only signal.
+  `tpl cache status`'s load time as the only signal. A change of provider or of
+  `path` is a repoint too; the document served then names the provider of the
+  read that filled the cache, which is the one thing it does say
+  (`FR-CDOC-018`).
 
 ## What this document defers, and to what
 
 | Subject | Where |
 |---|---|
 | The document's keys, depths, cuts and envelope | `specification/context-document.md`, `specification/output-formats.md` |
+| The source or the absence of every property for a `sqlite` read | `specification/sqlite-contract.md` |
 | The emitter, the orderings, the seventeen payload shapes, `restricted`, and the cache-status document | `interfaces.md` |
 | The reader, the cache as a read-through layer, and where the model is assembled | `architecture.md` |
 | The crates and versions behind the TOML paths, the serialiser and the clock | `technology-stack.md` |

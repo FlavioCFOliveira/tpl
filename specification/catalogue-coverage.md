@@ -1,8 +1,8 @@
 ---
 title: Catalogue Coverage
 status: approved
-last-reviewed: 2026-09-20
-related: [context-document.md, schema-commands.md, server-contract.md, privileges-and-completeness.md]
+last-reviewed: 2026-11-03
+related: [context-document.md, schema-commands.md, server-contract.md, privileges-and-completeness.md, sqlite-contract.md]
 ---
 
 # Catalogue Coverage
@@ -17,6 +17,14 @@ every command, every output format, and every template sees the same set.
 
 The model is the same whatever the source. A live read, a cached read, and a
 `--context` document present the objects and fields defined here and no others.
+
+*Note added in the sixty-fifth edition.* The model is also the same whatever
+the provider of `FR-CONF-051`. The catalogue field lists and the observations
+this file records are those of MariaDB's `INFORMATION_SCHEMA`, and they govern
+a `mariadb` read. A `sqlite` read fills the same objects and properties from
+SQLite's schema table and pragmas, and
+[sqlite-contract.md](sqlite-contract.md) states the source, or the absence, of
+each, and the objects a `sqlite` read covers and excludes.
 
 ## Scope
 
@@ -156,6 +164,9 @@ of any catalogue query, which this specification does not state.
 - **FR-CAT-015**: A table SHALL carry its `CHECK` constraints, each with its
   name, its level, and its clause.
 
+  *Note added in the sixty-fifth edition.* A `sqlite` read carries none, per
+  `FR-LITE-034`, which states why and what it costs.
+
   *Two observed consequences, both stated under `FR-CAT-037` and
   `FR-CAT-038`.* A column-level constraint is named after the column it
   qualifies, so a constraint name is not guaranteed distinct from a column
@@ -244,6 +255,11 @@ requirement says otherwise; a difference between series is recorded under
 
 - **FR-CAT-033**: The model SHALL NOT report `SET DEFAULT` as the value of a
   foreign key's `ON UPDATE` or `ON DELETE` rule.
+
+  *Note added in the sixty-fifth edition.* This requirement records what
+  MariaDB does with the clause, and governs a `mariadb` read. SQLite keeps
+  and enforces `SET DEFAULT`, and a `sqlite` read reports it, per
+  `FR-LITE-031`. Nothing about a `mariadb` read changes.
 
   *Observed.* `ON DELETE SET DEFAULT ON UPDATE SET DEFAULT` is accepted by all
   four series **without error and without warning**, and the catalogue then
@@ -440,6 +456,11 @@ requirement says otherwise.
   | `event` | `INSERT`, `UPDATE`, `DELETE` | `FR-CAT-050` |
   | `timing` | `BEFORE`, `AFTER` | `FR-CAT-050` |
   | `kind` | `PROCEDURE` and `FUNCTION` | `FR-CAT-016` |
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` read, the value set
+  of `on_update` and `on_delete` is the five spellings `FR-LITE-031` records,
+  and `timing` takes `BEFORE` and `AFTER` alone, per `FR-LITE-032`; a value
+  outside either set is carried unchanged under this requirement.
 
   **`table_type` is not one of them**, and the difference is the field's job
   rather than its shape. `FR-CAT-001` through `FR-CAT-006` make that value a
@@ -1615,6 +1636,14 @@ that is not written down is an omission.
   `v_consignment_manifest.charged_total` reads `decimal(36,2)`, a precision
   that appears nowhere in the DDL.
 
+  *Note added in the sixty-eighth edition,* for rmp `#317`. Not excluded by
+  this requirement is not carried. The sentence above says only that coverage
+  is not the ground on which a view's columns are left out. The view object is
+  the nine properties of `FR-CAT-047`, none of which holds columns, so the
+  model carries none of these rows and presents no column of a view. A `sqlite`
+  read carries none either, per `FR-LITE-033`. Nothing about a `mariadb` read
+  changes.
+
 - **BR-CAT-003**: The order matters because it is what makes a count
   explainable. A caller comparing the number of tables it sees against the
   number the server holds must be able to attribute every difference to either
@@ -1624,6 +1653,8 @@ that is not written down is an omission.
 
 - [context-document.md](context-document.md) — how the covered material is
   shaped as a document.
+- [sqlite-contract.md](sqlite-contract.md) — how a `sqlite` read fills the
+  model this file defines.
 - [schema-commands.md](schema-commands.md) — the commands that present it, and
   the `--pattern` filter of `FR-SCH-011` through `FR-SCH-015`.
 - [server-contract.md](server-contract.md) — the supported version window of

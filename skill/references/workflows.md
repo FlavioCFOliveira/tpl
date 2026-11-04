@@ -30,7 +30,7 @@ tpl init                  # or: tpl init path/to/dir
 
 ## 2. Register and verify a database entry
 
-Pick one shape. Both keep the password out of the file and off the command line.
+Pick one shape. The MariaDB shapes keep the password out of the file and off the command line; a SQLite file has none.
 
 ```sh
 # Discrete fields, with the password from the environment:
@@ -43,12 +43,16 @@ tpl cfg database add reporting --dsn 'mysql://reader:${REPORTING_PASSWORD}@db.ex
 # A secret store, run without a shell:
 tpl cfg database add staging --host db-staging.example.com --user reader --schema shop \
   --password-command "pass db/staging"
+
+# A SQLite database file, by a path relative to the directory that holds .tpl/:
+tpl cfg database add ledger --provider sqlite --path data/ledger.sqlite
 ```
 
 - `--schema` is the database name on the server. `NAME` is the entry's local name (1 to 64 letters, digits or underscores), and `-d NAME` selects it.
 - For a local or development server without a trusted certificate, add `--tls disabled` (or `--tls preferred`). The default, `verify-identity`, fails against it.
 - Exit 64 if the name is taken (the hint gives the `update` command instead), if `--dsn` is mixed with the discrete flags, or if a value is malformed.
 - An entry without a host and a server database name is stored, but every command that connects with it exits 78.
+- A SQLite entry takes `--provider sqlite --path FILE` and no other flag (64 otherwise). `--path` is literal: no `${VAR}`, no `~`. See `configuration.md`, *SQLite entries*.
 
 Optionally make it the default, then verify it:
 
@@ -62,7 +66,8 @@ Read the result:
 - Exit 0 means the four checks ran. Then read `data.can_read_catalogue`: `false` means the user logs in but can't see the catalogue, so request `SELECT` access to it. `data.server.standing` is `supported` or `newer_than_supported`.
 - Exit 69: unreachable, refused, or timed out. Check the host and port. Retrying is safe.
 - Exit 77: login refused. Fix the user or the password source.
-- Exit 78: undefined `${VAR}`, `password_command` failed, unsupported server, or the session could not be made read-only.
+- Exit 78: undefined `${VAR}`, `password_command` failed, unsupported server, or the session could not be made read-only; for SQLite, a path that is not a regular file or not a readable SQLite database, or a schema `tpl` refuses.
+- For a SQLite entry, exit 0 always has `can_read_catalogue: true`, and a missing or unopenable file is exit 74.
 
 `cfg database test` never reads or writes the cache.
 
@@ -159,6 +164,8 @@ tpl cfg database update shop --host db-staging.example.com   # warns that the ol
 tpl -d shop cache clean                                      # required, or reads keep serving the old server
 tpl cfg database test shop
 ```
+
+A SQLite entry is repointed the same way, with `tpl cfg database update ledger --path other.sqlite`, then `tpl -d ledger cache clean`. An entry cannot change provider while it carries the other provider's keys (64): add a new entry instead.
 
 Remove an entry:
 

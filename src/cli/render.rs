@@ -621,6 +621,7 @@ fn from_catalogue<W: std::io::Write>(
             Sought::Catalogue {
                 entry,
                 database: &served.name,
+                provider: served.provider,
             },
             now,
         )
@@ -682,6 +683,7 @@ fn attempt<W: std::io::Write>(
     let at = Sought::Catalogue {
         entry,
         database: store.name(),
+        provider: store.provider(),
     };
     let bound = match assembly.binding.bind_shelved(store, at)? {
         Chosen::Bound(bound) => bound,
@@ -1033,7 +1035,7 @@ fn bounded<T>(
     render: impl FnOnce() -> Result<T, Error>,
 ) -> Result<T, Error> {
     crate::error::ensure_invariant(
-        crate::mariadb::quiescent(),
+        crate::provider::quiescent(),
         "no connection is open and no runtime of the database driver is alive while a template \
          is evaluated",
     )?;
@@ -1954,6 +1956,7 @@ mod tests {
             let sought = Sought::Catalogue {
                 entry: ENTRY,
                 database: &up_front.name,
+                provider: crate::model::database::Provider::Mariadb,
             };
             let context = super::context::assemble(
                 Served::borrowed(&up_front),

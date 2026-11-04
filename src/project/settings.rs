@@ -29,15 +29,16 @@
 //! belongs to the phase that opens the connection.
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use super::config::entry::{Entry, PortSetting, TlsMode};
+use super::config::entry::{Combination, Entry, PortSetting, TlsMode};
 use super::config::keys::EntryKey;
 use super::config::{Configuration, dsn, expand};
 use super::password;
 use super::secret::Secret;
 use crate::deadline::{Clock, Deadlines, Phase, Seconds};
-use crate::error::Error;
+use crate::error::{Error, KeyAbsence};
+use crate::model::database::Provider;
 use crate::render::RenderBounds;
 
 /// The default of `database.<name>.port` (`FR-CONF-002`).
@@ -218,6 +219,88 @@ impl Settings {
     }
 }
 
+/// What a `sqlite` entry resolves to: its database file, as an absolute path
+/// (`FR-CONF-053`, `FR-CONF-054`).
+#[derive(Debug, Clone)]
+pub(crate) struct FileSettings {
+    /// The entry these settings came from.
+    entry: String,
+    /// The database file, resolved against the project directory and
+    /// absolute (`FR-CONF-054`).
+    path: PathBuf,
+    /// The four phase deadlines; a `sqlite` read uses the catalogue-query one
+    /// alone (`FR-LITE-009`).
+    deadlines: Deadlines,
+}
+
+impl FileSettings {
+    /// Settings over `path` directly, for the tests of the reader.
+    #[cfg(test)]
+    pub(crate) fn new(entry: &str, path: &Path, deadlines: Deadlines) -> Self {
+        Self {
+            entry: entry.to_owned(),
+            path: path.to_owned(),
+            deadlines,
+        }
+    }
+
+    /// The entry these settings came from.
+    pub(crate) fn entry(&self) -> &str {
+        &self.entry
+    }
+
+    /// The database file, absolute.
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// The four phase deadlines.
+    pub(crate) const fn deadlines(&self) -> Deadlines {
+        self.deadlines
+    }
+}
+
+/// The settings an entry resolves to, by its provider (`FR-CONF-051`,
+/// `OD-35`).
+///
+/// It is a closed enumeration whose `mariadb` arm holds the server fields
+/// resolved as before and whose `sqlite` arm holds the absolute path; the
+/// entry name and the deadlines are common to both.
+#[derive(Debug)]
+pub(crate) enum Resolved {
+    /// A `mariadb` entry.
+    Mariadb(Settings),
+    /// A `sqlite` entry.
+    Sqlite(FileSettings),
+}
+
+impl Resolved {
+    /// The entry these settings came from.
+    pub(crate) fn entry(&self) -> &str {
+        match self {
+            Self::Mariadb(settings) => settings.entry(),
+            Self::Sqlite(settings) => settings.entry(),
+        }
+    }
+
+    /// The four phase deadlines.
+    pub(crate) const fn deadlines(&self) -> Deadlines {
+        match self {
+            Self::Mariadb(settings) => settings.deadlines(),
+            Self::Sqlite(settings) => settings.deadlines(),
+        }
+    }
+
+    /// The server settings, where the entry is a `mariadb` entry.
+    #[cfg(test)]
+    pub(crate) fn into_mariadb(self) -> Option<Settings> {
+        match self {
+            Self::Mariadb(settings) => Some(settings),
+            Self::Sqlite(_) => None,
+        }
+    }
+}
+
 /// The four phase deadlines of `FR-CONF-004`, resolved from `[core]`.
 ///
 /// Each takes the value the file declares for its key, or the built-in default
@@ -249,28 +332,128 @@ pub(crate) fn render_bounds(configuration: &Configuration) -> RenderBounds {
     )
 }
 
-/// Resolves the settings of the selected entry.
+/// Resolves the settings of the selected entry, by its provider.
 ///
 /// `lookup` supplies the environment `${VAR}` reads, which is
 /// [`expand::environment`] in the process and a table in a test, for the reason
 /// [`expand`] states.
 ///
+/// Entry resolution is step 5 of `FR-ERR-006`, and for every provider it
+/// begins with the two checks `FR-CONF-052` and `FR-CONF-053` place there,
+/// **before** any `${VAR}` expansion and before `password_command` can run: a
+/// key the provider refuses would otherwise be put in force for as long as the
+/// child runs (`OD-35`).
+///
 /// # Errors
 ///
-/// Returns what [`select`] returns for the selection, what [`expand`] returns
-/// for an unclosed or undefined reference, what [`dsn`] returns for a DSN the
-/// grammar refuses, [`Error::ConfigurationValueMalformed`] where an expanded
-/// port is not one, and what [`password::obtain`] returns for the child.
+/// Returns what [`select`] returns for the selection;
+/// [`Error::ProviderRefusesKeys`] where the entry carries a key its provider
+/// refuses; [`Error::EntryKeyMissing`] where a `sqlite` entry carries no
+/// `path`, or an empty one; and, for a `mariadb` entry, what [`expand`]
+/// returns for an unclosed or undefined reference, what [`dsn`] returns for a
+/// DSN the grammar refuses, [`Error::ConfigurationValueMalformed`] where an
+/// expanded port is not one, and what [`password::obtain`] returns for the
+/// child.
 pub(crate) fn resolve<L>(
     configuration: &Configuration,
     requested: Option<&str>,
+    clock: &Clock,
+    lookup: &L,
+) -> Result<Resolved, Error>
+where
+    L: Fn(&str) -> Option<String>,
+{
+    let (name, entry, selection) = select(configuration, requested)?;
+    let file = configuration.file();
+
+    // FR-CONF-052: the keys the provider refuses, at entry resolution.
+    let combination = Combination::of(entry);
+    let refused = combination.refused_by_provider();
+    if !refused.is_empty() {
+        return Err(Error::ProviderRefusesKeys {
+            entry: name.to_owned(),
+            file: file.to_owned(),
+            provider: combination.provider(),
+            written: combination.provider_written(),
+            keys: refused.iter().map(|key| key.leaf()).collect(),
+        });
+    }
+
+    match entry.provider() {
+        Provider::Mariadb => resolve_server(configuration, name, entry, selection, clock, lookup)
+            .map(Resolved::Mariadb),
+        Provider::Sqlite => resolve_file(configuration, name, entry).map(Resolved::Sqlite),
+    }
+}
+
+/// The settings of a `sqlite` entry: its database file, resolved against the
+/// project directory (`FR-CONF-053`, `FR-CONF-054`).
+///
+/// # Errors
+///
+/// Returns [`Error::EntryKeyMissing`] where the entry carries no `path`, or one
+/// that is empty under the definition of `FR-CONF-050`.
+fn resolve_file(
+    configuration: &Configuration,
+    name: &str,
+    entry: &Entry,
+) -> Result<FileSettings, Error> {
+    let file = configuration.file();
+    let missing = |absence| Error::EntryKeyMissing {
+        entry: name.to_owned(),
+        key: format!("database.{name}.{}", EntryKey::Path),
+        file: file.to_owned(),
+        flag: PATH_FLAG,
+        placeholder: PATH_PLACEHOLDER,
+        absence,
+    };
+
+    let Some(written) = entry.path.as_deref() else {
+        return Err(missing(KeyAbsence::Absent));
+    };
+    if written.to_str().is_none_or(super::config::keys::is_blank) {
+        return Err(missing(KeyAbsence::Empty));
+    }
+
+    Ok(FileSettings {
+        entry: name.to_owned(),
+        path: project_directory(file).join(written),
+        deadlines: deadlines(configuration),
+    })
+}
+
+/// The flag of `FR-CFG-027` that writes `database.<name>.path`.
+const PATH_FLAG: &str = "--path";
+
+/// The placeholder the hint of `FR-CONF-053` writes after it.
+const PATH_PLACEHOLDER: &str = "<path>";
+
+/// The project directory of `FR-CONF-054`: the parent of the canonical `.tpl`
+/// folder that holds `file`.
+///
+/// `file` is `.tpl/.cfg` below the folder [`crate::project::Project`]
+/// canonicalised per `FR-PROJ-009`, so where the folder was reached through a
+/// symbolic link this is the parent of its target, not of the link. A path
+/// joined to it that is already absolute stays as written, which is how
+/// [`Path::join`] treats an absolute operand.
+fn project_directory(file: &Path) -> &Path {
+    file.parent()
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new("/"))
+}
+
+/// The settings of a `mariadb` entry, resolved as they always have been.
+fn resolve_server<L>(
+    configuration: &Configuration,
+    name: &str,
+    entry: &Entry,
+    selection: Selection,
     clock: &Clock,
     lookup: &L,
 ) -> Result<Settings, Error>
 where
     L: Fn(&str) -> Option<String>,
 {
-    let (name, entry, selection) = select(configuration, requested)?;
     let file = configuration.file();
     let deadlines = deadlines(configuration);
 
@@ -525,7 +708,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the entry resolves");
+            .expect("the entry resolves")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert_eq!(settings.host(), Some("db.example.com"));
         assert_eq!(settings.port(), 3306);
@@ -548,7 +733,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the entry resolves");
+            .expect("the entry resolves")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert_eq!(settings.host(), Some("db.example.com"));
         assert_eq!(settings.port(), 3307);
@@ -573,7 +760,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the entry resolves");
+            .expect("the entry resolves")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert_eq!(settings.host(), Some("db.example.com"));
         assert_eq!(settings.database(), Some("shop"));
@@ -632,7 +821,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the child produced a password");
+            .expect("the child produced a password")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert_eq!(
             settings
@@ -653,7 +844,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the entry resolves");
+            .expect("the entry resolves")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert!(!format!("{settings:?}").contains("hunter2"));
         assert!(!format!("{settings:#?}").contains("hunter2"));
@@ -675,7 +868,9 @@ mod tests {
                 other => table(other),
             },
         )
-        .expect("the entry resolves");
+        .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry");
 
         assert_eq!(settings.host(), Some("db.example.com"));
         assert_eq!(settings.entry(), "shop");

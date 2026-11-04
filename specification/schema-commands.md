@@ -1,8 +1,8 @@
 ---
 title: Schema Commands (First Arm)
 status: approved
-last-reviewed: 2026-09-21
-related: [cli-contract.md, cache-commands.md, output-formats.md, context-document.md, render-command.md]
+last-reviewed: 2026-11-03
+related: [cli-contract.md, cache-commands.md, output-formats.md, context-document.md, render-command.md, project-and-discovery.md]
 ---
 
 # Schema Commands (First Arm)
@@ -441,14 +441,21 @@ tpl schema dump                        The whole database as one JSON document
   `json` output in the envelope of `FR-OUT-024`.
 
 - **FR-SCH-031**: The `data` of `tpl schema info` SHALL be an object carrying
-  one key, `database`, whose value carries exactly four members and no others:
-  the three metadata fields `FR-CTX-036` fixes — `name`, `charset`, and
-  `collation` — and the `server` object `FR-CTX-031` fixes. It SHALL NOT carry
-  the collections `tables`, `views`, and `routines` of `FR-CTX-035`.
+  one key, `database`, whose value carries exactly five members and no others:
+  the four metadata fields `FR-CTX-036` fixes — `name`, `charset`,
+  `collation` and `provider` — and the `server` object `FR-CTX-031` fixes. It
+  SHALL NOT carry the collections `tables`, `views`, and `routines` of
+  `FR-CTX-035`.
 
   ```json
-  {"schema_version":1,"source":"server","data":{"database":{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{"version":"11.4.13-MariaDB-ubu2404","series":"11.4","standing":"supported"}}}}
+  {"schema_version":1,"source":"server","data":{"database":{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","provider":"mariadb","server":{"version":"11.4.13-MariaDB-ubu2404","series":"11.4","standing":"supported"}}}}
   ```
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The object carried
+  four members, the three metadata fields and `server`; it carries the
+  `provider` of `FR-CTX-043` as a fourth metadata field, in the position
+  `FR-CTX-036` gives it, because it is that object reduced and every member it
+  carries is that object's.
 
   **`tpl schema info --format json` and `tpl schema dump` SHALL NOT emit the
   same bytes.** The two commands answer different questions, and this
@@ -457,13 +464,13 @@ tpl schema dump                        The whole database as one JSON document
   **How this object relates to the one `FR-CTX-001` fixes.** Every member it
   carries is the same member, under the same name and with the same value, that
   the `database` object of the context document carries: a caller reading
-  `data.database.name`, `.charset`, `.collation` or `.server` receives the same
-  answer from `tpl schema info` and from `tpl schema dump`. This object is that
-  object **without** the three collections, and it is the only place this
-  corpus emits a reduction of it. `FR-CTX-001`, `FR-CTX-035` and `FR-CTX-036`
-  are unchanged: they fix the context document, which is what
-  `tpl schema dump` emits under `FR-SCH-034` and what `tpl render --context`
-  consumes under `FR-SCH-036`, and `tpl schema info` emits neither.
+  `data.database.name`, `.charset`, `.collation`, `.provider` or `.server`
+  receives the same answer from `tpl schema info` and from `tpl schema dump`.
+  This object is that object **without** the three collections, and it is the
+  only place this corpus emits a reduction of it. `FR-CTX-001`, `FR-CTX-035`
+  and `FR-CTX-036` are unchanged by it: they fix the context document, which is
+  what `tpl schema dump` emits under `FR-SCH-034` and what `tpl render
+  --context` consumes under `FR-SCH-036`, and `tpl schema info` emits neither.
 
   The envelope and the `data` key are fixed here, per `FR-SCH-030` and
   `FR-OUT-024`.
@@ -591,7 +598,11 @@ tpl schema dump                        The whole database as one JSON document
 
 - **BR-SCH-003**: The first arm is not read-only with respect to the filesystem.
   A cache miss writes to `.tpl/.cache/`, per `FR-CACHE-007`. Only
-  `--direct --no-cache` guarantees that no file is touched.
+  `--direct --no-cache` guarantees that no file is touched, save the two files
+  `FR-PROJ-024` admits beside a SQLite database in write-ahead-log mode.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the exception is
+  new, for the reason `FR-PROJ-024` gives.
 
 ## Dependencies
 

@@ -69,7 +69,11 @@ pub(crate) mod mariadb;
 
 pub(crate) mod output;
 
+pub(crate) mod provider;
+
 pub(crate) mod render;
+
+pub(crate) mod sqlite;
 
 pub use error::Error;
 

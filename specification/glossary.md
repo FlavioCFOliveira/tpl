@@ -1,8 +1,8 @@
 ---
 title: Glossary
 status: approved
-last-reviewed: 2026-09-24
-related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md]
+last-reviewed: 2026-11-04
+related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md, sqlite-contract.md]
 ---
 
 # Glossary
@@ -96,6 +96,23 @@ One of the three read-only capabilities `tpl` provides: exploring the database
 (`tpl render …`). Command groups that are not arms — `tpl cache …`,
 `tpl cfg …`, `tpl init`, `tpl help`, and `tpl version` — are auxiliary.
 
+## bidirectional formatting character
+
+One of the twelve code points to which the Unicode Character Database gives
+the property `Bidi_Control`: U+061C ARABIC LETTER MARK, U+200E LEFT-TO-RIGHT
+MARK, U+200F RIGHT-TO-LEFT MARK, U+202A to U+202E, the embeddings and
+overrides and the character that ends them, and U+2066 to U+2069, the
+isolates and the character that ends them. Each changes the order in which a
+reader sees the characters around it, and none changes the characters.
+`FR-ERR-024` escapes them in a diagnostic message, and `FR-OUT-018` in the
+output of a read command. The set is the one `PropList.txt` of Unicode
+18.0.0, dated 2026-08-07, lists at
+`https://www.unicode.org/Public/UCD/latest/ucd/PropList.txt`, checked
+2026-11-03; a Unicode version that changes the property is what obliges a
+re-check.
+
+*Added in the sixty-ninth edition.*
+
 ## measurement point
 
 One of the nine points at which `tpl` is measured, listed in `NFR-PERF-014`,
@@ -165,6 +182,11 @@ The database structure `tpl` reads: database metadata, tables, columns, indexes,
 keys, views, routines, and triggers. How the catalogue is read is outside the
 scope of this edition.
 
+For a `mariadb` entry the catalogue is MariaDB's `INFORMATION_SCHEMA`; for a
+`sqlite` entry it is SQLite's schema table, `sqlite_schema`, and the pragma
+table-valued functions `FR-LITE-015` names. *Amended in the sixty-fifth
+edition.*
+
 ## closed / dissolved / closed on a stated limit
 
 The three ways an open question leaves the index of
@@ -194,6 +216,15 @@ A read is complete when it returns, for every object it presents, every property
 otherwise it is incomplete. Completeness is a property of a read, not of a
 server: the same database read by two users can be complete for one and
 incomplete for the other. See `FR-PRIV-001`.
+
+## connection
+
+One connection of `tpl` to the database an entry names: to a MariaDB server
+for a `mariadb` entry, or of the SQLite library to the database file for a
+`sqlite` entry, per `FR-LITE-037`. An invocation opens at most one, per
+`NFR-PERF-004`.
+
+*Added in the sixty-fifth edition.*
 
 ## context
 
@@ -227,6 +258,28 @@ The three-key outer shape every JSON document `tpl` writes to stdout carries:
 `schema_version`, `source`, and `data`. Only `data` differs between commands,
 and the module that owns a command owns the shape of its `data`. Fixed by
 `FR-OUT-024`; the seventeen documents are indexed by `BR-OUT-002`.
+
+## hardening control
+
+A setting of the SQLite library that `tpl` applies on every connection to a
+database file, or a property the carried library is built with, which `tpl`
+confirms by reading it back on every connection, so that a file treated as
+untrusted is read under the checks SQLite offers for one. The controls are
+`FR-LITE-010`, the limits `FR-LITE-011`.
+
+*Added in the sixty-fifth edition.*
+
+*Amended in the sixty-sixth edition.* A property of the build is a hardening
+control too: extension loading is absent from the carried library, and its
+read-back is `PRAGMA compile_options`.
+
+## official driver
+
+A Rust driver of the SQLite library published by the SQLite project itself —
+the SQLite developers, at sqlite.org. A community driver is not one, whatever
+its name and whatever source it carries. Step 0 of `FR-LITE-004` turns on it.
+
+*Added in the sixty-fifth edition.*
 
 ## in flight
 
@@ -265,12 +318,16 @@ not the model accommodates it, is recorded separately under `FR-SRV-038`.
 ## database entry
 
 A `[database.<name>]` block in `.tpl/.cfg` describing how to reach one server
-and which database on it to read. The entry name is a label local to the
+and which database on it to read, or, for an entry whose provider is `sqlite`,
+which database file to read. The entry name is a label local to the
 project; it need not match the database name on the server. Selected with
 `-d/--database`. An entry name is one to sixty-four ASCII letters, digits and
 underscores, per `FR-CONF-048`.
 
 *Amended in the forty-ninth edition.* The last sentence is new.
+
+*Amended in the sixty-fifth edition.* The clause on the `sqlite` provider is
+new; see *provider*.
 
 ## discovery
 
@@ -340,6 +397,17 @@ the key space, as `FR-CFG-009` already did for `tpl cfg set`.
 *Amended in the forty-sixth edition.* The prefix clause is new: `FR-ERR-042`
 also admits a command of which the supplied token is a proper prefix.
 
+## nested statement
+
+A statement the SQLite library runs while a statement `tpl` issued is running,
+to carry that statement out: the `PRAGMA` a pragma table-valued function runs
+for each invocation, or a statement a virtual-table module runs against its own
+tables. The library's statement trace reports it with the prefix `-- `. It is
+not a statement `tpl` issues: `FR-LITE-018` neither checks it against the
+closed list of `FR-LITE-015` nor counts it.
+
+*Added in the sixty-sixth edition.*
+
 ## normative budget
 
 *Retired in the thirty-sixth edition.* The term named the single budget whose
@@ -377,6 +445,29 @@ Every plumbing document shares the envelope of `FR-OUT-024` and is versioned by
 Output intended to be read by a person. In `tpl`, `--format text`, which is
 explicitly not a contract. See `FR-OUT-004`.
 
+## project directory
+
+The directory that holds the `.tpl` folder of a project, whether the folder
+was discovered or named by `--tpl-dir`; where the folder is reached through a
+symbolic link, the parent of the folder's canonical path. A relative `path` of
+a `sqlite` entry resolves against it, per `FR-CONF-054`.
+
+*Added in the sixty-fifth edition.*
+
+*Amended in the sixty-seventh edition.* The clause on a folder reached
+through a symbolic link is new, per `FR-CONF-054`.
+
+## provider
+
+The kind of database an entry is read through: `mariadb` or `sqlite`, named by
+the entry's `provider` key, and `mariadb` where the entry carries none. The
+provider decides which keys the entry takes and which contract reads it —
+[server-contract.md](server-contract.md) or
+[sqlite-contract.md](sqlite-contract.md). Fixed by `FR-CONF-051` and
+`FR-CONF-052`; a template reads it as `database.provider`, per `FR-CTX-043`.
+
+*Added in the sixty-fifth edition.*
+
 ## project
 
 Any directory containing a `.tpl` folder. The `.tpl` folder is the project root
@@ -394,6 +485,21 @@ and functions occupy distinct namespaces on the server, so one bare name can
 denote two objects; the qualified form says which is meant. Accepted wherever a
 command names one routine, per `FR-SCH-008`. A bare name matching both is `64`,
 per `FR-SCH-010`.
+
+## read transaction
+
+A transaction of the SQLite library in which a connection reads the database
+file and writes nothing. Begun by `BEGIN DEFERRED`, it starts when its first
+statement reads the file, and from then until it ends every statement on the
+connection reads one snapshot of the database: in rollback-journal mode the
+connection holds the shared lock a writer must wait out before it commits,
+and in write-ahead-log mode a write another connection commits stays
+invisible to it, per `https://sqlite.org/lang_transaction.html`,
+`https://sqlite.org/lockingv3.html` and `https://sqlite.org/isolation.html`,
+checked 2026-11-04. `FR-LITE-042` runs the check of `FR-LITE-041` and the
+catalogue statements of a `sqlite` read in one.
+
+*Added in the seventieth edition.*
 
 ## read-through cache
 
@@ -442,14 +548,18 @@ survived, compared against the same invocation made in a state that has
 nothing for that operation to find. It is the fourth instrument of
 `NFR-PERF-007`, available on every target of `NFR-PERF-018` and needing no
 privilege on any of them, and it is what stands in for the syscall trace on the
-two macOS targets, where that instrument does not exist. It observes three
-things and no others: the invocation's exit code, the bytes on stdout, and the
-artefacts it leaves on disk. Stderr is not among them. The arrangements it is
-used in are named by `NFR-PERF-007`.
+two macOS targets, where that instrument does not exist, for the clauses of
+`NFR-PERF-005`. It observes three things and no others: the invocation's exit
+code, the bytes on stdout, and the artefacts it leaves on disk. Stderr is not
+among them. The arrangements it is used in are named by `NFR-PERF-007`.
 
 *Written here in the thirty-second edition*, from
 [performance-requirements.md](performance-requirements.md), where the
 eleventh edition defined it.
+
+*Amended in the sixty-seventh edition.* The clause it stands in for is named:
+for a `sqlite` entry the syscall trace also observes `NFR-PERF-004`, and no
+differential run stands in for it on the macOS targets, per that requirement.
 
 ## restricted
 
@@ -461,11 +571,34 @@ carrying it is refused as a `--context`; and an object carrying it is never
 written to the cache, per `FR-CACHE-037`. See `FR-PRIV-005`, `FR-PRIV-008`, and
 `FR-PRIV-016`.
 
+## result code
+
+The code by which the SQLite library reports the outcome of an operation: a
+**primary** result code, such as `SQLITE_BUSY`, and, where the library gives
+one, an **extended** result code that refines it, such as
+`SQLITE_READONLY_DIRECTORY`. SQLite names and documents them at
+`https://sqlite.org/rescode.html`. A result code is not an exit code: every
+one that reports a failure on a `sqlite` entry is given an exit code of
+`FR-ERR-001` by `FR-LITE-040`, and `FR-GLOB-018` fixes how a `cause` line
+names it.
+
+*Added in the sixty-seventh edition.*
+
 ## routine
 
 A stored procedure or a stored function. MariaDB distinguishes the two in
 `INFORMATION_SCHEMA.ROUTINES.ROUTINE_TYPE`; `tpl` reports both under the single
-term "routine" and states the kind per object.
+term "routine" and states the kind per object. SQLite has none, per
+`FR-LITE-022`.
+
+## rowid alias
+
+The column of a SQLite table that is its only primary-key column, in a table
+that is not `WITHOUT ROWID`, and that has no index of its own: SQLite stores it
+as the rowid and assigns it on an insert that supplies none. `tpl` reports it
+as auto-incremental. Fixed by `FR-LITE-028`.
+
+*Added in the sixty-fifth edition.*
 
 ## series / supported series / major family
 
@@ -479,6 +612,10 @@ corpus that names them, per `BR-SRV-005`.
 
 A **rolling release** is a series MariaDB does not maintain after GA. No rolling
 release is a supported series, per `FR-SRV-016`.
+
+For a `sqlite` entry the series is that of the SQLite library the binary
+carries, `<major>.<minor>` of its version, and no window applies to it, per
+`FR-LITE-002` and `FR-LITE-003`. *Amended in the sixty-fifth edition.*
 
 Version comparison in this specification is always by series, never by point
 release: `10.11.14` and `10.11.2` are the same series, per `FR-SRV-021`. A
@@ -506,10 +643,45 @@ by `FR-OUT-026`.
 ## standing
 
 The third key of the `server` object of `FR-CTX-031`, stating where the server
-the read was made against sits relative to the supported window: `supported`, or
-`newer_than_supported`. It is enumerated, always present, and never `null`, per
-`FR-CTX-034`. A series *below* the window has no value because it never reaches
-a document — `FR-SRV-020` refuses it before the catalogue is read.
+the read was made against sits relative to the supported window: `supported`,
+or `newer_than_supported`. It is enumerated, always present, and never `null`,
+per `FR-CTX-034`. For a `sqlite` read it is always `supported`, per
+`FR-LITE-003`. A series *below* the window has no value because it never
+reaches a document — `FR-SRV-020` refuses it before the catalogue is read.
+
+## SQLite table kinds: internal table / virtual table / shadow table
+
+SQLite's own terms, used where a `sqlite` read decides what it covers. An
+**internal table** is one whose name begins with `sqlite_`, in any letter case,
+a prefix SQLite reserves for itself. A **virtual table** is a table a module
+implements rather than SQLite stores; its row of the schema table has a root
+page of `0`. A **shadow table** is an ordinary table in which a virtual table's
+module keeps its data, and only a library that holds the module reports it as
+one. Internal and virtual tables are excluded, per `FR-LITE-021`; a shadow
+table is covered as a table, like any other, per `FR-LITE-020`.
+
+*Added in the sixty-fifth edition.*
+
+*Amended in the sixty-sixth edition.* The clause on a module the carried
+library does not hold is new.
+
+*Amended in the sixty-ninth edition.* A shadow table is no longer excluded,
+by the user's decision recorded under `FR-LITE-020`, and a virtual table is
+recognised by its root page.
+
+## storage class
+
+The class of a value SQLite stores, one of five: `NULL`, `INTEGER`, `REAL`,
+`TEXT` and `BLOB`, per `https://sqlite.org/datatype3.html`, checked
+2026-11-03. It belongs to the value and not to the column: the same page
+states that a column of `TEXT` affinity stores a value as `NULL`, `TEXT` or
+`BLOB`, and that a `BLOB` is stored as a `BLOB` whatever the column's
+affinity, so a column declared `text` can hold one. Not to be confused with
+[type affinity](#type-affinity), the classification of a column by how it
+stores a value. `FR-LITE-041` refuses a schema table that holds a value of a
+class its contract excludes.
+
+*Added in the sixty-ninth edition.*
 
 ## target
 
@@ -518,6 +690,15 @@ statically linked against `musl`, and macOS on amd64 and arm64. Every
 measurement, every recorded figure, and every measurement point is stated
 against one of them, and measurements on different targets are never compared,
 per `NFR-PERF-012`. None is second class.
+
+## type affinity
+
+SQLite's classification of a column by how it stores a value: `INTEGER`,
+`TEXT`, `BLOB`, `REAL` or `NUMERIC`, derived from the declared type by the
+rules of `https://sqlite.org/datatype3.html`. A `sqlite` read carries it, in
+lower case, as a column's `data_type`, per `FR-LITE-026`.
+
+*Added in the sixty-fifth edition.*
 
 ## template
 

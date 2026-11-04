@@ -65,6 +65,13 @@ mod predicate;
 mod root;
 mod surface;
 
+/// Installs the registered surface of `FR-ENV-005` on `engine`, for a test
+/// outside this module that renders over a document of its own.
+#[cfg(test)]
+pub(crate) fn register_surface(engine: &mut minijinja::Environment<'static>) {
+    surface::register(engine);
+}
+
 #[cfg(test)]
 mod fixture;
 

@@ -3,7 +3,7 @@ id: ADR-005
 title: The scope of the async runtime
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-22
+last-reviewed: 2026-11-03
 requirements: [FR-PROJ-025, NFR-PERF-004, NFR-PERF-005, NFR-PERF-006, NFR-PERF-007]
 supersedes: []
 superseded-by: null
@@ -14,6 +14,14 @@ superseded-by: null
 ## Status
 
 Accepted, 2026-09-10.
+
+**Amended in place on 2026-11-03**, for rmp `#315`: the SQLite provider of
+`ADR-013` opens a connection outside `mariadb/` and bounds its statements with a
+thread. The record now states that the runtime is MariaDB's alone and where a
+deadline may use the runtime's timer, and quotes the root coordination document
+in the English it is now written in. The scope did not change, so `decided` is
+unchanged; `last-reviewed` carries the amendment, and the claims re-read that
+day are those of the *Sources* rows dated 2026-11-03.
 
 ## Context
 
@@ -35,10 +43,17 @@ subcommand except `database test`, and to any `tpl render` given `--context`.
 Two further forces point the same way. `NFR-PERF-004` allows at most one
 connection per invocation, so there is nothing for a runtime to multiplex. And
 the root coordination document forbids startup work the invoked command does not
-need, in the words "sem inicialização estática pesada" and "inicialização
-preguiçosa por defeito" — a rule it states as a first-order requirement rather
-than a preference, because the tool is invoked repeatedly inside build
-pipelines.
+need, in the words "No heavy static initialisation" and "Lazy initialisation by
+default" — a rule it states as a demand on design and architecture rather than
+a preference, because the tool is "invoked repeatedly and often inside loops and
+build pipelines".
+
+**A second provider reads without a runtime.** `ADR-013` selects `rusqlite`,
+which is synchronous, for a `sqlite` entry, and `FR-LITE-009` bounds every
+statement on that connection by the catalogue-query deadline. Its reader,
+`sqlite/`, opens the one connection `NFR-PERF-004` allows for such an entry,
+outside `mariadb/`, so where the runtime lives and where a deadline may use its
+timer must be stated for a reader that has none.
 
 ## Decision
 
@@ -47,10 +62,17 @@ no signature elsewhere in the crate returns a future.
 
 **The runtime is built lazily inside `mariadb/`, with `block_on` at that
 boundary.** It is a current-thread runtime, and it comes into existence only
-when a command actually reaches the module that opens a connection. The two
-halves compose: the module that needs the runtime is also the module
-`NFR-PERF-004` constrains, so at most one connection and exactly one runtime
-have the same owner.
+when a command actually reaches `mariadb/`, the module that opens a connection
+to a server. The two halves compose: for a `mariadb` entry, the module that
+needs the runtime is also the module that opens the one connection
+`NFR-PERF-004` allows, so the connection and the runtime have the same owner.
+
+**The runtime is MariaDB's alone.** A command that reads a `sqlite` entry builds
+no runtime: `rusqlite` blocks on the calling thread, and `sqlite/` is
+synchronous like the rest of the process. Its catalogue-query deadline is
+enforced by a watchdog thread in `sqlite/` holding `rusqlite`'s
+`InterruptHandle`, with the library's `busy_timeout` set to what remains of the
+bound (`OD-36`); neither needs a runtime timer.
 
 **The boundary is the unit of verification.** Because no runtime is built for a
 command that does not reach `mariadb/`, `NFR-PERF-005` is satisfied by
@@ -86,13 +108,18 @@ source.
 only one.** Everything above `mariadb/` reads as ordinary synchronous Rust, and
 a reader auditing startup cost has one place to look.
 
-**Deadline enforcement lives inside the boundary.** The six phase deadlines of
-`FR-CONF-005` are enforced with the runtime's own timers, which is only
-available where the runtime is — see `docs/spec-technical/open-decisions.md`
-entry `OD-12`, which records the mechanism and the feature it requires. That
-entry is subordinate to this one on the question of *where*: a deadline
-mechanism that needed a timer outside `mariadb/` would contradict this record
-and would be the defect.
+**The runtime's timers stay inside the boundary.** The phase deadlines of
+`FR-CONF-005` that a `mariadb` read crosses — DNS resolution, TCP connect, the
+TLS handshake and the catalogue query — are enforced with the runtime's own
+timers, which exist only where the runtime is. The phases that run outside
+`mariadb/` — `password_command`, the render, and every statement on a SQLite
+connection — are bounded by threads of the crate's own and build no runtime.
+`docs/spec-technical/open-decisions.md` records the mechanisms, in entry `OD-12`
+and, for a `sqlite` entry, `OD-36`. Both are subordinate to this record on the
+question of *where*: a deadline mechanism that used the runtime's timer outside
+`mariadb/`, or built a runtime to obtain one, would contradict this record and
+would be the defect. A thread outside `mariadb/` that keeps time without the
+runtime, as the watchdog in `sqlite/` does, does not.
 
 **The runtime's cost is not paid by the commands that cannot use it.** This is
 what `NFR-PERF-005` asks for, and it is also what puts the reference figures
@@ -117,4 +144,7 @@ citation of this record.
 | The four commands that perform no discovery, read no configuration file and open no connection | `specification/performance-requirements.md`, `NFR-PERF-005`; `specification/project-and-discovery.md`, `FR-PROJ-025` | 2026-09-11 |
 | Each such requirement is verified by an observation made outside the process and SHALL NOT be verified by reading the source | `specification/performance-requirements.md`, `NFR-PERF-007` | 2026-09-11 |
 | One invocation opens at most one connection | `specification/performance-requirements.md`, `NFR-PERF-004` | 2026-09-11 |
-| No startup work beyond what the invoked command needs; lazy initialisation by default; no speculative parallelism without a measured benefit | `CLAUDE.md`, *Desempenho e Eficiência* | 2026-09-11 |
+| No startup work beyond what the invoked command needs, in the words "No heavy static initialisation" and "Lazy initialisation by default"; no speculative parallelism without a measured benefit; performance is a demand on "design and architecture", for a tool "invoked repeatedly and often inside loops and build pipelines" | `CLAUDE.md`, *Performance and Efficiency* and its *Implementation rules*, at `6203216` | 2026-11-03 |
+| `rusqlite` is synchronous, and a command that reads a `sqlite` entry builds no runtime | `ADR-013`, *Consequences* | 2026-11-03 |
+| Every statement on a SQLite connection runs under the catalogue-query deadline | `specification/sqlite-contract.md`, `FR-LITE-009`, at `5805b5d` | 2026-11-03 |
+| The `password_command` and render phases are bounded by threads of the crate's own; the statements on a SQLite connection by a watchdog thread in `sqlite/` holding the interrupt handle, with the busy timeout set to the remaining bound, and no runtime timer | `docs/spec-technical/open-decisions.md`, `OD-12` and `OD-36`, at `ad653f5` | 2026-11-03 |

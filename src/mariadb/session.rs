@@ -45,8 +45,8 @@ use std::borrow::Cow;
 use std::future::Future;
 use std::time::Instant;
 
-use sqlx::mysql::MySqlConnection;
-use sqlx::{Row as _, mysql::MySqlRow};
+use sqlx_core::row::Row as _;
+use sqlx_mysql::{MySqlConnection, MySqlRow};
 use tokio::runtime::Runtime;
 use tokio::time::timeout;
 
@@ -93,7 +93,7 @@ enum Attempt {
     /// The bound of `FR-GLOB-012` expired, already classified.
     Expired(Error),
     /// The driver reported a failure, not yet classified.
-    Driver(sqlx::Error),
+    Driver(sqlx_core::Error),
 }
 
 /// Runs one statement under the bound of `FR-GLOB-012`.
@@ -117,7 +117,7 @@ fn run<T>(
     runtime: &Runtime,
     bound: Bound,
     target: &Target<'_>,
-    work: impl Future<Output = Result<T, sqlx::Error>>,
+    work: impl Future<Output = Result<T, sqlx_core::Error>>,
 ) -> Result<T, Attempt> {
     let expired = || {
         Attempt::Expired(fault::expired(
@@ -195,7 +195,7 @@ fn enforce(
         runtime,
         bound(),
         target,
-        sqlx::raw_sql(READ_ONLY).execute(&mut *connection),
+        sqlx_core::raw_sql::raw_sql(READ_ONLY).execute(&mut *connection),
     )
     .map_err(|attempt| unenforced(attempt, entry, ReadOnlyFault::NotApplied))?;
 
@@ -209,7 +209,7 @@ fn enforce(
         runtime,
         bound(),
         target,
-        sqlx::raw_sql(READ_BACK).fetch_optional(&mut *connection),
+        sqlx_core::raw_sql::raw_sql(READ_BACK).fetch_optional(&mut *connection),
     )
     .map_err(|attempt| unenforced(attempt, entry, ReadOnlyFault::ReadBackDisagreed))?;
 
@@ -266,7 +266,7 @@ fn probe(
         runtime,
         bound,
         target,
-        sqlx::raw_sql(PROBE).fetch_optional(&mut *connection),
+        sqlx_core::raw_sql::raw_sql(PROBE).fetch_optional(&mut *connection),
     )
     .map_err(|attempt| unprobed(attempt, target))?;
 
@@ -476,6 +476,8 @@ mod tests {
             &nothing,
         )
         .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry")
     }
 
     /// The verdict `version` earns.
@@ -682,6 +684,8 @@ mod tests {
             &nothing,
         )
         .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry")
     }
 
     /// The statement text of each row the server's record holds for the account

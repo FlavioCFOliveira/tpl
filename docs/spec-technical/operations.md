@@ -1,7 +1,7 @@
 ---
 title: Operations
 status: draft
-last-reviewed: 2026-09-24
+last-reviewed: 2026-11-04
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, technology-stack.md, data-model.md, quality-attributes.md]
 ---
 
@@ -262,6 +262,23 @@ is the path that is installed.
 The third column is `cargo install --list` for the cargo-installed binaries and
 the host's own report for `hyperfine` and Docker, all on 2026-09-11.
 
+**The bundled SQLite library adds a C compile to every target, and a build
+option the build must read.** The `bundled` feature of the SQLite driver
+compiles the library's source into the binary
+([`ADR-013`](../adr/adr-013-sqlite-driver.md)): natively on the two Darwin
+targets, and through the zig toolchain of the cross-build path on the two
+`musl` targets. Which targets that record observed the omission of extension
+loading on, and with which zig release, are its own and are not restated; the
+first build of each target by the recorded path is the observation it leaves
+open. The omission is a build option in `.cargo/config.toml` at the repository
+root, which Cargo reads only when invoked from inside the repository. A binary
+built otherwise carries the mechanism and ends every `sqlite` read in `70`
+before reading the file: it fails safe, because the read-back of `FR-LITE-010`
+is the guarantee and the file is the means (`ADR-013`, *Consequences*). Both
+workflows of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) invoke
+Cargo at the repository root. At `19abb1f` the manifest enables the feature and
+the file sets the option.
+
 **The table describes the development host, not CI.** In the workflows of
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), `cargo-audit` is the
 prebuilt release at the version that record pins, and it is checked against a
@@ -334,8 +351,8 @@ and the record fields are `benches/README.md`'s and are not restated here.
 
 ## The release gates
 
-A gate is a check whose failure stops the release. Four are standing; the
-fifth fires only when a pin moves.
+A gate is a check whose failure stops the release. Five are standing; the
+sixth fires only when a pin moves.
 
 | Gate | What is checked | Trigger | Forced by |
 |---|---|---|---|
@@ -343,6 +360,7 @@ fifth fires only when a pin moves.
 | Every target | The pipeline passes on all four of `NFR-PERF-018`; a failure on one is a failure | Every release | `NFR-PERF-018`; enforced by the workflows of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | Provenance | The four gates of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), Decision 3, pass before any validation or publishing. Gate 3 checks that the tag is `v` and a valid Semantic Versioning 2.0.0 version equal to the manifest's; gate 4, that exactly one release-notes file matches the anchored pattern carrying the full tag. The expression and the pattern are that record's. A tag with a pre-release identifier publishes a GitHub pre-release, which `install.sh` never installs | Every release | [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | The supported-series table | The table of `FR-SRV-015` is re-verified against its source, and its verification date moved | **Every release**, without exception | `FR-SRV-019`, `BR-SRV-004` |
+| The SQLite release | The release carried is re-verified against SQLite's release history and vulnerability page, and [`ADR-013`](../adr/adr-013-sqlite-driver.md) edited in place where the judgement or the release moves | **Every release**, without exception | `FR-LITE-039`; `ADR-013`, *Consequences* |
 | The engine pin | Every name of `FR-ENV-018` still exists and still behaves as before | Only when the pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) moves | `FR-ENV-003` |
 
 **There is no performance gate, and the table above is short by one row that
@@ -363,14 +381,16 @@ criterion so that the old table stays true. A re-derivation that changes the
 set changes what `FR-SRV-029` must be run against, and therefore what the
 fixture must contain.
 
-**Three gates are enforced by a workflow, and two are carried by a person.**
+**Three gates are enforced by a workflow, and three are carried by a person.**
 Under [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), `release.yml`
 publishes nothing unless the tag passes the provenance gates and the tagged
 commit passes the validation pipeline on all four targets, which enforces the
 first three rows. The supported-series table is re-verified by hand before
 the `v*` tag is created, as that record requires, so that any change it forces
 is in the tagged commit; publishing starts only when `release.yml` is
-dispatched against the tag. The engine pin is checked by hand when the
+dispatched against the tag. The SQLite release is re-verified by hand on the
+same terms and at the same moment, because a release it forces moves the lock
+file and `ADR-013` with it. The engine pin is checked by hand when the
 pin moves; no workflow checks it.
 
 ## The four version numbers: where a bump is enacted
@@ -496,7 +516,8 @@ exclude the init payload in its own text, is the coordination document owner's.
 
 ## The fixture as an operational asset
 
-`scripts/mariadb/` is the only database any validation may use: `CLAUDE.md`
+`scripts/mariadb/` is the only server any validation may use, and
+`scripts/sqlite/`, below, the only source of a database file: `CLAUDE.md`
 (*Testes contra MariaDB*) admits no mock, no stub and no external instance, and
 the fixture's own documentation adds that no container is left running after a
 validation run. It is an operational asset because three obligations rest on
@@ -540,6 +561,17 @@ written and records the discharge. `DIV-036` is the entry of
 `specification/upstream-divergences.md` that tracks what naming it still owes
 the root documents, and what that is remains that register's to state.
 
+
+**`scripts/sqlite/` is the second fixture, and nothing operates it.** It holds
+SQL text alone. Each test builds the databases of `FR-LITE-038` from it in its
+own process, through the library the binary carries, into a temporary directory
+of its own ([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)).
+There is no container, no harness script and no gate, nothing to start or stop,
+and nothing left behind outside the temporary directory. It answers for a
+database file the obligation `CLAUDE.md` places on `scripts/mariadb/` for a
+server: exhaustive coverage of what the reader reads, in a realistic domain
+(`FR-LITE-038`). At `19abb1f` it holds seventeen SQL files and the
+`README.md` that states what each builds.
 ## Continuous integration and release
 
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) prescribes two GitHub
@@ -591,7 +623,9 @@ that carries the skill archive; both are that record's *Consequences*.
 [measurement harness](#the-measurement-harness).** A green run therefore does
 not verify the server-dependent assertions; they stay with a person, and
 [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) (*Consequences*)
-lists them. No figure is produced or consumed, consistent with `BR-PERF-008`.
+lists them. The SQLite tests are not among them: their fixture
+is built in process, so they run in both workflows on all four targets
+([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)). No figure is produced or consumed, consistent with `BR-PERF-008`.
 
 ## What this document defers, and to what
 

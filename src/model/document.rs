@@ -793,7 +793,7 @@ mod tests {
         let document = compact(&fixture::database());
 
         assert!(
-            document.starts_with(r#"{"schema_version":1,"source":"server","data":{"database":{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{"#),
+            document.starts_with(r#"{"schema_version":1,"source":"server","data":{"database":{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","provider":"mariadb","server":{"#),
             "{document}"
         );
         assert_eq!(document.matches('\n').count(), 1);
@@ -996,6 +996,52 @@ mod tests {
         assert!(
             expected.starts_with("must be a string, but it is"),
             "{expected}"
+        );
+    }
+
+    #[test]
+    fn fr_ctx_043_a_document_without_provider_is_read_as_a_mariadb_document() {
+        // FR-CTX-043 item 3: a `--context` document may omit the field, and is
+        // then read as a `mariadb` one.
+        let model = fixture::database();
+        let document = compact(&model).replacen(r#""provider":"mariadb","#, "", 1);
+        assert!(!document.contains("provider"));
+
+        let read_back = read(&document, &path()).expect("the field may be absent");
+
+        assert_eq!(
+            read_back.provider,
+            crate::model::database::Provider::Mariadb
+        );
+        assert_eq!(read_back, model);
+    }
+
+    #[test]
+    fn fr_ctx_043_a_third_provider_is_65_naming_the_key_path_and_the_two_values() {
+        // FR-CTX-043 item 3 and FR-RND-020.
+        let document = compact(&fixture::database()).replacen(
+            r#""provider":"mariadb""#,
+            r#""provider":"postgres""#,
+            1,
+        );
+
+        let ContextFault::Structure { at, expected } = refused(&document) else {
+            panic!("a third provider is a structural fault");
+        };
+        assert_eq!(at, "data.database.provider");
+        assert!(expected.contains("mariadb"), "{expected}");
+        assert!(expected.contains("sqlite"), "{expected}");
+    }
+
+    #[test]
+    fn fr_ctx_043_a_mariadb_document_carries_provider_as_the_fourth_metadata_field() {
+        // FR-CTX-036 and FR-CTX-043: after collation and before server.
+        let document = compact(&fixture::database());
+
+        assert!(
+            document
+                .contains(r#""collation":"utf8mb4_unicode_520_ci","provider":"mariadb","server":"#),
+            "{document}"
         );
     }
 }

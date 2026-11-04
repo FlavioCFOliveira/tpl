@@ -1,8 +1,8 @@
 ---
 title: Project and Discovery
 status: approved
-last-reviewed: 2026-09-24
-related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md, errors-and-exit-codes.md, global-flags.md, help-and-version.md]
+last-reviewed: 2026-11-03
+related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md, errors-and-exit-codes.md, global-flags.md, help-and-version.md, sqlite-contract.md]
 ---
 
 # Project and Discovery
@@ -794,8 +794,12 @@ tpl init [<path>]
   sense `FR-PROJ-024` gives it outside `.tpl`.
 
 - **FR-PROJ-024**: The system SHALL NOT create, modify, or delete any file
-  outside `.tpl`, with exactly one exception: the destination directory of
-  `tpl init` and its missing parent directories, per `FR-PROJ-013`.
+  outside `.tpl`, with exactly two exceptions: the destination directory of
+  `tpl init` and its missing parent directories, per `FR-PROJ-013`; and, for
+  a `sqlite` entry whose database is in write-ahead-log mode, the two files
+  `<file>-wal` and `<file>-shm` beside the database, which the SQLite library
+  the binary carries may create and write, and which may remain after the
+  invocation, per `FR-LITE-008`.
 
   *Amended in the third edition.* The first edition admitted no exception,
   which contradicted `FR-PROJ-013` outright: `tpl init a/b/c` cannot create
@@ -808,13 +812,56 @@ tpl init [<path>]
   `.tpl`, and it writes nothing at all if `.tpl` already exists at the
   destination, per `FR-PROJ-014`.
 
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the second exception
+  is new. `FR-LITE-008` lets the SQLite library create the two files beside a
+  database in write-ahead-log mode on any read of it, and this requirement
+  admitted one exception, so the two contradicted each other on every such
+  read. The user decided on 2026-11-03 that `FR-LITE-008` stands. The
+  exception is enumerated, as the third edition enumerated the first, so that
+  the invariant still reads as an invariant, and it names the two files and
+  the condition under which they arise rather than admitting whatever the
+  library writes. The first exception, and everything this requirement
+  forbids for a `mariadb` entry, are unchanged.
+
+  *Observed, on 2026-11-03, through the Python library 3.54.1, on a read-only
+  connection.* A read of a database in write-ahead-log mode, with neither file
+  present, created `-wal` and `-shm` and left the database's bytes and
+  modification time as it found them. A second read, with both files present,
+  left `-wal` unchanged and left the content of `-shm` as it found it, but
+  moved its modification time: the library writes the shared-memory file on a
+  read, so the exception admits writing as well as creating.
+
+  *Rejected: an exception for whatever the SQLite library writes.* It admits
+  more than `FR-LITE-008` bounds, which names two files and forbids every
+  other. *Rejected: reading the library as outside "the system".* The library
+  is linked into the binary, per `FR-LITE-001`, and an invariant about what
+  the binary does that excused part of the binary could not be checked from
+  outside the process. *Rejected: amending `FR-LITE-008` instead.* The user
+  decided that it stands, and its own text states the alternatives it
+  rejected, among them the `immutable` open, which creates nothing and misses
+  committed structure.
+
+  *Accepted cost.* An invocation that reads a `sqlite` entry can leave two
+  files outside `.tpl`, beside a database the caller named. They belong to the
+  database's own locking protocol, every SQLite client that reads such a
+  database creates them, and neither changes the database's content, per
+  `FR-LITE-008`.
+
 - **BR-PROJ-001**: What `tpl` does is fully determined by the contents of the
   project, which is what makes its behaviour reproducible between machines and
   in CI.
 
 - **BR-PROJ-002**: A read command writes to `.tpl/.cache/` on a miss, so no read
   command is read-only with respect to the filesystem unless it is invoked with
-  `--direct --no-cache`.
+  `--direct --no-cache`. Even so invoked, a read of a `sqlite` entry whose
+  database is in write-ahead-log mode may create and write the two files
+  `FR-PROJ-024` admits beside the database, and writes nothing else.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the second sentence
+  is new, for the reason `FR-PROJ-024` gives. The pure read stays the one
+  form of a read command that writes nothing inside `.tpl`; the two files
+  belong to the database's own locking protocol, per `FR-LITE-008`, which
+  states why no form of the read avoids them.
 
 ## Dependencies
 
@@ -823,6 +870,8 @@ tpl init [<path>]
   writes it.
 - [template-commands.md](template-commands.md) — the template root and its
   containment rules.
+- [sqlite-contract.md](sqlite-contract.md) — `FR-LITE-008`, the two files
+  beside a database in write-ahead-log mode that `FR-PROJ-024` admits.
 
 ## Open questions
 

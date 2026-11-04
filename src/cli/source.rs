@@ -79,14 +79,15 @@ use crate::cache::paths::Collection;
 use crate::cache::{Cache, Covered, Listed, Look, Summary};
 use crate::deadline::{Clock, Deadlines, Seconds};
 use crate::error::{Error, KeyAbsence};
-use crate::mariadb::{self, Target, catalogue};
+use crate::mariadb::Target;
 use crate::model::document::{self, DatabaseDocument};
 use crate::output::Source;
 use crate::project::Project;
 use crate::project::config::Configuration;
 use crate::project::config::expand;
 use crate::project::config::keys::{EntryKey, is_blank};
-use crate::project::settings::{self, Settings};
+use crate::project::settings::{self, Resolved, Settings};
+use crate::provider::{self, Read};
 
 use super::Ending;
 use super::globals::Globals;
@@ -232,8 +233,8 @@ pub(super) struct Opened {
     /// the file the `78` row of `FR-ERR-034` obliges.
     configuration: Configuration,
 
-    /// Everything the connection will need, already resolved.
-    settings: Settings,
+    /// Everything the connection will need, already resolved, by provider.
+    settings: Resolved,
 }
 
 impl Opened {
@@ -336,7 +337,12 @@ impl<'a> Reader<'a> {
             &expand::environment,
         )?;
 
-        connection_keys(&settings, &configuration)?;
+        // FR-CONF-040 and FR-CONF-041 reach the `mariadb` arm alone: a `sqlite`
+        // entry carries neither key (FR-CONF-052).
+        match &settings {
+            Resolved::Mariadb(server) => connection_keys(server, &configuration)?,
+            Resolved::Sqlite(_) => {}
+        }
 
         let cache = Cache::of(project.root(), settings.entry());
 
@@ -369,9 +375,15 @@ impl<'a> Reader<'a> {
     /// Returns [`Error::EntryKeyMissing`] where the resolved settings name no
     /// host or no database — which [`Reader::open`] has already refused, so
     /// each arm is the type's own totality rather than a reachable condition —
-    /// and what [`mariadb::open`] and [`catalogue::read`] return.
-    pub(super) fn fetch(&self, opened: &Opened) -> Result<catalogue::Catalogue, Error> {
-        let settings = &opened.settings;
+    /// and what [`provider::read`] returns for the entry's provider.
+    pub(super) fn fetch(&self, opened: &Opened) -> Result<Read, Error> {
+        let clock = self.clock();
+        let settings = match &opened.settings {
+            Resolved::Mariadb(settings) => settings,
+            Resolved::Sqlite(file) => {
+                return provider::read(provider::Source::File(file), &clock);
+            }
+        };
         let file = opened.configuration.file();
         let missing = |key: &str, flag, placeholder| Error::EntryKeyMissing {
             entry: settings.entry().to_owned(),
@@ -390,19 +402,7 @@ impl<'a> Reader<'a> {
             return Err(missing("database", SCHEMA_FLAG, SCHEMA_PLACEHOLDER));
         };
 
-        let clock = self.clock();
-        let mut session = mariadb::open(&target, &clock)?;
-        let read = catalogue::read(
-            &mut session,
-            &target,
-            &clock,
-            database,
-            &catalogue::Scope::Everything,
-        );
-
-        session.close();
-
-        read
+        provider::read(provider::Source::Server { target, database }, &clock)
     }
 
     /// Reads the catalogue and hands the `database` object to `present`.
@@ -583,7 +583,7 @@ impl<'a> Reader<'a> {
     where
         P: FnOnce(Served<'_, '_>, Source, &str) -> Result<T, Error>,
     {
-        let catalogue = self.fetch(opened)?;
+        let read = self.fetch(opened)?;
         let hand = |served: Served<'_, '_>| {
             if !self.no_cache {
                 opened.cache.write(&served, Covered::Everything);
@@ -597,12 +597,12 @@ impl<'a> Reader<'a> {
         // freed or copied (this module's documentation).
         match self.ending {
             Ending::Process => {
-                let model = leak(leak(catalogue).model()?);
+                let model = leak(leak(read).model()?);
 
                 hand(Served::leaked(leak(document::context(model)?)))
             }
             Ending::Caller => {
-                let model = catalogue.model()?;
+                let model = read.model()?;
 
                 hand(Served::borrowed(&document::context(&model)?))
             }
