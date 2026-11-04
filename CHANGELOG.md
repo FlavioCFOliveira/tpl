@@ -53,8 +53,11 @@ workflow, before it closes.
   nothing: a provider other than `mariadb` or `sqlite`; `--path` beside a
   MariaDB flag, or given to `add` without `--provider sqlite`; an empty
   `--path` or one holding `${`; and a write that would leave an entry carrying
-  a key its provider does not take. Writing `provider` or `path` keeps the
-  entry's cache and warns, as writing a connection key does.
+  a key its provider does not take. Writing or removing `provider` or `path`
+  keeps the entry's cache and warns, as writing or removing a connection key
+  does. The warning says the entry may now read another database where the
+  write names `provider` or `path` or leaves a `sqlite` entry, and that it may
+  now point at another server otherwise.
 - **`database.provider` in every document.** The `database` object of the
   JSON documents and of the render context carries `provider`, `mariadb` or
   `sqlite`; a cache-served read carries the provider of the read that filled
@@ -85,9 +88,12 @@ workflow, before it closes.
   `--provider` and `--path`, with a SQLite example, and name `--path` among
   the flags each MariaDB flag excludes; `tpl help cfg set` lists the two new
   keys; `tpl help cfg database test` states what its four answers mean for a
-  `sqlite` entry; and the exit codes of the `schema` subcommands,
-  `tpl render`, `tpl cache load` and `tpl cfg database test` name the
-  conditions of a `sqlite` entry.
+  `sqlite` entry; the exit codes of the `schema` subcommands, `tpl render`,
+  `tpl cache load` and `tpl cfg database test` name the conditions of a
+  `sqlite` entry; and `tpl render --help` and the `context_variables` of
+  `tpl help --format json` describe the `database` variable as "The whole
+  database: name, charset, collation, provider, server, tables, views and
+  routines."
 - **Library API.** `tpl::Error` gained twelve variants, for the SQLite
   provider and its configuration. `tpl::model` gained
   `database::Provider`, `index::PrimaryKey` and the field
