@@ -147,7 +147,8 @@ workflow, before it closes.
   `Login`, `ReadOnlyStatement`, `ReadOnlyReadBack` and `VersionProbe`.
   `tpl::Error` also gained `DatabaseNameRefused`, `ValueHoldsNul` and
   `NulValueGiven`, with the new `error::NulField` and `error::NulPlace`, and
-  `SqliteNamesAlike`, with the new `error::AlikeNames` and `error::AlikeKind`. `tpl::model` gained `database::Provider`, with the values
+  `SqliteNamesAlike`, with the new `error::AlikeNames` and `error::AlikeKind`,
+  and `ProjectFileNotDurable`. `tpl::model` gained `database::Provider`, with the values
   `Mariadb`, `Mysql` and `Sqlite`, `index::PrimaryKey` and the field
   `Database::provider`; `Table::primary_key` now returns a `PrimaryKey`
   rather than an `Index`; and fields a SQLite or a MySQL read cannot fill
@@ -326,8 +327,12 @@ workflow, before it closes.
   that folder exits `74`, leaving the previous file in place.
 - **A rewrite of `.tpl/.cfg` survives a crash.** The temporary file is
   `fsync`ed before it is renamed over `.cfg`, and the `.tpl` folder after the
-  rename, so a power loss leaves the previous file or the new one, whole. An
-  `fsync` that fails exits `74`.
+  rename, so a power loss leaves the previous file or the new one, whole. A
+  failure up to and including the rename exits `74` with the previous file in
+  place, as before. A failure after it exits `74` with
+  `error: .tpl/.cfg was written, and its durability could not be confirmed`, a
+  `cause` stating that the file holds the new content and what the filesystem
+  returned, and a `hint` carrying `tpl cfg list`.
 - **C1 controls and bidirectional formatting characters are escaped.** In
   the text output of the read commands and in every diagnostic, a character
   from U+0080 to U+009F, and each of the twelve characters Unicode marks

@@ -1011,6 +1011,15 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             path.display(),
             os(returned)
         )),
+        // FR-CFG-041, the eighty-third edition: the rename took effect, so the
+        // file holds the new content, and the previous one is never said to
+        // stand.
+        Error::ProjectFileNotDurable { path, returned } => Cow::Owned(format!(
+            "{} holds the new content; making the rename durable failed: the filesystem \
+             returned {}",
+            path.display(),
+            os(returned)
+        )),
         Error::StdoutUnwritable { returned } => Cow::Owned(format!(
             "the write to standard output returned: {}",
             os(returned)

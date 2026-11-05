@@ -1287,6 +1287,12 @@ fn bare(error: &Error) -> Cow<'static, str> {
             "free space on the filesystem, or make .tpl writable by the invoking user, then run \
              the command again",
         ),
+        // FR-CFG-041, the eighty-third edition: the change is in the file, and
+        // `tpl cfg list` shows the file as it stands.
+        Error::ProjectFileNotDurable { .. } => Cow::Borrowed(
+            "the change is in the file and may not survive a crash of this machine; check the \
+             filesystem, and see the file with: tpl cfg list",
+        ),
         Error::StdoutUnwritable { .. } => Cow::Borrowed(
             "free space on the destination, or send the output elsewhere, then run the command \
              again",

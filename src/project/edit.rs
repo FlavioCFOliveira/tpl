@@ -267,10 +267,13 @@ impl Editor {
     /// # Errors
     ///
     /// Returns [`Error::ProjectFileUnwritable`] naming the **target** where the
-    /// temporary file could not be created, written or given mode `0600`, or
-    /// the rename failed. In every one of those cases the previous `.cfg` is
-    /// still in place, unchanged, and no step has acted outside the folder
-    /// [`Editor::open`] opened.
+    /// temporary file could not be created, written, given mode `0600` or made
+    /// durable, or the rename failed. In every one of those cases the previous
+    /// `.cfg` is still in place, unchanged, and no step has acted outside the
+    /// folder the trust checks judged. Returns
+    /// [`Error::ProjectFileNotDurable`] where the rename took effect and its
+    /// durability could not then be established: the file holds the new
+    /// content (`FR-CFG-041`, as amended in the eighty-third edition).
     pub(crate) fn save(&self) -> Result<(), Error> {
         let rendered = self.document.to_string();
         let temporary = format!("{CONFIGURATION}.{}.tmp", std::process::id());
@@ -282,9 +285,16 @@ impl Editor {
             FILE_MODE,
             rendered.as_bytes(),
         )
-        .map_err(|returned| Error::ProjectFileUnwritable {
-            path: self.file.clone(),
-            returned,
+        .map_err(|unreplaced| match unreplaced {
+            crate::at::Unreplaced::Failed(returned) => Error::ProjectFileUnwritable {
+                path: self.file.clone(),
+                returned,
+            },
+            // FR-CFG-041, the eighty-third edition: the rename took effect.
+            crate::at::Unreplaced::NotDurable(returned) => Error::ProjectFileNotDurable {
+                path: self.file.clone(),
+                returned,
+            },
         })
     }
 }
@@ -786,6 +796,30 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(directory.join(".cfg")).expect("the file is there"),
             "[core]\n"
+        );
+    }
+
+    #[test]
+    fn fr_cfg_041_a_rename_whose_durability_fails_is_74_and_the_new_content_stands() {
+        // FR-CFG-041 as amended in the eighty-third edition: the folder's
+        // `fsync` fails after the rename, through the seam of `crate::at`, as
+        // a device error would. The rewrite exits 74 with its own condition,
+        // and the file holds the new content, which is not undone.
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let editor = edited(&directory);
+        crate::at::steps::fail_folder_sync();
+
+        let refused = editor.save().expect_err("the folder's fsync fails");
+
+        assert!(
+            matches!(refused, Error::ProjectFileNotDurable { .. }),
+            "{refused:?}"
+        );
+        assert_eq!(refused.exit_code(), 74);
+        assert_eq!(
+            std::fs::read_to_string(directory.join(".cfg")).expect("the file is there"),
+            "[core]\ndatabase = \"shop\"\n"
         );
     }
 

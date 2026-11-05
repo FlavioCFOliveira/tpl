@@ -492,24 +492,30 @@ pub(crate) fn write_in(
 /// 7. `folder` is `fsync`ed, so the rename itself survives a crash.
 ///
 /// Every step acts on `folder`'s descriptor, so no component of its path
-/// resolved again can redirect one of them. On macOS `fsync` hands the data to
-/// the device without asking it to flush its own cache, which `F_FULLFSYNC`
-/// would; the requirement names `fsync`, and it is what is issued.
+/// resolved again can redirect one of them.
+///
+/// `FR-CFG-041` states the property — after a crash, the previous file or the
+/// new one whole under the name, and success only once the new one is durable
+/// — and leaves the means to the implementation. Steps 5 and 7 are the means
+/// here: `fsync` of the file, then of the folder. On macOS `fsync` hands the
+/// data to the device without asking it to flush its own cache, which
+/// `F_FULLFSYNC` would; that is a limit of the means chosen, recorded here.
 ///
 /// # Errors
 ///
-/// Returns what the filesystem returned for the first step that failed. A
-/// failure up to the rename leaves the target untouched and removes the
-/// temporary; a failure of the folder's `fsync` comes after the rename, so the
-/// target then holds the new bytes, whose durability the call could not
-/// establish.
+/// Returns [`Unreplaced::Failed`] with what the filesystem returned for the
+/// first step up to and including the rename that failed: the target is then
+/// untouched and the temporary removed. Returns [`Unreplaced::NotDurable`]
+/// where the rename took effect and the folder's `fsync` then failed: the
+/// target holds the new bytes, whose durability could not be established, and
+/// nothing is undone.
 pub(crate) fn replace_in(
     folder: &OwnedFd,
     name: &OsStr,
     temporary: &OsStr,
     mode: Mode,
     bytes: &[u8],
-) -> io::Result<()> {
+) -> Result<(), Unreplaced> {
     let _ = rfs::unlinkat(folder, temporary.as_bytes(), AtFlags::empty());
 
     let replaced = (|| -> Result<(), Errno> {
@@ -530,13 +536,35 @@ pub(crate) fn replace_in(
 
     if let Err(errno) = replaced {
         let _ = rfs::unlinkat(folder, temporary.as_bytes(), AtFlags::empty());
-        return Err(io_error(errno));
+        return Err(Unreplaced::Failed(io_error(errno)));
     }
 
-    rfs::fsync(folder).map_err(io_error)?;
+    sync_folder(folder).map_err(|errno| Unreplaced::NotDurable(io_error(errno)))?;
     step(Step::SyncFolder);
 
     Ok(())
+}
+
+/// Why [`replace_in`] did not complete, by whether the rename took effect
+/// (`FR-CFG-041`).
+#[derive(Debug)]
+pub(crate) enum Unreplaced {
+    /// A step up to and including the rename failed: the target is untouched.
+    Failed(io::Error),
+    /// The rename took effect and its durability could not be established:
+    /// the target holds the new bytes.
+    NotDurable(io::Error),
+}
+
+/// `fsync` of the folder after the rename, which a test makes fail through
+/// [`steps::fail_folder_sync`] to reach the outcome a device error would.
+fn sync_folder(folder: &OwnedFd) -> Result<(), Errno> {
+    #[cfg(test)]
+    if steps::folder_sync_fails() {
+        return Err(Errno::IO);
+    }
+
+    rfs::fsync(folder)
 }
 
 /// One step of [`replace_in`], as the test configuration records it.
@@ -672,6 +700,20 @@ pub(crate) mod steps {
     thread_local! {
         /// The steps taken on this thread since the last [`take`].
         static TAKEN: RefCell<Vec<Step>> = const { RefCell::new(Vec::new()) };
+
+        /// Whether the next `fsync` of a folder on this thread fails.
+        static FAIL_FOLDER_SYNC: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    /// Makes the next `fsync` of a folder after a rename, on this thread,
+    /// fail with `EIO`, as a device error would.
+    pub(crate) fn fail_folder_sync() {
+        FAIL_FOLDER_SYNC.with(|fail| fail.set(true));
+    }
+
+    /// Whether the folder's `fsync` is to fail, once.
+    pub(super) fn folder_sync_fails() -> bool {
+        FAIL_FOLDER_SYNC.with(|fail| fail.replace(false))
     }
 
     /// Records one step.

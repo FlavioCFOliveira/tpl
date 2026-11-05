@@ -1387,6 +1387,10 @@ mod tests {
                 path: hostile_path(),
                 returned: io::Error::from(io::ErrorKind::StorageFull),
             },
+            Error::ProjectFileNotDurable {
+                path: hostile_path(),
+                returned: io::Error::from_raw_os_error(5),
+            },
             Error::StdoutUnwritable {
                 returned: io::Error::from(io::ErrorKind::StorageFull),
             },
@@ -2213,6 +2217,31 @@ mod tests {
             }),
             "correct --tpl-dir so that it names an existing .tpl folder"
         );
+    }
+
+    #[test]
+    fn fr_cfg_041_a_rewrite_whose_durability_is_not_confirmed_says_the_new_content_stands() {
+        // FR-CFG-041 as amended in the eighty-third edition, its example word
+        // for word but for the filesystem's answer, which is the system's own
+        // text for EIO: the file holds the new content, and nothing says the
+        // previous one stands.
+        let rendered = render(&Error::ProjectFileNotDurable {
+            path: PathBuf::from("/home/ana/shop/.tpl/.cfg"),
+            returned: io::Error::from_raw_os_error(5),
+        });
+
+        assert_eq!(
+            rendered,
+            example([
+                "error: .tpl/.cfg was written, and its durability could not be confirmed",
+                "cause: /home/ana/shop/.tpl/.cfg holds the new content; making the rename durable \
+                 failed: the filesystem returned Input/output error",
+                "hint:  the change is in the file and may not survive a crash of this machine; \
+                 check the filesystem, and see the file with: tpl cfg list",
+                "exit:  74 (EX_IOERR)",
+            ])
+        );
+        assert!(!rendered.contains("previous"), "{rendered}");
     }
 
     #[test]

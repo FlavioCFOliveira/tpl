@@ -2179,6 +2179,21 @@ pub enum Error {
         returned: io::Error,
     },
 
+    /// A rewrite of `.tpl/.cfg` whose rename took effect and whose durability
+    /// could not then be established (`FR-CFG-041`, as amended in the
+    /// eighty-third edition): the file holds the new content, which may not
+    /// survive a crash of the machine. It is never reported as a failure that
+    /// left the previous file in place.
+    #[error(".tpl/.cfg was written, and its durability could not be confirmed")]
+    ProjectFileNotDurable {
+        /// The `.cfg` that now holds the new content.
+        path: PathBuf,
+        /// What the filesystem returned for the operation that would have
+        /// made the rename durable.
+        #[source]
+        returned: io::Error,
+    },
+
     /// Standard output could not be written (`FR-ERR-001`, the `74` row).
     #[error("standard output could not be written")]
     StdoutUnwritable {
@@ -3537,6 +3552,7 @@ impl Error {
             | Self::ContextDocumentUnreadable { .. }
             | Self::TrustMaterialUnreadable { .. }
             | Self::ProjectFileUnwritable { .. }
+            | Self::ProjectFileNotDurable { .. }
             | Self::StdoutUnwritable { .. }
             | Self::StdoutClosedMidDocument
             | Self::SqliteFileLookup { .. }
@@ -3607,7 +3623,7 @@ pub(crate) mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    pub(crate) const VARIANT_COUNT: usize = 117;
+    pub(crate) const VARIANT_COUNT: usize = 118;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -4089,6 +4105,13 @@ pub(crate) mod tests {
                 Error::ProjectFileUnwritable {
                     path: path(),
                     returned: io::Error::from(io::ErrorKind::StorageFull),
+                },
+                74,
+            ),
+            (
+                Error::ProjectFileNotDurable {
+                    path: path(),
+                    returned: io::Error::from_raw_os_error(5),
                 },
                 74,
             ),
@@ -4674,6 +4697,7 @@ pub(crate) mod tests {
             Error::ProjectNotCreated { .. } => "ProjectNotCreated",
             Error::ProjectFileUnreadable { .. } => "ProjectFileUnreadable",
             Error::ProjectFileUnwritable { .. } => "ProjectFileUnwritable",
+            Error::ProjectFileNotDurable { .. } => "ProjectFileNotDurable",
             Error::StdoutUnwritable { .. } => "StdoutUnwritable",
             Error::StdoutClosedMidDocument => "StdoutClosedMidDocument",
             Error::AuthenticationRefused { .. } => "AuthenticationRefused",
