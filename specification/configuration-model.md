@@ -699,6 +699,10 @@ path     = "data/ledger.sqlite"
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
 
+  *Note added in the eightieth edition,* for rmp `#357`. A `path` that holds
+  a NUL character is refused, on the command line with `64` and in the file
+  with `78`, per `FR-CONF-057`.
+
   *Amended in the sixty-seventh edition,* for rmp `#314`: the sentence on a
   `.tpl` folder reached through a symbolic link is new. "The directory that
   holds the `.tpl` folder" has two readings there — the directory holding the
@@ -2131,6 +2135,100 @@ describes a `mysql` entry as it describes a `mariadb` one, per
   settles what is sent.
 
   *Added in the seventy-seventh edition,* for rmp `#334`.
+
+## A NUL character
+
+- **FR-CONF-057**: The following values SHALL NOT hold a NUL character
+  (U+0000): the `host`, `user`, `password` and `database` of a `mariadb` or a
+  `mysql` entry; each of the four parts of a `dsn` that carries one of them,
+  read after the percent-decoding through which the URL carries it; the
+  `path` of a `sqlite` entry; and the password a `password_command` prints.
+
+  1. **On the command line.** IF a value given to `tpl cfg set` for one of
+     those keys, or to `--dsn`, `--host`, `--user`, `--schema` or `--path`
+     under `FR-CFG-027`, holds a NUL character — the value of `--dsn`, and of
+     the `dsn` key, once each part is decoded — THEN the system SHALL exit
+     `64` (`EX_USAGE`), as `FR-CFG-010` does for a value that does not
+     conform to its type, and SHALL write nothing to `.tpl/.cfg`.
+  2. **In the file.** IF the entry an invocation selects holds such a value,
+     THEN the system SHALL exit `78` (`EX_CONFIG`) at entry resolution, step
+     5 of `FR-ERR-006`, before any connection is opened and before the file
+     a `path` names is opened.
+  3. **From `password_command`.** IF the password the helper prints holds a
+     NUL character, THEN the system SHALL exit `78` where `FR-CONF-056`
+     runs the helper, before the first connection phase.
+
+  The `cause` SHALL name the key, the flag or the part of `dsn`, and the
+  entry, state that the value holds a NUL character, and state that `tpl`
+  refuses it because the value would be cut at it. For `host`, `user`,
+  `database` and `path` it SHALL name the part of the value before the NUL
+  character, escaped under `FR-ERR-024`, which is the value the cut would
+  have used; it SHALL NOT reproduce any part of a password or of the
+  helper's output, per `FR-ERR-013`, and for the third item it SHALL name
+  the command as stored, under the exception `FR-CONF-033` states. The
+  `hint` SHALL show the key or the flag with a placeholder for the value, as
+  in `--schema <database>`, or for the third item state that the command
+  must print the password alone.
+  `${VAR}` cannot introduce a NUL character: every target of `NFR-PERF-018`
+  is a Unix, whose environment strings end at their first NUL, so the rule
+  reaches the value as written, the parts of a `dsn` as decoded, and the
+  helper's output.
+
+  ```
+  tpl -d shop schema tables
+  error: database.shop.database holds a NUL character, for database entry 'shop'
+  cause: database.shop.database in /home/ana/shop/.tpl/.cfg holds a NUL character (U+0000) after 'freight'; tpl refuses it, because the login ends a database name at its first NUL and the session would select 'freight', not the name written
+  hint:  write the name without it: tpl cfg database update shop --schema <database>
+  exit:  78 (EX_CONFIG)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  *Rationale.* Each of these values reaches an interface that ends a string
+  at its first NUL. The login of the client-server protocol carries the user
+  name and the database as `string<NUL>`, per *Protocol::HandshakeResponse41*
+  at
+  `https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_handshake_response.html`;
+  the C interface through which the servers' own clients connect takes the
+  host, the user, the password and the database as `const char *`, per
+  `mysql_real_connect` at
+  `https://dev.mysql.com/doc/c-api/8.4/en/mysql-real-connect.html`, so no
+  such client presents a password that holds one; and SQLite's
+  `sqlite3_open_v2` takes the file name as `const char *filename`, at
+  `https://sqlite.org/c3ref/open.html`. MariaDB's and MySQL's identifier
+  pages state that a name holds no NUL: "Identifiers are not permitted to
+  contain the ASCII NUL character (U+0000)", at
+  `https://mariadb.com/docs/server/reference/sql-structure/sql-language-structure/identifier-names`,
+  and "ASCII NUL (U+0000) and supplementary characters (U+10000 and higher)
+  are not permitted in quoted or unquoted identifiers", at
+  `https://dev.mysql.com/doc/refman/8.4/en/identifiers.html`. All five were
+  read on 2026-11-05. A value that holds a NUL is therefore a value no
+  server accepts whole, and where an interface does not refuse it, it cuts
+  it: rmp `#357`, from the security review of the `mysql` provider on `8.4`
+  and `9.7`, records that a `database` of `freight`, a NUL and `x` selected
+  `freight` at the login, while the catalogue statements compared the whole
+  value, read no row, and exited `77` naming a fault the caller did not
+  make. A refusal names the fault where it is.
+
+  *Why at entry resolution, and not at step 3.* The fault is in one entry,
+  and a refusal at step 3 would refuse the `cfg` command that repairs it,
+  the ground `FR-CONF-040` and `FR-CONF-049` give. *Why the password and the
+  helper's output too.* A password reaches the login through methods of
+  authentication that do not all carry it alike, and one value that one
+  method reads whole and another cuts is two passwords; the servers' own
+  clients cannot present it at all. *Why `path`.* A `path` that holds a NUL
+  names no file the library can open whole, and the file it would open is
+  another than the one written.
+
+  *Rejected: leaving the value to the server or the library.* Neither
+  refuses it where it is cut: the login selected the prefix, and the refusal
+  that followed was a `77` that named the wrong fault. *Rejected: stripping
+  the character.* It changes a value the caller wrote, which `FR-CONF-050`
+  declines for whitespace on the same ground.
+
+  *Added in the eightieth edition,* for rmp `#357`.
 
 ## Precedence
 

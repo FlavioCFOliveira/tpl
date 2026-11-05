@@ -1754,6 +1754,16 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 
   *Added in the seventy-ninth edition,* for rmp `#352`.
 
+  *Note added in the eightieth edition,* for rmp `#352`. For a `mysql` entry
+  the databases these clauses read are those of item 17 of `FR-MYSQL-044`: a
+  target whose name holds a quotation mark, a backslash and a backtick, and
+  four decoys a quoting or a pattern could read in its place. A server can
+  compare a name with letter case folded, so a read of the target meets the
+  decoy in another case exactly where a statement naming the target as a
+  literal meets it. No database of the fixture of `scripts/mariadb/` holds
+  such a name, and `FR-CONF-038` does not oblige one, so for a `mariadb`
+  entry these clauses have no fixture to run against.
+
 ## The order of the connection start
 
 - **FR-SRV-042**: WHEN the system opens a connection, it SHALL issue the three

@@ -2211,13 +2211,19 @@ no requirement of this file is amended.
      authentication method. The `cause` SHALL state both possibilities. The
      `hint` SHALL state that the address must be that of a server of the
      entry's provider, and SHALL carry the command that repoints the entry,
-     as in the first outcome. A greeting that is **truncated** — a packet in
-     the greeting's place that ends before the fields the provider's protocol
-     gives a greeting — or **malformed** — one holding what no greeting of
-     that protocol holds — is this outcome, whatever its bytes, and the
-     system SHALL NOT end the invocation with the `70` of `FR-ERR-030` for
-     it: an answer the server got wrong is not a defect of `tpl`. A greeting
-     cut short because the connection closed before the packet's announced
+     as in the first outcome. A packet of the login that is **truncated** —
+     a well-framed packet that ends before the fields the provider's
+     protocol gives a packet of its kind — or **malformed** — one holding
+     what no packet of that kind holds — is this outcome, whatever its
+     bytes, and the system SHALL NOT end the invocation with the `70` of
+     `FR-ERR-030` for it: an answer the server got wrong is not a defect of
+     `tpl`. The packets of the login are the greeting; an error packet in
+     the greeting's place or at any later step of the login, which
+     `FR-ERR-048` sends here when it cannot be read; a request to switch
+     the authentication method; and a packet that continues an
+     authentication method, such as the packet beginning with the byte
+     `0x01` that `caching_sha2_password` sends, cut to that one byte. A
+     packet cut short because the connection closed before its announced
      length had arrived is the first outcome.
   3. **The server's RSA public key, for a `mariadb` entry.** The login, over
      a session TLS does not protect, needs the server's RSA public key, and
@@ -2336,20 +2342,35 @@ no requirement of this file is amended.
   greeting and ending before its fields do, for which the system exits `69`
   with the second example's four lines.
 
+  *Amended in the eightieth edition,* for rmp `#342`: the sentence on a
+  truncated or malformed greeting reaches every packet of the login. rmp
+  `#342` now covers every short packet on which the driver may panic: a
+  truncated greeting; an error packet cut short in the greeting's place or
+  during the login, which `FR-ERR-048` already sent to this outcome; and a
+  one-byte `0x01` packet during a `caching_sha2_password` login. Each was
+  the second outcome as written — what answered did not answer as a server
+  of the provider does — and each is now named, with the bar on `70`. A
+  test shows each with a listener on the loopback interface that sends the
+  packet in its place, for which the system exits `69` with the second
+  example's four lines.
+
 - **FR-ERR-048**: WHEN the server of a `mariadb` or a `mysql` entry answers
   the login with an error packet, the system SHALL NOT read the catalogue,
   and SHALL classify the packet by the error number it carries, read for the
   entry's provider, as the following table states, and by nothing else the
   packet carries. A number the table does not name is its last row. WHERE
-  the connection named no database, `1044` and `1049` are the last row too,
-  because the condition of the first row is about the database the entry
-  names. WHERE the system cannot read the packet as the server's error
-  packet, and so has no number to classify, the failure is the second
-  outcome of `FR-ERR-047`.
+  the connection named no database, `1044`, `1049` and `1102` are the last
+  row too, because the conditions of their rows are about the database the
+  entry names. WHERE the system cannot read the packet as the server's error
+  packet, and so has no number to classify — a packet that ends before its
+  error number, or before the fields an error packet carries, among them —
+  the failure is the second outcome of `FR-ERR-047`, at `69`, and the system
+  SHALL NOT end the invocation with the `70` of `FR-ERR-030` for it.
 
   | `mariadb` entry | `mysql` entry | Name in the error references | What it is | Code |
   |---|---|---|---|---|
   | `1044`, `1049` | `1044`, `1049` | `ER_DBACCESS_DENIED_ERROR`, `ER_BAD_DB_ERROR` | The database the entry names, which `FR-PRIV-021` reports | `77` |
+  | `1102` | `1102` | `ER_WRONG_DB_NAME` | The database the entry names is not a name the server accepts for a database | `78` (`EX_CONFIG`) |
   | `1045`, `1698` | `1045`, `1698` | `ER_ACCESS_DENIED_ERROR`, `ER_ACCESS_DENIED_NO_PASSWORD_ERROR` | Authentication refused: the user or the password | `77` |
   | `1130` | `1130` | `ER_HOST_NOT_PRIVILEGED` | Authentication refused: the user may not connect from the client's host | `77` |
   | `1862` | `1862` | `ER_MUST_CHANGE_PASSWORD_LOGIN` | Authentication refused: the password has expired | `77` |
@@ -2363,6 +2384,16 @@ no requirement of this file is amended.
   Each class carries the following message.
 
   - **The database.** The message of `FR-PRIV-021`.
+  - **A database name the server does not accept.** The `error` line SHALL
+    state that the server refused the database name of the entry. The
+    `cause` SHALL name the host and port, the error number, the name the
+    entry gives, between quotation marks and escaped under `FR-ERR-024`, so
+    that a leading or a trailing space shows, and the key or the part of
+    `dsn` that carries it, per the `78` row of `FR-ERR-034`; and SHALL state
+    that the server does not accept that name for a database. The `hint`
+    SHALL carry `tpl cfg database update <entry> --schema <database>`, with
+    the entry name filled in, or for an entry defined by `dsn` the command of
+    `FR-ERR-045`, and SHALL NOT state that the operation can be run again.
   - **Authentication refused**, every `77` row but the first. The `error`
     line SHALL name the user and the host the server refused. The `cause`
     SHALL name them, the reason the row states, and that the refusal came
@@ -2411,6 +2442,13 @@ no requirement of this file is amended.
   ```
 
   ```
+  error: the server at db.example.com:3306 refused the database name, for database entry 'shop'
+  cause: the server at db.example.com:3306 refused the login with server error 1102: it does not accept 'freight ' as a database name, which database.shop.database gives in /home/ana/shop/.tpl/.cfg
+  hint:  correct the database name: tpl cfg database update shop --schema <database>
+  exit:  78 (EX_CONFIG)
+  ```
+
+  ```
   error: the server at db.example.com:3306 accepts only encrypted sessions, for database entry 'shop'
   cause: the server at db.example.com:3306 refused the login with server error 3159: it accepts only encrypted sessions, and the session was not encrypted under tls 'disabled'
   hint:  encrypt the session: tpl cfg database update shop --tls verify-identity
@@ -2447,7 +2485,13 @@ no requirement of this file is amended.
   `4151`, and `3118` and `3955`, different meanings: MariaDB names `3118` and
   `3955` placeholders for MySQL compatibility, and MySQL uses `4150` and
   `4151` for errors of a bulk parser. That is why the table is read for the
-  entry's provider.
+  entry's provider. `1102` was read in both references on 2026-11-05: each
+  names it `ER_WRONG_DB_NAME`, with SQLSTATE `42000` and the message
+  "Incorrect database name '%s'"; and both identifier pages state that a
+  database name cannot end with a space — "Database, table and column names
+  can't end with space characters", MariaDB's, and "Database, table, and
+  column names cannot end with space characters", MySQL's, at the pages
+  `FR-CONF-057` cites.
 
   *Observed, and bounded.* `1044`, `1045` and `1049` are observed: the tests
   of `src/mariadb/fault.rs` recorded them on 2026-09-18 against the four
@@ -2467,19 +2511,32 @@ no requirement of this file is amended.
   producing it needs the server's global `max_connections` changed, which
   the fixtures do not do. No other number is observed. This requirement
   classifies numbers; it states no observation of which number a server
-  sends in which circumstance beyond those four.
+  sends in which circumstance beyond those four. `1102` is not observed by
+  this corpus: rmp `#357` records it, from the security review of the
+  `mysql` provider, for a `database` of `freight` followed by a space, on
+  `8.4` and `9.7`; whether a MariaDB server answers the same name with the
+  same number is not observed, and the row is read alike for both because
+  both references give the number one meaning.
 
   *Rationale: the code follows the caller's next step*, as `FR-ERR-002`
   requires. `77` is for a refusal whose remedy is the account — its
   credentials, or a grant or an unlock an administrator gives — which is the
-  step the `77` row of `FR-ERR-001` states. `78` is for the one refusal whose
-  remedy is the entry's own `tls` key. `69` is for a refusal that is about
+  step the `77` row of `FR-ERR-001` states. `78` is for the two refusals
+  whose remedy is a key of the entry: its `tls`, for `3159`, and its
+  database name, for `1102`. `69` is for a refusal that is about
   the server's state or the client's host, and not about the account: a
   server at its limit admits the same login later, and an unknown error
   leaves repetition as the one step that is safe, the operation being
-  read-only. *Why `1129` is `69`.* The block concerns the client's host and
-  the connection errors from it, not the account, and the reference's own
-  message names the remedy as an administrator's flush of the host cache.
+  read-only. *Why `1102` is `78`.* The server refuses the name itself,
+  whatever the account: no grant, no unlock and no repetition makes it a
+  name the server accepts, and the next step is the entry's `database` key,
+  the step the `78` row of `FR-ERR-001` states. It is not the `77` of the
+  first row, whose two numbers concern a name the server accepts and a
+  database the reader may not see or the server does not hold, which
+  `FR-PRIV-021` cannot tell apart. *Why `1129` is `69`.* The block concerns
+  the client's host and the connection errors from it, not the account, and
+  the reference's own message names the remedy as an administrator's flush
+  of the host cache.
 
   *Rejected: classifying by SQLSTATE.* `42000` covers `1044` and `1049`,
   which `FR-PRIV-021` reports, and `1203` and `1226`, which are limits; and
@@ -2493,6 +2550,23 @@ no requirement of this file is amended.
   2026-11-04 to fix in that sprint.
 
   *Added in the seventy-seventh edition,* for rmp `#338`.
+
+  *Amended in the eightieth edition,* for rmp `#357` and `#342`. The row of
+  `1102` is new, with its message, its example and its place in the
+  rationale, which counted one refusal on `78` where there are now two. The
+  number fell to the last row, and the implementation exited `69` with a
+  `hint` that the operation can be run again, which repeats the same
+  refusal, for a fault whose fix is the entry. *Rejected: refusing a name that ends with a space
+  before connecting.* The rules a server applies to a database name — its
+  characters, its length, its last character — are the server's, and a
+  copy of them in `tpl` would differ from the server it is pointed at; the
+  server's refusal, classified, names the fault as surely. A NUL character
+  is the one character `tpl` refuses itself, under `FR-CONF-057`, because no
+  server refuses it at the login: the login cuts the name at it. The
+  sentence on a packet the system cannot read as an error packet names a
+  packet that ends early and bars the `70`, for rmp `#342`: the outcome was
+  the second of `FR-ERR-047` as written, and is now stated where an
+  implementer reads it.
 
 ## A session that opens and does not hold
 

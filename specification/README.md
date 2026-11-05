@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventy-nine editions. All are in force;
+The specification has been written in eighty editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6539,6 +6539,77 @@ template, and the worked examples. Three passages of `README.md` paraphrase
 a requirement this edition amends, and
 [upstream-divergences.md](upstream-divergences.md) raises `DIV-063`,
 `DIV-064` and `DIV-065` against them. `CLAUDE.md` paraphrases none.
+
+### Eightieth edition — a database name the server refuses, one it never sees whole, and the databases a quoting could mistake
+
+The seventy-ninth edition was committed at `5b1a568`, so the follow-up pass
+of sprint 29 is an edition of its own. It specifies rmp `#357`, which the
+user brought into the sprint from the security review of the `mysql`
+provider; the fixture rmp `#352` needs to prove the property `FR-SRV-043`
+states; and, for rmp `#342`, every short packet of the login on which the
+driver may panic.
+
+**One identifier is assigned**: `FR-CONF-057`. None is retired and none is
+renumbered. No open question is raised, so the index of
+[open-questions.md](open-questions.md) stays empty, no divergence entry is
+raised or discharged, and [glossary.md](glossary.md) is unchanged.
+
+- **A database name the server refuses** — rmp `#357`. `FR-ERR-048` gains
+  the row of `1102`, `ER_WRONG_DB_NAME`, read alike for both providers, at
+  `78`: the server refuses the name the entry gives, as for a name ending
+  with a space, and the next step is the entry's `database` key. Its
+  message names the host and port, the number and the name between
+  quotation marks, and its `hint` the command that changes the name; it no
+  longer says that the operation can be run again. Both error references
+  were read for the number, and both identifier pages for the trailing
+  space; which number a MariaDB server sends for that name is not observed.
+  A name ending with a space is not refused before connecting: the server's
+  rules for a name are the server's.
+- **A name the server never sees whole** — rmp `#357`. `FR-CONF-057`, new,
+  in [configuration-model.md](configuration-model.md), in a section of its
+  own: a NUL character is refused in `host`, `user`, `password` and
+  `database`, in each of those parts of a `dsn` once percent-decoded, in a
+  `sqlite` entry's `path`, and in the password a `password_command` prints —
+  with `64` on the command line, with `78` at entry resolution in the file,
+  and with `78` where the helper runs — because the login, the servers' C
+  interface and SQLite's open each end the value at it. `FR-CONF-054` gains
+  a note.
+- **The databases a quoting could mistake** — rmp `#352`. `FR-MYSQL-044`
+  gains item 17: a target database whose name holds a quotation mark, a
+  backslash and a backtick, with objects of its own, among them a table
+  whose name holds a `%`; four decoys — the name without the backslash, with
+  it doubled, a name its pattern matches, and a case variant; and, in item
+  16, the reduced-grant reader's grant on the target and on no decoy. The
+  note on it states what each test of `FR-SRV-043` expects on both series.
+  `FR-SRV-043` gains a note naming the item and recording that the fixture
+  of `scripts/mariadb/` holds no such database, and the rationale of
+  `FR-MYSQL-048` names the item.
+- **Every short packet of the login** — rmp `#342`. `FR-ERR-047`'s second
+  outcome reaches every packet of the login that ends before its fields or
+  holds what none of its kind holds — the greeting, an error packet in the
+  greeting's place or later in the login, a request to switch the method, and
+  a packet that continues one, such as a `caching_sha2_password` packet cut
+  to its byte `0x01` — at `69` and never `70`; and `FR-ERR-048` says so of an
+  error packet it cannot read. Each case was the second outcome as written.
+- **This file** — the edition count of the Scope, and this record.
+
+**What changes for a `mariadb` entry, and what does not.** `1102` moves from
+`69` to `78` for both server providers, and its message changes;
+`FR-CONF-057` refuses, for every provider, values that were accepted and
+then cut. `FR-ERR-047` and `FR-ERR-048` change no message: they bar a `70`
+that no requirement permitted. `FR-MYSQL-044` obliges the MySQL fixture and
+changes nothing `tpl` does. `FR-CONF-015`, `FR-CONF-040`, `FR-CONF-041`,
+`FR-CONF-049`, `FR-CONF-050`, `FR-CONF-056`, `FR-CFG-010`, `FR-CFG-027`,
+`FR-CFG-031`, `FR-CFG-055`, `FR-ERR-006`, `FR-ERR-034`, `FR-ERR-036`,
+`FR-PRIV-021`, `FR-SRV-006`, `FR-MYSQL-015` and `FR-LITE-005` were read
+against the changes, and none is amended.
+
+The fifth validation rule is applied for this edition: neither root
+document has changed since `9468588`; at `5b1a568` both were searched for
+an error packet of the login, a database name, a NUL character, the
+contents of the MySQL fixture and a short packet. Neither paraphrases a
+requirement this edition amends, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
 
 ### Still out of scope
 
