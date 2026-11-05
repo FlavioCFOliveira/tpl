@@ -10,9 +10,25 @@
 //!
 //! C0 escaping needs nothing here. JSON admits no raw control character inside
 //! a string, so the encoder emits the escape the format defines and that is
-//! what satisfies `FR-OUT-018` on this path; the tab exception belongs to the
-//! `text` layouts, where the aligned columns of `FR-OUT-006` are laid out with
-//! it.
+//! what satisfies `FR-OUT-018` on this path for the C0 range; the tab
+//! exception belongs to the `text` layouts, where the aligned columns of
+//! `FR-OUT-006` are laid out with it.
+//!
+//! **The characters past C0 are the formatter's.** `FR-OUT-018`, as amended
+//! in the sixty-ninth edition, emits a C1 control character and a
+//! bidirectional formatting character as JSON's own escape, `\u` and four
+//! hexadecimal digits, which a parser reads back as the same character.
+//! `serde_json` writes both raw: its escape table covers `0x00`–`0x1F`, `"` and
+//! `\\`, and it hands every run it does not escape — map keys included — to
+//! `Formatter::write_string_fragment`, whose default writes the bytes
+//! unchanged. Both forms are therefore written through a formatter of the
+//! crate — [`Compact`], with the trait's default layout, and [`Indented`] —
+//! and each overrides that one method through [`fragment`], which writes every
+//! character [`super::escape::escaped_past_c0`] admits as `\u` and four
+//! lowercase hexadecimal digits, the case `serde_json` writes a C0 escape in,
+//! and the rest of the fragment unchanged (`OD-18`, as amended for rmp
+//! `#321`). The derive still states the key order; the formatter changes how
+//! a string's characters are written, never which keys or values are emitted.
 //!
 //! Nothing is flushed here. The buffer belongs to [`super::writer`], which owns
 //! it because it also owns the consequence of a failed flush.
@@ -23,6 +39,7 @@ use serde::Serialize;
 use serde_json::ser::Formatter;
 
 use super::envelope::Document;
+use super::escape::{escaped_past_c0, may_hold_past_c0};
 
 /// The byte every JSON document ends with, per `FR-OUT-007`.
 const TERMINATOR: u8 = b'\n';
@@ -87,12 +104,79 @@ where
     T: Serialize,
 {
     match form {
-        Form::Compact => serde_json::to_writer(&mut *writer, document),
+        Form::Compact => write_compact(&mut *writer, document),
         Form::Indented => write_indented(&mut *writer, document),
     }
     .map_err(io::Error::from)?;
 
     writer.write_all(&[TERMINATOR])
+}
+
+/// Serialises `value` to `writer` in the compact form of `FR-OUT-007`, without
+/// the terminator.
+fn write_compact<W, T>(writer: W, value: &T) -> serde_json::Result<()>
+where
+    W: Write,
+    T: Serialize + ?Sized,
+{
+    value.serialize(&mut serde_json::Serializer::with_formatter(writer, Compact))
+}
+
+/// Writes one fragment of a string that `serde_json` does not escape, with
+/// every character [`escaped_past_c0`] admits written as `\u` and four
+/// lowercase hexadecimal digits (`FR-OUT-018`, `OD-18`).
+///
+/// A fragment holding no lead byte of such a character reaches `writer` in
+/// one call, which is the ordinary case; otherwise each run between two of
+/// them is written in one call.
+fn fragment<W>(writer: &mut W, fragment: &str) -> io::Result<()>
+where
+    W: ?Sized + Write,
+{
+    // PERF: an ASCII fragment holds no byte at or above `0x80`, so none of the
+    // three lead bytes `may_hold_past_c0` looks for; `str::is_ascii` answers a
+    // word at a time where the scan reads one byte at a time, and the catalogue
+    // is mostly ASCII (rmp `#355`: 8.5 ms of a MySQL 8.4 dump of 2 000 tables).
+    if fragment.is_ascii() || !may_hold_past_c0(fragment) {
+        return writer.write_all(fragment.as_bytes());
+    }
+
+    let mut run = 0;
+    for (at, character) in fragment.char_indices() {
+        if escaped_past_c0(character) {
+            writer.write_all(&fragment.as_bytes()[run..at])?;
+            let code = u32::from(character);
+            writer.write_all(&[
+                b'\\',
+                b'u',
+                HEX[((code >> 12) & 0xf) as usize],
+                HEX[((code >> 8) & 0xf) as usize],
+                HEX[((code >> 4) & 0xf) as usize],
+                HEX[(code & 0xf) as usize],
+            ])?;
+            run = at + character.len_utf8();
+        }
+    }
+
+    writer.write_all(&fragment.as_bytes()[run..])
+}
+
+/// The lowercase hexadecimal digits, indexed by value: the case `serde_json`
+/// writes a C0 escape in.
+const HEX: &[u8; 16] = b"0123456789abcdef";
+
+/// The compact form of `FR-OUT-007`: the layout of the trait's defaults, which
+/// is `serde_json`'s `CompactFormatter`, with the characters past C0 escaped.
+#[derive(Debug, Clone, Copy, Default)]
+struct Compact;
+
+impl Formatter for Compact {
+    fn write_string_fragment<W>(&mut self, writer: &mut W, fragment: &str) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self::fragment(writer, fragment)
+    }
 }
 
 /// Serialises `value` to `writer` in the indented form of `FR-OUT-008`,
@@ -170,6 +254,13 @@ impl Indented {
 }
 
 impl Formatter for Indented {
+    fn write_string_fragment<W>(&mut self, writer: &mut W, fragment: &str) -> io::Result<()>
+    where
+        W: ?Sized + Write,
+    {
+        self::fragment(writer, fragment)
+    }
+
     fn begin_array<W>(&mut self, writer: &mut W) -> io::Result<()>
     where
         W: ?Sized + Write,
@@ -400,5 +491,77 @@ mod tests {
             let (ours, theirs) = both(&value);
             assert_eq!(ours, theirs, "{value}");
         }
+    }
+
+    /// `value` written in `form`, without the terminator.
+    fn written(value: &Value, form: Form) -> String {
+        let mut out = Vec::new();
+        match form {
+            Form::Compact => super::write_compact(&mut out, value),
+            Form::Indented => write_indented(&mut out, value),
+        }
+        .expect("a buffer accepts every write");
+
+        String::from_utf8(out).expect("the encoder emits UTF-8")
+    }
+
+    #[test]
+    fn fr_out_018_a_c1_control_and_a_bidirectional_formatting_character_take_json_s_own_escape() {
+        // FR-OUT-018 as amended in the sixty-ninth edition: in `json` each is
+        // written as `\u` and four hexadecimal digits — lowercase, the case
+        // serde_json writes a C0 escape in — in a value and in a map key, in
+        // both forms, and the parsed document is unchanged.
+        let hostile = "caf\u{e9} \u{9b}31m \u{202e}gpj.exe \u{61c}\u{2066}\u{1}";
+        let value = json!({ hostile: [hostile, { "k": hostile }] });
+
+        for form in [Form::Compact, Form::Indented] {
+            let document = written(&value, form);
+
+            assert!(document.contains("\\u009b31m"), "{form:?}: {document}");
+            assert!(document.contains("\\u202egpj.exe"), "{form:?}: {document}");
+            assert!(
+                document.contains("\\u061c\\u2066\\u0001"),
+                "{form:?}: {document}"
+            );
+            assert!(document.contains("caf\u{e9}"), "{form:?}: é stays raw");
+            assert!(
+                !document.chars().any(super::escaped_past_c0),
+                "{form:?}: {document:?} carries a character of the set raw"
+            );
+            let parsed: Value = serde_json::from_str(&document).expect("the document parses");
+            assert_eq!(parsed, value, "{form:?}: the parsed document changed");
+        }
+
+        // Every C1 control and every Bidi_Control code point, one by one.
+        for code in (0x80_u32..=0x9f).chain([
+            0x61c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068,
+            0x2069,
+        ]) {
+            let character = char::from_u32(code).expect("a code point of the set");
+            let document = written(&json!(character.to_string()), Form::Compact);
+            assert_eq!(document, format!("\"\\u{code:04x}\""));
+        }
+    }
+
+    #[test]
+    fn fr_out_018_a_value_carrying_no_character_of_the_set_is_written_as_serde_json_writes_it() {
+        // MariaDB output changes only for a value holding one of these
+        // characters: every other string is written byte for byte as before.
+        let value = json!({
+            "comment": "Terminais e postos de acostagem — 港湾施設",
+            "local": "Ålesund",
+            "emoji": "\u{1f600}",
+            "near": "\u{7f}\u{a0}\u{61b}\u{200d}\u{2010}\u{2029}\u{202f}\u{2065}\u{206a}",
+            "c0": "a\tb\nc\u{1f}",
+        });
+
+        assert_eq!(
+            written(&value, Form::Compact),
+            serde_json::to_string(&value).expect("it serialises")
+        );
+        assert_eq!(
+            written(&value, Form::Indented),
+            serde_json::to_string_pretty(&value).expect("it serialises")
+        );
     }
 }

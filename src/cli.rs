@@ -576,6 +576,25 @@ pub(crate) fn dispatch(invocation: &Invocation) -> Result<(), Error> {
     route(&mut std::io::stdout().lock(), invocation, Ending::Process)
 }
 
+/// Runs one invocation in process, as the crate entry point does, with what it
+/// writes to stdout kept rather than written (`NFR-PERF-008`).
+///
+/// It is the entry point's own sequence — parse, fix the diagnostic level,
+/// route — with a buffer in place of standard output and
+/// [`Ending::Caller`], so a unit test can drive a whole invocation on a thread
+/// of its own and read what it wrote, without the document reaching the test
+/// runner's output.
+#[cfg(test)]
+pub(crate) fn run_captured(argv: &[&str]) -> (Result<(), Error>, Vec<u8>) {
+    let mut written = Vec::new();
+    let result = parse(argv.iter().map(|argument| (*argument).to_owned())).and_then(|invocation| {
+        crate::diagnostics::verbosity::set_level(level(&invocation));
+        route(&mut written, &invocation, Ending::Caller)
+    });
+
+    (result, written)
+}
+
 /// What follows the command once it returns.
 ///
 /// It exists for one decision: whether memory the command holds is worth
@@ -980,10 +999,10 @@ mod tests {
         (&["cfg", "unset"], &["key"], &[]),
         (&["cfg", "list"], &[], &["format", "pretty"]),
         (&["cfg", "database"], &[], &[]),
-        (&["cfg", "database", "add"], &["name"], &["ca-file", "ca-path", "dsn", "host", "password-command", "port", "schema", "tls", "user"]),
+        (&["cfg", "database", "add"], &["name"], &["ca-file", "ca-path", "dsn", "host", "password-command", "path", "port", "provider", "schema", "tls", "user"]),
         (&["cfg", "database", "list"], &[], &["format", "pretty"]),
         (&["cfg", "database", "show"], &["name"], &["format", "pretty"]),
-        (&["cfg", "database", "update"], &["name"], &["ca-file", "ca-path", "dsn", "host", "password-command", "port", "schema", "tls", "user"]),
+        (&["cfg", "database", "update"], &["name"], &["ca-file", "ca-path", "dsn", "host", "password-command", "path", "port", "provider", "schema", "tls", "user"]),
         (&["cfg", "database", "remove"], &["name"], &[]),
         (&["cfg", "database", "test"], &["name"], &["format", "pretty"]),
 

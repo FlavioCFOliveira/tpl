@@ -96,8 +96,9 @@ impl fmt::Display for CatalogueObjectKind {
 
 /// The phase of a connection or a catalogue read that failed.
 ///
-/// The four are the ones `FR-ERR-034` enumerates for the `cause` line of a
-/// `69`, and the set is closed by that row.
+/// They are the ones `FR-ERR-034` enumerates for the `cause` line of a `69`,
+/// each session statement named as `FR-ERR-027` names it, and the set is
+/// closed by that row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetworkPhase {
     /// Resolving the host name.
@@ -106,8 +107,35 @@ pub enum NetworkPhase {
     TcpConnect,
     /// Negotiating TLS, per the mode of `FR-CONF-013`.
     TlsHandshake,
+    /// The login: the server's greeting and the authentication, which run
+    /// before and after a TLS handshake (`FR-CONF-005`, `FR-ERR-047`).
+    Login,
+    /// The read-only session statement of `FR-SRV-008` or `FR-MYSQL-018`, a
+    /// session statement of `FR-CONF-005`.
+    ReadOnlyStatement,
+    /// The read-back of the read-only session, `FR-SRV-009` or
+    /// `FR-MYSQL-018`, a session statement of `FR-CONF-005`.
+    ReadOnlyReadBack,
+    /// The version probe of `FR-SRV-002` or `FR-MYSQL-006`, a session
+    /// statement of `FR-CONF-005`.
+    VersionProbe,
     /// Reading `INFORMATION_SCHEMA`.
     CatalogueQuery,
+}
+
+impl NetworkPhase {
+    /// Whether the phase is one of the four connection phases that share the
+    /// budget of `core.connect_timeout` (`FR-CONF-005`).
+    #[must_use]
+    pub const fn connecting(self) -> bool {
+        match self {
+            Self::DnsResolution | Self::TcpConnect | Self::TlsHandshake | Self::Login => true,
+            Self::ReadOnlyStatement
+            | Self::ReadOnlyReadBack
+            | Self::VersionProbe
+            | Self::CatalogueQuery => false,
+        }
+    }
 }
 
 impl fmt::Display for NetworkPhase {
@@ -116,6 +144,10 @@ impl fmt::Display for NetworkPhase {
             Self::DnsResolution => "DNS resolution",
             Self::TcpConnect => "the TCP connect",
             Self::TlsHandshake => "the TLS handshake",
+            Self::Login => "the login",
+            Self::ReadOnlyStatement => "the read-only session statement",
+            Self::ReadOnlyReadBack => "the read-back of the read-only session",
+            Self::VersionProbe => "the version probe",
             Self::CatalogueQuery => "a query reading the database structure",
         };
         f.write_str(name)
@@ -516,6 +548,146 @@ pub enum TlsFault {
     CertificateRejected,
 }
 
+/// What the operating system reported for a TCP connect that failed, beside
+/// the refusal [`Error::ConnectionRefused`] carries (`FR-ERR-049`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TcpFault {
+    /// `EHOSTUNREACH` or `EHOSTDOWN`: the host is unreachable.
+    HostUnreachable,
+    /// `ENETUNREACH` or `ENETDOWN`: the host's network is unreachable.
+    NetworkUnreachable,
+    /// `ETIMEDOUT`: nothing answered, and the operating system abandoned the
+    /// attempt before the connection budget expired.
+    NoAnswer,
+    /// Any other error, with the number the operating system gave, where it
+    /// gave one.
+    Other(Option<i32>),
+}
+
+/// What a login that did not complete returned, outside the refusal of a
+/// server's error packet, a TLS handshake and a deadline (`FR-ERR-047`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginFault {
+    /// The first outcome: the connection opened and then failed — closed by
+    /// the server, reset, or abandoned by the operating system.
+    ConnectionClosed,
+    /// The second outcome: what answered did not answer the login as a
+    /// server of the entry's provider does.
+    NotAccepted,
+}
+
+/// Why the server refused an account at the login, beside the user or the
+/// password [`Error::AuthenticationRefused`] carries (`FR-ERR-048`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AccountRefusal {
+    /// `1130`: the user may not connect from the client's host.
+    HostNotPrivileged,
+    /// `1862`: the password has expired.
+    PasswordExpired,
+    /// MariaDB `4151`, MySQL `3118`: the account is locked.
+    Locked,
+    /// MariaDB `4150`, MySQL `3955`: the account is blocked after failed
+    /// logins.
+    Blocked,
+}
+
+/// Why the server ended a login with an error packet that is about its own
+/// state or the client's host, and not the account (`FR-ERR-048`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginRefusal {
+    /// `1040`: the server has reached its limit on connections.
+    ServerConnectionLimit,
+    /// `1203`: the user has reached its limit on simultaneous connections.
+    UserConnectionLimit,
+    /// `1226`: the account has exceeded a resource limit.
+    ResourceLimit,
+    /// `1129`: the client's host is blocked after connection errors.
+    HostBlocked,
+    /// Any other number, which `tpl` classifies no further.
+    Unclassified,
+}
+
+/// A value `FR-CONF-057` refuses where it holds a NUL character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NulField {
+    /// The `host` of a `mariadb` or a `mysql` entry.
+    Host,
+    /// The `user`.
+    User,
+    /// The `password`, from the key, the `dsn` or the helper.
+    Password,
+    /// The `database`.
+    Database,
+    /// The `path` of a `sqlite` entry.
+    Path,
+}
+
+impl fmt::Display for NulField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Host => "host",
+            Self::User => "user",
+            Self::Password => "password",
+            Self::Database => "database",
+            Self::Path => "path",
+        })
+    }
+}
+
+/// Where a value `FR-CONF-057` refuses was read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NulPlace {
+    /// A key of the entry in `.tpl/.cfg`.
+    Key {
+        /// The fully qualified key.
+        key: String,
+        /// The configuration file.
+        file: PathBuf,
+    },
+    /// A part of the entry's `dsn`, which the field names.
+    DsnPart {
+        /// The fully qualified key of the `dsn`.
+        key: String,
+        /// The configuration file.
+        file: PathBuf,
+    },
+    /// The output of the entry's `password_command`.
+    Helper {
+        /// The command as stored (`FR-CONF-017`).
+        command: Vec<String>,
+    },
+}
+
+/// The statement of an open session that failed (`FR-ERR-036`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionStatement {
+    /// The version probe of `FR-SRV-002`, or of `FR-MYSQL-006`.
+    VersionProbe,
+    /// A statement of the catalogue read.
+    CatalogueQuery,
+}
+
+impl fmt::Display for SessionStatement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::VersionProbe => "the version probe",
+            Self::CatalogueQuery => "a query reading the database structure",
+        })
+    }
+}
+
+/// How a statement of an open session failed (`FR-ERR-036`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatementFault {
+    /// The connection failed while the statement was running, a failure of
+    /// the encryption of a session TLS protects included.
+    ConnectionFailed,
+    /// The server's answer did not follow the client-server protocol.
+    OutsideProtocol,
+    /// The server answered with an error packet carrying this number.
+    ServerError(u16),
+}
+
 /// Where an entry name the rule of `FR-CONF-048` refuses was given on the
 /// command line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -567,6 +739,233 @@ pub enum TplDirFault {
     /// The path is a directory whose last segment is `.tpl` in neither form,
     /// and it holds no directory named `.tpl` (`FR-PROJ-027`).
     NotTplFolder,
+}
+
+/// A value read from a SQLite database file, or returned by its library — an
+/// object name, a value read back, the library's message (`FR-ERR-046`).
+///
+/// It is a type of its own so that the bound of `FR-ERR-046` is decided by
+/// the type and not remembered at each interpolation: its
+/// [`Display`](fmt::Display) writes the value escaped under `FR-ERR-024` and,
+/// past 256 characters, cut to its first and last 128 around a marker that
+/// counts what was left out. It is built only in the SQLite reader, from what
+/// the library returned; a value of a `mariadb` read, of a `--context`
+/// document or of the argument vector is never this type, so none of them is
+/// bounded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileValue(String);
+
+impl FileValue {
+    /// The value, as read.
+    pub(crate) fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    /// The value as read, unbounded — for a comparison, never for a line.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for FileValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&crate::diagnostics::bounded(&self.0))
+    }
+}
+
+/// What the SQLite library returned for a failure: the result code and the
+/// message (`FR-GLOB-018`, `FR-LITE-007`, `FR-LITE-040`).
+///
+/// It is the two facts `FR-GLOB-018` admits into a `cause`, and never the
+/// driver's error value, which is dropped where the library's report is
+/// classified.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LibraryReport {
+    /// The code the library returned: the extended code where it returned
+    /// one, whose low eight bits are the primary code.
+    pub code: i32,
+    /// The library's message, or [`None`] where the driver handed none.
+    pub message: Option<FileValue>,
+}
+
+impl LibraryReport {
+    /// SQLite's name for the code — `SQLITE_NOTADB`,
+    /// `SQLITE_READONLY_DIRECTORY` — or the primary code's name and the number
+    /// for an extended code the table does not hold (`FR-GLOB-018`).
+    ///
+    /// It is derived from the code rather than carried beside it, which keeps
+    /// [`enum@Error`] within the size `clippy::result_large_err` admits.
+    #[must_use]
+    pub fn name(&self) -> String {
+        crate::sqlite::code_name(self.code)
+    }
+}
+
+impl fmt::Display for LibraryReport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.message {
+            Some(message) => write!(f, "{} ({}): {message}", self.name(), self.code),
+            None => write!(
+                f,
+                "{} ({}), with no message from the library",
+                self.name(),
+                self.code
+            ),
+        }
+    }
+}
+
+/// Where a SQLite read failed: the open, or a statement the reader issued
+/// (`FR-LITE-007`, `FR-LITE-040`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SqliteAt {
+    /// The read-only open of `FR-LITE-006`.
+    Open,
+    /// A statement of `FR-LITE-015`, described as the `cause` names it.
+    Statement(&'static str),
+}
+
+impl fmt::Display for SqliteAt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Open => f.write_str("the read-only open of the file"),
+            Self::Statement(statement) => f.write_str(statement),
+        }
+    }
+}
+
+/// What ended a statement on a SQLite connection with `69` (`FR-LITE-009`,
+/// `FR-LITE-040`, the note on `FR-ERR-034` for a `sqlite` entry).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SqliteEnd {
+    /// The library returned `SQLITE_BUSY`: the database was locked. `waited`
+    /// is the resolved deadline where the bound was spent when it returned.
+    Locked {
+        /// What the library returned, boxed so that [`enum@Error`] stays
+        /// within the size `clippy::result_large_err` admits.
+        report: Box<LibraryReport>,
+        /// The bound and its resolved value, where the wait spent it.
+        waited: Option<(DeadlineBound, Duration)>,
+    },
+    /// The catalogue-query deadline ended a statement for which the library
+    /// returned no `SQLITE_BUSY`: the watchdog's interrupt, or a bound
+    /// already spent before the statement began.
+    Deadline {
+        /// Which of the two bounds of `FR-GLOB-012` expired.
+        bound: DeadlineBound,
+        /// Its resolved value.
+        limit: Duration,
+    },
+    /// `SQLITE_PROTOCOL` or `SQLITE_SCHEMA`: another connection kept winning
+    /// the locks, or kept changing the schema (`FR-LITE-040`).
+    Contended {
+        /// What the library returned, boxed for the reason
+        /// [`SqliteEnd::Locked`] gives.
+        report: Box<LibraryReport>,
+    },
+}
+
+/// Two names of one set of `FR-LITE-043` that differ in the bytes the file
+/// holds for them and convert to one text under `FR-OUT-017`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlikeNames {
+    /// The kind of the two objects.
+    pub kind: AlikeKind,
+    /// The table that holds them, for two columns, two indexes or two
+    /// triggers.
+    pub table: Option<FileValue>,
+    /// The text both names convert to.
+    pub text: FileValue,
+}
+
+/// The kinds of the two objects of [`AlikeNames`], by the sets of
+/// `FR-LITE-043`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AlikeKind {
+    /// Two tables (the first set).
+    Tables,
+    /// Two views (the first set).
+    Views,
+    /// A table and a view (the first set).
+    TableAndView,
+    /// Two columns of one table (the second set).
+    Columns,
+    /// Two indexes of one table (the third set).
+    Indexes,
+    /// Two triggers of one table (the fourth set).
+    Triggers,
+}
+
+impl fmt::Display for AlikeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Tables => "two tables",
+            Self::Views => "two views",
+            Self::TableAndView => "a table and a view",
+            Self::Columns => "two columns",
+            Self::Indexes => "two indexes",
+            Self::Triggers => "two triggers",
+        })
+    }
+}
+
+/// A row of the schema table `main.sqlite_schema` that the check of
+/// `FR-LITE-041` refuses: its `type` and its `name`, as values of the file,
+/// and the kind of row it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefusedRow {
+    /// The row's `type`: a text or a BLOB as its bytes read as text with
+    /// U+FFFD substituted, an integer or a real in digits, `NULL` as `NULL`.
+    pub row_type: FileValue,
+    /// The row's `name`, written as its `type` is.
+    pub name: FileValue,
+    /// Why the check refuses it.
+    pub kind: RefusedKind,
+}
+
+/// The seven kinds of row the check of `FR-LITE-041` refuses, in the order of
+/// that requirement's table.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RefusedKind {
+    /// A table or a view named in the namespace of the pragma table-valued
+    /// functions: SQLite reads it in place of the function of that name.
+    PragmaName,
+    /// A value of a storage class the schema table's contract excludes.
+    StorageClass {
+        /// The column of the schema table that holds it.
+        column: &'static str,
+        /// The storage class it holds: `NULL`, `INTEGER`, `REAL`, `TEXT` or
+        /// `BLOB`.
+        class: &'static str,
+    },
+    /// A table whose root page contradicts its text.
+    RootPage {
+        /// The root page, or [`None`] for `NULL`.
+        rootpage: Option<i64>,
+        /// Whether the text creates a virtual table.
+        creates_virtual: bool,
+    },
+    /// A `type` that is not exactly one of the four texts SQLite writes:
+    /// `table`, `index`, `view` and `trigger`.
+    Type,
+    /// A row with no text that is not an index's: the library reads every
+    /// such row as an index's.
+    NoText {
+        /// Whether the `sql` is `NULL`; it is the empty text otherwise.
+        null: bool,
+    },
+    /// A NUL character in a name or a text, which the library reads only up
+    /// to.
+    Nul {
+        /// The column that holds it: `name`, `tbl_name` or `sql`.
+        column: &'static str,
+    },
+    /// A trigger whose text does not begin `CREATE TRIGGER` followed by the
+    /// trigger's name, as SQLite writes it.
+    TriggerHeader,
 }
 
 /// Every condition `tpl` reports as a failure.
@@ -1128,6 +1527,55 @@ pub enum Error {
         command: String,
     },
 
+    /// `tpl cfg database add` or `update` combines a flag with a provider
+    /// that refuses it, which the command line alone decides (`FR-CFG-055`,
+    /// items 1 and 2).
+    #[error("{}", flag_refused(.flag, *.provider, *.given))]
+    FlagRefusedByProvider {
+        /// The command, `cfg database add` or `cfg database update`.
+        command: &'static str,
+        /// The entry the invocation names.
+        entry: String,
+        /// The flag the provider refuses, as a literal of `FR-CFG-027`.
+        flag: &'static str,
+        /// The provider that decides it: the one given, or `mariadb` where
+        /// `--provider` was not given.
+        provider: crate::model::database::Provider,
+        /// Whether `--provider` was given.
+        given: bool,
+    },
+
+    /// `tpl cfg database add --provider sqlite` was not given `--path`
+    /// (`FR-CFG-055`, item 1).
+    #[error("tpl cfg database add --provider sqlite needs --path")]
+    PathRequired {
+        /// The entry the invocation names.
+        entry: String,
+    },
+
+    /// A `cfg` write would leave an entry carrying a key its provider refuses
+    /// (`FR-CFG-048`, as amended in the sixty-fifth edition, `FR-CONF-052`).
+    /// `.tpl/.cfg` is left unchanged.
+    #[error("cannot give entry '{entry}' {}", provider_write(*.provider, *.own, .written))]
+    ProviderIncoherentWrite {
+        /// The entry the write would leave in that state.
+        entry: String,
+        /// The provider the write turns on: the provider written, or the
+        /// provider the written key belongs to.
+        provider: crate::model::database::Provider,
+        /// The provider the entry would carry after the write, which refuses
+        /// a written key that is not the provider (`FR-CONF-052`).
+        own: crate::model::database::Provider,
+        /// The key the invocation writes, fully qualified.
+        written: String,
+        /// Every key the entry would carry that the other provider takes,
+        /// as leaves of `FR-CONF-002`.
+        carried: Vec<&'static str>,
+        /// The value the invocation asked for, where it is one a `hint` may
+        /// carry under `FR-ERR-022`.
+        value: Option<String>,
+    },
+
     // ---------------------------------------------------------------- 65 ---
     /// A template the engine could not parse (`FR-TMPL-020`, `FR-RND-030`).
     #[error("template '{template}' has a syntax error at {position}")]
@@ -1252,8 +1700,13 @@ pub enum Error {
         /// The database entry of `.tpl/.cfg` the read was made through — half
         /// of the population `FR-ERR-034` obliges.
         entry: String,
-        /// The server-side database it was sought in — the other half.
+        /// The server-side database it was sought in — the other half; `main`
+        /// for a `sqlite` read (`FR-LITE-019`).
         database: String,
+        /// The provider the read was made through, which decides what the
+        /// `cause` says was searched: the catalogue of a server, or the schema
+        /// of a database file (`FR-CTX-043`).
+        provider: crate::model::database::Provider,
         /// The nearest matches among the objects of that kind the database
         /// does hold, selected by `FR-ERR-019` and ordered as it fixes. Empty
         /// where nothing qualified, per `FR-ERR-020`. `FR-SCH-010` obliges the
@@ -1456,6 +1909,9 @@ pub enum Error {
     /// `verify-identity`.
     #[error("the TLS handshake with {host}:{port} failed, for database entry '{entry}'")]
     TlsHandshakeFailed {
+        /// The provider of the entry, which decides the `hint` of a refused
+        /// handshake (`FR-MYSQL-021`).
+        provider: crate::model::database::Provider,
         /// The database entry the connection was opened for.
         entry: String,
         /// The host attempted.
@@ -1469,7 +1925,8 @@ pub enum Error {
     /// A network phase did not finish within its deadline (`FR-ERR-027`,
     /// `FR-GLOB-013`).
     #[error(
-        "{phase} for {host}:{port} exceeded {bound} of {limit:?}, for database entry '{entry}'"
+        "{phase} for {host}:{port} exceeded {} of {limit:?}, for database entry '{entry}'",
+        bound_name(*.phase, *.bound)
     )]
     NetworkDeadlineExceeded {
         /// The database entry the connection was opened for.
@@ -1489,6 +1946,92 @@ pub enum Error {
         limit: Duration,
     },
 
+    /// The TCP connect failed with an error the operating system reported
+    /// that is not a refusal (`FR-ERR-049`, outcomes 2 to 4).
+    #[error("cannot reach {host}:{port}, for database entry '{entry}'")]
+    TcpConnectFailed {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn` (`FR-ERR-045`).
+        by_dsn: bool,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// What the operating system reported.
+        fault: TcpFault,
+    },
+
+    /// The TCP connection opened and the login did not complete
+    /// (`FR-ERR-047`, outcomes 1 and 2).
+    #[error("the login to {host}:{port} did not complete, for database entry '{entry}'")]
+    LoginNotCompleted {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn` (`FR-ERR-045`).
+        by_dsn: bool,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// The provider of the entry, whose server the `cause` and the `hint`
+        /// name.
+        provider: crate::model::database::Provider,
+        /// Which of the two outcomes it was.
+        fault: LoginFault,
+    },
+
+    /// The server ended the login with an error packet about its own state or
+    /// the client's host (`FR-ERR-048`: a limit on connections, a blocked
+    /// host, or a number `tpl` classifies no further).
+    #[error("the login to {host}:{port} did not complete, for database entry '{entry}'")]
+    LoginRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// The error number the packet carried, which the `cause` names under
+        /// `FR-GLOB-018`.
+        number: u16,
+        /// The reason its row states.
+        reason: LoginRefusal,
+    },
+
+    /// A statement failed on a session that had opened (`FR-ERR-036`).
+    #[error(
+        "{} did not complete, for database entry '{entry}'",
+        statement_line(*.statement, .host, *.port)
+    )]
+    StatementFailed {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// The host of the session.
+        host: String,
+        /// The port of the session.
+        port: u16,
+        /// The statement that failed.
+        statement: SessionStatement,
+        /// How it failed.
+        fault: StatementFault,
+    },
+
+    /// A statement on a SQLite connection was ended by a lock, the
+    /// catalogue-query deadline, or another connection (`FR-LITE-009`,
+    /// `FR-LITE-040`).
+    #[error("the SQLite database {} could not be read now, for database entry '{entry}'", .path.display())]
+    SqliteUnavailable {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The statement that was running.
+        statement: &'static str,
+        /// What ended it.
+        ended: SqliteEnd,
+    },
+
     // ---------------------------------------------------------------- 70 ---
     /// An internal invariant was violated and the system declines to continue
     /// past it (`FR-ERR-030`).
@@ -1502,6 +2045,45 @@ pub enum Error {
         invariant: &'static str,
         /// Where it was detected — the "where" of the `70` row of
         /// `FR-ERR-034`, which is the location the condition arose at.
+        location: &'static Location<'static>,
+    },
+
+    /// A hardening control or limit of a SQLite connection did not take
+    /// effect, or its read-back did not confirm it (`FR-LITE-012`). Nothing is
+    /// read from the file.
+    #[error("the SQLite control {control} did not take effect, for database entry '{entry}'")]
+    SqliteControlNotInEffect {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The control or limit, as `FR-LITE-010` and `FR-LITE-011` name it.
+        control: &'static str,
+        /// The value set, or the row required.
+        set: &'static str,
+        /// The value read back, or what the library returned where applying
+        /// or reading it failed.
+        read_back: FileValue,
+    },
+
+    /// The SQLite library reported a failure only a defect of `tpl` or of
+    /// the library the binary carries can produce, or a fact of the read broke
+    /// an invariant the reader holds (`FR-LITE-040`, `FR-LITE-032`,
+    /// `FR-ERR-030`).
+    #[error("reading the SQLite database {} hit a defect in tpl, for database entry '{entry}'", .path.display())]
+    SqliteDefect {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The open or the statement that failed.
+        at: SqliteAt,
+        /// The invariant that was violated, as a literal.
+        invariant: &'static str,
+        /// What the library returned, where the defect is a result code,
+        /// boxed for the reason [`SqliteEnd::Locked`] gives.
+        report: Option<Box<LibraryReport>>,
+        /// Where it was detected.
         location: &'static Location<'static>,
     },
 
@@ -1597,6 +2179,21 @@ pub enum Error {
         returned: io::Error,
     },
 
+    /// A rewrite of `.tpl/.cfg` whose rename took effect and whose durability
+    /// could not then be established (`FR-CFG-041`, as amended in the
+    /// eighty-third edition): the file holds the new content, which may not
+    /// survive a crash of the machine. It is never reported as a failure that
+    /// left the previous file in place.
+    #[error(".tpl/.cfg was written, and its durability could not be confirmed")]
+    ProjectFileNotDurable {
+        /// The `.cfg` that now holds the new content.
+        path: PathBuf,
+        /// What the filesystem returned for the operation that would have
+        /// made the rename durable.
+        #[source]
+        returned: io::Error,
+    },
+
     /// Standard output could not be written (`FR-ERR-001`, the `74` row).
     #[error("standard output could not be written")]
     StdoutUnwritable {
@@ -1613,6 +2210,34 @@ pub enum Error {
     #[error("standard output closed part-way through a JSON document")]
     StdoutClosedMidDocument,
 
+    /// The kind of the SQLite database path could not be established,
+    /// because its lookup failed (`FR-LITE-005`, the first row of
+    /// `FR-LITE-007`). Nothing is opened and nothing is created.
+    #[error("the SQLite database {} could not be found, for database entry '{entry}'", .path.display())]
+    SqliteFileLookup {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// What the filesystem returned.
+        returned: io::Error,
+    },
+
+    /// A read of the SQLite database file, or of a file the library needs
+    /// beside it, failed for want of something the host or the filesystem did
+    /// not supply (`FR-LITE-007`, `FR-LITE-040`).
+    #[error("the SQLite database {} could not be read, for database entry '{entry}'", .path.display())]
+    SqliteFileUnreadable {
+        /// The entry the read was made through.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The open or the statement that failed.
+        at: SqliteAt,
+        /// What the library returned.
+        report: LibraryReport,
+    },
+
     // ---------------------------------------------------------------- 77 ---
     /// The server refused the credentials (`FR-ERR-001`, the `77` row).
     ///
@@ -1628,6 +2253,25 @@ pub enum Error {
         user: String,
         /// The host that refused it.
         host: String,
+    },
+
+    /// The server refused the account for a reason that is not the user or
+    /// the password (`FR-ERR-048`).
+    #[error(
+        "the server at '{host}' refused authentication for user '{user}', for database entry '{entry}'"
+    )]
+    AccountRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, for the `hint` that names
+        /// another user (`FR-ERR-045`).
+        by_dsn: bool,
+        /// The user the server refused.
+        user: String,
+        /// The host that refused it.
+        host: String,
+        /// The reason its row states.
+        reason: AccountRefusal,
     },
 
     /// A property of an object requested by name could not be read, so the
@@ -2045,6 +2689,11 @@ pub enum Error {
         by_dsn: bool,
         /// Which of the two conditions of `FR-SRV-010` arose.
         fault: ReadOnlyFault,
+        /// The session variable the read-back reads, as the provider's
+        /// contract names it: `@@session.tx_read_only` for a `mariadb` entry
+        /// (`FR-SRV-009`) and `@@session.transaction_read_only` for a `mysql`
+        /// entry (`FR-MYSQL-018`, `FR-MYSQL-019`).
+        read_back: &'static str,
     },
 
     /// The selected entry does not carry a key the invocation needs
@@ -2088,6 +2737,83 @@ pub enum Error {
         has_entries: bool,
     },
 
+    /// The selected entry carries a key its provider refuses (`FR-CONF-052`).
+    /// No connection is opened and no file.
+    #[error("database entry '{entry}' carries keys its provider does not take")]
+    ProviderRefusesKeys {
+        /// The entry.
+        entry: String,
+        /// The file the entry is declared in.
+        file: PathBuf,
+        /// The entry's provider.
+        provider: crate::model::database::Provider,
+        /// Whether the provider is written, or taken from an absent key.
+        written: bool,
+        /// Every key the entry carries that the provider refuses, as leaves of
+        /// `FR-CONF-002`, in the order it states them.
+        keys: Vec<&'static str>,
+    },
+
+    /// The path a `sqlite` entry names is not a regular file (`FR-LITE-005`).
+    /// It is not opened.
+    #[error("{} is not a regular file, for database entry '{entry}'", .path.display())]
+    SqliteNotRegularFile {
+        /// The entry.
+        entry: String,
+        /// The path, as resolved.
+        path: PathBuf,
+        /// The kind of file found: a directory, a FIFO, a socket, a character
+        /// or a block device.
+        kind: &'static str,
+    },
+
+    /// The file a `sqlite` entry names is not a SQLite database, is damaged,
+    /// or holds a schema the library cannot load (`FR-LITE-007`).
+    #[error("{} cannot be read as a SQLite database, for database entry '{entry}'", .path.display())]
+    SqliteFileRefused {
+        /// The entry.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The open or the statement that failed.
+        at: SqliteAt,
+        /// What the library returned.
+        report: LibraryReport,
+    },
+
+    /// The schema table of the file a `sqlite` entry names holds a row the
+    /// check of `FR-LITE-041` refuses: a table or a view named like a pragma
+    /// table-valued function, a value of a storage class the table's contract
+    /// excludes, a table whose root page contradicts its text, a type SQLite
+    /// does not write, a row with no text that is not an index's, a NUL
+    /// character in a name or a text, or a trigger's header SQLite does not
+    /// write. No further statement reads the file.
+    #[error("{} holds a schema tpl refuses to read, for database entry '{entry}'", .path.display())]
+    SqliteSchemaRefused {
+        /// The entry.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The row refused, boxed so that [`enum@Error`] stays within the size
+        /// `clippy::result_large_err` admits.
+        row: Box<RefusedRow>,
+    },
+
+    /// The file holds two names of one set of `FR-LITE-043` that differ in
+    /// their bytes and convert to one text: the model, naming each object by
+    /// its text, cannot carry them apart. No model is presented and nothing
+    /// is written to the cache.
+    #[error("the database file holds {} tpl cannot tell apart, for database entry '{entry}'", .names.kind)]
+    SqliteNamesAlike {
+        /// The entry.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The two names, boxed so that [`enum@Error`] stays within the size
+        /// `clippy::result_large_err` admits.
+        names: Box<AlikeNames>,
+    },
+
     /// The server is reachable and authenticated and is not MariaDB
     /// (`FR-SRV-003`). The catalogue is not read.
     #[error("the server reached by database entry '{entry}' is not MariaDB")]
@@ -2124,6 +2850,196 @@ pub enum Error {
         /// table compiled into the binary, and the type admits no other.
         supported: &'static [&'static str],
     },
+
+    /// A `mysql` entry reached a server that is reachable and authenticated
+    /// and is not MySQL (`FR-MYSQL-007`, `FR-MYSQL-008`). The catalogue is not
+    /// read.
+    #[error("the server is not MySQL, for database entry '{entry}'")]
+    ServerNotMysql {
+        /// The entry that reached it.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
+        by_dsn: bool,
+        /// The string the version probe returned, from which the `cause` names
+        /// the product: MariaDB where it carries the marker, and the string
+        /// itself otherwise.
+        reported: String,
+    },
+
+    /// A `mysql` entry reached a MySQL server of a series older than the
+    /// newest series of `FR-MYSQL-003` and not among them (`FR-MYSQL-009`).
+    /// The catalogue is not read.
+    #[error("server series '{series}' is not supported, for database entry '{entry}'")]
+    MysqlSeriesNotSupported {
+        /// The entry that reached it.
+        entry: String,
+        /// Whether that entry is defined by `dsn`, so that a `hint` repointing
+        /// it names `--dsn` (`FR-ERR-045`). Set by the crate-private `Error::of_dsn_entry`.
+        by_dsn: bool,
+        /// The string the version probe returned (`FR-MYSQL-006`).
+        version: String,
+        /// The series found, derived from it.
+        series: String,
+        /// The series of `FR-MYSQL-003`, as the table compiled into the binary
+        /// holds them; `BR-MYSQL-001` states the set once, so the window
+        /// travels on the value, as it does for [`Error::SeriesNotSupported`].
+        supported: &'static [&'static str],
+    },
+
+    /// A `mysql` entry's authentication, over a session TLS does not protect,
+    /// needs the server's RSA public key, which `tpl` does not request
+    /// (`FR-MYSQL-045`). The connection is ended before the authentication
+    /// completes, and the catalogue is not read.
+    ///
+    /// For a `mariadb` entry it is the third outcome of `FR-ERR-047`: the same
+    /// facts and command at exit `69`, per the note on `FR-SEC-021`.
+    #[error(
+        "cannot authenticate user '{user}' over an unencrypted session, for database entry '{entry}'"
+    )]
+    PublicKeyRequestRefused {
+        /// The provider of the entry, which decides the code: `78` for a
+        /// `mysql` entry, `69` for a `mariadb` entry.
+        provider: crate::model::database::Provider,
+        /// The entry whose connection it was.
+        entry: String,
+        /// The user the driver presented.
+        user: String,
+        /// The host the connection reached.
+        host: String,
+        /// The port it reached.
+        port: u16,
+        /// The TLS mode in force, as `FR-CONF-013` spells it: `disabled`, or
+        /// `preferred` against a server that offered no TLS.
+        tls: &'static str,
+        /// Whether the server offered no TLS, which the refusal shows under
+        /// `preferred`: it is raised only on a session TLS does not protect,
+        /// and `preferred` leaves one so only where the server offers none.
+        no_tls_offered: bool,
+        /// The authentication method the server asked for, as the driver names
+        /// it — one of the driver's own names, so it is held as the `'static`
+        /// string the driver hands over.
+        method: &'static str,
+    },
+
+    /// The server accepts only encrypted sessions, and the session was not
+    /// encrypted under the entry's mode (`FR-ERR-048`, error `3159`).
+    #[error(
+        "the server at {host}:{port} accepts only encrypted sessions, for database entry '{entry}'"
+    )]
+    SecureTransportRequired {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// The TLS mode in force, as `FR-CONF-013` spells it.
+        tls: &'static str,
+    },
+
+    /// The server refused, at the login, the database name the entry gives
+    /// (`FR-ERR-048`, error `1102`).
+    ///
+    /// `78` and not `69`: no repetition makes it a name the server accepts,
+    /// and the next step is the entry's database key.
+    #[error("the server at {host}:{port} refused the database name, for database entry '{entry}'")]
+    DatabaseNameRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn` (`FR-ERR-045`).
+        by_dsn: bool,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// The database name, as the entry gives it. The key that carries it
+        /// is `database`, or the database part of `dsn` where `by_dsn` is
+        /// set, and is derived from the entry rather than carried.
+        name: String,
+        /// The configuration file that declares it.
+        file: PathBuf,
+    },
+
+    /// A value `FR-CONF-057` names, read from `.tpl/.cfg` or printed by the
+    /// `password_command`, holds a NUL character.
+    #[error(
+        "{} holds a NUL character, for database entry '{entry}'",
+        nul_subject(*.field, .place)
+    )]
+    ValueHoldsNul {
+        /// The database entry that holds the value.
+        entry: String,
+        /// Which value it is.
+        field: NulField,
+        /// Where the value was read.
+        place: NulPlace,
+        /// The part of the value before the NUL character, for every field
+        /// but the password, which no message reproduces (`FR-ERR-013`).
+        before: Option<String>,
+    },
+
+    /// A value `FR-CONF-057` names, given on the command line, holds a NUL
+    /// character. Nothing is written.
+    #[error(
+        "{} holds a NUL character, for database entry '{entry}'",
+        nul_given_subject(.parameter, *.field, *.in_dsn)
+    )]
+    NulValueGiven {
+        /// The flag or the fully qualified key the value was given for.
+        parameter: String,
+        /// The command path the value was given to, without the program name.
+        command: String,
+        /// The database entry the value was given for.
+        entry: String,
+        /// Which value it is.
+        field: NulField,
+        /// Whether the value is a part of the `dsn` given.
+        in_dsn: bool,
+        /// The part of the value before the NUL character, for every field
+        /// but the password.
+        before: Option<String>,
+    },
+}
+
+/// The subject of the `error` line of [`Error::ValueHoldsNul`].
+fn nul_subject(field: NulField, place: &NulPlace) -> String {
+    match place {
+        NulPlace::Key { key, .. } => key.clone(),
+        NulPlace::DsnPart { key, .. } => format!("the {field} part of {key}"),
+        NulPlace::Helper { .. } => "the password the password_command printed".to_owned(),
+    }
+}
+
+/// The subject of the `error` line of [`Error::NulValueGiven`].
+fn nul_given_subject(parameter: &str, field: NulField, in_dsn: bool) -> String {
+    if in_dsn {
+        format!("the {field} part of {parameter}")
+    } else {
+        format!("the value given for {parameter}")
+    }
+}
+
+/// The bound a deadline names in its `error` line: the budget the four
+/// connection phases share, for one of them, and the phase's own deadline
+/// for a catalogue query (`FR-ERR-027`, `FR-CONF-005`).
+fn bound_name(phase: NetworkPhase, bound: DeadlineBound) -> &'static str {
+    match bound {
+        DeadlineBound::Phase if phase.connecting() => "the connection budget",
+        DeadlineBound::Phase => "its own deadline",
+        DeadlineBound::Overall => "the overall budget",
+    }
+}
+
+/// The subject of the `error` line of [`Error::StatementFailed`]
+/// (`FR-ERR-036`).
+fn statement_line(statement: SessionStatement, host: &str, port: u16) -> String {
+    match statement {
+        SessionStatement::VersionProbe => format!("the version probe of {host}:{port}"),
+        SessionStatement::CatalogueQuery => {
+            format!("a query reading the database structure from {host}:{port}")
+        }
+    }
 }
 
 /// The `error:` line of [`Error::UnknownCommand`]: the token, and the group it
@@ -2380,6 +3296,44 @@ fn configuration_entry_name(file: &std::path::Path, core: bool) -> String {
     }
 }
 
+/// The `error:` line of [`Error::FlagRefusedByProvider`]: the flags that
+/// cannot stand together, as the invocation gave them (`FR-CFG-055`).
+///
+/// `provider` is the provider that decides it. Where `--provider` was not
+/// given, the line names the flag that decided it instead: `--path`, beside a
+/// flag of a `mariadb` entry, or the absent `--provider sqlite`.
+fn flag_refused(flag: &str, provider: crate::model::database::Provider, given: bool) -> String {
+    use crate::model::database::Provider;
+
+    match (provider, given) {
+        (_, true) => format!("{flag} cannot be given with --provider {provider}"),
+        (Provider::Sqlite, false) => format!("{flag} cannot be given with --path"),
+        (Provider::Mariadb | Provider::Mysql, false) => {
+            format!("{flag} cannot be given without --provider sqlite")
+        }
+    }
+}
+
+/// The `error:` line of [`Error::ProviderIncoherentWrite`], in the words
+/// `FR-CFG-048` shows: the provider where the write gives one, and the key
+/// otherwise.
+///
+/// `provider` is the provider the written key belongs to, and `own` the
+/// provider the entry carries after the write. Where the write is a key rather
+/// than the provider, `own` refuses the key, and that is the provider the line
+/// names.
+fn provider_write(
+    provider: crate::model::database::Provider,
+    own: crate::model::database::Provider,
+    written: &str,
+) -> String {
+    if written.ends_with(".provider") {
+        format!("the provider {provider}")
+    } else {
+        format!("the key {written}, which its provider {own} does not take")
+    }
+}
+
 /// The `error:` line of [`Error::EntryKeyMissing`].
 ///
 /// `database.<name>.database` names the word three times over, which is how the
@@ -2390,6 +3344,8 @@ fn entry_key_missing(entry: &str, key: &str) -> String {
         "no server database name"
     } else if key.ends_with(".host") {
         "no host"
+    } else if key.ends_with(".path") {
+        "no database file"
     } else {
         "a required key missing"
     };
@@ -2470,7 +3426,13 @@ impl Error {
             | Self::NetworkDeadlineExceeded { by_dsn, .. }
             | Self::ReadOnlySessionNotEnforced { by_dsn, .. }
             | Self::ServerNotMariaDb { by_dsn, .. }
-            | Self::SeriesNotSupported { by_dsn, .. } => *by_dsn = true,
+            | Self::SeriesNotSupported { by_dsn, .. }
+            | Self::ServerNotMysql { by_dsn, .. }
+            | Self::MysqlSeriesNotSupported { by_dsn, .. }
+            | Self::TcpConnectFailed { by_dsn, .. }
+            | Self::LoginNotCompleted { by_dsn, .. }
+            | Self::AccountRefused { by_dsn, .. }
+            | Self::DatabaseNameRefused { by_dsn, .. } => *by_dsn = true,
             _ => {}
         }
         self
@@ -2535,7 +3497,11 @@ impl Error {
             | Self::InitDestinationIsTplFolder { .. }
             | Self::InvalidEntryName { .. }
             | Self::InvalidReference { .. }
-            | Self::EmptyValue { .. } => 64,
+            | Self::EmptyValue { .. }
+            | Self::NulValueGiven { .. }
+            | Self::FlagRefusedByProvider { .. }
+            | Self::PathRequired { .. }
+            | Self::ProviderIncoherentWrite { .. } => 64,
 
             // 65 EX_DATAERR
             Self::TemplateSyntax { .. }
@@ -2562,10 +3528,21 @@ impl Error {
             Self::NameNotResolved { .. }
             | Self::ConnectionRefused { .. }
             | Self::TlsHandshakeFailed { .. }
-            | Self::NetworkDeadlineExceeded { .. } => 69,
+            | Self::NetworkDeadlineExceeded { .. }
+            | Self::TcpConnectFailed { .. }
+            | Self::LoginNotCompleted { .. }
+            | Self::LoginRefused { .. }
+            | Self::StatementFailed { .. }
+            | Self::PublicKeyRequestRefused {
+                provider: crate::model::database::Provider::Mariadb,
+                ..
+            }
+            | Self::SqliteUnavailable { .. } => 69,
 
             // 70 EX_SOFTWARE
-            Self::InternalInvariant { .. } => 70,
+            Self::InternalInvariant { .. }
+            | Self::SqliteControlNotInEffect { .. }
+            | Self::SqliteDefect { .. } => 70,
 
             // 73 EX_CANTCREAT
             Self::ProjectAlreadyExists { .. } | Self::ProjectNotCreated { .. } => 73,
@@ -2575,11 +3552,16 @@ impl Error {
             | Self::ContextDocumentUnreadable { .. }
             | Self::TrustMaterialUnreadable { .. }
             | Self::ProjectFileUnwritable { .. }
+            | Self::ProjectFileNotDurable { .. }
             | Self::StdoutUnwritable { .. }
-            | Self::StdoutClosedMidDocument => 74,
+            | Self::StdoutClosedMidDocument
+            | Self::SqliteFileLookup { .. }
+            | Self::SqliteFileUnreadable { .. } => 74,
 
             // 77 EX_NOPERM
-            Self::AuthenticationRefused { .. } | Self::PropertyNotReadable { .. } => 77,
+            Self::AuthenticationRefused { .. }
+            | Self::AccountRefused { .. }
+            | Self::PropertyNotReadable { .. } => 77,
 
             // 78 EX_CONFIG
             Self::ProjectNotFound { .. }
@@ -2610,13 +3592,24 @@ impl Error {
             | Self::EntryKeyMissing { .. }
             | Self::NoDatabaseEntrySelected { .. }
             | Self::ServerNotMariaDb { .. }
-            | Self::SeriesNotSupported { .. } => 78,
+            | Self::SeriesNotSupported { .. }
+            | Self::ServerNotMysql { .. }
+            | Self::MysqlSeriesNotSupported { .. }
+            | Self::PublicKeyRequestRefused { .. }
+            | Self::SecureTransportRequired { .. }
+            | Self::DatabaseNameRefused { .. }
+            | Self::ValueHoldsNul { .. }
+            | Self::ProviderRefusesKeys { .. }
+            | Self::SqliteNotRegularFile { .. }
+            | Self::SqliteFileRefused { .. }
+            | Self::SqliteSchemaRefused { .. }
+            | Self::SqliteNamesAlike { .. } => 78,
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{
         CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven,
         EntryRepair, Error, KeyAbsence, NetworkPhase, PasswordCommandFault, Position,
@@ -2630,7 +3623,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 92;
+    pub(crate) const VARIANT_COUNT: usize = 118;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -2978,6 +3971,7 @@ mod tests {
                     name: "ordrs".to_owned(),
                     entry: "shop".to_owned(),
                     database: "shop".to_owned(),
+                    provider: crate::model::database::Provider::Mariadb,
                     nearest: Vec::new(),
                 },
                 66,
@@ -3057,6 +4051,7 @@ mod tests {
             ),
             (
                 Error::TlsHandshakeFailed {
+                    provider: crate::model::database::Provider::Mariadb,
                     fault: crate::error::TlsFault::Refused,
                     entry: String::from("shop"),
                     host: "db.example.com".to_owned(),
@@ -3110,6 +4105,13 @@ mod tests {
                 Error::ProjectFileUnwritable {
                     path: path(),
                     returned: io::Error::from(io::ErrorKind::StorageFull),
+                },
+                74,
+            ),
+            (
+                Error::ProjectFileNotDurable {
+                    path: path(),
+                    returned: io::Error::from_raw_os_error(5),
                 },
                 74,
             ),
@@ -3331,6 +4333,7 @@ mod tests {
                     by_dsn: false,
                     entry: "shop".to_owned(),
                     fault: ReadOnlyFault::ReadBackDisagreed,
+                    read_back: "@@session.tx_read_only",
                 },
                 78,
             ),
@@ -3369,13 +4372,277 @@ mod tests {
                 },
                 78,
             ),
+            // The `mysql` provider (FR-MYSQL-008, FR-MYSQL-009, FR-MYSQL-045).
+            (
+                Error::ServerNotMysql {
+                    by_dsn: false,
+                    entry: "shop".to_owned(),
+                    reported: "11.8.9-MariaDB-ubu2404".to_owned(),
+                },
+                78,
+            ),
+            (
+                Error::MysqlSeriesNotSupported {
+                    by_dsn: false,
+                    entry: "shop".to_owned(),
+                    version: "8.0.46".to_owned(),
+                    series: "8.0".to_owned(),
+                    supported: WINDOW,
+                },
+                78,
+            ),
+            (
+                Error::PublicKeyRequestRefused {
+                    provider: crate::model::database::Provider::Mysql,
+                    entry: "shop".to_owned(),
+                    user: "reader".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    tls: "disabled",
+                    no_tls_offered: false,
+                    method: "caching_sha2_password",
+                },
+                78,
+            ),
+            // The login and the session (FR-ERR-036, FR-ERR-047 … FR-ERR-049).
+            (
+                Error::TcpConnectFailed {
+                    entry: "shop".to_owned(),
+                    by_dsn: false,
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    fault: crate::error::TcpFault::HostUnreachable,
+                },
+                69,
+            ),
+            (
+                Error::LoginNotCompleted {
+                    entry: "shop".to_owned(),
+                    by_dsn: false,
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    provider: crate::model::database::Provider::Mariadb,
+                    fault: crate::error::LoginFault::ConnectionClosed,
+                },
+                69,
+            ),
+            (
+                Error::LoginRefused {
+                    entry: "shop".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    number: 1040,
+                    reason: crate::error::LoginRefusal::ServerConnectionLimit,
+                },
+                69,
+            ),
+            (
+                Error::StatementFailed {
+                    entry: "shop".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    statement: crate::error::SessionStatement::VersionProbe,
+                    fault: crate::error::StatementFault::ServerError(1927),
+                },
+                69,
+            ),
+            (
+                Error::AccountRefused {
+                    entry: "shop".to_owned(),
+                    by_dsn: false,
+                    user: "reader".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    reason: crate::error::AccountRefusal::Locked,
+                },
+                77,
+            ),
+            (
+                Error::SecureTransportRequired {
+                    entry: "shop".to_owned(),
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    tls: "disabled",
+                },
+                78,
+            ),
+            // The provider, and the SQLite read (FR-CONF-051 … FR-LITE-040).
+            (
+                Error::FlagRefusedByProvider {
+                    command: "cfg database add",
+                    entry: "ledger".to_owned(),
+                    flag: "--host",
+                    provider: crate::model::database::Provider::Sqlite,
+                    given: true,
+                },
+                64,
+            ),
+            (
+                Error::PathRequired {
+                    entry: "ledger".to_owned(),
+                },
+                64,
+            ),
+            (
+                Error::ProviderIncoherentWrite {
+                    entry: "shop".to_owned(),
+                    provider: crate::model::database::Provider::Sqlite,
+                    own: crate::model::database::Provider::Sqlite,
+                    written: "database.shop.provider".to_owned(),
+                    carried: vec!["host", "port"],
+                    value: Some("sqlite".to_owned()),
+                },
+                64,
+            ),
+            (
+                Error::SqliteUnavailable {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    statement: "the version probe",
+                    ended: super::SqliteEnd::Deadline {
+                        bound: DeadlineBound::Phase,
+                        limit: Duration::from_secs(1),
+                    },
+                },
+                69,
+            ),
+            (
+                Error::SqliteControlNotInEffect {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    control: "temp_store",
+                    set: "MEMORY (2)",
+                    read_back: super::FileValue::new("1"),
+                },
+                70,
+            ),
+            (
+                Error::SqliteDefect {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    at: super::SqliteAt::Open,
+                    invariant: "an invariant",
+                    report: None,
+                    location: Location::caller(),
+                },
+                70,
+            ),
+            (
+                Error::SqliteFileLookup {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    returned: io::Error::from(io::ErrorKind::NotFound),
+                },
+                74,
+            ),
+            (
+                Error::SqliteFileUnreadable {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    at: super::SqliteAt::Open,
+                    report: report(14),
+                },
+                74,
+            ),
+            (
+                Error::ProviderRefusesKeys {
+                    entry: "ledger".to_owned(),
+                    file: path(),
+                    provider: crate::model::database::Provider::Sqlite,
+                    written: true,
+                    keys: vec!["host"],
+                },
+                78,
+            ),
+            (
+                Error::SqliteNotRegularFile {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger"),
+                    kind: "directory",
+                },
+                78,
+            ),
+            (
+                Error::SqliteFileRefused {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    at: super::SqliteAt::Statement("the version probe"),
+                    report: report(26),
+                },
+                78,
+            ),
+            (
+                Error::SqliteSchemaRefused {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    row: Box::new(super::RefusedRow {
+                        row_type: super::FileValue::new("view"),
+                        name: super::FileValue::new("pragma_table_list"),
+                        kind: super::RefusedKind::PragmaName,
+                    }),
+                },
+                78,
+            ),
+            (
+                Error::SqliteNamesAlike {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    names: Box::new(super::AlikeNames {
+                        kind: super::AlikeKind::Tables,
+                        table: None,
+                        text: super::FileValue::new("r\u{fffd}f"),
+                    }),
+                },
+                78,
+            ),
+            (
+                Error::DatabaseNameRefused {
+                    entry: "shop".to_owned(),
+                    by_dsn: false,
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    name: "freight ".to_owned(),
+                    file: path(),
+                },
+                78,
+            ),
+            (
+                Error::ValueHoldsNul {
+                    entry: "shop".to_owned(),
+                    field: super::NulField::Database,
+                    place: super::NulPlace::Key {
+                        key: "database.shop.database".to_owned(),
+                        file: path(),
+                    },
+                    before: Some("freight".to_owned()),
+                },
+                78,
+            ),
+            (
+                Error::NulValueGiven {
+                    parameter: "--host".to_owned(),
+                    command: "cfg database add".to_owned(),
+                    entry: "shop".to_owned(),
+                    field: super::NulField::Host,
+                    in_dsn: false,
+                    before: Some("db".to_owned()),
+                },
+                64,
+            ),
         ]
+    }
+
+    /// A report of the SQLite library, for a sample.
+    fn report(code: i32) -> super::LibraryReport {
+        super::LibraryReport {
+            code,
+            message: Some(super::FileValue::new("a message")),
+        }
     }
 
     /// The variant's name, by an exhaustive match with no wildcard arm: a
     /// variant added to [`Error`] does not compile until it is named here too,
     /// which is what keeps `samples` honest.
-    fn variant_name(error: &Error) -> &'static str {
+    pub(crate) fn variant_name(error: &Error) -> &'static str {
         match error {
             Error::UnknownCommand { .. } => "UnknownCommand",
             Error::UnknownCommandPathSegment { .. } => "UnknownCommandPathSegment",
@@ -3430,6 +4697,7 @@ mod tests {
             Error::ProjectNotCreated { .. } => "ProjectNotCreated",
             Error::ProjectFileUnreadable { .. } => "ProjectFileUnreadable",
             Error::ProjectFileUnwritable { .. } => "ProjectFileUnwritable",
+            Error::ProjectFileNotDurable { .. } => "ProjectFileNotDurable",
             Error::StdoutUnwritable { .. } => "StdoutUnwritable",
             Error::StdoutClosedMidDocument => "StdoutClosedMidDocument",
             Error::AuthenticationRefused { .. } => "AuthenticationRefused",
@@ -3469,6 +4737,31 @@ mod tests {
             Error::ProjectDirUnusable { .. } => "ProjectDirUnusable",
             Error::ServerNotMariaDb { .. } => "ServerNotMariaDb",
             Error::SeriesNotSupported { .. } => "SeriesNotSupported",
+            Error::ServerNotMysql { .. } => "ServerNotMysql",
+            Error::MysqlSeriesNotSupported { .. } => "MysqlSeriesNotSupported",
+            Error::PublicKeyRequestRefused { .. } => "PublicKeyRequestRefused",
+            Error::TcpConnectFailed { .. } => "TcpConnectFailed",
+            Error::LoginNotCompleted { .. } => "LoginNotCompleted",
+            Error::LoginRefused { .. } => "LoginRefused",
+            Error::StatementFailed { .. } => "StatementFailed",
+            Error::AccountRefused { .. } => "AccountRefused",
+            Error::SecureTransportRequired { .. } => "SecureTransportRequired",
+            Error::DatabaseNameRefused { .. } => "DatabaseNameRefused",
+            Error::ValueHoldsNul { .. } => "ValueHoldsNul",
+            Error::NulValueGiven { .. } => "NulValueGiven",
+            Error::FlagRefusedByProvider { .. } => "FlagRefusedByProvider",
+            Error::PathRequired { .. } => "PathRequired",
+            Error::ProviderIncoherentWrite { .. } => "ProviderIncoherentWrite",
+            Error::SqliteUnavailable { .. } => "SqliteUnavailable",
+            Error::SqliteControlNotInEffect { .. } => "SqliteControlNotInEffect",
+            Error::SqliteDefect { .. } => "SqliteDefect",
+            Error::SqliteFileLookup { .. } => "SqliteFileLookup",
+            Error::SqliteFileUnreadable { .. } => "SqliteFileUnreadable",
+            Error::ProviderRefusesKeys { .. } => "ProviderRefusesKeys",
+            Error::SqliteNotRegularFile { .. } => "SqliteNotRegularFile",
+            Error::SqliteFileRefused { .. } => "SqliteFileRefused",
+            Error::SqliteSchemaRefused { .. } => "SqliteSchemaRefused",
+            Error::SqliteNamesAlike { .. } => "SqliteNamesAlike",
         }
     }
 
@@ -3520,13 +4813,23 @@ mod tests {
     }
 
     #[test]
-    fn fr_err_030_code_70_is_confined_to_the_internal_error_variant() {
+    fn fr_err_030_code_70_is_confined_to_the_defect_variants() {
         // FR-ERR-030: 70 is a defect in `tpl`, never something a caller
         // provokes. The other producing condition, a panic, never becomes an
-        // Error value.
+        // Error value. FR-LITE-012 and FR-LITE-040 detect two more violated
+        // invariants on a `sqlite` read — a control of the library the binary
+        // carries that did not take effect, and a result code only a defect
+        // produces — each with a variant that carries what its `cause` names.
         for (error, _) in samples() {
             if error.exit_code() == 70 {
-                assert_eq!(variant_name(&error), "InternalInvariant");
+                assert!(
+                    matches!(
+                        variant_name(&error),
+                        "InternalInvariant" | "SqliteControlNotInEffect" | "SqliteDefect"
+                    ),
+                    "{} produces 70",
+                    variant_name(&error)
+                );
             }
         }
     }
@@ -3581,6 +4884,7 @@ mod tests {
                 name: "ordrs".to_owned(),
                 entry: "shop".to_owned(),
                 database: "shop".to_owned(),
+                provider: crate::model::database::Provider::Mariadb,
                 nearest: Vec::new(),
             }
             .to_string(),

@@ -1,8 +1,8 @@
 ---
 title: The Context Document
 status: approved
-last-reviewed: 2026-09-25
-related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md]
+last-reviewed: 2026-11-04
+related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # The Context Document
@@ -231,7 +231,12 @@ variable is bound to a source, which is
   | The column declares `DEFAULT NULL`, **or** is nullable and declares no `DEFAULT` | `{"kind":"null"}` |
 
   Which catalogue value produces which of the four rows is fixed by
-  `FR-CTX-037`.
+  `FR-CTX-037` for a `mariadb` read, by `FR-MYSQL-029` for a `mysql` read, and
+  by `FR-LITE-027` for a `sqlite` read.
+
+  *Amended in the seventy-third edition,* for rmp `#324`: the sentence names
+  the classification of a `mysql` read. The four rows and the three forms are
+  unchanged, and so is the classification of a `mariadb` read.
 
   *Amended in the seventh edition, because the requirement could not be
   implemented as written.* It required four distinguishable cases and the
@@ -363,6 +368,17 @@ variable is bound to a source, which is
 
 - **FR-CTX-014**: A column SHALL carry `column_type`, the type exactly as the
   server writes it.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` read, `column_type`
+  is the declared type as SQLite stores it, and every part of `FR-CTX-015` is
+  read as `FR-LITE-026` states. `FR-CTX-037` through `FR-CTX-041` record a
+  MariaDB catalogue and govern a `mariadb` read.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  read, `column_type` is the type as the MySQL catalogue writes it, and
+  `FR-MYSQL-028` states which of `FR-CTX-038` through `FR-CTX-041` it adopts
+  and where MySQL's grammar differs. `FR-CTX-037` does not reach a `mysql`
+  read, whose default is classified under `FR-MYSQL-029`.
 
 - **FR-CTX-015**: A column SHALL additionally carry the decomposed parts of its
   type: `data_type`, `precision`, `scale`, `length`, `unsigned`, `charset`,
@@ -612,6 +628,15 @@ variable is bound to a source, which is
   derived from `version` as `FR-SRV-040` requires. `standing` SHALL be as
   `FR-CTX-034` fixes it.
 
+  *Note added in the sixty-fifth edition.* For a `sqlite` read the object
+  describes the SQLite library, and its three values are fixed by
+  `FR-LITE-002`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  read the object describes the MySQL server, `version` is the string the
+  probe of `FR-MYSQL-006` returns, whose form that requirement fixes, and
+  `standing` is set under `FR-MYSQL-010`.
+
   *Amended in the seventh edition.* The example above shows
   `11.4.5-MariaDB`, which is the form the fourth edition assumed. The four
   fixture servers were observed to return a **further suffix** —
@@ -636,6 +661,18 @@ variable is bound to a source, which is
   `FR-CTX-031` are present, are strings, and that `standing` holds one of the
   values of `FR-CTX-034`.
 
+  *Note added in the sixty-fifth edition.* The first sentence governs a read
+  through a `mariadb` entry; a `sqlite` read carries the series of the library,
+  per `FR-LITE-002`. On the `--context` path the system validates the
+  `provider` field as `FR-CTX-043` states, and validates nothing else about the
+  provider.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. A read through a
+  `mysql` entry carries a series of `FR-MYSQL-003`, or one newer than every
+  one of them under `FR-MYSQL-010`. The `--context` path is unchanged: it
+  validates no series against any window, whichever provider the document
+  names.
+
   *Rationale.* The refusal of `FR-SRV-020` is about a server `tpl` would have to
   read and cannot vouch for. `FR-RND-022` opens no connection on the `--context`
   path, so there is no such server: the document is a record of a read that
@@ -657,7 +694,8 @@ variable is bound to a source, which is
 
 - **FR-CTX-034**: `standing` SHALL be an enumerated field stating the server's
   standing relative to the supported window of `FR-SRV-001`, and SHALL take
-  exactly the following values:
+  exactly the following values. For a `sqlite` read it is always `supported`,
+  per `FR-LITE-003`:
 
   | Value | Meaning |
   |---|---|
@@ -680,6 +718,11 @@ variable is bound to a source, which is
   *Rejected.* A boolean `supported`, which cannot later say *how* a server sits
   outside the window; and omitting the field on a supported server, which would
   break `FR-SRV-005`, `FR-OUT-012`, and every template that tested it.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  read, `standing` takes the same two values against the supported set of
+  `FR-MYSQL-003`, under `FR-MYSQL-010`, and a MySQL series below that set
+  never reaches a document, per `FR-MYSQL-009`.
 
 - **FR-CTX-035**: The `database` object SHALL carry the collections `tables`,
   `views`, and `routines`, each a JSON array per `FR-CTX-003`, each ordered by
@@ -722,7 +765,7 @@ variable is bound to a source, which is
 
   *One command emits a reduction of this object, and it is named here so that
   a reader arriving from this file is told once.* `FR-SCH-031` gives
-  `tpl schema info` a `database` value carrying the three metadata fields of
+  `tpl schema info` a `database` value carrying the metadata fields of
   `FR-CTX-036` and the `server` object of `FR-CTX-031`, and **not** these three
   collections. It is that object with three members removed: every member it
   does carry is this member, under this name, with this value. Nothing about
@@ -730,7 +773,7 @@ variable is bound to a source, which is
   `tpl render --context` consumes, per `FR-CTX-001`, and `tpl schema info`
   emits neither.
 
-- **FR-CTX-036**: The `database` object SHALL carry exactly three metadata
+- **FR-CTX-036**: The `database` object SHALL carry exactly four metadata
   fields beside the `server` object of `FR-CTX-031` and the three collections
   of `FR-CTX-035`:
 
@@ -739,10 +782,21 @@ variable is bound to a source, which is
   | `name` | the schema-name field | `freight` |
   | `charset` | the schema's default character-set field | `utf8mb4` |
   | `collation` | the schema's default collation field | `utf8mb4_unicode_520_ci` |
+  | `provider` | the provider of the entry the read was made through, per `FR-CTX-043` | `mariadb` |
 
   ```json
-  {"database":{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{…},"tables":[…],"views":[…],"routines":[…]}}
+  {"database":{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","provider":"mariadb","server":{…},"tables":[…],"views":[…],"routines":[…]}}
   ```
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. `provider` is the
+  fourth field, emitted after `collation` and before `server`. The first three
+  are read as the table states for a `mariadb` read; for a `sqlite` read they
+  are read as `FR-LITE-023` states.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  read the first three are read from the schema catalogue as `FR-MYSQL-025`
+  states, the same three fields under the same names, and `provider` is
+  `mysql`.
 
   *Observed.* The schema catalogue table returns **six columns and no more**,
   identically on all four series of `FR-SRV-015`. Three of them become the
@@ -770,6 +824,68 @@ variable is bound to a source, which is
   an explicit collation therefore yields a different `collation` from two
   supported servers, and `FR-SRV-026` excepts it for that reason. Recorded as
   difference 11 of `FR-SRV-038`.
+
+- **FR-CTX-043**: The `database` object SHALL carry `provider`, an enumerated
+  field taking exactly the values `mariadb`, `mysql` and `sqlite`, which names
+  the provider of `FR-CONF-051` through which the read was made. It SHALL be
+  present in every document, for every provider, and SHALL NOT be `null`.
+
+  1. **A live read** carries the provider of the entry it was made through.
+  2. **A cache-served read** carries the provider of the read that wrote the
+     record it is served from, per `FR-CDOC-018`.
+  3. **A `--context` document** MAY omit the field. WHERE it is absent, the
+     system SHALL read the document as a `mariadb` document and the render
+     context SHALL carry `provider` `mariadb`. WHERE it is present and is not
+     one of the three values, the document does not match the contract and is
+     `65` (`EX_DATAERR`) under `FR-RND-020`, and the `cause` SHALL name the
+     key path `data.database.provider` and the three values.
+
+  **This field is the only change a MariaDB document undergoes in the
+  sixty-fifth edition.** Every other key of a document a `mariadb` read
+  produces, its value and its position are as they were, and a template that
+  does not read `provider` renders the same bytes from it as before.
+
+  *Rationale.* The user's requirement is that the provider set in the
+  configuration decides the application's behaviour, and a template is part of
+  that behaviour: a view's `definition` is the server's rewritten body on one
+  provider and the stored `CREATE VIEW` statement on the other, per
+  `FR-LITE-033`, and a column's `data_type` is a server type or a SQLite
+  affinity, per `FR-LITE-026`. A template branches on the provider by reading
+  it, and a field that is present on both providers lets a template test it
+  without `FR-SEM-012` failing the render — the argument `BR-SRV-008` makes
+  for `standing`.
+
+  *The version does not move.* Adding a field is not breaking, per
+  `FR-OUT-014`, so `schema_version` is unchanged, per `FR-OUT-038`, and a
+  document written before this edition carries the same `schema_version` as
+  one written after it. Such a document has no `provider`, and every one was
+  produced by a `mariadb` read, because no other provider existed; item 3 reads
+  it as one, so a committed dump keeps rendering. Refusing it would make a
+  document valid under one `schema_version` invalid under the same one, which
+  is what that version exists to rule out.
+
+  *Rejected: carrying the provider only in a SQLite document.* The guard
+  `database.provider == "sqlite"` would fail every render from a MariaDB
+  document, under `FR-SEM-012`. *Rejected: a boolean.* An enumerated field can
+  gain a value, per `FR-OUT-014`, and a boolean cannot, which is the ground
+  `FR-CDOC-010` gives for `source`. *Rejected: moving `provider` into the
+  `server` object.* That object describes the program that read the catalogue,
+  per `FR-LITE-002`, and three keys of it are fixed in `FR-CTX-031`; the
+  provider is a property of the entry, and the database object is where the
+  entry's other facts are.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventy-third edition,* for rmp `#324`. The field takes a
+  third value, `mysql`, for a read through a `mysql` entry, per
+  `FR-CONF-051`. Adding a value to an enumerated field is not breaking, per
+  `FR-OUT-014`, so `schema_version` does not move, per `FR-OUT-038`. A
+  document without the field is still read as a `mariadb` one, and a
+  `--context` document naming `mysql` is accepted where a binary released
+  before this edition refused it with `65`. Nothing a `mariadb` or a `sqlite`
+  document carries changes, and a template that does not read `provider`
+  renders the same bytes from either as before. "Both providers" reads
+  "every provider", and the `cause` names three values.
 
 - **BR-CTX-006**: `server` was fixed two editions before the metadata fields
   of the `database` object beside it, and it could be fixed early for a reason
@@ -936,6 +1052,11 @@ emits — `FR-SCH-018` keeps them out of it.
 
 - [catalogue-coverage.md](catalogue-coverage.md) — the objects and fields this
   document carries.
+- [sqlite-contract.md](sqlite-contract.md) — how a `sqlite` read fills the
+  document, and the `server` object of `FR-LITE-002`.
+- [mysql-contract.md](mysql-contract.md) — how a `mysql` read fills the
+  document, the `server` object of `FR-MYSQL-006`, and the default
+  classification of `FR-MYSQL-029`.
 - [output-formats.md](output-formats.md) — the JSON rules the document obeys.
 - [schema-commands.md](schema-commands.md) — `tpl schema dump`, which emits it.
 - [render-command.md](render-command.md) — `--context`, which consumes it, and

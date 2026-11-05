@@ -1,7 +1,7 @@
 ---
 title: Technology Stack
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -22,7 +22,7 @@ repeated in each.
 
 | Rule | Consequence |
 |---|---|
-| **A fact a decision record holds is cited, never restated** (rule R3, [`docs/adr/`](../adr/README.md)) | Five crates carry their version in a record. Their version column is a citation, and the record is the one place the number lives. The same holds for the rationale and the rejected candidate wherever a record carries them |
+| **A fact a decision record holds is cited, never restated** (rule R3, [`docs/adr/`](../adr/README.md)) | Seven crates carry their version in a record. Their version column is a citation, and the record is the one place the number lives. The same holds for the rationale and the rejected candidate wherever a record carries them |
 | **Every claim about a technology names its source and the date consulted, or is marked unverified** | The rule is the register's, recorded in [`docs/adr/README.md`](../adr/README.md), and it governs this folder unchanged |
 | **No measured figure appears here** | Startup, binary size and resident memory decided nothing in this document and are recorded in `BENCHMARKS.md` alone, per `BR-PERF-006` and the extension [`ADR-003`](../adr/adr-003-database-driver.md) makes of it |
 
@@ -37,7 +37,8 @@ beside it, never the requirement the package declares.** Where the column cites
 a record instead, the pin is that record's
 ([`ADR-001`](../adr/adr-001-template-engine-pin.md),
 [`ADR-003`](../adr/adr-003-database-driver.md),
-[`ADR-011`](../adr/adr-011-render-memory-accounting.md)). In both forms the requirement
+[`ADR-011`](../adr/adr-011-render-memory-accounting.md),
+[`ADR-013`](../adr/adr-013-sqlite-driver.md)). In both forms the requirement
 the package resolves against is the manifest's, and it is read there and not
 here.
 
@@ -49,7 +50,7 @@ here.
 | Minimum supported toolchain | A rule — the higher of the edition floor and the highest floor declared in the shipped graph — and the figure it yields | [`ADR-007`](../adr/adr-007-msrv.md), registered as [`OD-02`](open-decisions.md#od-02--the-msrv) |
 | Release profile | Five settings, and the panic path that reports `70` under them | [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md), registered as [`OD-28`](open-decisions.md#od-28--the-release-profile-against-the-caught-panic-condition-of-70) |
 | Package layout | One package carrying a library and a binary; `benches/` gets no package of its own | [`ADR-006`](../adr/adr-006-package-layout.md), registered as [`OD-04`](open-decisions.md#od-04--one-package-or-a-workspace) |
-| `unsafe` | `#![forbid(unsafe_code)]` at the top of the crate | `CLAUDE.md`, *Regras Inegociáveis*; consequence [below](#the-consequence-of-forbidding-unsafe) |
+| `unsafe` | `#![forbid(unsafe_code)]` at the top of the crate | `CLAUDE.md`, *Non-Negotiable Rules*; consequence [below](#the-consequence-of-forbidding-unsafe) |
 
 The toolchain used to build the four targets of `NFR-PERF-018`, and the
 development toolchain that is above the floor, are
@@ -71,7 +72,8 @@ excludes dev-dependencies. Every crate below is a direct dependency of it.
 | `clap` | 4.6.6 | crates.io crate index, `clap`, `max_stable_version` | 2026-09-11 |
 | `minijinja` | The pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) | That record | 2026-09-11 |
 | `minijinja-contrib` | The pin of [`ADR-001`](../adr/adr-001-template-engine-pin.md) | That record | 2026-09-11 |
-| `sqlx` | The pin of [`ADR-003`](../adr/adr-003-database-driver.md) | That record | 2026-09-11 |
+| `sqlx-core`, `sqlx-mysql` | The pin of [`ADR-003`](../adr/adr-003-database-driver.md), consumed as two crates rather than through the facade `sqlx` (`ADR-003` as amended, with [`ADR-013`](../adr/adr-013-sqlite-driver.md) point 4), and serving both server providers ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 1) | That record | 2026-11-04 |
+| `rusqlite` | The pin of [`ADR-013`](../adr/adr-013-sqlite-driver.md) | That record | 2026-11-03 |
 | `tokio` | The pin of [`ADR-003`](../adr/adr-003-database-driver.md) | That record | 2026-09-11 |
 | `serde` | 1.0.229 | crates.io crate index, `serde`, `max_stable_version` | 2026-09-11 |
 | `serde_json` | 1.0.151 | crates.io crate index, `serde_json`, `max_stable_version` | 2026-09-11 |
@@ -90,12 +92,13 @@ rejected option and cites the argument rather than reproducing it.
 |---|---|---|---|
 | `clap` | Parses the invocation and supplies the runtime tree introspection `FR-HELP-021` requires | It is the parser `CLAUDE.md` *Stack* fixes, and its typed error context is the only source of the token `FR-ERR-034` row `64` obliges | Recovering the token by a second parse of `argv`; letting the parser render its own diagnostics and its own help ([`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own), [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)) |
 | `cap` | The process's `#[global_allocator]`, wrapping `std::alloc::System`, whose count of live heap bytes the render memory limit of `FR-RND-039` reads; installed by the binary, no features, hard limit unset | [`ADR-011`](../adr/adr-011-render-memory-accounting.md) | [`ADR-011`](../adr/adr-011-render-memory-accounting.md): an allocator of this crate's own, `setrlimit`, resident-set polling, the crate's hard limit, and six other crates |
-| `minijinja` | Compiles and renders a template at run time, per `FR-TMPL-004` and `CLAUDE.md` *Invariantes de Implementação*; with its `fuel` feature, counts the render fuel of `FR-RND-036` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md); every compile-time engine is excluded by `CLAUDE.md` *Invariantes de Implementação* |
+| `minijinja` | Compiles and renders a template at run time, per `FR-TMPL-004` and `CLAUDE.md` *Implementation Invariants*; with its `fuel` feature, counts the render fuel of `FR-RND-036` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md); every compile-time engine is excluded by `CLAUDE.md` *Implementation Invariants* |
 | `minijinja-contrib` | Adds utility filters and globals, all of them group 3 of `FR-ENV-019` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md) |
-| `sqlx` | Connects to MariaDB and issues the closed statement list of `FR-SRV-006` | [`ADR-003`](../adr/adr-003-database-driver.md) — settled by `FR-CONF-036`, not by the measurement | [`ADR-003`](../adr/adr-003-database-driver.md) |
-| `tokio` | The current-thread runtime the asynchronous driver requires, and the timers four of the six deadlines use | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
+| `sqlx-core`, `sqlx-mysql` | Connect to MariaDB and issue the closed statement list of `FR-SRV-006`, for a `mariadb` entry; connect to MySQL and issue that of `FR-MYSQL-015`, for a `mysql` entry | [`ADR-003`](../adr/adr-003-database-driver.md) — settled by `FR-CONF-036`, not by the measurement; the form is [`ADR-013`](../adr/adr-013-sqlite-driver.md)'s point 4; for a `mysql` entry, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) | [`ADR-003`](../adr/adr-003-database-driver.md); for the form, [`ADR-013`](../adr/adr-013-sqlite-driver.md); for a `mysql` entry, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md), `mysql_async` among them |
+| `rusqlite` | Opens a SQLite database file read-only, applies and reads back the hardening of `FR-LITE-010` and `FR-LITE-011`, and issues the closed list of `FR-LITE-015`, for a `sqlite` entry; carries the SQLite library itself, compiled in (`FR-LITE-001`) | [`ADR-013`](../adr/adr-013-sqlite-driver.md) — selected by the rule of `FR-LITE-004` | [`ADR-013`](../adr/adr-013-sqlite-driver.md): the crate `sqlite`, the SQLite driver of `sqlx`, `turso`, a patched `rusqlite`, and `rusqlite` 0.39.0 |
+| `tokio` | The current-thread runtime the asynchronous driver requires, for a `mariadb` and a `mysql` entry, and the timers of the connection budget and the catalogue query; never built for a `sqlite` entry | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) |
 | `serde` | The derive that fixes the key order of `FR-OUT-013` in the type. It is **not** how `.tpl/.cfg` is read: [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) records why a derive cannot answer `FR-CONF-034` or `FR-CONF-035` | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | A bespoke writer, and a distinct type per absence rule ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
-| `serde_json` | Encodes the seventeen payload shapes and the envelope of `FR-OUT-024`; its pretty printer answers `FR-OUT-008` | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | `preserve_order`, and with it `indexmap`, which would contradict `NFR-DET-002` ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
+| `serde_json` | Encodes the seventeen payload shapes and the envelope of `FR-OUT-024`; its pretty printer answers `FR-OUT-008`; its `Formatter` trait is where `tpl` escapes what `FR-OUT-018` adds past C0 | [`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions) | `preserve_order`, and with it `indexmap`, which would contradict `NFR-DET-002` ([`OD-18`](open-decisions.md#od-18--serialisation-key-order-and-the-two-omissions)) |
 | `toml` | The read path over `.tpl/.cfg`, through its document tree — spanned keys and spanned values — rather than through a `serde` derive | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml_edit` for both paths, which would put an editing document on the path that reads untrusted input; and a `serde` derive, which cannot name the offending key or its position |
 | `toml_edit` | The write path over `.tpl/.cfg`, preserving comments, spacing and the relative order of items | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) | `toml` alone, which would delete the commented example `FR-PROJ-018` requires on the first write |
 | `thiserror` | Derives the one public error enum and its `Display` | [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) | `anyhow` in the library; per-module enums composed by `From`; an exit code stored as a field ([`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation)) |
@@ -116,6 +119,20 @@ library, reading the exit code and returning carries no dynamic error — is tha
 entry's ground and no longer this document's open question. Where the removal
 left the MSRV is [`ADR-007`](../adr/adr-007-msrv.md)'s, cited here and not
 restated.
+
+**[`ADR-013`](../adr/adr-013-sqlite-driver.md) changes the graph again, and the
+tables above state the graph it prescribes.** The facade `sqlx` and its macro
+side leave, `sqlx-core` and `sqlx-mysql` become direct dependencies, and
+`rusqlite` joins, so the direct dependencies are fourteen. Which crates leave
+and enter, the six the change adds, its lock-file count, its MSRV consequence
+and its advisory reading are that record's and are not restated. At
+`19abb1f` the manifest declares `sqlx-core`, `sqlx-mysql` and `rusqlite` and no
+facade, and its `[dependencies]` table holds the fourteen.
+
+**[`ADR-014`](../adr/adr-014-mysql-provider-driver.md) adds no crate.** The
+`mysql` provider reads through the crates above, and the graph is unchanged
+but for the source of `sqlx-mysql`, below. At `cc511e2` the
+`[dependencies]` table still holds the fourteen.
 
 ## The template engine
 
@@ -220,13 +237,24 @@ The driver, the rule that settled it and the candidate it disqualified are
 is restated. What belongs here is the criterion as a property of this stack, and
 the feature selection that realises the two records.
 
-**One crate of the driver is read from inside this repository rather than from
-the index.** A `[patch.crates-io]` entry redirects `sqlx-core` to a vendored
-copy, on the terms [`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) sets:
-that record holds the defect, the patch, the obligations the vendored tree
-carries and the condition that retires it, and it states that the copy is not a
-new dependency and does not enter the budget below. The pin is unchanged and
-remains [`ADR-003`](../adr/adr-003-database-driver.md)'s.
+**Both crates of the driver are read from inside this repository rather than
+from the index.** Two `[patch.crates-io]` entries redirect each to a vendored
+copy. `sqlx-core`'s is on the terms
+[`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) sets: that record holds
+the defect, the patch, the obligations the vendored tree carries and the
+condition that retires it, and it states that the copy is not a new dependency
+and does not enter the budget below. `sqlx-mysql`'s is on the terms
+[`ADR-014`](../adr/adr-014-mysql-provider-driver.md) sets, which apply
+`ADR-010`'s form to a second tree: its patch refuses the RSA public-key request
+over a session TLS does not protect, presents an empty or absent password as
+the server's own clients do, records the phase a connection reached, and
+carries upstream pull request `#4458` whole, which bounds every read of a
+short or malformed packet so that none panics (point 8); that record holds each
+part, its scope and the condition that retires it. The
+pin is unchanged and remains
+[`ADR-003`](../adr/adr-003-database-driver.md)'s. A path patch removes the
+crate's registry source from `Cargo.lock`, so `cargo audit` no longer matches
+either crate; the compensating lookup each record owes is that record's.
 
 **`FR-CONF-036` is an admission criterion, not a preference.** A driver that
 cannot express all five modes of `FR-CONF-013` distinctly is disqualified, and
@@ -235,37 +263,115 @@ requirement that disqualifies a dependency is an admission test over this
 document's whole table, and this is the one the corpus states; `FR-SEC-021` is
 what it protects.
 
-The driver declares **forty-three feature flags, five of them enabled by
-default** (docs.rs, `sqlx` 0.9.0, feature list, consulted 2026-09-11). Three
-features are required by decisions already settled:
+The driver's facade declares **forty-three feature flags, five of them enabled
+by default** (docs.rs, `sqlx` 0.9.0, feature list, consulted 2026-09-11). Three
+of its features are required by decisions already settled. **Under `ADR-003` as
+amended the package no longer depends on the facade**: it depends on
+`sqlx-core` and `sqlx-mysql` and enables on them the features the facade
+enabled under these three and its own defaults, which that record lists. The
+three remain the decisions each traces to:
 
-| Feature | Required by | Source |
-|---|---|---|
-| `mysql` | The product `FR-SRV-001` fixes | `Cargo.toml` at tag `v0.9.0` |
-| `runtime-tokio` | The runtime of [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | `Cargo.toml` at tag `v0.9.0` |
-| `tls-rustls-ring-webpki` | The bundled root store of [`ADR-002`](../adr/adr-002-tls-mode-mapping.md). It resolves to `sqlx-core/_tls-rustls-ring-webpki`, which is defined as `["_tls-rustls", "rustls/ring", "webpki-roots"]`; its sibling `tls-rustls-ring-native-roots` resolves to `rustls-native-certs` instead and is the platform trust store that record rejects | `Cargo.toml` and `sqlx-core/Cargo.toml` at tag `v0.9.0` |
+| Facade feature | Required by | Realised in the two-crate form as | Source |
+|---|---|---|---|
+| `mysql` | The product `FR-SRV-001` fixes, and the protocol a `mysql` entry speaks (`FR-MYSQL-020`) | The crate `sqlx-mysql` itself | `Cargo.toml` at tag `v0.9.0`; `ADR-003`; `ADR-014` point 1 |
+| `runtime-tokio` | The runtime of [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | The `sqlx-core` feature it forwards to, listed in `ADR-003` | `Cargo.toml` at tag `v0.9.0`; `ADR-003` |
+| `tls-rustls-ring-webpki` | The bundled root store of [`ADR-002`](../adr/adr-002-tls-mode-mapping.md). It resolves to `sqlx-core/_tls-rustls-ring-webpki`, which is defined as `["_tls-rustls", "rustls/ring", "webpki-roots"]`; its sibling `tls-rustls-ring-native-roots` resolves to `rustls-native-certs` instead and is the platform trust store that record rejects | That `sqlx-core` feature, enabled directly | `Cargo.toml` and `sqlx-core/Cargo.toml` at tag `v0.9.0`; `ADR-003` |
 
 All three sourced from the driver's own repository at tag `v0.9.0`, consulted
 2026-09-11. `tls-rustls` and `tls-rustls-ring` are documented in that manifest
 as backwards-compatibility aliases that resolve to the same webpki feature.
+The two crates are marked upstream as not for direct use, and the form ends at
+the release `ADR-013` names; both are those records' and are not restated.
 
 `tokio` enables no feature by default (docs.rs, `tokio` 1.53.1, *Feature
 flags*, consulted 2026-09-11), so three are added rather than subtracted: `rt`,
 which "Enables `tokio::spawn`, the current-thread scheduler, and non-scheduler
 utilities" ([`ADR-005`](../adr/adr-005-async-runtime-scope.md)); `time`, which
-enables the types the four runtime-enforced deadlines use
+enables the types the runtime-enforced deadlines use
 ([`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced)); and
 `net`, which
 [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) already
 records as the gate on the name resolution `tpl` performs itself.
 
-**Observation — the driver's five default features are decided by nothing.**
-`any`, `json`, `macros`, `migrate` and `derive` are on unless
-`default-features = false` is set. `tpl` issues a fixed statement list against
-one product, runs no migration and uses no compile-time checked query, so none
-of the five answers a requirement; but turning them off is a decision under the
-dependency budget, and this document records the question rather than settling
-it.
+**Observation — the driver's default features are decided by nothing.**
+`any`, `json`, `macros`, `migrate` and `derive` were on through the facade
+unless `default-features = false` was set. Under the two-crate form the macro
+side has left the graph (`ADR-013`), and `ADR-003` carries onto the two crates
+the effective set the facade's defaults gave them. `tpl` issues a fixed
+statement list against each of two products, runs no migration and uses no compile-time
+checked query, so none of those features answers a requirement; turning them
+off is a decision under the dependency budget, and this document records the
+question rather than settling it.
+
+## The SQLite driver and the library it carries
+
+The driver, its features, the SQLite release it carries, the build option that
+omits extension loading, the judgement `FR-LITE-039` requires and the
+candidates `FR-LITE-004` disqualified are
+[`ADR-013`](../adr/adr-013-sqlite-driver.md), and none is restated. What
+belongs here is the driver's surface as `tpl` uses it, read at the version that
+record pins (docs.rs, `rusqlite` 0.41.1, consulted 2026-11-03).
+
+| Call | Used for | Feature | Requirement |
+|---|---|---|---|
+| `Connection::open_with_flags(path, flags)` | The read-only open, with the flags [architecture.md](architecture.md#the-sqlite-reader) names. `OpenFlags`' default, which the plain open uses, includes `SQLITE_OPEN_CREATE` and `SQLITE_OPEN_URI`, so that open is not used | — | `FR-LITE-006` |
+| `Connection::is_readonly(db_name)`, "Determine if a database is read-only", on `main` | The read-back of the read-only open. **Whether it issues a statement is not confirmed in the official documentation**; the statement record of `FR-LITE-018` reports none where it is called, between `PRAGMA compile_options` and the first statement of stage 5 (row 28 of [verification.md](verification.md#mandated-by-the-corpus), at `19abb1f`) | — | `FR-LITE-010` |
+| `Connection::set_db_config` and `db_config`, over `DbConfig::SQLITE_DBCONFIG_DEFENSIVE`, `SQLITE_DBCONFIG_TRUSTED_SCHEMA` and `SQLITE_DBCONFIG_ENABLE_VIEW` ("Enable or disable views") | Three controls, set and read back without a statement. `db_config` passes `-1` to `sqlite3_db_config` (`src/config.rs`, read at docs.rs on 2026-11-03), which SQLite reads as leaving the setting unchanged and reporting it (`https://sqlite.org/c3ref/c_dbconfig_defensive.html`, checked 2026-11-03) | — | `FR-LITE-010` |
+| `Connection::set_limit` and `limit` | The three limits, set and read back | `limits` | `FR-LITE-011` |
+| `Connection::busy_timeout` and `get_interrupt_handle` | The statement bound of [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection), which also records where `busy_timeout` panics and why the bound handed to it saturates | — | `FR-LITE-009` |
+| `Connection::prepare` | Every statement of the closed list — the four controls `query_only`, `cell_size_check`, `mmap_size` and `temp_store`, each set and read back through its pragma, and `BEGIN DEFERRED` and `COMMIT` among them — each a constant of `sqlite/catalogue/statements.rs`, prepared and stepped by the one function that applies the statement's bound. `prepare_cached` needs the `cache` feature, which `ADR-013` leaves off with the defaults | — | `FR-LITE-010`, `FR-LITE-015`, `FR-LITE-042` |
+| `Connection::trace_v2` with `SQLITE_TRACE_STMT` | The statement record, from the test configuration alone ([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)) | `trace`, on the `[dev-dependencies]` entry alone | `FR-LITE-018` |
+| `Connection::close` | The close, "functionally equivalent to the `Drop` implementation" except that it returns the error | — | `FR-RND-040` |
+
+**`pragma_update` and `pragma_query_value` are not used** for the four
+controls: their eight statements go through `prepare`, as the code at
+`19abb1f` issues them. Each helper composes its statement's text in the driver
+— `PRAGMA`, the name, and for an update `=` and the value — and runs it through
+`execute_batch` or `query_row`, outside the bound
+[`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)
+arms around each statement, so its text would not be the constant of the crate
+[interfaces.md](interfaces.md#the-sqlite-reader) requires. With the driver's
+`extra_check` feature on, it also checks the name with a statement
+`FR-LITE-015` does not list, `SELECT 1 FROM pragma_pragma_list WHERE name = ?`
+(`src/pragma.rs`, read at docs.rs, `rusqlite` 0.41.1, on 2026-11-04). That
+feature is not a default (docs.rs, `rusqlite` 0.41.1, *Feature flags*,
+consulted 2026-11-04), and neither `rusqlite` entry of the manifest enables it.
+
+**`rusqlite::Error` and `TraceEvent` are non-exhaustive** (docs.rs, as above),
+so the match over the driver's error and the one that reads a trace event each
+carry a wildcard arm. The rule against one in `CLAUDE.md` *Types and errors*
+governs an enumeration of the crate itself, which neither is. The result code
+is matched as an integer, not through the driver's `ErrorCode`, and its
+wildcard arm is the last row of `FR-LITE-040`
+([`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify)).
+
+**The build options `tpl` adds are the record's.** `.cargo/config.toml`
+undoes the extension loading `libsqlite3-sys` enables, omits the loader, and
+starts the library with its memory statistics off
+(`SQLITE_DEFAULT_MEMSTATUS=0`), which `tpl` never reads
+([`ADR-013`](../adr/adr-013-sqlite-driver.md) point 2); the options and the
+grounds are not restated.
+
+**The bundled build defines more than the controls touch.** `libsqlite3-sys`
+0.39.1 compiles the library with, among others, `SQLITE_USE_URI`,
+`SQLITE_ENABLE_FTS5`, `SQLITE_ENABLE_RTREE`, `SQLITE_ENABLE_DBSTAT_VTAB` and
+`SQLITE_DEFAULT_FOREIGN_KEYS=1` (`build.rs`, read at docs.rs on 2026-11-03).
+Two bear on a requirement: `SQLITE_USE_URI` is why the open is handed an
+absolute path ([architecture.md](architecture.md#the-sqlite-reader)), and the
+two modules decide which functions item 10 of `FR-LITE-038` can call and let
+the fixture build the `fts5` table its databases hold. Which tables
+`FR-LITE-020` covers no longer depends on them: the schema table decides it.
+
+**`rusqlite` is declared twice, and `trace` reaches the test build alone**,
+through a `[dev-dependencies]` entry. The two entries and their features, why
+feature unification keeps `trace` out of `cargo build --release`, and why the
+dev entry also turns the defaults off are
+[`ADR-013`](../adr/adr-013-sqlite-driver.md) point 1, amended in place on
+2026-11-03, and are not restated. The one caller of the feature is the
+`#[cfg(test)]` hook of
+[`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)
+in `sqlite/`; a call outside `#[cfg(test)]` does not compile in the release
+build, so the boundary is enforced by the compiler (`ADR-013`, *Consequences*).
 
 ## The argument parser
 
@@ -326,7 +432,13 @@ this document's own reading, with the source and the date beside each.
 
 ## Serialisation
 
-Derived `Serialize` through `serde_json`, into a writer `tpl` owns; the field
+Derived `Serialize` through `serde_json`, into a writer `tpl` owns. The one
+feature enabled on it is `raw_value`: "`RawValue` is only available if
+serde_json is built with the `"raw_value"` feature" (docs.rs, `serde_json`
+1.0.151, `RawValue`, consulted 2026-11-05), and `cache.rs` reads each member
+of a cached table's two deferred key lists as a `RawValue`, keeping its bytes
+undecoded until the template reaches the list (`FR-CACHE-038`;
+[architecture.md](architecture.md#the-cache-as-a-read-through-layer)). The field
 declaration order **is** the key order, `preserve_order` is off, `serde_json`
 does not depend on `indexmap`, and `skip_serializing_if` governs **one field of
 the model**, written once for each kind that can carry the marking. All five
@@ -389,14 +501,15 @@ the process ID as the PGID" (Rust standard library documentation,
 
 The rule is the root coordination document's: prefer `std`, justify each crate,
 check what it drags in, and refuse one used for a trivial function (`CLAUDE.md`,
-*Desempenho e Eficiência*). Four conditions apply it here.
+*Performance and Efficiency*, *Implementation rules*). Five conditions apply it here.
 
 | Condition | Source |
 |---|---|
 | The budget is a budget on the **shipped** graph, which an unfiltered `cargo tree` overstates | [`ADR-006`](../adr/adr-006-package-layout.md) |
-| A crate must compile and pass tests on all four targets of `NFR-PERF-018`; one that does not support `aarch64` does not enter | `CLAUDE.md`, *Plataformas Suportadas* |
+| A crate must compile and pass tests on all four targets of `NFR-PERF-018`; one that does not support `aarch64` does not enter | `CLAUDE.md`, *Supported Platforms* |
 | A crate that declares a toolchain floor above the current one raises the MSRV, so admission is also an MSRV question | [`ADR-007`](../adr/adr-007-msrv.md) |
 | A closed grammar written into the corpus is implemented, not depended on | Below |
+| A crate that compiles C source adds a C compile to every target's build | [`ADR-013`](../adr/adr-013-sqlite-driver.md) for the bundled library; [operations.md](operations.md#msrv-the-development-toolchain-and-the-cross-build-path) for the toolchain that compiles it |
 
 **Six facilities are implemented in the crate rather than taken from a
 dependency**, and one argument decides five of them: each has a closed grammar
@@ -429,7 +542,11 @@ what the stack may contain.
 
 So the prohibition reaches the code of this crate and cannot be relaxed locally
 — the `#[allow(...)]` escape `CLAUDE.md` permits for a `clippy` lint is not
-available for this one. It does not reach a dependency's internals, which is
+available for this one. `FR-LITE-004` turns the same rule into an admission
+test for the SQLite driver, and its one control that no safe interface could
+read back is the case the last sentence below describes: extension loading is
+compiled out of the library rather than reached through `unsafe`
+([`ADR-013`](../adr/adr-013-sqlite-driver.md)). It does not reach a dependency's internals, which is
 precisely what makes
 [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid)'s
 answer possible: the system call is made inside a crate that wraps it in a safe

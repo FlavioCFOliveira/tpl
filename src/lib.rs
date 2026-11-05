@@ -1,5 +1,5 @@
-//! `tpl` reads the structure of a MariaDB database and applies MiniJinja
-//! templates to it.
+//! `tpl` reads the structure of a MariaDB, MySQL or SQLite database and
+//! applies MiniJinja templates to it.
 //!
 //! The crate is split in two halves, per `ADR-006`: this library holds the
 //! logic, so that it is addressable from a test without launching a process,
@@ -31,6 +31,8 @@
 //! | `model::document` | The one document that carries the model in both directions: the collection shape of `FR-CTX-003` … `FR-CTX-005`, the one-hop embedding of `FR-CTX-006` … `FR-CTX-010`, the orderings of `NFR-DET-002`, and the read-back `FR-CTX-033` admits |
 //! | `mariadb` | The one connection of `NFR-PERF-004`, the TLS mode of `FR-CONF-037` and `ADR-002`, the read-only session of `FR-SRV-008` … `FR-SRV-011`, the version probe of `FR-SRV-002` with the window of `FR-SRV-015`, and the classification `OD-06` drops the driver's error at |
 //! | `mariadb::catalogue` | The fixed repertoire of catalogue queries — one per object kind, whose count `NFR-PERF-001` and `NFR-PERF-002` fix — the common column lists of `FR-SRV-037`, the fold that turns their rows into the model, and the completeness verdict of `FR-PRIV-001` … `FR-PRIV-019` it takes as it folds |
+//! | `mysql` | The `mysql` provider of `mysql-contract.md`: its one connection, made as a `mariadb` entry's is (`FR-MYSQL-020`), the refusal of `FR-MYSQL-045`, the read-only session and read-back of `FR-MYSQL-018`, the product and version checks of `FR-MYSQL-006` … `FR-MYSQL-010`, and the twelve statements whose rows fold into the model (`FR-MYSQL-015`, `FR-MYSQL-023` … `FR-MYSQL-046`) |
+//! | `provider` | The dispatch of a read to the reader of its entry's provider (`FR-CONF-051`) |
 //! | `cache` | The store of `FR-CACHE-001` … `FR-CACHE-037`: one folder per entry, one file per object written through a rename, the two versions and the completeness record of `FR-CDOC-001` … `FR-CDOC-007`, and a failure in either direction that is a miss rather than a condition |
 //! | `at` | Directory-relative file operations below the canonical `.tpl`: every component opened without following a link, every file opened without waiting for a writer and typed on its descriptor (`FR-SEC-026`, `FR-SEC-027`) |
 //! | `heap` | The heap count the render memory limit of `FR-RND-039` bounds: the one place the library reads the counting allocator of `ADR-011`, which the binary installs and hands over through [`install_heap_counter`] |
@@ -67,9 +69,15 @@ pub(crate) mod project;
 
 pub(crate) mod mariadb;
 
+pub(crate) mod mysql;
+
 pub(crate) mod output;
 
+pub(crate) mod provider;
+
 pub(crate) mod render;
+
+pub(crate) mod sqlite;
 
 pub use error::Error;
 

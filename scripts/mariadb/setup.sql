@@ -975,4 +975,18 @@ DELIMITER ;
 
 CREATE USER IF NOT EXISTS 'tpl_reader'@'%' IDENTIFIED BY 'tpl-reader-pw';
 GRANT SELECT, EXECUTE ON freight.* TO 'tpl_reader'@'%';
+
+-- tpl_nopass   the same grant, and no password at all: the account an entry
+--              with `password = ""` or with no password source reaches, which
+--              FR-CONF-055 (rmp #334) governs. Created with no IDENTIFIED
+--              clause, so the server's default method and an empty credential.
+CREATE USER IF NOT EXISTS 'tpl_nopass'@'%';
+GRANT SELECT, EXECUTE ON freight.* TO 'tpl_nopass'@'%';
+
+-- tpl_limited  SELECT on freight.*, and at most one connection at a time: the
+--              account whose second simultaneous login the server refuses with
+--              a limit on connections, which FR-ERR-048 classifies (rmp #338).
+CREATE USER IF NOT EXISTS 'tpl_limited'@'%' IDENTIFIED BY 'tpl-limited-pw'
+  WITH MAX_USER_CONNECTIONS 1;
+GRANT SELECT ON freight.* TO 'tpl_limited'@'%';
 FLUSH PRIVILEGES;

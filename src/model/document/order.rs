@@ -45,6 +45,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 
 use crate::model::check_constraint::CheckConstraint;
+use crate::model::foreign_key::ForeignKeyColumn;
 use crate::model::index::Index;
 use crate::model::routine::Routine;
 use crate::model::table::Table;
@@ -161,6 +162,51 @@ pub(crate) fn pointers_by_name<T: Named>(members: &[T]) -> Vec<&T> {
     pointers
 }
 
+/// The content order of `FR-LITE-031`, over two foreign keys of a `sqlite`
+/// document, none of which carries a name.
+///
+/// Each key is given as its referencing table, its pairs of columns and its
+/// referenced table. The keys are compared by the referencing table's name,
+/// then by the referencing columns, then by the referenced table's name, then
+/// by the referenced columns, each byte by byte through [`compare`]
+/// (`NFR-DET-002`). A list of columns is compared member by member, a shorter
+/// list that is a prefix of a longer one first; a key that names no
+/// referenced table sorts before one that names one, which is [`Option`]'s own
+/// order and needs no second decision.
+pub(crate) fn compare_by_content(
+    left: (&str, &[ForeignKeyColumn<'_>], Option<&str>),
+    right: (&str, &[ForeignKeyColumn<'_>], Option<&str>),
+) -> Ordering {
+    fn columns(
+        left: &[ForeignKeyColumn<'_>],
+        right: &[ForeignKeyColumn<'_>],
+        side: for<'p> fn(&'p ForeignKeyColumn<'_>) -> &'p str,
+    ) -> Ordering {
+        left.iter()
+            .map(side)
+            .zip(right.iter().map(side))
+            .map(|(left, right)| compare(left, right))
+            .find(|ordering| ordering.is_ne())
+            .unwrap_or_else(|| left.len().cmp(&right.len()))
+    }
+    fn referencing<'p>(pair: &'p ForeignKeyColumn<'_>) -> &'p str {
+        &pair.column
+    }
+    fn referenced<'p>(pair: &'p ForeignKeyColumn<'_>) -> &'p str {
+        &pair.referenced_column
+    }
+
+    compare(left.0, right.0)
+        .then_with(|| columns(left.1, right.1, referencing))
+        .then_with(|| match (left.2, right.2) {
+            (None, None) => Ordering::Equal,
+            (None, Some(_)) => Ordering::Less,
+            (Some(_), None) => Ordering::Greater,
+            (Some(left), Some(right)) => compare(left, right),
+        })
+        .then_with(|| columns(left.1, right.1, referenced))
+}
+
 /// Carries a collection into the document in the order it was given.
 ///
 /// This is the call site of an exception of `NFR-DET-002`, and it is a function
@@ -254,6 +300,64 @@ mod tests {
         assert_eq!(ordered[0].name, "carrier");
         assert_eq!(ordered[1].name, "vessel");
         assert!(std::ptr::eq(ordered[0], &members[1]));
+    }
+
+    #[test]
+    fn fr_lite_031_unnamed_keys_are_ordered_by_table_columns_referenced_table_and_columns() {
+        // FR-LITE-031 with NFR-DET-002: no key has a name, so the order is
+        // the referencing table, the referencing columns, the referenced
+        // table and the referenced columns, each byte by byte.
+        use super::compare_by_content;
+        use crate::model::foreign_key::ForeignKeyColumn;
+        use std::cmp::Ordering;
+
+        let pair = |column: &'static str, referenced: &'static str| ForeignKeyColumn {
+            column: Cow::Borrowed(column),
+            referenced_column: Cow::Borrowed(referenced),
+        };
+        let origin = [pair("origin_port", "code")];
+        let destination = [pair("destination_port", "code")];
+        let composite = [pair("origin_port", "code"), pair("origin_berth", "berth")];
+
+        assert_eq!(
+            compare_by_content(
+                ("leg", &origin, Some("port")),
+                ("leg", &destination, Some("port"))
+            ),
+            Ordering::Greater
+        );
+        assert_eq!(
+            compare_by_content(
+                ("leg", &origin, Some("port")),
+                ("leg", &composite, Some("port"))
+            ),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_by_content(
+                ("leg", &origin, Some("port")),
+                ("leg", &origin, Some("berth"))
+            ),
+            Ordering::Greater
+        );
+        assert_eq!(
+            compare_by_content(
+                ("berth", &origin, Some("port")),
+                ("leg", &origin, Some("port"))
+            ),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_by_content(("leg", &origin, None), ("leg", &origin, Some("port"))),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_by_content(
+                ("leg", &[pair("origin_port", "alpha")], Some("port")),
+                ("leg", &origin, Some("port"))
+            ),
+            Ordering::Less
+        );
     }
 
     #[test]

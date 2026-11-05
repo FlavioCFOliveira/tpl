@@ -12,9 +12,10 @@ This package is that sequence, written once.
 
 ## Why once
 
-`FR-EX-007` requires the four examples to read the same three schemas from the
-same server under the same conditions, "database entries that differ in nothing
-a read can observe" included. The set is comparable only while one axis varies:
+`FR-EX-007` requires the four examples to make every read — the three MariaDB
+schemas of `FR-EX-006`, the MySQL `freight` of `FR-EX-011` and the SQLite
+database of `FR-EX-012` — under the same conditions, "entries that differ in
+nothing a read can observe" included. The set is comparable only while one axis varies:
 where two examples render different data layers, the difference must be
 attributable to their templates and their type mappings, because that is what
 the set exists to compare. Four copies of a host, a port, a user and a
@@ -26,8 +27,8 @@ Written once, the property holds by construction rather than by inspection.
 
 No language. No template name. No file name. No table list.
 
-Everything example-specific arrives through one callback. The driver reads the
-three schemas, hands them to the example's `plan` function, and performs the
+Everything example-specific arrives through one callback. The driver makes the
+five reads, hands them to the example's `plan` function, and performs the
 renders that function returns. That is the whole of the example-specific
 surface; everything else in this package is fixture.
 
@@ -68,7 +69,7 @@ def run(
 | Parameter | What it is |
 |---|---|
 | `workspace` | The **build** directory. `tpl init` creates `<workspace>/.tpl` there, and that directory belongs to the driver |
-| `plan` | `Callable[[Catalogue], Sequence[Render]]`, called once with the three schemas read |
+| `plan` | `Callable[[Catalogue], Sequence[Render]]`, called once with the five reads made |
 | `templates` | A directory copied into `<workspace>/.tpl/templates/` after `init`, merging over what `init` wrote so an example may replace the macro of `FR-PROJ-017` as well as add to it |
 | `binary` | A `tpl` executable to use instead of the one the search finds |
 | `reset` | Remove an existing `<workspace>/.tpl` before `init`, so a rerun works. Only that directory, only directly under the workspace, never a link |
@@ -112,15 +113,23 @@ that reached past them would demonstrate a surface no such consumer can use.
 
 ## The access
 
-The server and the three schemas live in `fixture.py`, not in an example.
+The servers, the schemas and the database file live in `fixture.py`, not in an
+example.
 
-| | |
-|---|---|
-| Server | `127.0.0.1:13309` — the fixture's most recent series, `12.3` |
-| TLS | `verify-identity`, `tpl`'s own default and the strongest of the five, against `scripts/mariadb/tls/ca.pem` |
-| User | `root` |
-| Schemas | `sakila`, `world`, `freight`, each registered under an entry of its own name |
-| Password | `${FIXTURE_PW}`, expanded from the environment |
+| | MariaDB (`FR-EX-006`) | MySQL (`FR-EX-011`) | SQLite (`FR-EX-012`) |
+|---|---|---|---|
+| Source | `127.0.0.1:13309` — the fixture's most recent series, `12.3` | `127.0.0.1:13321` — the MySQL fixture's most recent series, `9.7` | `.tpl/fixture/freight.sqlite`, built on every run from `scripts/sqlite/freight.sql` |
+| TLS | `verify-identity`, `tpl`'s own default and the strongest of the five, against `scripts/mariadb/tls/ca.pem` | `verify-identity`, against `scripts/mysql/tls/ca.pem` | — |
+| User | `root` | `root` | — |
+| Read | `sakila`, `world`, `freight`, each registered under an entry of its own name | `freight`, registered as `freight_mysql` with `--provider mysql` | `main`, registered as `freight_sqlite` with `--provider sqlite --path` |
+| Password | `${FIXTURE_PW}`, expanded from the environment | `${FIXTURE_PW}`: the fixture's root password is the MariaDB one's | — |
+
+**The SQLite database is built by the driver**, with the standard library's
+`sqlite3`, from the text of `scripts/sqlite/freight.sql`, every statement of it
+accepted, into the `.tpl` folder `tpl init` has just created. It is a product of
+the run, as the project is, so it is removed with the project on the next run and
+is never committed (`FR-EX-012`, `FR-LITE-038`). The entry names it by a path
+relative to the project directory, which `FR-CONF-054` resolves.
 
 **The password is never written into `.tpl/.cfg` and never passed on a command
 line.** What `tpl cfg set` writes into the file is the literal string
@@ -132,7 +141,7 @@ for the life of the invocation, and every process on the host can read it —
 
 The driver checks `$FIXTURE_PW` before it writes anything. Left to `tpl`, the
 absence surfaces correctly but only at the third step, as exit `78`, after a
-project and three entries have already been written.
+project and an entry have already been written.
 
 **Why `root` and not `tpl_reader`.** The fixture's other user exists to make an
 *incomplete* catalogue read reproducible, which
@@ -167,6 +176,7 @@ because one of them alone is a coincidence.
 cargo build --release
 ./scripts/mariadb/up.sh
 ./scripts/mariadb/seed-datasets.sh 12.3
+./scripts/mysql/up.sh 9.7
 export FIXTURE_PW=tpl-root
 ```
 
@@ -178,8 +188,9 @@ documents both. `freight` is in the image and needs nothing.
 ## Dependencies
 
 None. Standard library only: `subprocess`, `json`, `pathlib`, `shutil`,
-`dataclasses`. The workflow is five command invocations, a JSON parse and a file
-write, and no third-party package would carry its weight against that.
+`dataclasses`, and `sqlite3` for the SQLite database. The workflow is five
+command invocations, a JSON parse and a file write, and no third-party package
+would carry its weight against that.
 
 ## Layout
 
@@ -188,6 +199,6 @@ write, and no third-party package would carry its weight against that.
 | `__init__.py` | The public surface, re-exported |
 | `workflow.py` | `run`, the entry point, and `Render`, `Access`, `Outcome` |
 | `cli.py` | `Tpl`: building an argv, running it, checking the exit code, keeping the streams apart |
-| `fixture.py` | The server, the three schemas and the password arrangement |
+| `fixture.py` | The servers, the schemas, the SQLite database and how it is built, and the password arrangement |
 | `catalogue.py` | What a schema read hands an example |
 | `discovery.py` | Finding the binary and the repository root |

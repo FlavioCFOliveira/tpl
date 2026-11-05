@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -29,26 +29,31 @@ file's shape, mode and rewrite discipline are
 [data-model.md](data-model.md#tplcfg); versions, features and trust-anchor
 crates are [technology-stack.md](technology-stack.md).
 
-## The six untrusted inputs
+## The seven untrusted inputs
 
-`specification/security.md` *Trust boundaries* enumerates six. Each enters the
-process at exactly one component, and that component is where the input stops
-being raw.
+`specification/security.md` *Trust boundaries* enumerates seven; the seventh,
+a SQLite database file, since the sixty-fifth edition. Each enters the process
+at exactly one component, and that component is where the input stops being
+raw.
 
 | # | Untrusted input | First seen by | What that boundary does with it | Forced by |
 |---|---|---|---|---|
 | 1 | The argument vector | `cli/` | Parsed and classified before any filesystem access; a rejected token leaves the parser as a typed value in an error, never as text the parser rendered | `FR-ERR-006`, `FR-CLI-006`, [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
-| 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised; the file is opened without following a link and without blocking, and its type and both trust checks are judged on that descriptor as a **precondition** of reading it; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal | `FR-PROJ-009`, `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004` |
-| 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-SEC-007` |
-| 4 | Catalogue values | `mariadb/` | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006` |
+| 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised; the file is opened without following a link and without blocking, and its type and both trust checks are judged on that descriptor as a **precondition** of reading it; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal. A value that would reach the login, the server's C interface or SQLite's open holding a NUL character is refused at entry resolution, before it can be cut there | `FR-PROJ-009`, `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004`, `FR-CONF-057` |
+| 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all, and only on an invocation that opens a connection; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-CONF-056`, `FR-SEC-007` |
+| 4 | Catalogue values | `mariadb/`, or `mysql/` for a `mysql` entry | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006`, `FR-MYSQL-015` |
 | 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
 | 6 | Files under the template root | `render/` | Reached only through the one resolution function, which is where containment is enforced; the three `template` subcommands that resolve without the engine call the same function | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023`, `FR-TMPL-024`, `FR-TMPL-025`, `FR-TMPL-026` |
+| 7 | A SQLite database file | `sqlite/` | Its kind is established without opening it; it is opened read-only and never created, and the library is confirmed hardened before any statement reads it; a schema table that could forge the catalogue is refused before any statement reads through a pragma function, and that check and every catalogue statement read one snapshot; its values are converted and coverage applied at that one boundary, and none reaches a statement | `FR-SEC-028`, `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` … `FR-LITE-017`, `FR-LITE-041`, `FR-LITE-042`, `FR-OUT-017` |
 
 Rows 1, 4 and 5 are the populations `FR-ERR-024` and `FR-OUT-019` name as
-sources of an interpolated value, which is why escaping is a property of the
+sources of an interpolated value — row 7's values reach output as catalogue
+values, row 4's population, and the library's messages about the file reach a
+`cause` ([interfaces.md](interfaces.md#the-sqlite-reader)), each bounded under
+`FR-ERR-046` — which is why escaping is a property of the
 emitting and the diagnostic paths and not of these boundaries.
 
-**Recorded gap — the cache is not one of the six.** `.tpl/.cache/` holds
+**Recorded gap — the cache is not one of the seven.** `.tpl/.cache/` holds
 documents `tpl` itself wrote (`FR-PROJ-023`), so the corpus does not place it
 among the untrusted inputs, and neither does this document. `FR-CACHE-033` and
 `FR-CDOC-004` fix the treatment of a file that cannot be read or carries an
@@ -110,14 +115,16 @@ belongs here is the disclosure property of each.
 |---|---|---|
 | The directed key read | Unredacted and unexpanded, by decision, because the caller asked for one key by name | `FR-SEC-004`, `BR-CFG-002` |
 | The whole-file listing, and one entry shown | Redacted, with a variable reference emitted verbatim, so what the variable holds is never disclosed by either command | `FR-SEC-003`, `FR-CFG-021` |
-| The resolution a connection uses | Never reaches stdout at all; its only consumer is `mariadb/`, and the credential inside it is carried in the type above | `FR-CONF-004`, `FR-CONF-029`, `FR-GLOB-018` |
+| The resolution a connection uses | Never reaches stdout at all; its only consumer is the connection code of `mariadb/`, which opens a `mysql` entry's connection too, and the credential inside it is carried in the type above | `FR-CONF-004`, `FR-CONF-029`, `FR-GLOB-018`, `FR-MYSQL-020` |
 
 The third row is what makes *the resolved DSN* a category a diagnostic cannot
 write: the value exists only between `project/settings.rs` and `mariadb/`, and
 no component between them emits. Nothing re-composes a URL on that path either —
 the resolution hands on fields, not a string — so the value a diagnostic would
-have to be denied is never assembled in the first place (`FR-CONF-018`,
-`FR-SEC-009`).
+have to be denied is never assembled in the first place (`FR-SEC-009`). The
+same absence is why the percent-encoding `FR-CONF-018` names has nothing to
+apply to, which [`OD-39`](open-decisions.md#od-39--a-dsn-value-percent-encoded-by-nothing)
+holds open.
 
 ### The six categories that reach no diagnostic stream
 
@@ -132,10 +139,10 @@ which keeps the forbidden values out of the error type.
 | # | Category | Why it has no home | Forbidden by |
 |---|---|---|---|
 | 1 | The argument vector | No emission function takes a formatted message, so the vector cannot be dumped; what `cli/` hands `diagnostics/` is a typed rejection, not the invocation | `FR-GLOB-018`, `FR-SEC-005`, with [`OD-17`](open-decisions.md#od-17--observability) and [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
-| 2 | The resolved DSN | It is produced by the third read path above and consumed by `mariadb/`; no variant of the error type carries it | `FR-GLOB-018`, `FR-SEC-005`, `BR-ERR-003`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) |
+| 2 | The resolved DSN | It is produced by the third read path above and consumed by `mariadb/`, for both server providers; no variant of the error type carries it | `FR-GLOB-018`, `FR-SEC-005`, `BR-ERR-003`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) |
 | 3 | The `password_command` | Nothing emits it as diagnostic content; the stored array is named in the `cause` of a child failure, which `FR-CONF-033` obliges and admits because `FR-CONF-017` keeps that array unexpanded | `FR-GLOB-018`, `FR-SEC-005` |
 | 4 | The child's standard error | It is directed to the null device, so the bytes never exist in the process to be written | `FR-GLOB-018`, `FR-SEC-005`, `FR-CONF-032`, `FR-SEC-024` |
-| 5 | The raw driver error | It is classified at the `mariadb/` boundary and the original value is dropped; with no subscriber installed, what the driver itself emits is discarded before it exists | `FR-GLOB-018`, `FR-SEC-005`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-17`](open-decisions.md#od-17--observability) |
+| 5 | The raw driver error | It is classified at the `mariadb/` or the `sqlite/` boundary and the original value is dropped; with no subscriber installed, what the driver itself emits is discarded before it exists. For a server entry, the error number of a server's error packet and the operating system's error number for the TCP connect are not the raw driver error, and a `cause` obliged to name one carries it ([interfaces.md](interfaces.md#a-server-connection-that-fails)); for a `sqlite` entry the result code's name and the library's message are not, and a `cause` obliged to state them carries them ([`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify)) | `FR-GLOB-018`, `FR-SEC-005`, with [`OD-06`](open-decisions.md#od-06--the-error-types-shape-and-the-exit-code-derivation) and [`OD-17`](open-decisions.md#od-17--observability) |
 | 6 | The contents of `.tpl/.cfg` | The reader hands `error.rs` the key and the position of a fault, never the text of the file. For the two keys whose value may itself be a credential it hands on the value's **type** where it would otherwise hand on the value, and the choice is made from the key space rather than at the call site | `FR-GLOB-018`, `FR-SEC-005`, `FR-CONF-034`, `FR-CONF-035`, `FR-ERR-013` |
 
 Two prohibitions bound the whole set rather than one category: no credential
@@ -197,14 +204,15 @@ not a configuration layer (`FR-CONF-030`;
 |---|---|---|
 | Expansion reaches the six fields that admit it and no others | `project/settings.rs`, deciding from the declared key space and not from the caller | `FR-SEC-007`, `FR-CONF-015` |
 | Two fields are excluded by the same table, so the exclusion is structural: neither the encryption mode nor the child command is expandable, and no variable can therefore weaken transport or choose the program that runs | The declared key space, asked per field | `FR-SEC-008`, `FR-CONF-016`, `FR-CONF-017` |
-| Inside a connection string, substitution happens after the URL has been broken into fields, and what it substitutes is encoded for the field it lands in | `project/config/dsn.rs` splits, `project/settings.rs` expands, before any connection exists | `FR-SEC-009`, `FR-CONF-018` |
+| Inside a connection string, substitution happens after the URL has been broken into fields, and the fields are handed to the driver one by one, never joined into a URL again; the percent-encoding `FR-CONF-018` names is performed by nothing ([`OD-39`](open-decisions.md#od-39--a-dsn-value-percent-encoded-by-nothing)) | `project/config/dsn.rs` splits, `project/settings.rs` expands, before any connection exists | `FR-SEC-009`, `FR-CONF-018` |
+| Expansion and the child run only for an invocation that opens a connection, so a read the cache serves neither reads the environment nor starts `password_command` | `Prepared::connect` in `project/settings.rs`, reached from the connection branch of step 6 alone | `FR-CONF-056` |
 | An undefined variable ends the invocation; it is never an empty substitution | `project/config/expand.rs` → `error.rs` | `FR-SEC-010`, `FR-CONF-022`, `BR-CONF-002` |
 
 The third row is an ordering, not a sanitisation, and the order is what does
 the work: the field boundaries exist before any substitution occurs, so a
-substituted value is confined to the field it was written into, and encoding it
-afterwards keeps that value from re-entering the grammar it sits in. One pass
-only, so nothing substituted is substituted again (`FR-CONF-019`).
+substituted value is confined to the field it was written into, and no grammar
+is parsed again afterwards for it to re-enter. One pass only, so nothing
+substituted is substituted again (`FR-CONF-019`).
 
 ## The child process
 
@@ -272,6 +280,7 @@ therefore contains.
 | It is a regular file | Its type is read from the descriptor it is then read through, so a link, a FIFO, a socket or a device is `78` and nothing blocks | `FR-PROJ-030`, `FR-SEC-027` |
 | Naming the folder explicitly exempts nothing | The explicit path suppresses the walk and enters the same check sequence | `FR-SEC-016`, `FR-PROJ-008` |
 | An absent file is not a bypass | There is no file to own and nothing to grant, so the `.tpl` folder's ownership is checked instead; the configuration is then empty, and the write surface may create the file again | `FR-PROJ-028`, `FR-PROJ-001`, `FR-CFG-004` |
+| A rewrite acts in the folder the checks judged | The five commands that rewrite `.cfg` start from the text the checks read and make every step relative to the `.tpl` descriptor the checks opened and held, following no link, so a link or a folder swapped into the path afterwards redirects nothing and a link at `.cfg` is replaced rather than written through ([interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)) | `FR-CFG-041`, `FR-SEC-027` |
 
 Two consequences are worth stating because a reader would otherwise assume more
 or less than the design gives. The boundary is **not** what refuses a project
@@ -338,7 +347,7 @@ closed by the design; the seventh is stated rather than closed.
 | A variable moving a connection's host, port or database | The parse-expand-encode order of *The environment* above | `FR-SEC-009`, `FR-CONF-018` |
 | A shell interpreting a value from an untrusted `.cfg` | Direct execution from an argument array; no shell exists on the path | `FR-SEC-011`, `FR-CONF-024` |
 | A catalogue name formatted into a runnable suggestion | A `hint` is built from literals and from names inside the admitted character set; a candidate outside it is presented in no form, and the generic hint stands alone | `FR-SEC-019`, `FR-ERR-022`, `FR-ERR-023` |
-| A control character rewriting a terminal, or forging a line of the four-line diagnostic format | C0 escaping applied in `output/` and in `diagnostics/`, by the two rules that differ between them, with the two emissions that are exempt and byte-for-byte | `FR-SEC-020`, `FR-OUT-018`, `FR-OUT-019`, `FR-ERR-024` |
+| A control character rewriting a terminal, a bidirectional formatting character showing a name other than the one printed, or a line forged in the four-line diagnostic format | The escaping of C0, C1 and bidirectional formatting characters, applied in `output/` and in `diagnostics/` by the two rules that differ between them over tab, with the two emissions that are exempt and byte-for-byte ([interfaces.md](interfaces.md#the-document-emitter)) | `FR-SEC-020`, `FR-OUT-018`, `FR-OUT-019`, `FR-ERR-024` |
 | A caller's pattern reaching the server | The pattern is matched in memory against names already read and is never sent | `FR-SCH-013` |
 | A path chosen from catalogue data | There is no file-writing surface to choose a path for | `FR-RND-028`, `BR-RND-003` |
 
@@ -350,29 +359,129 @@ must quote it, and the registered filter is what it quotes with
 boundary, and no requirement claims otherwise
 ([overview.md](overview.md#what-tpl-is-not)).
 
-**Recorded gap — the one caller-supplied value that reaches the server.**
-`NFR-PERF-002` establishes a named-object read in which the name restricts the
-statement the server receives, and `FR-CFG-044` restricts the privilege probe to
-the configured database; the qualified-routine-name parser resolves its operand
-against `mariadb/` ([interfaces.md](interfaces.md#the-shared-functions-and-the-phase-clock)).
-The closed statement list of `FR-SRV-006` fixes **which** statements exist and
-`FR-SCH-013` keeps the pattern out of them, but no requirement and no settled
-entry of [open-decisions.md](open-decisions.md) fixes **how** a caller-supplied
-name is conveyed into a statement — as a value bound by the driver, or composed
-into the statement text. Settling it here would be taking a decision the
-register has not taken, which this folder does not admit; it is reported to the
-register owner.
+**The one caller-supplied value that reaches a server statement**, the
+database name the entry gives (`FR-CONF-041`), changes no part of a statement
+but the value its rows are compared with (`FR-SRV-043`, `FR-MYSQL-048`). Every
+server read is the whole catalogue, so a table, view or routine named on the
+command line is matched in memory and reaches no statement; the pattern is
+kept out by `FR-SCH-013`. The two server readers convey the name differently:
+
+| Reader | How the name reaches the statement | Recorded in |
+|---|---|---|
+| `mariadb/` | A parameter the driver binds, the statement prepared and executed; the text never holds the value | `mariadb/catalogue.rs`, read at `9d2538e` |
+| `mysql/` | Composed into the constant text at one site as a `_utf8mb4` hexadecimal literal and sent over the text protocol; the rule, its limits, the evidence that certified it and the rejected alternatives — a quoted literal among them — are the record's | [`ADR-015`](../adr/adr-015-mysql-catalogue-name-conveyance.md) |
+
+The login packet carries the same name as a protocol field, which ends at a
+NUL character; `FR-CONF-057` refuses such a name before any connection
+(*The seven untrusted inputs*, row 2). This paragraph discharges the gap this
+section recorded until 2026-11-05.
+
+## A SQLite database file
+
+`FR-SEC-028` states the rule and the threats it closes, and points at the
+requirements that carry it. The order the controls are applied in is
+[architecture.md](architecture.md#the-sqlite-reader)'s; what belongs here is
+which control closes which threat, and how the build confirms each.
+
+| Control | Applied by | Confirmed by | Closes | Forced by |
+|---|---|---|---|---|
+| A regular file | A lookup that opens nothing | The kind it reports | A FIFO hanging the open; a device or a directory read as a database | `FR-LITE-005` |
+| A read-only open that creates nothing | The open's flags | `is_readonly` on `main` | Any write through the connection; a database created at a mistyped path | `FR-LITE-006` |
+| `query_only` on | Its pragma | Its pragma, read | A write the open did not refuse, as defence in depth | `FR-LITE-010` |
+| Defensive mode on, `trusted_schema` off | The configuration interface | The configuration interface, read | Corruption by ordinary SQL; a function or module not marked innocuous run from a view or a schema expression | `FR-LITE-010` |
+| Views disabled | The configuration interface | The configuration interface, read | As defence in depth, what a statement that named a view would open: a view expanded through the views it names, and a view taking the place of a pragma function | `FR-LITE-010` |
+| Extension loading absent | The build ([`ADR-013`](../adr/adr-013-sqlite-driver.md)) | `PRAGMA compile_options` returning `OMIT_LOAD_EXTENSION`, before anything reads the file | Code loaded from a path a schema or a statement names | `FR-LITE-010` |
+| `cell_size_check` on, `mmap_size` `0` | Their pragmas | Their pragmas, read | A malformed page read unchecked; a page read through a map another process can change | `FR-LITE-010` |
+| `temp_store` at `MEMORY` | Its pragma | Its pragma, read back as `2`, and `PRAGMA compile_options` returning a `TEMP_STORE` row of `1`, `2` or `3`, because the build decides whether the pragma is obeyed | Content of the file written to a temporary file outside `.tpl`, in a directory the host chooses | `FR-LITE-010` |
+| Length, statement length and attachments limited | `set_limit` | `limit` | A value sized to exhaust memory; a second file attached | `FR-LITE-011` |
+
+**Every control is confirmed before any byte of the file is parsed**, and one
+not confirmed is `70`, naming the control, the value set and the value read
+(`FR-LITE-012`, `FR-LITE-017`). No flag, key or environment condition reaches
+any of them: nothing in the key space, the flag tree or the environment layer
+names one (`FR-LITE-014`).
+
+**The path is literal, and handed to the library absolute.** `path` is never
+expanded and refuses `${` (`FR-CONF-054`, `FR-SEC-007`'s note); a relative
+value is resolved against the project directory, so the library receives a
+path beginning with `/`, which it never reads as a URI although the bundled
+build enables URI filenames ([architecture.md](architecture.md#the-sqlite-reader)).
+A link in it is followed, on the ground `FR-LITE-005` gives: the path is the
+caller's own, in a file only the caller may write (`FR-PROJ-010`,
+`FR-PROJ-011`).
+
+**A schema table that could forge the catalogue is refused before it is
+read.** The check, the first catalogue statement, refuses with `78` the seven
+kinds of row `FR-LITE-041` names — a table or a view in the namespace of the
+pragma functions, a value of a storage class the schema table's contract
+excludes, a table row whose root page contradicts its text, and four shapes
+SQLite never writes and its loader accepts: another spelling of a type, a row
+with no text that is not an index's, a NUL character in a name or a text, and
+a trigger header SQLite does not write — before any statement reads
+through a pragma function (`FR-SEC-028`, `FR-LITE-017`, `FR-LITE-041`). How the
+verdict is reached is [architecture.md](architecture.md#the-sqlite-reader)'s.
+
+**The check governs what the read reads.** On a read, the check and every
+catalogue statement run in one read transaction and read one snapshot, so a
+table or a view another connection commits after the check is never read
+through: in rollback-journal mode the writer cannot commit until the read
+ends, and in write-ahead-log mode what it commits stays invisible to the read
+(`FR-SEC-028`, `FR-LITE-042`). How the transaction stands to the read-only
+promise is [below](#for-a-sqlite-entry-three-parts).
+
+**Rows are grouped and names matched on the bytes the file holds**, never on
+the text they convert to, so no row is attached to another object and no
+reference resolves to another object than the one SQLite resolves it to; a
+file in which two names of one set convert alike is refused with `78` before
+anything is folded (`FR-LITE-043`;
+[architecture.md](architecture.md#the-sqlite-reader)).
+
+**No statement carries a value from the file, and none compiles a view or
+connects a virtual table.** Every statement is a constant, and none is issued
+per object, so none needs a name read from the file (`FR-LITE-016`,
+`FR-LITE-037`; [architecture.md](architecture.md#the-sqlite-reader)). No
+statement invokes `pragma_table_list`, reads from a view, or passes the name of
+a view or of a virtual table to a pragma function, so nothing a view's
+definition names and no module's code runs during the read (`FR-LITE-015`,
+`FR-LITE-033`). A nested statement the library runs for a pragma function is
+bounded by the read-only open and `query_only` (`FR-LITE-018`).
+
+**A value of the file reaches a diagnostic line only bounded**, so a name sized
+by a crafted file cannot flood the line a calling agent reads (`FR-SEC-028`,
+`FR-ERR-046`). Which values are bounded, where and how is
+[interfaces.md](interfaces.md#the-diagnostic-renderer)'s.
+
+**Five residuals, each stated by its requirement and none closed here.**
+
+- A file replaced by a FIFO between the lookup and the open blocks the open,
+  and no deadline interrupts it; arranging it needs write access to the
+  directory that holds the database (`FR-LITE-005`).
+- The library's loading of the schema at the probe grows faster than the
+  number of objects the file declares, so a crafted file can end a read with
+  `69` at the catalogue-query deadline; it cannot make one outlast it, because
+  the watchdog's interrupt ends the probe (`FR-LITE-009`, *Consequence*).
+- A database in write-ahead-log mode may leave `<file>-wal` and `<file>-shm`
+  beside it, created and written by the library; `FR-PROJ-024` admits both
+  (`FR-LITE-008`; [data-model.md](data-model.md#tpl-on-disk-and-its-five-writers)).
+- Damage confined to pages the catalogue read never touches is not detected,
+  because no integrity check runs (`FR-LITE-013`).
+- A process that writes the file's bytes without SQLite's locks changes what a
+  statement reads, inside the read transaction or outside it; what it writes is
+  a damaged file, refused where the library detects it (`FR-LITE-042`, *What
+  the transaction does not reach*; `FR-LITE-007`).
 
 ## Transport
 
 `FR-SEC-021` fixes which mode a connection takes when nobody chose one, and
 `BR-CONF-001` fixes where the authority over encryption sits. The first and the
-fourth rows below are the two limits `FR-SEC-021` carries as observed rather
+sixth rows below are the two limits `FR-SEC-021` carries as observed rather
 than reasoned, and both bear on the build.
 
 | Property | How the build holds it | Forced by |
 |---|---|---|
-| `mariadb/` sets the mode on **every** connection it opens, whichever mode it is | The driver's own default is never the operative one. What an inherited default would amount to is [`ADR-002`](../adr/adr-002-tls-mode-mapping.md)'s consequence and is not restated | `FR-CONF-037`, `FR-SEC-021` |
+| `mariadb/` sets the mode on **every** connection it opens, whichever mode it is, a `mysql` entry's included | The driver's own default is never the operative one. What an inherited default would amount to is [`ADR-002`](../adr/adr-002-tls-mode-mapping.md)'s consequence and is not restated | `FR-CONF-037`, `FR-SEC-021`, `FR-MYSQL-020`, `FR-MYSQL-021` |
+| The server's RSA public key is never requested over a session TLS does not protect | The vendored driver returns a typed refusal before the request is written, on both paths that would write it; `tpl` recognises it by its type and reports it with the method the server asked for — `78` for a `mysql` entry, `69` for a `mariadb` entry. The patch, its two guards and the condition that retires it are [`ADR-014`](../adr/adr-014-mysql-provider-driver.md)'s, points 3, 4 and 7 | `FR-MYSQL-045`, `FR-ERR-047`, the note on `FR-SEC-021` |
+| An empty password, and an entry that supplies none, are sent as the server's own clients send an empty password | The vendored driver sends the fixed response for the method instead of a scramble of the empty string, at the first response and at every switch of the method, and requests no key for it ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 5) | `FR-CONF-055`, `FR-MYSQL-047` |
 | The mode-to-driver mapping lives in exactly one place | Recorded in [`ADR-002`](../adr/adr-002-tls-mode-mapping.md), which `FR-CONF-038` requires and rule R3 of [`docs/adr/`](../adr/README.md) obliges; this document cites it and carries none of it | `FR-CONF-038`, `FR-CONF-013` |
 | The mode set is an admission test over the dependency table | Carried by [technology-stack.md](technology-stack.md#the-database-driver-and-the-five-tls-modes), where the criterion belongs to the stack rather than to this subject | `FR-CONF-036` |
 | Pinned trust material joins the root store rather than replacing it | A property of how the store is assembled, not a choice available here: pinning therefore enlarges what passes verification instead of restricting it, and no output or document may describe it as exclusive | `FR-CONF-039`, `FR-CONF-014`, [`OD-16`](open-decisions.md#od-16--the-tls-backend-and-the-root-store) |
@@ -383,7 +492,7 @@ The trust anchors themselves, the rejection of the platform store and the
 consequence for reproducibility across hosts are
 [`ADR-002`](../adr/adr-002-tls-mode-mapping.md)'s and are not restated. The
 third limit of [overview.md](overview.md#the-three-limits-the-system-states-rather-than-overcomes)
-is the fourth row above, stated where a reader would otherwise assume more.
+is the sixth row above, stated where a reader would otherwise assume more.
 
 **A symbolic link has four dispositions in this crate, and no component decides
 for another.** `render/` refuses one at every component below the template root,
@@ -393,7 +502,7 @@ path to the cache with `78`, never reads through one at an object file — a
 miss — or at `meta.json` or `database.json` — an unusable record — and
 replaces one at a write target — the first
 two are the tables of *Template containment* and *Project discovery* above, the
-third is the fifth row of this one, and the fourth is
+third is the seventh row of this one, and the fourth is
 [data-model.md](data-model.md#tplcache)'s (`FR-CACHE-030`, `FR-CACHE-033`,
 `FR-CACHE-042`, `FR-CACHE-044`, `FR-CDOC-017`, `FR-SEC-026`). There is no shared path-policy helper: each disposition is written
 where its own requirement applies, and a single helper would have to carry the
@@ -412,7 +521,7 @@ belongs here is which half does what, and where each sits.
 
 | Part | What it is in the build | What it does | Forced by |
 |---|---|---|---|
-| The closed statement list | Every statement `mariadb/` can send is written into the crate; no component composes one elsewhere, and no external process is run to read structure | **Prevents.** Nothing outside the list leaves the process, whatever grants the session carries | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001` |
+| The closed statement list | Every statement `mariadb/` can send for a `mariadb` entry is written into the crate; no component composes one elsewhere, and no external process is run to read structure | **Prevents.** Nothing outside the list leaves the process, whatever grants the session carries | `FR-SRV-006`, `FR-SRV-007`, `BR-SRV-001` |
 | The read-only session | Stages 2 and 3 of the connection lifecycle: applied once at connection start, confirmed immediately by reading `@@session.tx_read_only` and no other spelling of it, and a failure of either half refuses the connection before any catalogue statement | **Detects.** Defence in depth over the first part, which is what `BR-SRV-002` states it is and all it states it is | `FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`, `BR-SRV-002` |
 
 Neither half is disableable by a flag, a configuration key or an environment
@@ -422,6 +531,40 @@ produce, are
 [architecture.md](architecture.md#the-connection-lifecycle)'s. Describing the
 session setting as prevention overstates it, and no passage of this folder may
 (`BR-SRV-002`).
+
+### For a `mysql` entry, the same two parts
+
+`BR-MYSQL-002` gives a `mysql` entry the two parts of a `mariadb` entry, on the
+same terms.
+
+| Part | What it is in the build | What it does | Forced by |
+|---|---|---|---|
+| The closed statement list | The three connection-start statements in `mysql/session.rs`, constants of the crate, and the twelve statement texts of `mysql/catalogue/statements.rs`, each reading one table of `FR-MYSQL-015` and receiving only the database name, by the rule of [`ADR-015`](../adr/adr-015-mysql-catalogue-name-conveyance.md) at its one composition site in `mysql/catalogue.rs` | **Prevents** | `FR-MYSQL-015`, `FR-MYSQL-016`, `FR-MYSQL-048` |
+| The read-only session | Applied once, then confirmed by reading `@@session.transaction_read_only` — the one spelling a supported MySQL series carries — and accepting the integer `1` alone, decoded whatever its signedness; a failure of either half refuses the connection before any catalogue statement | **Detects** | `FR-MYSQL-018`, `FR-MYSQL-019` |
+
+Neither is disableable (`FR-MYSQL-019`). A `mariadb` entry that reaches a MySQL
+server fails at its own read-back, whose variable MySQL does not carry, before
+any catalogue statement (`FR-MYSQL-012`).
+
+### For a `sqlite` entry, three parts
+
+`BR-LITE-001` divides the promise for a database file in three, and two of them
+prevent.
+
+| Part | What it is in the build | What it does | Forced by |
+|---|---|---|---|
+| The read-only open | Stage 2 of the SQLite reader, read back at stage 5 | **Prevents**, at the library: the connection cannot write the file | `FR-LITE-006` |
+| The closed statement list | Every statement `sqlite/` can send is a constant of the crate | **Prevents**, in `tpl` | `FR-LITE-015`, `FR-LITE-016` |
+| `query_only` | Set and read back at stage 5 | Makes a write fail on a connection that could otherwise make one; defence in depth | `FR-LITE-010` |
+
+None is disableable (`FR-LITE-014`). The read transaction of `FR-LITE-042` is
+part of the read and no breach of the promise: it takes the shared lock every
+statement takes and writes nothing, and a transaction that could write is
+refused by the read-only open and excluded by `FR-LITE-016` (`BR-LITE-001`, as
+amended in the seventieth edition). What the promise does not cover — the two
+files a database in write-ahead-log mode may leave beside it — is
+`FR-LITE-008`'s, and the promise is verified from outside the process
+([verification.md](verification.md#the-sqlite-provider)).
 
 ## What this document defers, and to what
 

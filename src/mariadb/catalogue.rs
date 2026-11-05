@@ -62,8 +62,8 @@
 //! marking is the whole of what a shortfall does to them.
 
 pub(crate) mod completeness;
-mod fold;
-mod row;
+pub(crate) mod fold;
+pub(crate) mod row;
 mod statements;
 
 // The harness is asked rather than restated: the gate, the inventory and the
@@ -88,14 +88,14 @@ pub(crate) mod fixture;
 
 use std::panic::Location;
 
-use sqlx::mysql::MySqlRow;
+use sqlx_mysql::MySqlRow;
 use tokio::time::timeout;
 
 use super::Session;
 use super::connect::Target;
 use super::fault;
 use crate::deadline::{Clock, Phase};
-use crate::error::{Error, NetworkPhase};
+use crate::error::{Error, NetworkPhase, SessionStatement};
 use crate::model::database::Database;
 use crate::model::server::Server;
 use statements::{Read, Statement};
@@ -258,12 +258,13 @@ pub(crate) fn read(
 ///
 /// **A privilege refusal is an answer, not a condition.** `FR-CFG-045` fixes
 /// the exit code of a false at `0`, so a server that answers this statement
-/// with an error packet has answered it: the statement's text is a
-/// `&'static str` of the repertoire, valid on every series of `FR-SRV-015` per
-/// `FR-SRV-037`, and the only thing about it that can be refused is this
-/// reader's standing. A failure that is **not** an error packet — a socket that
-/// dropped, a TLS fault, a phase that outlived its bound — is the server
-/// ceasing to answer, and stays what `FR-ERR-034` makes it.
+/// with an error packet carrying one of the four privilege errors of
+/// `FR-CFG-044` has answered it. An error packet carrying any other number
+/// says nothing about the reader — a statement the server killed, a resource
+/// it ran out of — and is the third way of `FR-ERR-036`, with its number, as
+/// the seventy-ninth edition requires; so is every failure that is not an
+/// error packet, in the first or the second way, and an expired deadline is
+/// `FR-ERR-027`'s.
 ///
 /// This is not the attempt-and-fall-back read `FR-SRV-023` forbids, for the two
 /// reasons `FR-CFG-044` gives: the statement is always the same one and is
@@ -290,17 +291,19 @@ pub(crate) fn probe(
         // FR-CFG-044, the second fact: at least one row.
         Ok(rows) => Ok(!rows.is_empty()),
 
-        // FR-CFG-044, the first fact. The server answered with an error packet,
-        // which for this statement is a privilege refusal; the discriminant
-        // read is the presence of a database error and nothing inside it, which
-        // is what `FR-GLOB-018` and `OD-06` leave a caller of the driver.
-        Err(driver) if driver.as_database_error().is_some() => Ok(false),
+        // FR-CFG-044, the first fact. The server answered with an error packet
+        // carrying one of the four privilege errors; the number is the one fact
+        // read from it, which is what `FR-GLOB-018` and `OD-06` leave a caller
+        // of the driver. Any other error packet is the third way of
+        // FR-ERR-036, which the arm below reports with its number.
+        Err(driver) if fault::is_privilege_error(&driver) => Ok(false),
 
         Err(driver) => Err(fault::speaking(
             target.entry(),
             &driver,
             target.host(),
             target.port(),
+            SessionStatement::CatalogueQuery,
         )),
     }
 }
@@ -320,8 +323,15 @@ fn fetch(
     clock: &Clock,
     statement: &Statement<'_>,
 ) -> Result<Vec<MySqlRow>, Error> {
-    issue(session, target, clock, statement)?
-        .map_err(|driver| fault::speaking(target.entry(), &driver, target.host(), target.port()))
+    issue(session, target, clock, statement)?.map_err(|driver| {
+        fault::speaking(
+            target.entry(),
+            &driver,
+            target.host(),
+            target.port(),
+            SessionStatement::CatalogueQuery,
+        )
+    })
 }
 
 /// Sends one statement and hands back what the driver answered.
@@ -343,7 +353,7 @@ fn issue(
     target: &Target<'_>,
     clock: &Clock,
     statement: &Statement<'_>,
-) -> Result<Result<Vec<MySqlRow>, sqlx::Error>, Error> {
+) -> Result<Result<Vec<MySqlRow>, sqlx_core::Error>, Error> {
     let bound = clock.bound(target.deadlines().of(Phase::CatalogueQuery));
     let expired = || {
         fault::expired(
@@ -373,9 +383,11 @@ fn issue(
     // exactly the reads a caller most wants to see. A statement the bound
     // refused was never sent and is never counted, which is why the check comes
     // first.
-    crate::diagnostics::emit::catalogue_query();
+    crate::diagnostics::emit::catalogue_query(
+        crate::diagnostics::emit::CatalogueSource::InformationSchema,
+    );
 
-    let mut query = sqlx::query::<sqlx::MySql>(statement.sql());
+    let mut query = sqlx_core::query::query::<sqlx_mysql::MySql>(statement.sql());
 
     for bind in statement.binds() {
         query = query.bind(bind);
@@ -479,6 +491,8 @@ mod tests {
             &|_: &str| None,
         )
         .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry")
     }
 
     /// Reads `scope` from one fixture server as `account`, and closes the
@@ -864,10 +878,14 @@ mod tests {
                 assert_eq!(stored, 6, "{}", server.name());
 
                 for generated in &generated {
-                    assert!(!generated.expression.is_empty());
-                    assert!(!generated.expression.contains(" AS "));
-                    assert!(!generated.expression.contains("VIRTUAL"));
-                    assert!(!generated.expression.contains("STORED"));
+                    let expression = generated
+                        .expression
+                        .as_deref()
+                        .expect("a MariaDB read carries every generation expression");
+                    assert!(!expression.is_empty());
+                    assert!(!expression.contains(" AS "));
+                    assert!(!expression.contains("VIRTUAL"));
+                    assert!(!expression.contains("STORED"));
                 }
             },
         );
@@ -933,7 +951,7 @@ mod tests {
 
                 let primary = tariff.primary_key().expect("tariff has a primary key");
 
-                assert_eq!(primary.name, PRIMARY_KEY_NAME);
+                assert_eq!(primary.name.as_deref(), Some(PRIMARY_KEY_NAME));
                 assert_eq!(primary.columns.len(), 1);
                 assert_eq!(primary.columns[0].name, "tariff_id");
 
@@ -1050,7 +1068,7 @@ mod tests {
 
                 let column_level = constraints
                     .iter()
-                    .filter(|constraint| constraint.level == ConstraintLevel::Column)
+                    .filter(|constraint| constraint.level == Some(ConstraintLevel::Column))
                     .count();
 
                 assert_eq!(column_level, 2, "{}", server.name());
@@ -1097,7 +1115,7 @@ mod tests {
                 }
 
                 for trigger in &triggers {
-                    assert_eq!(trigger.action_order, 1);
+                    assert_eq!(trigger.action_order, Some(1));
                     assert_eq!(trigger.orientation, "ROW");
                     assert_eq!(trigger.old_row_alias, "OLD");
                     assert_eq!(trigger.new_row_alias, "NEW");
@@ -1135,21 +1153,38 @@ mod tests {
 
                 for view in &model.views {
                     assert!(!view.definition.is_empty());
-                    assert!(!view.definer.is_empty());
-                    assert_eq!(view.algorithm, "UNDEFINED");
-                    assert_eq!(view.character_set_client, "utf8mb4");
+                    assert!(
+                        view.definer
+                            .as_deref()
+                            .is_some_and(|definer| !definer.is_empty())
+                    );
+                    assert_eq!(view.algorithm.as_deref(), Some("UNDEFINED"));
+                    assert_eq!(view.character_set_client.as_deref(), Some("utf8mb4"));
                     assert!(view.restricted.is_none());
                 }
 
                 for option in ["NONE", "LOCAL", "CASCADED"] {
                     assert!(
-                        model.views.iter().any(|view| view.check_option == option),
+                        model
+                            .views
+                            .iter()
+                            .any(|view| view.check_option.as_deref() == Some(option)),
                         "{option} is absent"
                     );
                 }
 
-                assert!(model.views.iter().any(|view| view.is_updatable));
-                assert!(model.views.iter().any(|view| !view.is_updatable));
+                assert!(
+                    model
+                        .views
+                        .iter()
+                        .any(|view| view.is_updatable == Some(true))
+                );
+                assert!(
+                    model
+                        .views
+                        .iter()
+                        .any(|view| view.is_updatable == Some(false))
+                );
             },
         );
     }
@@ -1264,7 +1299,7 @@ mod tests {
 
                 assert_eq!(model.name, SCHEMA);
                 assert_eq!(model.charset, "utf8mb4");
-                assert_eq!(model.collation, "utf8mb4_unicode_520_ci");
+                assert_eq!(model.collation.as_deref(), Some("utf8mb4_unicode_520_ci"));
                 assert!(model.server.version().contains("MariaDB"));
                 assert_eq!(model.server.series(), server.name());
             },
@@ -1350,7 +1385,7 @@ mod tests {
                         &table
                             .foreign_keys()
                             .iter()
-                            .map(|key| key.name.as_ref())
+                            .map(|key| key.name.as_deref().unwrap_or_default())
                             .collect::<Vec<_>>(),
                     );
                 }
@@ -1991,8 +2026,8 @@ mod tests {
                 assert_eq!(pairs, 17, "{name}");
 
                 for key in &keys {
-                    assert!(key.referenced_key.is_some(), "{name}: {}", key.name);
-                    assert!(key.referenced_table.is_some(), "{name}: {}", key.name);
+                    assert!(key.referenced_key.is_some(), "{name}: {:?}", key.name);
+                    assert!(key.referenced_table.is_some(), "{name}: {:?}", key.name);
 
                     // The sixth field is settled by the read's population
                     // rather than by a value: FR-CAT-045 restricts the read to
@@ -2002,7 +2037,7 @@ mod tests {
                     for pair in &key.columns {
                         assert!(
                             !pair.referenced_column.is_empty(),
-                            "{name}: {} names an empty referenced column",
+                            "{name}: {:?} names an empty referenced column",
                             key.name
                         );
                     }
@@ -2045,7 +2080,7 @@ mod tests {
 
                         assert!(
                             carried.contains(&referenced),
-                            "{name}: {} names {referenced}, which this read does not carry —                              a key FR-CAT-057 should have excluded reached the model",
+                            "{name}: {:?} names {referenced}, which this read does not carry —                              a key FR-CAT-057 should have excluded reached the model",
                             key.name
                         );
                     }

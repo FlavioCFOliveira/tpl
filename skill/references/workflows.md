@@ -30,7 +30,7 @@ tpl init                  # or: tpl init path/to/dir
 
 ## 2. Register and verify a database entry
 
-Pick one shape. Both keep the password out of the file and off the command line.
+Pick one shape. The server shapes keep the password out of the file and off the command line; a SQLite file has none. Each server shape below makes a `mariadb` entry; add `--provider mysql` to make a `mysql` entry for a MySQL server.
 
 ```sh
 # Discrete fields, with the password from the environment:
@@ -43,12 +43,19 @@ tpl cfg database add reporting --dsn 'mysql://reader:${REPORTING_PASSWORD}@db.ex
 # A secret store, run without a shell:
 tpl cfg database add staging --host db-staging.example.com --user reader --schema shop \
   --password-command "pass db/staging"
+
+# A MySQL server, with any of the shapes above:
+tpl cfg database add orders --provider mysql --host mysql.example.com --user reader --schema orders
+
+# A SQLite database file, by a path relative to the directory that holds .tpl/:
+tpl cfg database add ledger --provider sqlite --path data/ledger.sqlite
 ```
 
 - `--schema` is the database name on the server. `NAME` is the entry's local name (1 to 64 letters, digits or underscores), and `-d NAME` selects it.
-- For a local or development server without a trusted certificate, add `--tls disabled` (or `--tls preferred`). The default, `verify-identity`, fails against it.
+- For a local or development MariaDB server without a trusted certificate, add `--tls disabled` (or `--tls preferred`). The default, `verify-identity`, fails against it. For a MySQL server, add `--ca-file` instead: without TLS, a login that needs the server's RSA public key exits 78.
 - Exit 64 if the name is taken (the hint gives the `update` command instead), if `--dsn` is mixed with the discrete flags, or if a value is malformed.
 - An entry without a host and a server database name is stored, but every command that connects with it exits 78.
+- A SQLite entry takes `--provider sqlite --path FILE` and no other flag (64 otherwise). `--path` is literal: no `${VAR}`, no `~`. See `configuration.md`, *SQLite entries*.
 
 Optionally make it the default, then verify it:
 
@@ -60,9 +67,10 @@ SHOP_PASSWORD=… tpl cfg database test shop --format json
 Read the result:
 
 - Exit 0 means the four checks ran. Then read `data.can_read_catalogue`: `false` means the user logs in but can't see the catalogue, so request `SELECT` access to it. `data.server.standing` is `supported` or `newer_than_supported`.
-- Exit 69: unreachable, refused, or timed out. Check the host and port. Retrying is safe.
-- Exit 77: login refused. Fix the user or the password source.
-- Exit 78: undefined `${VAR}`, `password_command` failed, unsupported server, or the session could not be made read-only.
+- Exit 69: unreachable, refused, the login did not complete, a limit on connections or a blocked host, or timed out. The `cause` names the phase. Check the host and port. Retrying is safe.
+- Exit 77: login refused. The `cause` names why: the user or password, the client's host, an expired password, or a locked or blocked account. Fix the user or the password source, or follow the hint.
+- Exit 78: undefined `${VAR}`, `password_command` failed, a server that is not the entry's product or of an unsupported series, the session could not be made read-only, or `tls` does not encrypt where the server or the login requires it (follow the `--tls verify-identity` hint); for SQLite, a path that is not a regular file or not a readable SQLite database, or a schema `tpl` refuses.
+- For a SQLite entry, exit 0 always has `can_read_catalogue: true`, and a missing or unopenable file is exit 74.
 
 `cfg database test` never reads or writes the cache.
 
@@ -146,7 +154,7 @@ tpl -d shop cache clean --view v_sales   # delete one object (exit 66 if it is n
 ```
 
 - Nothing expires. `loaded_at` in `cache status` is the only staleness signal. If the schema may have changed, reload or use `--direct`.
-- **A cache hit still resolves the entry.** Every `${VAR}` it references must be defined, and `password_command` must succeed, even when no connection is opened. Otherwise the command exits 78.
+- **A cache hit reads no credential.** It expands no `${VAR}` and runs no `password_command`, so it succeeds with the variable unset. The first command that connects — a miss, `--direct`, `cache load`, `cfg database test` — needs them, and exits 78 naming an undefined variable.
 - Cleaning one object marks its collection as not whole. After that, a listing, a dump or a render needs the server again until you run `tpl -d shop cache load`. Prefer `cache load --table X` for refreshing one object.
 - Read the cache only through `tpl`. Its on-disk layout is not a contract.
 
@@ -159,6 +167,8 @@ tpl cfg database update shop --host db-staging.example.com   # warns that the ol
 tpl -d shop cache clean                                      # required, or reads keep serving the old server
 tpl cfg database test shop
 ```
+
+A SQLite entry is repointed the same way, with `tpl cfg database update ledger --path other.sqlite`, then `tpl -d ledger cache clean`. An entry cannot move between a server provider and `sqlite` while it carries the other provider's keys (64): add a new entry instead. A server entry moves between `mariadb` and `mysql` with `tpl cfg set database.NAME.provider mysql` (or `mariadb`), followed by `tpl -d NAME cache clean`.
 
 Remove an entry:
 

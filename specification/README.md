@@ -1,8 +1,8 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-09-25
-related: [glossary.md, cli-contract.md, catalogue-coverage.md, open-questions.md, upstream-divergences.md]
+last-reviewed: 2026-11-05
+related: [glossary.md, cli-contract.md, catalogue-coverage.md, sqlite-contract.md, mysql-contract.md, open-questions.md, upstream-divergences.md]
 ---
 
 # tpl Functional Specification
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in sixty-four editions. All are in force;
+The specification has been written in eighty-seven editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -4931,13 +4931,1860 @@ The fifth validation rule is discharged for this edition: both root
 documents were read against every requirement amended since the register was
 last re-read.
 
+### Sixty-fifth edition — a second provider
+
+rmp `#314`, of sprint 27, gives `tpl` read support for SQLite. The user asked
+that each database engine be a distinct provider, abstracted through the
+configuration; that the provider set there decide how `tpl` behaves; that
+templates render from a SQLite database on the principles they render from a
+MariaDB one; and that MariaDB support not change. Three further decisions of
+the user, of 2026-11-03, fix how the SQLite driver is chosen.
+
+**Fifty identifiers are assigned**: `FR-LITE-001` through `FR-LITE-038`,
+`BR-LITE-001` and `BR-LITE-002`, in a new file; `FR-CONF-051` through
+`FR-CONF-054`; `FR-CFG-055` and `FR-CFG-056`; `FR-CTX-043`; `FR-CDOC-018`;
+`FR-ENV-048`; and `FR-SEC-028`. None is retired and none is renumbered.
+[glossary.md](glossary.md) gains eight entries — *connection*, *project
+directory*, *provider*, *rowid alias*, *SQLite table kinds*, *type affinity*,
+*hardening control* and *official driver* — and amends five. `DIV-057` and
+`DIV-058` are raised in [upstream-divergences.md](upstream-divergences.md),
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The SQLite contract** — [sqlite-contract.md](sqlite-contract.md), new,
+  beside [server-contract.md](server-contract.md). The binary carries its own
+  library, whose version, series and a `standing` that is always `supported`
+  fill the `server` object, with no window and no refusal
+  (`FR-LITE-001` to `FR-LITE-003`). The driver is chosen by a closed rule:
+  an official driver where one exists and passes the hardening, otherwise
+  security, then catalogue visibility (`FR-LITE-004`). The file is read only
+  if it is a regular file, opened read-only and never created, and refused
+  with `74`, `78` or `69` by condition (`FR-LITE-005` to `FR-LITE-009`); a
+  database in write-ahead-log mode may leave two files beside it
+  (`FR-LITE-008`). The file is untrusted: seven controls and three limits are
+  applied and read back on every connection, a control that does not take
+  effect is `70`, and no integrity check runs (`FR-LITE-010` to
+  `FR-LITE-014`). A closed statement list, its order and its verification
+  (`FR-LITE-015` to `FR-LITE-018`, `BR-LITE-001`). The read covers `main`,
+  with seven enumerated exclusions, and no routines (`FR-LITE-019` to
+  `FR-LITE-022`). Every model property's SQLite source or its absence, with
+  one derivation from stored text — a trigger's event and timing
+  (`BR-LITE-002`, `FR-LITE-023` to `FR-LITE-034`). A view that does not
+  compile is incomplete and marked; anything else is complete or fails
+  (`FR-LITE-035`, `FR-LITE-036`). The requirements of form and the fixture of
+  `scripts/sqlite/` (`FR-LITE-037`, `FR-LITE-038`).
+- **The provider in the configuration** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-051` gives every
+  entry a `provider`, `mariadb` where the key is absent, so every existing
+  `.tpl/.cfg` keeps its meaning; `FR-CONF-052` fixes the keys each provider
+  takes and refuses, at entry resolution; `FR-CONF-053` requires `path`; and
+  `FR-CONF-054` reads it as a literal path, never expanded, resolved against
+  the project directory. `FR-CONF-002` grows to twenty key forms.
+- **The commands** — [cfg-commands.md](cfg-commands.md). `--provider` and
+  `--path` join `FR-CFG-027`; `FR-CFG-055` fixes the flags each provider
+  admits; `FR-CFG-056` states the four steps of `tpl cfg database test` for a
+  `sqlite` entry. `FR-CFG-016`, `FR-CFG-020`, `FR-CFG-048`, `FR-CFG-051`,
+  `FR-CFG-053` and `FR-CFG-033` are amended, with `FR-CACHE-029` in
+  [cache-commands.md](cache-commands.md) and `FR-HELP-036` in
+  [help-and-version.md](help-and-version.md).
+- **The document** — [context-document.md](context-document.md).
+  `FR-CTX-043` adds `database.provider`, present for both providers, and it
+  is the only change a MariaDB document undergoes. `schema_version` does not
+  move, because adding a field is not breaking, and a `--context` document
+  without the field is read as a `mariadb` one. `FR-CTX-036` and `FR-SCH-031`
+  in [schema-commands.md](schema-commands.md) carry it as a fourth metadata
+  field; `FR-CDOC-018` in [cache-documents.md](cache-documents.md) records the
+  provider of a cached read.
+- **The model** — notes on `FR-CAT-015`, `FR-CAT-033` and `FR-CAT-055` in
+  [catalogue-coverage.md](catalogue-coverage.md); `FR-ENV-048` in
+  [template-environment.md](template-environment.md) places the five type
+  affinities in the type families; `NFR-DET-002` in
+  [cli-contract.md](cli-contract.md) orders the unnamed foreign keys.
+- **The scope of the MariaDB rules** — `FR-SRV-001` is scoped to a `mariadb`
+  entry, and [server-contract.md](server-contract.md) says once that it
+  governs that provider; nothing it requires of a `mariadb` entry changes.
+  The cells of `FR-ERR-001` and the steps of `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) name the `sqlite`
+  conditions, and notes reach
+  [privileges-and-completeness.md](privileges-and-completeness.md),
+  [performance-requirements.md](performance-requirements.md),
+  [output-formats.md](output-formats.md) and
+  [render-command.md](render-command.md). [security.md](security.md) gains
+  the trust boundary and `FR-SEC-028`.
+
+`FR-CONF-007`, `FR-CONF-034`, `FR-CONF-048`, `FR-CONF-050`, `FR-PROJ-030`,
+`FR-GLOB-024`, `FR-GLOB-026`, `FR-OUT-014`, `FR-OUT-038`, `FR-RND-022`,
+`FR-RND-042`, `FR-CACHE-028`, `BR-CACHE-004`, `FR-CTX-023`, `FR-CTX-042`,
+`FR-PRIV-008`, `FR-ERR-027`, `FR-ERR-030`, `FR-SRV-042` and `NFR-PERF-003`
+were read against the changes. None conflicts with them, so none is amended.
+Every statement of SQLite behaviour rests on an observation of 2026-11-03,
+recorded with its conditions in
+[sqlite-contract.md](sqlite-contract.md#observations), or on SQLite's
+documentation, cited by page and date. The fifth validation rule is discharged
+for this edition: both root documents were read at `6203216` against every
+requirement the edition writes or amends, and the two entries it raises hold
+every divergence found.
+
+### Sixty-sixth edition — the library the binary carries, read again
+
+rmp `#319`, of sprint 27, amends the sixty-fifth edition after rmp `#315`
+applied `FR-LITE-004` to four candidate drivers in compiled spikes, and writes
+the user's requirement of 2026-11-03 that the SQLite library `tpl` carries be
+the most recent release possible, and secure. Every reading it relies on was
+re-taken on two builds of the library, 3.51.3 and 3.54.1, recorded with their
+conditions in [sqlite-contract.md](sqlite-contract.md#observations); the two
+returned the same readings wherever both were taken.
+
+**One identifier is assigned: `FR-LITE-039`.** None is retired and none is
+renumbered. [glossary.md](glossary.md) gains *nested statement* and amends
+*SQLite table kinds* and *hardening control*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The release the binary carries** — `FR-LITE-039` requires the most recent
+  SQLite release obtainable through the driver `FR-LITE-004` selects, judged
+  against SQLite's release history, and admits no release that a listed
+  vulnerability reachable under `tpl`'s controls affects. An older release
+  needs a reason in the decision records, and the choice is re-verified before
+  every release of `tpl`. It overrides neither `FR-LITE-004` nor anything a
+  `mariadb` entry does. `FR-LITE-001` and the file's scope point at it.
+- **Extension loading, compiled out** — by the user's decision of 2026-11-03,
+  `FR-LITE-010` makes extension loading absent from the carried library, built
+  with `SQLITE_OMIT_LOAD_EXTENSION`, instead of a switch set off that no
+  candidate driver could read back without `unsafe` code. `PRAGMA
+  compile_options`, which reads nothing from the file, confirms the omission
+  before the probe, and a missing `OMIT_LOAD_EXTENSION` row ends the
+  invocation with `70` under `FR-LITE-012`. The control is strengthened, not
+  removed, so `FR-LITE-004` stands. `FR-LITE-015` lists the pragma and
+  `FR-LITE-017` names it in the order. The read-back at every open answers
+  SQLite's own caveat that its `SQLITE_OMIT_*` options are unsupported with
+  the amalgamation; the omission was observed to take effect on both builds.
+  A `SELECT` of the same option was rejected: it loads the untrusted schema
+  before it answers.
+- **What the statement trace can verify** — `FR-LITE-018` now records what the
+  trace reports, a statement as it begins running, and asserts the list and
+  the order over the statements reported at top level. A nested statement,
+  which the library runs to carry out a pragma function or a module, is
+  neither checked nor counted, and a statement that fails when it is prepared,
+  or is never run, is stated as absent from the record.
+- **An oversized schema** — `FR-LITE-007` gives the length limit of
+  `FR-LITE-011` a row of its own: `SQLITE_TOOBIG`, with `78`.
+- **A `CHECK` that does not stop the read** — the sixty-fifth edition's
+  reading that a `CHECK` calling a function not marked innocuous makes the
+  schema fail to load under `trusted_schema` off is withdrawn: it does not
+  hold on the two builds, and could not be reproduced in the shell it was
+  taken from. `FR-LITE-010` records what `trusted_schema` off costs on the
+  builds, `FR-LITE-007` drops the case from its damaged-schema row, and
+  `FR-LITE-038` replaces the fixture database that relied on it with a
+  length-limit database and moves the `CHECK` into the main database. It also
+  gains a view that `trusted_schema` off refuses, the third cause
+  `FR-LITE-035` names, which no fixture case exercised. The expression-depth
+  reading of `FR-LITE-011` was re-taken and holds.
+- **Shadow tables of a module the library lacks** — the bounded claim of
+  `FR-LITE-020` is settled by observation: a library built without FTS5
+  reports the shadow tables of an `fts5` table as `table`. The requirement now
+  states that the carried library's report decides the covered set.
+- **The writing conventions** — `FR-LITE-018` is the fifth requirement whose
+  limit is on the evidence rather than on the guarantee, and the list in
+  *[Writing conventions](#writing-conventions)* names it.
+
+`FR-LITE-002`, `FR-LITE-004`, `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-016`,
+`FR-LITE-021`, `FR-LITE-034`, `FR-LITE-035`, `FR-LITE-036`, `FR-LITE-037`,
+`FR-SEC-028`, `FR-CFG-056`, `FR-ERR-001`, `FR-ERR-006` and `NFR-PERF-001` were
+read against the changes. None conflicts with them, so none is amended:
+`FR-CFG-056` reports every control of `FR-LITE-010` at its second step,
+whichever way each is confirmed. The fifth validation rule owes nothing for
+this edition: neither root document, read at `349560e`, states extension
+loading, the statement trace, the length limit, the `CHECK` reading,
+shadow-table coverage or the release of the SQLite library.
+
+### Sixty-seventh edition — what the technical design of the second provider found
+
+rmp `#314`, reopened in sprint 27, settles the seven points the technical
+specification of the `sqlite` provider, written at `ad653f5`, recorded against
+this corpus and did not resolve: one question on result codes that held back
+a part of the reader, three passages that contradicted a requirement in force,
+and three facts no requirement fixed. Within the same edition the coordinator
+added four further defects of the SQLite specification, found while the
+seven were settled. Each is settled by the narrowest amendment that removes
+it, and no requirement changes its meaning for a `mariadb` entry.
+
+**Two identifiers are assigned: `FR-LITE-040` and `FR-ERR-046`.** None is
+retired and none is renumbered. [glossary.md](glossary.md) gains *result
+code* and amends *project directory* and *differential run*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Every SQLite result code has an exit code** — `FR-LITE-040`, new, in
+  [sqlite-contract.md](sqlite-contract.md). After `FR-LITE-012`,
+  `FR-LITE-035` and the rows of `FR-LITE-007`, now read by result code
+  wherever the library returns it, every primary result code SQLite publishes
+  is classified by whose the fault is: `70` where `tpl` misused the library,
+  the library failed itself, or the outcome needs an operation `tpl` never
+  performs; `74` where the host or the filesystem did not supply what the read
+  needed, memory included; `69` where another connection holds or changes the
+  database; and `70` for a primary result code published later. The split the
+  technical specification recommended is taken with two corrections, each by
+  `FR-ERR-002`: `SQLITE_PROTOCOL` and `SQLITE_SCHEMA` are `69`, not `74`, and
+  `SQLITE_LOCKED` is `70`. The `69` and `74` cells of `FR-ERR-001`, the note
+  on `FR-ERR-006` and a note on `FR-LITE-007` follow, and a note on
+  `FR-ERR-036` states that it governs a `mariadb` entry only.
+- **Two files outside `.tpl`** — by the user's decision of 2026-11-03,
+  `FR-LITE-008` stands. `FR-PROJ-024` in
+  [project-and-discovery.md](project-and-discovery.md) now admits a second
+  exception, the `-wal` and `-shm` files the library may create and write
+  beside a database in write-ahead-log mode, and `BR-PROJ-002`,
+  `FR-CACHE-016` in [cache-commands.md](cache-commands.md) and `BR-SCH-003`
+  in [schema-commands.md](schema-commands.md), which state the same pure read,
+  admit them beside it. A read was observed to write the shared-memory file,
+  so the exception admits writing as well as creating.
+- **What a `cause` carries from the library** — `FR-GLOB-018` in
+  [global-flags.md](global-flags.md) states what the raw driver error is for a
+  `sqlite` entry: the driver's error value, in any rendering. The result code
+  and the library's message are not it, and a `cause` a requirement obliges to
+  state them carries both, escaped under `FR-ERR-024`, and nothing of the
+  driver's value. `FR-SEC-005` points at it.
+- **A deadline that met no lock** — the note on `FR-ERR-034` for a `sqlite`
+  entry names a lock only where the library returned `SQLITE_BUSY`, and
+  otherwise the deadline and its resolved value.
+- **The project directory of a linked `.tpl`** — `FR-CONF-054` in
+  [configuration-model.md](configuration-model.md) resolves a relative `path`
+  against the parent of the canonical `.tpl` folder, the one path the project
+  holds after `FR-PROJ-009`, and not against the directory holding a link.
+- **A rowid-alias primary key** — `FR-LITE-029` fixes the rest of its
+  properties: `unique` true, as SQLite's documentation states of the rowid;
+  and the member's prefix length, `type`, the comment and `ignored` as
+  `FR-LITE-030` gives them to every SQLite index.
+- **Two assertions on a `sqlite` entry** — `NFR-PERF-004` in
+  [performance-requirements.md](performance-requirements.md) is verified by
+  the syscall trace on the two Linux targets and skipped, with its reason, on
+  the two macOS targets, where no instrument observes it; `NFR-PERF-008`
+  compares the diagnostic count with the statement record of `FR-LITE-018`
+  over the SQLite fixture, on all four targets. The table under
+  *Requirements of form* gains both rows, and `NFR-PERF-004` becomes the sixth
+  requirement whose limit is on the evidence, listed in
+  *[Writing conventions](#writing-conventions)*. `FR-LITE-037` points at both.
+- **The `unique` test and a rowid alias** — the `unique` test of `FR-ENV-041`
+  in [template-environment.md](template-environment.md) consults the table's
+  primary key as well as its unique indexes, so a rowid-alias column answers
+  true, as a MariaDB primary-key column does. Every MariaDB document answers
+  as before, because its primary key is always the unique index `PRIMARY`.
+- **A path that names nothing** — `FR-LITE-005` routes a path whose kind
+  cannot be established, because its lookup fails, to the first row of
+  `FR-LITE-007`, which now begins at the check of the kind: one rule gives it
+  `74` and its `cause`, whichever of the check and the open finds it.
+- **Temporary files** — `FR-LITE-010` gains an eighth control, `temp_store`
+  at `MEMORY`, confirmed by its read-back and by `PRAGMA compile_options`.
+  Observed on another build of the release the binary carries, a sorting
+  statement over a large schema wrote a temporary file in the host's
+  temporary directory, outside `.tpl`, and with the control it wrote none.
+  `FR-LITE-015`, `FR-LITE-017`, `FR-LITE-008` and `FR-SEC-028` follow.
+  `FR-PROJ-002` is not amended: such a file lies outside `.tpl`, so the
+  requirements it contradicted were `FR-PROJ-024` and `FR-LITE-008`, which
+  now hold.
+- **A name sized to flood a diagnostic** — `FR-ERR-046`, new, in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), bounds a value read
+  from a SQLite database file, or returned by its library, in any diagnostic
+  line: past 256 characters, its first and last 128 are kept around a marker
+  that counts what was left out. `FR-ERR-024`, `FR-GLOB-018`, the note on
+  `FR-ERR-034` and `FR-SEC-028` point at it. Stdout, a MariaDB server's
+  values, a `--context` document and the argument vector are not bounded.
+- **One list that had missed the new requirement** — `FR-CFG-056` in
+  [cfg-commands.md](cfg-commands.md) takes its exit codes under
+  `FR-LITE-040` as well; the codes are unchanged.
+
+`FR-LITE-009`, `FR-LITE-012`, `FR-LITE-014`, `FR-LITE-018`, `FR-LITE-030`,
+`FR-LITE-035`, `FR-ERR-022`, `FR-ERR-027`, `FR-ERR-030`, `FR-ERR-032`,
+`FR-CAT-042`, `FR-CAT-043`, `FR-PROJ-002`, `FR-PROJ-009`, `FR-PROJ-023`,
+`FR-PROJ-027`, `FR-GLOB-017`, `NFR-PERF-005` and `NFR-PERF-007` were read
+against the changes. None conflicts with them, so none is amended. Every new
+statement of SQLite behaviour rests on SQLite's documentation, cited by page
+and date, or on an observation of 2026-11-03 through the Python library
+3.54.1 — the release the binary carries, built with the same `TEMP_STORE` —
+recorded beside the requirement it grounds. The fifth validation rule owes
+nothing new for this edition: both root documents were read at `ad653f5`
+against every requirement it amends, and the one passage each holds that an
+amendment reaches — the root `README.md` on writes outside `.tpl`, and the
+root `CLAUDE.md` on the disk writes `tpl` makes — is already held by
+`DIV-057` and `DIV-058`.
+
+### Sixty-eighth edition — a view read for what nothing carried
+
+rmp `#317`, of sprint 27, corrects one defect the implementation of the
+`sqlite` provider found. `FR-LITE-033` gave a SQLite view its columns, and the
+view object of `FR-CAT-047` has nine properties and no key for columns, for
+either provider; adding one would change every MariaDB document. The
+implementation read a view's columns only to learn whether the view compiles,
+for the marking of `FR-LITE-035`. By the user's decision of 2026-11-03, `tpl`
+reads no view's columns and marks no view, as on MariaDB. No requirement
+changes its meaning for a `mariadb` entry.
+
+**One identifier is withdrawn: `FR-LITE-035`.** It keeps its heading with a
+withdrawal note, and is retired and never reused. None is assigned or
+renumbered. [glossary.md](glossary.md) is unchanged. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **The view object** — `FR-LITE-033` in
+  [sqlite-contract.md](sqlite-contract.md) gives a SQLite view exactly the
+  nine properties of `FR-CAT-047`, states the parity with a `mariadb` read,
+  which carries no column of a view either, and forbids reading a view's
+  columns. It records the user's decision on four grounds: parity with
+  MariaDB, where no requirement asks whether a view compiles; nothing missing
+  from the document; no statement of the read compiling a view's definition;
+  and the cache and `--context` treating the read as any complete read. Three
+  options are recorded as rejected: keeping the marking, under which a
+  document that lacks nothing was refused as a `--context` and never recorded
+  whole in the cache; a `columns` key on the view of both providers; and one
+  on a SQLite view alone. The accepted cost is stated: a view that does not
+  compile is no longer flagged. A note on `FR-CAT-052` in
+  [catalogue-coverage.md](catalogue-coverage.md) states that a view's columns,
+  not excluded by coverage, are not carried either.
+- **What the read no longer does** — `FR-LITE-015` forbids a statement that
+  reads from a view or makes the library compile one; the read is the probe
+  and six catalogue statements, one fewer, with no per-view statement.
+  `FR-LITE-035` is withdrawn, and `FR-LITE-036` holds a `sqlite` read complete
+  or failed without exception, a view that does not compile presented whole
+  and unmarked. `FR-LITE-037` drops the one path on which the count grew with
+  the objects. `FR-LITE-018` verifies that no statement compiles a view by
+  the read of the fixture succeeding, and `FR-LITE-038` keeps the views that
+  do not compile in the fixture for that purpose. `FR-LITE-040` loses the
+  step that gave `SQLITE_ERROR` on a view read to `FR-LITE-035`: no statement
+  that remains can produce it, and the `SQLITE_ERROR` row takes every one
+  with `70`. `FR-LITE-010` keeps disabling views rejected, on the ground it
+  gives for triggers, and `FR-LITE-039` names what the read still reaches.
+- **What one reason reaches, observed** — the decision's ground on attack
+  surface holds for the compile of a view's definition and not for module
+  code. Observed on 2026-11-03 through the Python library 3.54.1: listing
+  the objects reported a column count of `0` for every view, one that
+  compiles included, so it compiles none; and the first statement invoking `pragma_table_list` connected an `fts5` table
+  and ran its module's read of `<table>_config`, with no view read.
+  `FR-LITE-033` records the ground as narrowed, and `FR-LITE-018` records
+  where the nested statement now runs.
+- **The cross-references** — the note on `FR-PRIV-003` and the Overview of
+  [privileges-and-completeness.md](privileges-and-completeness.md), the `77`
+  cell of `FR-ERR-001` and the note on `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), `FR-GLOB-018` in
+  [global-flags.md](global-flags.md), and the note on `NFR-PERF-001` and
+  `NFR-PERF-008` in [performance-requirements.md](performance-requirements.md)
+  no longer describe a marked view or a `77` for one. A `sqlite` entry now
+  reaches `77` through no condition.
+
+`FR-CAT-047`, `FR-CTX-043`, `BR-LITE-002`, `FR-LITE-017`, `FR-PRIV-001` to
+`FR-PRIV-008`, `FR-PRIV-016`, `FR-CACHE-037`, `BR-CDOC-006` and `FR-ERR-030`
+were read against the changes. None conflicts with them, so none is amended:
+`FR-LITE-017` names no view statement in its order, and the definitions of a
+complete read and of the `restricted` array hold for a `sqlite` read without
+a sentence of their own. The fifth validation rule owes nothing for this
+edition: neither root document, read at `2fd98f8`, states a view's columns,
+a marking of a SQLite view, or the statements a SQLite read issues.
+
+### Sixty-ninth edition — a catalogue a file could forge, views compiled after all, and controls past C0
+
+rmp `#317`, of sprint 27, closes four defects a security review of the
+SQLite reader at `cb99236` found, and rmp `#321` closes a fifth for both
+providers. Two user decisions of 2026-11-03 shape it: the objects of a
+`sqlite` read are read from the schema table alone, and C1 and bidirectional
+formatting characters are escaped, in `json` with JSON's own escape. Every
+new statement of SQLite behaviour rests on SQLite's documentation, cited by
+page and date, on an observation of 2026-11-03 through the Python library
+3.54.1 — the release of the library the binary carries — or through the
+release build of `tpl` at `cb99236`, or on the library's own source as the
+driver's published package bundles it, read at that public source. No
+requirement changes its meaning for a `mariadb` entry, save the escaping the
+user decided for both providers.
+
+**One identifier is assigned: `FR-LITE-041`.** None is withdrawn or
+renumbered. [glossary.md](glossary.md) gains *bidirectional formatting
+character* and *storage class*, and amends *SQLite table kinds*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+the index of [open-questions.md](open-questions.md) stays empty, and the one
+item of *[Maintenance debt](#maintenance-debt)* is discharged.
+
+- **A name that replaces a function** — SQLite resolves a name among the
+  file's tables and views before a pragma table-valued function of that name,
+  ignoring ASCII case. A view named `pragma_table_list` made `tpl` list a
+  forged table at exit `0`, and a table named `PRAGMA_TABLE_XINFO` made it
+  end with a false `70`. `FR-LITE-041`, new, in
+  [sqlite-contract.md](sqlite-contract.md), issues one statement against the
+  schema table after the probe and before every other catalogue statement,
+  and refuses with `78` a file whose schema holds a table or a view whose
+  name begins with `pragma_`: the prefix is SQLite's own namespace for those
+  functions, and a list of the names the read uses would age with
+  `FR-LITE-015`. Rejected: Unicode case folding, which SQLite does not apply;
+  qualifying the functions with `temp.`, which SQLite documents as not
+  working; and refusing indexes and triggers, which replace nothing. The
+  accepted cost is stated: a table named `pragma_settings` is refused.
+  `FR-LITE-015`, `FR-LITE-017` and `FR-LITE-007` place the check and give it
+  its rows, and `FR-CFG-056` in [cfg-commands.md](cfg-commands.md) makes it
+  the catalogue probe of `tpl cfg database test`, so that a file every read
+  refuses is not reported as readable.
+- **The objects read from the schema table** — `PRAGMA table_list` compiled
+  inside the library every view and connected every virtual table whose
+  column count it did not know, discarding the outcome, and restarted its scan
+  of the schema after each, whatever its argument: 6.4 s over 40 000 views,
+  past every deadline over the review's mutually nested views. By the user's
+  decision, recorded under `FR-LITE-020`, on the criterion that the provider
+  be the most secure, **no statement invokes `pragma_table_list`**:
+  `FR-LITE-015` drops it from the closed list and admits `pragma_index_info`,
+  every catalogue statement joins `main.sqlite_schema`, and no statement
+  compiles a view or connects a virtual table. `FR-LITE-020` recognises a view
+  by its row's type, a virtual table by a root page of `0`, and a
+  `WITHOUT ROWID` table by `pragma_index_info` returning its primary key,
+  which agreed with the old reading on every table observed. The two costs the
+  user accepted are written in: a shadow table is covered as a `BASE TABLE`,
+  per `FR-LITE-020` and `FR-LITE-021`, and a `STRICT` table's `ANY` column
+  takes `numeric` and loses `blob`, per `FR-LITE-026`. The rejected option,
+  keeping the function with its cost stated as a limit, is recorded beside
+  them. `BR-LITE-002`, `FR-LITE-003`, `FR-LITE-019`, `FR-LITE-024` and
+  `FR-LITE-028` follow. Observed: the review's file of 16 KB reads in
+  0.0022 s, 80 000 views in 0.11 s, and 320 000 in 0.61 s; `FR-LITE-009`
+  records the figures, and that the one part that grows faster, the
+  library's loading of the schema at the probe, is ended by the deadline
+  within 0.07 s. `FR-LITE-018` verifies by its statement record, over a new
+  fixture database holding an `fts5` table and a view over it, that no
+  module runs. The sixty-eighth edition's reading that listing compiles no
+  view is withdrawn in `FR-LITE-015` and `FR-LITE-033`, whose third ground now
+  holds by the closed list.
+- **Views disabled, as defence in depth** — `FR-LITE-010` gains a ninth
+  control, views disabled, confirmed by its read-back, and its rejection of
+  disabling views is reversed. With the statements of `FR-LITE-015` the
+  control closes nothing: every statement returned the same rows in the same
+  time with views enabled and disabled. It is kept because it closes, as
+  observed, what a defective statement would open: a view's name passed to a
+  pragma function failed in 0.002 s instead of running past 25 s, and a view
+  named `pragma_encoding` failed instead of forging the encoding.
+- **A value or a root page that contradicts the schema table** — a view's
+  `sql` stored as a BLOB made `tpl` report a defect of its own with `70`, and
+  a trigger's `type` stored as a BLOB removed the trigger from the read at
+  exit `0`. `FR-LITE-041` refuses with `78` a `type`, `name` or `tbl_name`
+  that is not text, an `sql` that is neither text nor `NULL`, a `rootpage`
+  that is neither an integer nor `NULL`, and, because the read now trusts the
+  root page, a table row whose root page contradicts its text — read from the
+  first word after `CREATE`, which agreed with the library on all 26 table
+  rows observed. `FR-LITE-040` states that such a value is a damaged schema
+  and not a defect of `tpl`. `FR-LITE-038` gains the fixture databases.
+- **Escaping past C0** — `FR-ERR-024` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) and `FR-OUT-018` in
+  [output-formats.md](output-formats.md) escape the C1 range, U+0080 to
+  U+009F, and the twelve bidirectional formatting characters of Unicode's
+  `Bidi_Control` property, as they escape C0, for both providers. Observed:
+  U+009B and U+202E left `tpl` unescaped in `text`, in `json` and in a
+  diagnostic. In `json` they take JSON's own `\u` escape, by the user's
+  decision, so the parsed document is unchanged. A MariaDB value changes only
+  where it holds one of these characters. `FR-ERR-046` applies unchanged: it
+  counts characters after escaping and never cuts an escape. Rejected: a
+  backlog task; the `sqlite` provider alone; Unicode's whole format category.
+  `FR-SEC-020` in [security.md](security.md) and a note on `NFR-DET-004` in
+  [cli-contract.md](cli-contract.md) follow, and the item the twentieth
+  edition recorded is discharged.
+- **The cross-references** — the note on `FR-ERR-006` places the check in
+  step 6, `FR-SEC-028` names the check and the threats the edition closes,
+  and `FR-ERR-046` carries a note on the widened escaping.
+
+`FR-LITE-004`, `FR-LITE-012`, `FR-LITE-013`, `FR-LITE-014`, `FR-LITE-016`,
+`FR-LITE-029`, `FR-LITE-030`, `FR-LITE-031`, `FR-LITE-032`, `FR-LITE-036`,
+`FR-ERR-001`, `FR-ERR-002`, `FR-ERR-030`, `FR-ERR-034`, `FR-GLOB-018`,
+`FR-OUT-014`, `FR-OUT-019`, `FR-CFG-024`, `FR-ENV-041`, `FR-ENV-048`,
+`NFR-PERF-001` and `NFR-PERF-008` were read against the changes. None
+conflicts with them, so none is amended: the selected driver sets and reads
+back the views control through its safe configuration interface, so step 1
+of `FR-LITE-004` still holds; the check is a statement of the last row of
+`FR-LITE-015`, which `NFR-PERF-001` and `NFR-PERF-008` already count; the
+`cause` of the check is reached through the rows of `FR-LITE-007` that
+`FR-ERR-034` and `FR-GLOB-018` already name; and a shadow table is covered
+with the properties every table carries, under the requirements that give
+them. The fifth validation rule owes nothing for this edition: neither root
+document, read at `cb99236`, states the escaping of a value, the hardening of
+a SQLite read, what it covers, or the statements it issues.
+
+### Seventieth edition — the check and the catalogue in one snapshot
+
+rmp `#317`, of sprint 27, closes one defect the technical specification
+found at `bc7885a` against the sixty-ninth edition. The check of
+`FR-LITE-041` ran as a statement of its own, before the six catalogue
+statements, and `FR-LITE-016` forbade every transaction statement, so each
+statement read the file as last committed when it began. A writer that
+committed a table named like a pragma table-valued function after the check
+and before a later statement replaced that function and forged the catalogue
+at exit `0`; a view so added is stopped by the views control of
+`FR-LITE-010`. The choice between the candidates is made on the criterion
+the user set for the provider, that it be the most secure, recorded under
+`FR-LITE-020`, and on observations of 2026-11-04 through the Python library
+3.54.1, the release the binary carries, under the read-only connection and
+every control of `FR-LITE-010`. No requirement changes its meaning for a
+`mariadb` entry.
+
+**One identifier is assigned: `FR-LITE-042`.** None is withdrawn or
+renumbered. [glossary.md](glossary.md) gains *read transaction*. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **One read transaction** — `FR-LITE-042`, new, in
+  [sqlite-contract.md](sqlite-contract.md), issues `BEGIN DEFERRED`
+  immediately before the check and `COMMIT` immediately after the last
+  catalogue statement, so that the check and every catalogue statement read
+  one snapshot: in rollback-journal mode a writer cannot commit until the
+  read ends, and in write-ahead-log mode what it commits stays invisible to
+  the read. A read that ends early issues no `COMMIT`, and the close of the
+  connection rolls the transaction back; `tpl cfg database test`, whose only
+  catalogue statement is the check, issues neither. Observed: without the
+  transaction, in both modes, a writer's table `pragma_encoding` made the
+  read return the encoding `forged` and list the table; with it, the read
+  returned `UTF-8` and no such table, the writer failing with `SQLITE_BUSY`
+  in rollback-journal mode and committing unseen in write-ahead-log mode.
+  The statement record of `FR-LITE-018` verifies the placement. The accepted
+  cost is stated: in rollback-journal mode an application's writer waits, or
+  fails with `SQLITE_BUSY`, for as long as the read's statements take; and a
+  process that writes the file's bytes without the library's locks is
+  outside what any read can withstand, as SQLite's documentation states.
+  `FR-CTX-024` is unchanged: the document still promises no snapshot.
+- **The rejected option, and two others** — bracketing the read with
+  `PRAGMA schema_version` and ending with `69` when it moved. The statement
+  form was observed not to be replaced by a table of that name, but the
+  option detects only after the statements have read through what the writer
+  added, and it rests on a value the writer sets: a writer that set the
+  cookie back after the forged read left both readings equal, and the read
+  would have ended at exit `0`. It also adds a pragma to the closed list and
+  a condition of `69`. Bracketing with `PRAGMA data_version`, which a writer
+  cannot set, moves on every commit, data included, and would fail a read of
+  any database written during it; repeating the check is passed by a table
+  added and dropped between the two checks.
+- **The statements and their order** — `FR-LITE-015` gains a third row,
+  `BEGIN DEFERRED` and `COMMIT`, and the catalogue row stays the last; the
+  two are not catalogue statements, so `FR-LITE-037`, `NFR-PERF-008` and
+  `FR-GLOB-017` count neither, and `FR-LITE-037` says so in a note.
+  `FR-LITE-016` admits those two and no other transaction statement, and
+  records the ground its prohibition had: a transaction that writes, that
+  stops other connections reading, or that ends with a rollback aborting the
+  statements in progress. `BEGIN IMMEDIATE` and `BEGIN EXCLUSIVE` were
+  observed to fail on the read-only connection. `FR-LITE-017` places
+  `BEGIN DEFERRED` between the probe and the check and `COMMIT` after the
+  last catalogue statement, and the note on `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) puts the first in
+  step 6, with no new code.
+- **The read-only promise and the deadline** — `BR-LITE-001` states that the
+  deferred transaction takes the shared lock every statement takes and writes
+  nothing; observed, a read inside it left the file's bytes, size and
+  modification time unchanged in both modes, and no file appeared in
+  rollback-journal mode. A note on `FR-LITE-009` states that a writer's lock
+  is now met at the check and at no later statement, and that an interrupt
+  inside the transaction leaves it to the close; the requirement is
+  unchanged.
+- **The cross-references** — a note on `FR-LITE-041` and on `FR-LITE-018`,
+  and `FR-SEC-028` in [security.md](security.md), which requires the one
+  snapshot and names, among its threats, a table or a view another
+  connection adds during the read.
+
+`FR-LITE-008`, `FR-LITE-019`, `FR-LITE-040`, `FR-CFG-056`, `FR-CONF-005`,
+`FR-RND-040`, `FR-CTX-024`, `FR-CTX-025`, `FR-CDOC-015`, `NFR-PERF-001` and
+`NFR-PERF-008` were read against the changes. None conflicts with them, so
+none is amended: the files of write-ahead-log mode are those the read
+already made; the two statements name no schema; each result code they can
+return is in a row of `FR-LITE-040`, and with `COMMIT` chosen over
+`ROLLBACK`, `tpl` still requests no abort or rollback; the test issues one
+statement and no transaction; every statement keeps its own deadline; the
+transaction ends before the connection closes and so before any render; no
+document promises a snapshot; and the count those two requirements take is
+of the last row of `FR-LITE-015` alone. The fifth validation rule owes
+nothing for this edition: neither root document, read at `bc7885a`, states
+the transactions or the statements of a SQLite read.
+
+### Seventy-first edition — what SQLite loads and never writes, and names in another letter case
+
+rmp `#317`, of sprint 27, closes one defect the implementation found at
+`82eb1d4` against the seventieth edition, and every case a sweep of the
+schema table and of the pragma functions' values then found. The library
+loads a row of the schema table whose `type` differs in letter case from the
+four texts SQLite writes, and uses its object, while `FR-LITE-041` and
+`FR-LITE-020` compared `type` exactly: a table typed `TABLE` and named
+`pragma_encoding` passed the check and forged the encoding at exit `0`, and
+a table typed `Table` was missing from the model at exit `0`. The sweep
+asked, of each shape the library loads, whether it makes a read drop, invent
+or mis-attach an object, or end with a false `70`. The choices are made on
+the criterion the user set for the provider, that it be the most secure,
+recorded under `FR-LITE-020` — several by the coordinator of rmp `#317`
+under that criterion, as each passage states — and on observations of
+2026-11-04 through the Python library 3.54.1, the release the binary
+carries, under the read-only connection and every control of
+`FR-LITE-010`. Damaged shapes SQLite never writes are refused with `78`;
+shapes SQLite writes are read correctly or, where the model has no shape for
+them, excluded as earlier exclusions are. No requirement changes its meaning
+for a `mariadb` entry.
+
+**One identifier is assigned: `BR-LITE-003`.** None is withdrawn or
+renumbered. [glossary.md](glossary.md) is unchanged. No entry of
+[upstream-divergences.md](upstream-divergences.md) is raised or discharged,
+and the index of [open-questions.md](open-questions.md) stays empty.
+
+- **Four new kinds of row the check refuses** — `FR-LITE-041`, in
+  [sqlite-contract.md](sqlite-contract.md), refuses with `78`, beside its
+  first three kinds:
+  - **a type SQLite does not write**: a `type` that is text and is not
+    exactly `table`, `index`, `view` or `trigger`, compared over the whole
+    value with no letter case folded. The library loaded, for all four
+    types, the type in upper, title and mixed case and the type followed by
+    a NUL character, and the object worked. Every comparison of `type` in
+    the file is exact, which this kind makes complete;
+  - **a row with no text that is not an index's**: an `sql` that is `NULL`
+    or the empty text on a row whose `type` is not `index`. The library
+    reads every such row as an index's; retyped `table`, `view` or
+    `trigger` for an existing index, it loaded and was read as a table with
+    no column, a view with no definition, or a trigger with no text, which
+    `FR-LITE-032` would end with a false `70`;
+  - **a NUL character in a name or a text**: in `name`, `tbl_name` or `sql`.
+    The library reads each only up to the NUL. A trigger whose `tbl_name`
+    ended in one matched no table and would have been dropped; an `sql`
+    beginning with one was read as an index's row; and a view's definition
+    carried text after one that the library never parsed;
+  - **a trigger's header SQLite does not write**: a text that does not
+    begin `CREATE TRIGGER`, or whose next word is an unquoted `IF`. SQLite
+    removes `TEMP`, `TEMPORARY` and `IF NOT EXISTS`, and the library loaded
+    a text holding each, which `FR-LITE-032`, reading the name after
+    `CREATE TRIGGER`, would have misread.
+
+  Over every database SQLite wrote, the main fixture database included, the
+  seven kinds returned no row. `FR-LITE-007` gains the four rows.
+- **The rejected options** — comparing `type` as the library does, folding
+  ASCII letter case: a comparison under `NOCASE` found `TABLE` and did not
+  find `table` followed by a NUL character, over which the encoding still
+  read `forged`, and matching the library in full would imitate behaviours
+  of its loader that its documentation does not state; and, for the same
+  reason, reading a value up to its first NUL character or skipping the
+  words SQLite removes from a header. Reading a row with no text as its
+  `type` says would present objects the file does not hold.
+- **Names matched as SQLite matches them** — `BR-LITE-003`, new, states the
+  three places the file finds a table, a view or a column by a name another
+  row or field carries: a trigger's `tbl_name`, and a foreign key's parent
+  table and parent columns. Two names match when they are equal with the 26
+  ASCII letters folded, over the whole of each name, and the object found is
+  carried under its own name. SQLite wrote a trigger's `tbl_name` as its
+  `ON` clause wrote it, and reported a key's parent table and columns as the
+  key wrote them; it folded ASCII letters and not `É`; and it refused two
+  objects or two columns whose names differ only in ASCII letter case.
+  `FR-LITE-032` attaches a trigger by that match, `FR-LITE-031` carries a
+  key's referenced table and columns under the names matched, `FR-LITE-021`
+  decides a trigger on a view and a dangling key by it, and `FR-LITE-030`
+  states that a member's name is its column's own. Rejected: an exact
+  comparison, which drops the trigger and excludes the key at exit `0`; and
+  Unicode case folding, which would attach a key to a table SQLite does not
+  resolve it to.
+- **A header read in any letter case** — SQLite upper-cases the leading
+  `CREATE TRIGGER` alone and stored `create trigger t1 after insert on x` as
+  `CREATE TRIGGER t1 after insert on x`. `FR-LITE-032` now recognises the
+  header's keywords ignoring ASCII letter case and carries them in upper
+  case, so a file SQLite wrote no longer reaches its `70`, and its *Source*,
+  which read "the keywords upper-cased", now quotes the page.
+- **A key whose parent key differs in number** — SQLite created
+  `FOREIGN KEY (x, y) REFERENCES p1`, where `p1` has a one-column primary
+  key, and refused every insert it governs with `foreign key mismatch`.
+  `FR-LITE-021` excludes a key that names no parent column when the parent's
+  primary key has another number of columns, as it excludes a dangling key;
+  carried, it would pair two columns with one.
+- **The fixture** — `FR-LITE-038` gains item 14 of the main database, names
+  written in another letter case for each match of `BR-LITE-003` and two
+  tables that differ outside ASCII; a key of the other arity in item 8; a
+  trigger written in lower case and one named `temp` in item 11; and eight
+  databases written under `writable_schema`, each of which a read ends with
+  `78`: a table `pragma_encoding` typed `TABLE`, an ordinary table typed
+  `Table`, a trigger typed `trigger` followed by a NUL character, a second
+  row for an existing index with `sql` `NULL` typed `table` and with the
+  empty text typed `view`, a trigger whose `tbl_name` ends in a NUL
+  character, a view whose `sql` carries text after a NUL character, and a
+  trigger whose text begins `CREATE TEMP TRIGGER`. `FR-LITE-020` states that
+  its comparison of `type` is exact.
+- **Shapes the sweep found already handled** — the library refused at the
+  probe, with `SQLITE_CORRUPT`: a `type` with a space, a tab, a line feed, an
+  extra or a missing letter, a non-ASCII letter, or another of the four; a
+  root page that is `NULL` on any row, other than `0` on a view, negative,
+  past the end of the file, or `1`; an `sql` with a leading space, a second
+  statement after the first, a schema qualifier before the name, `AS SELECT`,
+  or the text of another kind of object than its `type`; a trigger on a table
+  the file does not hold, on a view with `AFTER`, on `sqlite_sequence` or on a
+  virtual table, an `INSTEAD OF` trigger on a table, a `FOR EACH STATEMENT`,
+  and a `tbl_name` naming another table than the text; a row of no text
+  naming no index; and two tables named `a` and `A`. The library loaded, and
+  the read presents correctly or not at all: a name or a `tbl_name` in
+  another letter case than the text; an automatic index's `tbl_name` naming
+  another table, because no statement reads an index's row; a trigger's root
+  page other than `0`, and two tables sharing a root page, or a table on an
+  index's, which no catalogue fact depends on; and `TEMP`, `TEMPORARY` or
+  `IF NOT EXISTS` in a table's text, or `TEMP` and lower case in a view's,
+  whose text no property reads or which a view carries as stored. On files
+  SQLite writes: an index on `rowid`, a `UNIQUE` or `PRIMARY KEY` on it, and
+  a foreign key from it were refused at creation; a column named `rowid` was
+  read as a column; an empty table or column name read as the empty text; a
+  type holding `HIDDEN` read `hidden` `0`; an index repeating a column
+  listed it twice, as declared; and foreign keys to a view, a virtual table,
+  an internal table, a `rowid`, a missing column, or a table without a
+  primary key are excluded by `FR-LITE-021` as they were.
+
+`FR-LITE-015`, `FR-LITE-017`, `FR-LITE-024`, `FR-LITE-025`, `FR-LITE-040`,
+`FR-LITE-042`, `FR-CFG-056`, `FR-ERR-006`, `FR-ERR-024`, `FR-SEC-028`,
+`FR-CAT-044`, `FR-CTX-023` and `FR-CTX-042` were read against the changes.
+None conflicts with them, so none is amended: the check stays one statement
+against the schema table, in the place `FR-LITE-017` and `FR-LITE-042` give
+it, so the closed list and the order are unchanged; a table and a column
+keep the names their rows report, which are the names their statements
+declared; the new rows are no result code, so `FR-LITE-040` does not reach
+them; the catalogue probe of `FR-CFG-056` is the check, and refuses what it
+refuses; the check stays in step 6 of the note on `FR-ERR-006`; a NUL
+character a `cause` names is a C0 control character, which `FR-ERR-024`
+escapes; `FR-SEC-028` names the forgery the fourth kind closes on another
+path and points to `FR-LITE-041` for the check, through which the new kinds
+are reached as the third is; and a key carried under the names of the table
+and columns it matched names a table and columns the document holds, which
+is what `FR-CAT-044`, `FR-CTX-023` and `FR-CTX-042` require of it. The fifth
+validation rule owes nothing for this edition: neither root document, read
+at `82eb1d4`, states how a SQLite read compares the schema table's values,
+which rows it refuses, how it matches names, or how it reads a trigger's
+header.
+
+### Seventy-second edition — two root documents that caught up, and an example that had not
+
+rmp `#317` and `#318`, of sprint 27, close the record of the second provider
+outside this corpus and one example inside it. `60bf9df`, for rmp `#318`,
+documented SQLite in both root documents, and `60b0fb3`, for rmp `#317`, gave
+the `purpose` of the `database` variable every field the object carries.
+Both were read on 2026-11-04 at `a9d8fed`. No requirement changes its
+meaning.
+
+**No identifier is assigned, retired or renumbered.** No term enters or leaves
+[glossary.md](glossary.md), and the index of
+[open-questions.md](open-questions.md) stays empty.
+
+- **The register, read for the two entries the second provider raised** —
+  [upstream-divergences.md](upstream-divergences.md). `DIV-057` and `DIV-058`
+  are discharged by `60bf9df`, which made every part of each correction. The
+  counts, and their two restatements in `DIV-032` and `DIV-041`, move to three
+  due, fifty-one discharged and four partly discharged, with seven entries
+  owing, five to `CLAUDE.md` and two to `README.md`.
+  [Maintenance debt](#maintenance-debt) records that two of the three
+  obligations the sixty-fifth edition placed outside this corpus are paid.
+- **An example that no longer matched its rule** —
+  [help-and-version.md](help-and-version.md). The `database` line of the
+  example of `FR-HELP-033` named neither `charset` and `collation` nor
+  `provider`, which `FR-CTX-036` and `FR-CTX-043` give the object. It now
+  carries the `purpose` of `FR-HELP-032` that the binary prints, wrapped at
+  the 80 columns of `FR-HELP-009`.
+
+The fifth validation rule is met for the two entries and no further. No other
+entry was re-read for status, although `60bf9df` also edited the project tree
+and the testing section of `CLAUDE.md` that `DIV-036` and `DIV-050` target,
+and `6203216` translated that file whole. That reading is owed under the
+rule; this edition names it and does not make it. Neither root document
+paraphrases the example this edition corrects.
+
+### Seventy-third edition — a third provider
+
+rmp `#324`, of sprint 28, gives `tpl` read support for MySQL. The user's
+requirements, relayed on 2026-11-04, are binding: `tpl` reads a MySQL
+catalogue and renders templates from it on the principles it applies to
+MariaDB; MySQL is a provider of its own, which an entry's `provider` value
+selects by the mechanism that distinguishes `mariadb` from `sqlite`; no
+requirement that governs a `mariadb` or a `sqlite` entry changes its meaning;
+and the supported versions are only the latest release of each MySQL major
+series still under Oracle support.
+
+**Forty-seven identifiers are assigned**: `FR-MYSQL-001` through
+`FR-MYSQL-044` and `BR-MYSQL-001` through `BR-MYSQL-003`, in a new file. None
+is retired and none is renumbered. Two open questions are raised, `OQ-076`
+and `OQ-077`, the first entries of the index of
+[open-questions.md](open-questions.md) since the seventh edition emptied it.
+[glossary.md](glossary.md) gains three entries — *functional key part*, *LTS
+release / Innovation release* and *pending observation* — and amends five:
+*catalogue*, *connection*, *provider*, *series / supported series / major
+family* and *standing* — and the passage on what counts as a definition,
+which now names *pending observation* beside *a stated limit*. `DIV-059` and
+`DIV-060` are raised in [upstream-divergences.md](upstream-divergences.md).
+
+- **The MySQL contract** — [mysql-contract.md](mysql-contract.md), new,
+  beside [server-contract.md](server-contract.md) and
+  [sqlite-contract.md](sqlite-contract.md). A `mysql` entry takes the keys of
+  a `mariadb` entry (`FR-MYSQL-001`). The supported series were the newest
+  series of each major family under Oracle Premier or Extended Support,
+  Innovation releases while current (`FR-MYSQL-002`), which on 2026-11-04
+  were `26.10`, `9.7` and `8.4`, the latest releases `26.10.0`, `9.7.4` and
+  `8.4.13` (`FR-MYSQL-003`); the set rolls forward by the criterion alone, is
+  stated once and is re-verified before every release (`FR-MYSQL-004`,
+  `BR-MYSQL-001`, `FR-MYSQL-005`). The probe, the product check with its
+  stated limit, the refusals with `78` and the marked read of a newer series
+  mirror the MariaDB ones (`FR-MYSQL-006` to `FR-MYSQL-011`), and
+  `FR-MYSQL-012` records how an entry whose provider names the wrong product
+  is refused. The series differences are treated as MariaDB's are, with an
+  empty record of observed differences (`FR-MYSQL-013`, `FR-MYSQL-014`). A
+  closed list of statements and of twelve `INFORMATION_SCHEMA` tables, the
+  order of the connection start, and a read-only session read back through
+  `@@session.transaction_read_only` (`FR-MYSQL-015` to `FR-MYSQL-019`,
+  `BR-MYSQL-002`). Connection, TLS and authentication (`FR-MYSQL-020` to
+  `FR-MYSQL-022`). What a read covers, with an index holding a functional key
+  part excluded (`FR-MYSQL-023`, `FR-MYSQL-024`). Every field of the twelve
+  tables mapped to the model, a property MySQL cannot supply carried as
+  `null` and a field the model lacks not carried (`BR-MYSQL-003`,
+  `FR-MYSQL-025` to `FR-MYSQL-039`), including a default classification of
+  its own, because MySQL quotes no literal (`FR-MYSQL-029`), and `CHECK`
+  constraints attributed through the table-constraint table, with `level`
+  `null` (`FR-MYSQL-034`). A record of twenty-five divergences between MySQL
+  and MariaDB that reach the read (`FR-MYSQL-040`), completeness, the
+  requirements of form, verification, and the fixture of `scripts/mysql/`
+  (`FR-MYSQL-041` to `FR-MYSQL-044`).
+- **Every MySQL fact is marked as not yet observed.** No MySQL server has been
+  read, and rmp `#326` observes each statement through the fixture of
+  `FR-MYSQL-044`. Each statement of MySQL behaviour rests on MySQL's manuals
+  and release notes, checked 2026-11-04, the third provenance, and carries a
+  *Pending observation* note; the reference inspector of `ariga/atlas` is
+  cited where it bears on a choice and grounds no fact. *[Writing
+  conventions](#writing-conventions)* defines the note, the fourth provenance
+  is amended to admit it, and *[Maintenance debt](#maintenance-debt)* records
+  the observations owed as its one outstanding item.
+- **The provider in the configuration** —
+  [configuration-model.md](configuration-model.md). `FR-CONF-051` gives the
+  key a third value, `mysql`, and `FR-CONF-052` a row that takes and refuses
+  the keys of a `mariadb` entry; `FR-CONF-002` names the value; a note on
+  `FR-CONF-010` states that a DSN's scheme does not select the provider; and
+  notes on `FR-CONF-006`, the section on what an entry must describe, and
+  `FR-CONF-038` extend them to a `mysql` entry.
+- **The document** — [context-document.md](context-document.md).
+  `FR-CTX-043` gives `provider` the value `mysql`, so a `--context` document
+  naming it is accepted; `schema_version` does not move, because a value
+  added to an enumerated field is not breaking. `FR-CTX-012` names the
+  classification of `FR-MYSQL-029`, and notes on `FR-CTX-014`, `FR-CTX-031`,
+  `FR-CTX-033`, `FR-CTX-034` and `FR-CTX-036`, and on `FR-RND-020` in
+  [render-command.md](render-command.md), follow.
+- **The commands** — [cfg-commands.md](cfg-commands.md). `FR-CFG-055` admits
+  `--provider mysql` with the flags of a `mariadb` entry; `FR-CFG-033`
+  states the three values in the help of `--provider`; and notes on
+  `FR-CFG-024`, `FR-CFG-043`, `FR-CFG-048` and `FR-CFG-039` state the steps
+  and the messages of `tpl cfg database test` for a `mysql` entry.
+- **The cross-references** — the `78` cell of `FR-ERR-001`, `FR-ERR-024`,
+  which escapes for every provider, and notes on `FR-ERR-006`, `FR-ERR-034`,
+  `FR-ERR-036` and `FR-ERR-046` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md); `FR-OUT-018` in
+  [output-formats.md](output-formats.md), which escapes for every provider;
+  `BR-SEC-002` in [security.md](security.md); the assertion table and
+  `NFR-PERF-001` and `NFR-PERF-008` in
+  [performance-requirements.md](performance-requirements.md); the Overview of
+  [privileges-and-completeness.md](privileges-and-completeness.md); the
+  Overview and `FR-CAT-015`, `FR-CAT-033`, `FR-CAT-038` and `FR-CAT-055` of
+  [catalogue-coverage.md](catalogue-coverage.md); and the Overview and
+  `FR-SRV-001`, `FR-SRV-003`, `FR-SRV-007` and `FR-SRV-034` of
+  [server-contract.md](server-contract.md), each by a note that leaves the
+  requirement unchanged for a `mariadb` entry. Three sentences that called
+  the index of [open-questions.md](open-questions.md) empty — in
+  [server-contract.md](server-contract.md),
+  [catalogue-coverage.md](catalogue-coverage.md) and
+  [sqlite-contract.md](sqlite-contract.md) — are corrected, because it no
+  longer is.
+- **Two decisions are the user's** — [open-questions.md](open-questions.md).
+  `OQ-076` asks which releases form one major family under the calendar
+  versioning MySQL adopted with `26.7.0`; every reading selected the same
+  three series that day, so the table did not wait on it. `OQ-077` asks how an
+  account is authenticated over a session TLS does not protect, which MySQL's
+  default method makes a question of security; the requirement for every
+  encrypted session is written.
+
+**No requirement that governs a `mariadb` or a `sqlite` entry changes its
+meaning.** `FR-CONF-002`, `FR-CONF-051`, `FR-CONF-052`, `FR-CTX-012`,
+`FR-CTX-043`, `FR-CFG-033`, `FR-CFG-055`, `FR-ERR-001`, `FR-ERR-024` and
+`FR-OUT-018` gain the value, the provider or the requirement they enumerate,
+and keep every outcome they had for the other two; the examples of
+`FR-CFG-048` and `FR-CFG-055` name both server providers where they named
+`mariadb`; and the three sentences on the index of
+[open-questions.md](open-questions.md) are corrected without touching a
+requirement. Every other change is a note. `FR-SRV-003` keeps its `cause`,
+which states that `tpl` supports MariaDB only: it governs a `mariadb` entry,
+of which that is true, and the user asked that what the MariaDB requirements
+say be kept.
+
+`FR-SRV-002`, `FR-SRV-009`, `FR-SRV-010`, `FR-SRV-015`, `FR-SRV-020`,
+`FR-SRV-030`, `FR-SRV-040`, `FR-SRV-041`, `FR-SRV-042`, `FR-CONF-007`,
+`FR-CONF-013`, `FR-CONF-036`, `FR-CONF-039`, `FR-CONF-040`, `FR-CONF-041`,
+`FR-CAT-042`, `FR-CAT-043`, `FR-CAT-045`, `FR-CAT-046`, `FR-CAT-047`,
+`FR-CAT-048`, `FR-CAT-052`, `FR-CAT-057`, `FR-CTX-037`, `FR-CTX-039`,
+`FR-CTX-040`, `FR-ENV-041`, `FR-ENV-046`, `FR-CDOC-018`, `FR-CACHE-029`,
+`FR-PRIV-018`, `FR-PROJ-021`, `FR-PROJ-024`, `FR-RND-040`, `FR-GLOB-018` and
+`NFR-PERF-004` were read against the changes. None conflicts with them, so
+none is amended: the MariaDB window, probe, refusals and connection order are
+adopted by citation and not changed; a `mysql` entry writes nothing outside
+`.tpl`, closes its connection before a render, and stays within one
+connection; a cached read keeps the provider of the read that wrote it; and a
+`data_type` only MySQL produced fell through to no family under
+`FR-ENV-046`, as that requirement provided. `FR-PROJ-021` named a supported
+MariaDB database as what the starter template must render against, and was
+left as it stood.
+
+The fifth validation rule is discharged for this edition: both root
+documents were read at `e72e299` against every requirement the edition
+writes or amends, and the two entries it raises hold every divergence found.
+The reading the seventy-second edition named as owed, of `DIV-036` and
+`DIV-050`, is still owed; this edition does not make it.
+
+### Seventy-fourth edition — LTS series only, a key never asked for, and a starter template for two servers
+
+rmp `#331`, of sprint 28, writes three decisions the user took on 2026-11-04,
+relayed the same day, on what the seventy-third edition left open or noted.
+They are binding:
+
+1. **`OQ-076`.** The supported MySQL series are the latest release of each
+   MySQL LTS line still under Oracle Premier or Extended Support, two series
+   on that date, named by `FR-MYSQL-003`. No Innovation release is
+   supported, `26.10` and every later Innovation release numbered by the
+   calendar among them. A future LTS line joins the set when it is released,
+   and a line leaves when it moves past Extended Support. The
+   compatibility-lineage reading and the calendar-year reading are rejected.
+2. **`OQ-077`.** The server's RSA public key is never requested over a
+   session TLS does not protect, and where the authentication would need it
+   the read fails with a clear error, whose code and message this edition
+   states consistently with the error requirements in force. An opt-in
+   configuration key that allows the request is rejected.
+3. **`FR-PROJ-021`.** The starter template `tpl init` writes also renders
+   against the MySQL fixture, in addition to MariaDB. SQLite is not added.
+
+**One identifier is assigned**: `FR-MYSQL-045`. None is retired and none is
+renumbered. `OQ-076` and `OQ-077` are closed, and the index of
+[open-questions.md](open-questions.md) is empty again. No entry enters or
+leaves [glossary.md](glossary.md); two are amended.
+
+- **The supported series** — [mysql-contract.md](mysql-contract.md).
+  `FR-MYSQL-002` admits an LTS series under Premier or Extended Support and
+  no Innovation release, records the user's two rejected readings and the
+  third reading `OQ-076` named, and closes that entry. `FR-MYSQL-003` loses
+  the row of `26.10` and its major-family column, and `26.10` joins its
+  worked examples. `FR-MYSQL-004` moves the set on the first release of an
+  LTS series and on the end of Extended Support alone, and `FR-MYSQL-005`
+  names those as the next changes. The section on sources keeps the manual of
+  `26.10` for the release model and as corroboration only.
+- **What a server of an Innovation release meets** — the same file.
+  `FR-MYSQL-009` and `FR-MYSQL-010` are unchanged as requirements, and their
+  notes are rewritten. An Innovation release older than the newest supported
+  series is refused with `78`; one newer is read and marked
+  `newer_than_supported`, at exit `0`, which is every Innovation release
+  numbered by the calendar, `26.7` among them where the seventy-third edition
+  refused it. The version does not name a release's track, so the system
+  cannot tell such a server from one of a new LTS series, and refusing every
+  newer series is the outcome `FR-SRV-031` rejects. `FR-MYSQL-043` and
+  `FR-MYSQL-044` require the server outside the set that the refusal is
+  verified against to be older than the newest supported series.
+- **Authentication without TLS** — the same file. `FR-MYSQL-045`, new: the
+  system never requests the server's RSA public key over a session that is
+  not encrypted, whatever the authentication method; a login that needs it
+  ends the connection before the read-only session is set, with `78`, a
+  `cause` naming the user, the host, the `tls` mode and the method the server
+  asked for, and a `hint` carrying
+  `tpl cfg database update <entry> --tls verify-identity`. `77` is rejected
+  because the server refused nothing, and `69` because nothing was
+  unavailable. Whether a login needs the key depends on the server's cache,
+  which is stated as an accepted cost. It closes `OQ-077`, and
+  `FR-MYSQL-021`, `FR-MYSQL-022` and row 25 of `FR-MYSQL-040` cite it.
+- **Notes that applied to `26.10` alone** — the same file. The *Pending
+  observation* note of `FR-MYSQL-006` no longer cites the release notes of
+  `26.10.0`; `FR-MYSQL-014` drops the column of `26.10`, and its duality-view
+  candidate, which rested on that column, is placed by the index of
+  `INFORMATION_SCHEMA` tables of the two remaining manuals, read on
+  2026-11-04; and the note of `FR-MYSQL-022` no longer names `26.10`. A
+  page of the `26.10` manual cited beside a page of a supported series stays,
+  as corroboration, and owes no observation.
+- **The starter template** —
+  [project-and-discovery.md](project-and-discovery.md). `FR-PROJ-021`
+  renders against any supported MySQL database as well, and is shown against
+  every table of the fixture of `FR-MYSQL-044` on every supported MySQL
+  series; its MariaDB clause is unchanged, and a note says that a `sqlite`
+  entry is not reached.
+- **The questions, the glossary and this file** —
+  [open-questions.md](open-questions.md) moves both entries to the *Closed*
+  table, with the choice and the rejected options, empties the index, and
+  calls the specification complete again by its own definition.
+  [glossary.md](glossary.md) withdraws the MySQL meaning of *major family*
+  from *series / supported series / major family*, and *LTS release /
+  Innovation release* states that the version does not name the track and
+  what the user's *LTS line* means. In this file, the edition count of the
+  Scope, the count of closed questions under the identifier scheme, and two
+  paragraphs of [Maintenance debt](#maintenance-debt) follow.
+
+**No requirement that governs a `mariadb` or a `sqlite` entry changes its
+meaning.** The MariaDB clause of `FR-PROJ-021` is unchanged, and its new
+clause governs MySQL alone; every other change is to the `mysql` provider,
+to the record of open questions, to the MySQL passages of the glossary, and
+to this file. `FR-SRV-016`, `FR-SRV-031`, `FR-CFG-024`, `FR-CFG-043`,
+`FR-CTX-033`, `FR-CTX-034`, `FR-ERR-001`, `FR-ERR-006`, `FR-ERR-034`,
+`FR-ERR-045`, `BR-ERR-004`, `BR-ERR-005`, `FR-CONF-013`, `FR-CONF-033`,
+`FR-CONF-038`, `FR-SEC-021` and the glossary entry *standing* were read
+against the changes, and none is amended: the note on `FR-CFG-043` already
+reads a MySQL series newer than the set and exits `0`, and the condition of
+`FR-MYSQL-045` takes a code and a step those requirements already provide.
+The three sentences on the index of [open-questions.md](open-questions.md)
+in [server-contract.md](server-contract.md),
+[catalogue-coverage.md](catalogue-coverage.md) and
+[sqlite-contract.md](sqlite-contract.md), corrected by the seventy-third
+edition, stay true with the index empty and are not touched.
+
+**Three editorial corrections to the edition above.** Its account of
+[mysql-contract.md](mysql-contract.md) said that the supported series *are*
+those of the seventy-third edition's criterion, which on 2026-11-04 *are*
+three; its account of `OQ-076` said that every reading *selects* the same
+series *today*; and its account of the requirements it read and left
+unchanged said that `FR-PROJ-021` *names* a supported MariaDB database.
+Each is put in the past tense, and none of the three is otherwise changed.
+
+The fifth validation rule is discharged for this edition: both root
+documents were read at `4668fa4` against every requirement it writes or
+amends, and neither paraphrases one. The root `README.md` names no MySQL
+series, and `DIV-059` already owes it a row that cites `FR-MYSQL-002` and
+`FR-MYSQL-003` without a number, which this edition does not change. No
+entry is raised. The reading of `DIV-036` and `DIV-050` named as owed by the
+seventy-second edition is still owed.
+
+### Seventy-fifth edition — the MySQL catalogue observed, four facts its manual had wrong, and a layer of escapes
+
+rmp `#326`, of sprint 28, confirms the MySQL catalogue on live servers and
+amends this corpus from what it found. Its first half observed, on
+2026-11-04, every statement the seventy-third edition had marked *Pending
+observation*, through the fixture of `scripts/mysql/` that rmp `#325` built
+at `1b3ff53`: `8.4.13` and `9.7.4`, each with and without TLS, and `8.0.46`
+outside the set. This edition is its second half. Of the thirty marked
+statements — twenty-nine in [mysql-contract.md](mysql-contract.md) and one
+on `FR-ERR-046` — sixteen were confirmed, ten refined and four contradicted,
+and six stay marked, each because the fixture cannot observe it. The
+observation raised one question and left three `data_type` values in no
+type family, and the user's decisions of 2026-11-04 on both are written into
+this edition, which also completes rmp `#326`.
+
+**Two identifiers are assigned**: `FR-MYSQL-046` and `FR-ENV-049`. None is
+retired and none is renumbered. One open question is raised, `OQ-078`, and
+closed in the same edition on the user's decision, so the index of
+[open-questions.md](open-questions.md) is empty again.
+[glossary.md](glossary.md) gains one entry, *introducer*, and amends one,
+*pending observation*.
+
+- **The observation, its conditions and what it could not reach** —
+  [mysql-contract.md](mysql-contract.md). The section on sources names the
+  observation as the first ground, records once the conditions every reading
+  was taken under, says that the stock client stood in for `tpl`'s driver,
+  and lists the six statements that stay pending, each with the reason. A
+  confirmed statement carries an *Observed* note, and a contradicted one a
+  note headed *Observed, and the manual contradicted.*, which writes down the
+  manual's words and what the servers did. The evidence was saved in a
+  directory the repository does not version, so every note carries what was
+  seen rather than a path.
+- **Four contradictions** — the same file. `SET DEFAULT` is accepted by
+  InnoDB on both series and reported, and the action is refused only at run
+  time with `ERROR 1451`; `FR-MYSQL-033` now carries the rule as reported,
+  `SET DEFAULT` included, as a `sqlite` read already does under
+  `FR-LITE-031`, so the model gains no value it does not admit, and states
+  that `FR-CAT-033` governs a `mariadb` read alone. A view's check option
+  reads `CASCADED`, as on MariaDB, and the view catalogue is readable without
+  `SHOW VIEW`, with the definition the empty string; `FR-MYSQL-035` now
+  applies `FR-PRIV-011` to that shape. A procedure's DTD identifier is SQL
+  `NULL`, as on MariaDB. A spatial index reports `SPATIAL`, as on MariaDB.
+  Rows 13, 16 and 20 of `FR-MYSQL-040` are removed, and row 18 rewritten.
+- **The refinements that reach the read** — the same file. An expression's
+  text carries an introducer before each string literal and one extra layer
+  of backslash escaping, in a default, a generation expression, a check
+  clause and a functional key part, and not in a routine or trigger body,
+  and it raised `OQ-078`, on whether a read removes the layer. The read-back
+  of `transaction_read_only` is the integer `1`, which `FR-MYSQL-018` now
+  names as the confirming value. A plain column's generation expression is the
+  empty string. A generated invisible primary key is carried as reported, and
+  `FR-MYSQL-027` orders columns by the value of their position, which starts
+  at 2 when the key is hidden. A binary literal default is hexadecimal text,
+  a bit default drops its leading zeros, `EXTRA` combines its phrases in one
+  order, and the version probe answers three parts beside a four-part
+  `version_with_update` the closed list does not read.
+- **The differences between `8.4` and `9.7`** — the same file.
+  `FR-MYSQL-014` records ten and registers none. A `VECTOR` column, on `9.7`
+  alone, is carried under `FR-MYSQL-028`, whose `length` is four bytes for
+  each dimension; a JSON duality view, on `9.7` alone, is a covered view under
+  `FR-MYSQL-023`; and a routine of type `LIBRARY`, which `9.7` declares, is
+  not covered, because a library is not a routine in the sense of
+  `FR-CAT-008` and covering one would break `FR-CAT-016`.
+- **Completeness** — the same file. `FR-MYSQL-041` records MySQL's shapes of
+  a privilege-driven absence and applies the cross-checks in them: a view's
+  definition and a routine's body take MariaDB's shapes, a trigger is not
+  shown, and the constraint tables, which MariaDB withholds, are kept.
+- **The fixture** — the same file. `FR-MYSQL-044` names its cases instead of
+  "every case this file states", requires a server without TLS at each
+  supported series, requires the server outside the set to present the
+  fixture's certificate, adds `sql_generate_invisible_primary_key` to the
+  conditions recorded, and says that the release, the series outside the
+  set, the ports and where data directories are kept are the fixture's
+  choices, recorded in `scripts/mysql/README.md` and not requirements.
+- **The cross-references** — the note on `FR-ERR-006` names the
+  authentication condition of `FR-MYSQL-045` in step 6, and the note on
+  `FR-ERR-046` is observed, a trigger included, in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md); `FR-SEC-021` in
+  [security.md](security.md) points at `FR-MYSQL-045`; the MySQL notes on
+  `FR-CAT-033` and `FR-CAT-055` in
+  [catalogue-coverage.md](catalogue-coverage.md) and the overview of
+  [privileges-and-completeness.md](privileges-and-completeness.md) state what
+  was observed. Each is a note, and each leaves its requirement unchanged.
+- **The user's decisions** — the same file,
+  [template-environment.md](template-environment.md) and
+  [upstream-divergences.md](upstream-divergences.md). `FR-MYSQL-046`, new,
+  closes `OQ-078`: a `mysql` read removes exactly one layer of backslash
+  escaping — `\\` read as `\`, and `\'` as `'` — from an expression default,
+  a generated column's expression and a check clause, keeps the introducers
+  and changes nothing else, so the text it carries is MySQL's own SQL.
+  Carrying the text as written, removing the introducers too, and carrying
+  both texts are rejected. `FR-MYSQL-029`, `FR-MYSQL-031`, `FR-MYSQL-034`
+  and row 23 of `FR-MYSQL-040` cite it. `FR-ENV-049`, new, places the three
+  values by analogy with what MariaDB reports for the same declaration:
+  `json` is **textual**, as MariaDB's `longtext` is, and `geomcollection` and
+  `vector` are in none of the three, beside `geometrycollection` and the
+  binary types. The fall-through and the bounded claim of `FR-ENV-046`,
+  `FR-MYSQL-028` and the MySQL note on `FR-CAT-038` in
+  [catalogue-coverage.md](catalogue-coverage.md) follow. `DIV-059`, re-read
+  now that `1b3ff53` has added `scripts/mysql/`, owes a sentence naming that
+  fixture in the *Development* section of the root `README.md`, and stays
+  due.
+- **The questions, the glossary and this file** —
+  [open-questions.md](open-questions.md) lists `OQ-078` as raised and closed,
+  with its index empty and the specification complete. In this file the
+  edition count of the Scope, the count of questions under the identifier
+  scheme, the writing convention on the pending-observation note, the first
+  and fourth items of the Provenance, the maintenance debt and one sentence
+  of the record of the seventy-third edition follow. The first Provenance item
+  counted "seven decision logs", which no decision after the twenty-ninth
+  edition had moved; the count is removed, and the item says where a later
+  decision is recorded.
+
+**No requirement that governs a `mariadb` or a `sqlite` entry changes its
+meaning.** Every requirement amended is a requirement of the `mysql`
+provider, save `FR-ENV-046`, whose fall-through now names `FR-ENV-049` and
+whose answer for a column of a `mariadb` or a `sqlite` read is unchanged, as
+`FR-ENV-049` shows; and every change elsewhere is a note about a `mysql`
+entry or a passage of the record. `FR-CAT-008`, `FR-CAT-016`, `FR-CAT-033`,
+`FR-CAT-036`, `FR-CAT-038`, `FR-CAT-039`, `FR-CAT-042`, `FR-CAT-046`,
+`FR-CAT-047`, `FR-CAT-048`, `FR-CAT-050`, `FR-CAT-051`, `FR-CAT-052`,
+`FR-CAT-055`, `FR-CAT-056`, `FR-CTX-012`, `FR-CTX-018`, `FR-CTX-037`,
+`FR-CTX-040`, `BR-CTX-002`, `FR-ENV-041`, `FR-ENV-042`, `FR-ENV-048`,
+`FR-LITE-026`, `FR-LITE-027`, `FR-LITE-031`, `FR-PRIV-011`, `FR-PRIV-012`,
+`FR-PRIV-015`, `FR-PRIV-017` to `FR-PRIV-020`, `FR-SRV-006`, `FR-SRV-026`,
+`FR-SRV-038`, `FR-CONF-038`, `FR-CONF-039`, `FR-ERR-006`, `FR-ERR-046` and
+`FR-SEC-021` were read against the changes, and none is amended: the model
+already admits `SET DEFAULT` from SQLite; the MariaDB shapes of an absent view
+definition and routine body are MySQL's too; every value a `mysql` read now
+carries is carried under a rule already in force, save the three texts
+`FR-MYSQL-046` unescapes, a rule that reaches a `mysql` read alone; and of
+the three values `FR-ENV-049` places, no `mariadb` or `sqlite` read was
+observed producing `json` or `geomcollection`, and `vector` is placed where
+the fall-through of `FR-ENV-046` already put it.
+
+**One editorial correction to an earlier edition.** The seventy-third
+edition's account of the requirements it read and left unchanged said that a
+`data_type` only MySQL produces *falls* through to no family under
+`FR-ENV-046`, as that requirement *provides*. `FR-ENV-049` now places the
+three such values, so both verbs are put in the past tense, and the sentence
+is not otherwise changed.
+
+The fifth validation rule is discharged for this edition: neither root
+document has changed since `e72e299`; at `1b3ff53` the root `CLAUDE.md` was
+read whole, and the root `README.md` was read wherever it names MySQL and
+searched for every subject this edition amends — `SET DEFAULT`, the
+read-back variable, escaping, `VECTOR`, duality views, a generated invisible
+primary key, `SHOW VIEW`, the check option, the identifier limit, the
+authentication method and `scripts/mysql/` — and neither paraphrases a
+requirement this edition amends. For the user's decisions, both files were
+searched at `1b3ff53` for the type families and for escaping, and neither
+paraphrases `FR-ENV-046`, `FR-ENV-049` or `FR-MYSQL-046`. `DIV-059` was
+re-read there: the root `README.md` has not changed since `60bf9df`, its
+*Development* section names the fixtures of `scripts/mariadb/` and
+`scripts/sqlite/` and not the one `1b3ff53` added, and the entry's
+correction, which said that section owed nothing while `scripts/mysql/` did
+not exist, now names it; the status is unchanged. No entry is raised. The
+reading of `DIV-036` and `DIV-050` named as owed by the seventy-second
+edition is still owed.
+
+### Seventy-sixth edition — four readings the implementation had to choose, and a key MariaDB may ask for
+
+rmp `#329`, of sprint 28, implemented the `mysql` provider against the
+seventy-fifth edition, and found four places where this corpus admitted two
+readings or said nothing: the reason the refusal of an older series gives,
+an empty password, the outer parentheses of an expression default, and the
+value carried for an `ON UPDATE` default. This edition settles each, so that
+the specification states what `tpl` does, and records one decision of the
+user's on MariaDB, made for the same task and held in the project's decision
+records, that the corpus had not described.
+
+**One identifier is assigned**: `FR-MYSQL-047`. None is retired and none is
+renumbered. No open question is raised, so the index of
+[open-questions.md](open-questions.md) stays empty, and
+[glossary.md](glossary.md) is unchanged.
+
+- **The refusal of an older series** — `FR-MYSQL-009`, in
+  [mysql-contract.md](mysql-contract.md). The `cause` now names the version
+  string and states one reason for every series refused: the criterion of
+  `FR-MYSQL-002` it fails, that it is not an LTS series under Oracle Premier
+  or Extended Support and is older than the newest that is. The example gave
+  a reason particular to `8.0`, its support tier since a date, which the
+  binary could state only from a second table of every series it may refuse;
+  that reading is rejected, and the example states the criterion.
+- **An empty password** — `FR-MYSQL-047`, new, in the same file. A `mysql`
+  entry whose `password` is the empty string, whose `dsn` carries an empty
+  password part, or whose `password_command` prints nothing, presents the
+  empty string to the server as its password, through the authentication
+  method's own exchange, and not as an entry that supplies no password. The
+  three sources are read under `FR-CONF-006`, `FR-CONF-009` and
+  `FR-CONF-027`, which already make each an empty password and do not say
+  how it is presented. No requirement stated the rule for a `mariadb` entry,
+  and the new one did not reach one.
+- **The outer parentheses** — `FR-MYSQL-029`, the same file. The third row
+  of the classification removes the first and the last character of an
+  expression default that begins with `(` and ends with `)`, once, and does
+  not test whether they match: the rule `FR-CTX-037` applies to a MariaDB
+  default. A reading by matching pair is rejected, and the text it would
+  carry differently, which no server of the fixture wrote, is the accepted
+  cost.
+- **The `ON UPDATE` default** — `FR-MYSQL-030`, the same file. The value
+  carried is the phrase as `EXTRA` writes it, `on update` and the word that
+  follows, which is the shape a `mariadb` read carries under `FR-CAT-041`;
+  carrying the word alone, which the table's cell could be read as saying,
+  is rejected.
+- **MariaDB's `caching_sha2_password`** — a note on `FR-SEC-021`, in
+  [security.md](security.md), beside the note on the same path for a `mysql`
+  entry. MariaDB documents the plugin as optional and available from three
+  releases it names, and nothing in this corpus has observed it. Where a
+  `mariadb` entry's login over a session TLS does not protect needs the
+  server's RSA public key, the system does not request it, and the login
+  ended at exit `69` with the message it carried before, by the user's
+  decision of 2026-11-04 that nothing about MariaDB support changes; exit
+  `78` for such an entry is rejected.
+- **This file** — the edition count of the Scope, and this record.
+
+**No requirement that governs a `mariadb` or a `sqlite` entry changes its
+meaning.** Every requirement amended or added is a requirement of the
+`mysql` provider, and the one change elsewhere is a note that amends no
+requirement. `FR-CTX-012`, `FR-CTX-020`, `FR-CTX-037`, `BR-CTX-002`,
+`FR-CAT-041`, `FR-CONF-006`, `FR-CONF-007`, `FR-CONF-009`, `FR-CONF-015`,
+`FR-CONF-027`, `BR-CONF-004`, `FR-SRV-020`, `FR-SRV-030`, `FR-ERR-001`,
+`FR-ERR-034` and `FR-SEC-021` were read against the changes, and none is
+amended: the parentheses and the `ON UPDATE` value now follow the rules a
+`mariadb` read already applies, the empty password is read from the three
+requirements that already make it one, and the note on MariaDB's plugin
+keeps every outcome a `mariadb` entry has.
+
+The wordings the implementation of rmp `#329` changed for the third
+provider were read against the examples this corpus fixes: "a mariadb or a
+mysql entry", in the `cause` of the examples of `FR-CFG-048` and
+`FR-CFG-055`; "takes mariadb, mysql or sqlite", in the `cause` of the example
+of `FR-CONF-051`; and the help of `--provider`, which states the three
+values, the default and the flags of each provider, as `FR-CFG-033`
+requires. Each matches. The implementation's `hint` for the condition of
+that example of `FR-CONF-051` was not among the wordings changed, and still
+reads "give one of the two", where the example, amended in the
+seventy-third edition, reads "give one of the three"; the example is right,
+and this corpus is not amended for it.
+
+The fifth validation rule is discharged for this edition: neither root
+document has changed since `1b3ff53`, which the seventy-fifth edition read;
+at `90881b1` both were searched for every subject this edition amends — the
+refusal of a MySQL series, a support tier, an empty password, parentheses,
+`ON UPDATE`, `caching_sha2_password` and the server's RSA key — and neither
+paraphrases a requirement this edition amends or the note it adds. No entry
+is raised.
+
+### Seventy-seventh edition — five ways a server connection fails, a reason the binary prints, and an empty password sent as the servers' own clients send it
+
+rmp `#332`, `#333` and `#334`, of sprint 28, are three defects of a
+`mariadb` entry, older than the sprint, that the pass of the seventy-sixth
+edition found; rmp `#335`, `#336`, `#337` and `#338` are four more that this
+edition's own audit found in the code that classifies a failure of a server
+connection. On 2026-11-04 the user decided to fix all seven in sprint 28 as
+one effort with rmp `#332`, accepting, as an exception to the requirement
+that nothing about MariaDB support changes, that they change what a
+`mariadb` entry prints and, for rmp `#338`, the code of some error packets.
+This edition specifies them, with four follow-ups rmp `#329` recorded and
+three items the coordinator added; once they were implemented, and before
+the edition was committed, it was read back against the code, as the last
+paragraph but one of this record states.
+
+**Five identifiers are assigned**: `FR-ERR-047`, `FR-ERR-048`,
+`FR-ERR-049`, `FR-ERR-050` and `FR-CONF-055`, and one divergence entry,
+`DIV-061`. None is retired and none is renumbered. No open question is
+raised, so the index of [open-questions.md](open-questions.md) stays empty.
+[glossary.md](glossary.md) gains *login* and *scramble*.
+
+- **A login that does not complete** — rmp `#332`. `FR-ERR-047`, new, in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), with the term *login*
+  in [glossary.md](glossary.md): the phase from the end of the TCP connect
+  until the session opens. A failure in it that is neither an error packet
+  the server sends, nor the TLS handshake, nor a deadline, nor the `78` of
+  `FR-MYSQL-045`, exits `69` with a `cause` that names the login and one of
+  three outcomes — the connection failed, an answer the system does not
+  accept, or, for a `mariadb` entry, a login that needs the server's RSA
+  public key — and with a `hint` for each. The implementation reported every
+  such failure as a refused TCP connect, which `FR-ERR-034` bans. The `69`
+  row of `FR-ERR-034` names the login as its sixth phase. The note on
+  `FR-SEC-021` is revised: the login of a `mariadb` entry that needs the key
+  keeps `69` and takes the third outcome's message. `FR-ERR-002` gains a note
+  recording that this one condition's next step differs from its code's, by
+  the user's decision, and `FR-MYSQL-001` a note recording the decisions.
+- **A statement that fails on an open session** — rmp `#335`, `FR-ERR-036`.
+  The requirement was in force since the twenty-fifth edition and never
+  implemented. It keeps its condition, its code and its phase, and gains the
+  three ways a statement fails, what the `error` line and the `hint` carry,
+  the answer of the privilege probe of `FR-CFG-044` that is no failure, and
+  two examples.
+- **The connection budget** — rmp `#336`, `FR-CONF-005` and `FR-ERR-027`.
+  The login is a fourth connection phase under the one budget of
+  `core.connect_timeout`; the order of the phases is stated, the login
+  before and after a TLS handshake; and the phase in progress is decided by
+  what the connection had completed, not by the call that was running.
+  `FR-ERR-027` names the login and states the message of a budget's expiry,
+  whose `cause` no longer says that a shared budget bounds one phase alone.
+- **A TCP connect that fails** — rmp `#337`. `FR-ERR-049`, new: four
+  outcomes named by the operating system's POSIX error name — refused,
+  unreachable, no answer, and any other, whose `cause` names the error
+  number, or that it reported none. Only a refusal is reported as one.
+- **A TLS handshake that fails** — found by the implementation of rmp
+  `#336`. `FR-ERR-050`, new: the TLS handshake's two outcomes, a certificate
+  not accepted and a refusal before a certificate was accepted, each with the
+  message a `mariadb` entry has printed since the phase was first separated,
+  and the `hint` of the second for a `mysql` entry fixed by `FR-MYSQL-021`.
+- **An error packet during the login** — rmp `#338`. `FR-ERR-048`, new: a
+  table, read for the entry's provider, of the error numbers that are an
+  authentication refused (`77`), of the database `FR-PRIV-021` reports
+  (`77`), of the one that requires an encrypted session (`78`), and of
+  those that are limits on connections, a blocked host, or any other error
+  (`69`), grounded in MariaDB's and MySQL's error references; each class has
+  its message. The `77` row of `FR-ERR-034` names the reason the table
+  states, and `FR-PRIV-021` gains a note on the second condition that
+  reaches its message. `FR-GLOB-018`, in [global-flags.md](global-flags.md),
+  gains a paragraph that keeps the error number of a server's error packet,
+  and of the operating system's report, out of the raw driver error, so that
+  a `cause` may name it; the packet's message stays barred, and
+  `FR-SEC-005` gains a note saying so. `FR-ERR-045`'s list of the `hint`s it
+  governs names the TCP connect, the login and the `hint` of `FR-ERR-048`
+  that names another user.
+- **The reason a refused MariaDB series gives** — rmp `#333`, `FR-SRV-030`, in
+  [server-contract.md](server-contract.md). The `cause` now names the series
+  and states one reason for every series refused, that it is outside the
+  supported window, and the example is the message the implementation prints;
+  the dated reason particular to `10.6` and the version string the example
+  gave are rejected. The rejection of a code per case in `FR-SRV-020` no
+  longer says that the `cause` carries the distinction between the cases. No
+  line the implementation prints changes.
+- **An empty password, and none** — rmp `#334`. `FR-CONF-055`, new, in
+  [configuration-model.md](configuration-model.md), in a section of its own:
+  for a `mariadb` and a `mysql` entry, the empty string, and an entry that
+  supplies no password, are presented as the servers' own clients present an
+  empty password, at the first response of the login and at every switch of
+  the authentication method, and never as a
+  [scramble](glossary.md#scramble) computed from the empty string, on the
+  prior art of MySQL's client library and of MariaDB Connector/C, read at
+  their public source. `FR-MYSQL-047`, in
+  [mysql-contract.md](mysql-contract.md), now holds `FR-CONF-055` for a
+  `mysql` entry; the presentation it required, and its distinction between an
+  empty password and none, are rejected there and in `FR-CONF-055`.
+- **The `hint` of a refused TLS handshake, for a `mysql` entry** — a
+  follow-up of rmp `#329`, `FR-MYSQL-021`. The `hint` states that the server
+  must offer TLS and carries no command that lowers `tls` to a mode that does
+  not encrypt, which for a `mysql` entry ends in the `78` of `FR-MYSQL-045`
+  whenever the server holds no cached login. The `hint` of a `mariadb` entry
+  is unchanged, and `FR-ERR-050` now fixes it.
+- **The `ON UPDATE` attribute** — a follow-up of rmp `#329`. `FR-MYSQL-040`
+  gains row 31, the divergence `FR-MYSQL-030` records.
+- **The pending observations** — a follow-up of rmp `#329`. The *Pending
+  observation* notes on the `69` of three cells of `FR-MYSQL-021` and on the
+  `78` and the message of `FR-MYSQL-045` are replaced by *Observed* notes,
+  through `tpl`, from the provider's tests at `2d652bd` on `8.4.13` and
+  `9.7.4`. The note on trust material, on `FR-MYSQL-021`, is discharged by
+  the observation of `FR-CONF-039`, because the driver chosen for the `mysql`
+  provider is the one that requirement observed and the property involves no
+  server. Three notes remain. The count is restated in the sources of
+  [mysql-contract.md](mysql-contract.md), the rationale of `FR-MYSQL-020`,
+  [glossary.md](glossary.md#pending-observation),
+  [open-questions.md](open-questions.md), the writing conventions below and
+  the maintenance debt, whose paragraph that owed three notes to the
+  `mysql` provider "once it exists" now records all three discharged.
+- **The example of `FR-MYSQL-045`** — the `cause` now names the user and
+  states that the authentication was not completed, as the requirement and
+  the implementation do, and a second example shows the `preferred` case.
+- **This file** — the edition count of the Scope; this record; the count
+  of the writing conventions, whose sentence of the seventy-fifth edition is
+  put in the past tense beside the new count; and two editorial corrections
+  to the record of the seventy-sixth edition above, each a present tense
+  this edition made false: "No requirement states the rule for a `mariadb`
+  entry" is now "stated", because `FR-CONF-055` states it; and "the login
+  ends at exit `69` with the message it carried before" is now "ended",
+  because `FR-ERR-047` changes the message.
+
+**What changes for a `mariadb` entry, and what does not.** `FR-ERR-027`,
+`FR-ERR-034`, `FR-ERR-036`, `FR-ERR-047`, `FR-ERR-048`, `FR-ERR-049`,
+`FR-CONF-005`, `FR-CONF-055`, `FR-GLOB-018` and `FR-SRV-030` change what a
+`mariadb` entry prints, sends or exits with, each as one of the seven tasks
+requires and by the user's decision; `FR-SRV-030` changes no line the
+implementation prints, nor does `FR-ERR-050`, which states the messages of a
+failed TLS handshake as they were, and the messages of a refused TCP connect
+and of `1045` are kept word for word. The codes that move are those of
+`FR-ERR-048`: an error packet other than `1045`, and than `1044` and `1049`
+where the connection named a database, was `77`, and is now `77`, `78` or `69`
+by its class. The notes on `FR-ERR-002`, `FR-ERR-045`, `FR-SRV-020`,
+`FR-SEC-005`, `FR-SEC-021` and `FR-PRIV-021` record what those changes make
+true. No requirement of a `sqlite` entry changes meaning, and `FR-GLOB-018`'s
+paragraph on a `sqlite` entry is untouched. `FR-ERR-001`, `FR-ERR-006`,
+`FR-CONF-006`, `FR-CONF-007`, `FR-CONF-009`, `FR-CONF-027`, `FR-CONF-038`,
+`FR-CONF-039`, `FR-CFG-043`, `FR-CFG-044`, `FR-CAT-041`, `FR-MYSQL-009`,
+`FR-MYSQL-022` and the text of `FR-MYSQL-045` were read against the changes,
+and none is amended: the `69`, `77` and `78` cells of `FR-ERR-001`
+characterise their classes and do not enumerate them; every condition added is
+reached at the cache-or-connection step; and the three sources of an empty
+password are read as before.
+
+**The implementation read back.** The code of the seven tasks, validated
+with both fixtures up, found ten points where this edition was silent or
+imprecise, and the edition was amended before it was committed to state what
+the code does, each consistent with what the requirement intended; no code
+change is owed. `FR-ERR-049` reads the kind of error where the report
+carries no operating-system number, and names no number where neither
+gives one, and takes any other failure of the TCP connect phase as its
+fourth outcome. `FR-ERR-050` states the outcomes of the TLS handshake.
+`FR-ERR-036` and `FR-ERR-047` place a failure the TLS layer reports, and an
+error packet the system cannot read as the server's. `FR-ERR-048` takes
+`1044` and `1049` as unclassified where the connection named no database,
+and records `1226` as observed. `FR-CONF-055` states the response for each
+method, a single zero byte for `caching_sha2_password` by the user's choice
+between two clients that differ, and records the logins of a passwordless
+account on both fixtures. The note on `FR-SEC-021` says that the project's
+decision records now state its outcome. `FR-ERR-047` and the first outcome
+of `FR-ERR-049` are recorded as observed through `tpl`.
+
+The fifth validation rule is applied for this edition: neither root
+document has changed since `60bf9df`, before `1b3ff53`, which the
+seventy-fifth edition read; at `2d652bd` both were searched for every subject
+this edition amends — a login, a refused connection, a session that fails, a
+deadline of the connection, an error packet, the reason a MariaDB series is
+refused, an empty password, the `hint` of a TLS handshake, the `ON UPDATE`
+attribute and the pending-observation notes. One passage paraphrases a
+requirement this edition amends: the root `README.md` names
+`connect_timeout` as "shared by DNS resolution, TCP connect and the TLS
+handshake", which `FR-CONF-005` now extends to the login, so
+[upstream-divergences.md](upstream-divergences.md) raises `DIV-061` against
+it and its counts move. `CLAUDE.md` paraphrases no requirement this edition
+amends.
+
+### Seventy-eighth edition — four divergences discharged, one of them raised in the same pass
+
+rmp `#330`, of sprint 28, corrected the three divergences
+[upstream-divergences.md](upstream-divergences.md) owed against the root
+documents: `DIV-059` and `DIV-061` in `README.md`, and `DIV-060` in
+`CLAUDE.md`. The correction is in the working tree over `cc511e2`, and the
+commit of rmp `#330` records it together with this edition. This edition
+reads both files there and records what it found; no requirement changes.
+
+**No identifier of a requirement is assigned, retired or renumbered.** One
+divergence entry is assigned, `DIV-062`, and discharged in the same
+edition. No open question is raised, so the
+index of [open-questions.md](open-questions.md) stays empty, and
+[glossary.md](glossary.md) is unchanged.
+
+- **Three entries discharged** — `DIV-059`, `DIV-060` and `DIV-061`. Each
+  part of each correction was found made, and each entry's status names the
+  commit of rmp `#330` as the one that discharged it, with the working tree
+  over `cc511e2` that it records, and keeps the status it was raised with.
+- **One entry raised and discharged** — `DIV-062`, against the row *MySQL
+  privileges* that the correction of `DIV-059` added to the *Requirements*
+  table of `README.md`. The row said that a reader's restricted views and
+  routines are marked `restricted`, which `FR-MYSQL-041` makes true of a
+  listing and a dump, and omitted that one requested by name exits `77` under
+  `FR-PRIV-003`. It did not hold back the discharge of `DIV-059`, whose
+  correction did not ask for the row. rmp `#330` corrected the row in the
+  same working tree, a second reading found the correction's first form
+  made, and the entry is discharged by the same commit as the other three.
+- **The counts** — the Overview of the register counts sixty-two entries:
+  three due in full, fifty-five discharged and four partly discharged; seven
+  still owe something, five to `CLAUDE.md` and two to `README.md`.
+  `DIV-032` and `DIV-041` restate the count.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied for this edition: both root documents
+were read in the working tree over `cc511e2` against every entry this edition
+moves, and against the requirements their new passages paraphrase —
+`FR-MYSQL-002`, `FR-MYSQL-003`, `FR-MYSQL-008`, `FR-MYSQL-010`,
+`FR-MYSQL-012`, `FR-MYSQL-015`, `FR-MYSQL-018`, `FR-MYSQL-021`,
+`FR-MYSQL-034`, `FR-MYSQL-035`, `FR-MYSQL-041`, `FR-MYSQL-044`,
+`FR-MYSQL-045`, `FR-CONF-005`, `FR-CONF-010`, `FR-CONF-051`, `FR-CONF-052` and
+`FR-CONF-055`. One passage contradicted this corpus, and is `DIV-062`,
+discharged by the second reading. `DIV-036`, `DIV-037` and `DIV-050`, whose
+passages of `CLAUDE.md` sit beside the corrected lines, stand as they were.
+
+### Seventy-ninth edition — a password a cache hit never needed, three statements with no deadline of their own, and two tables that read alike
+
+Sprint 29, *Fixes and Improvements*, sets out to leave the code base with no
+known defect outstanding and to have all three providers read schemas and
+generate code without failure. This edition specifies what that requires of
+ten of its tasks, all relayed by the session coordinator in one brief: rmp
+`#310`, `#339`, `#340`, `#341`, `#349` and `#353`, and four it was asked to
+check and change only where needed, rmp `#311`, `#313`, `#342` and `#352`,
+each of which did need a change. Three decisions are the user's: for rmp
+`#310`, that a reference be expanded only when the entry is resolved for a
+connection; and, on 2026-11-05, after reading the first draft of this
+edition, that the refusal of rmp `#349` stand as written and that the worked
+examples of rmp `#353` cover all three providers, which the edition took in
+before it was committed. Every other choice between viable options is this
+edition's, and each is recorded with the options it rejected beside the
+requirement it shapes.
+
+**Six identifiers of a requirement are assigned**: `FR-CONF-056`,
+`FR-SRV-043`, `FR-MYSQL-048`, `FR-LITE-043`, `FR-EX-011` and `FR-EX-012`;
+and three divergence entries, `DIV-063`, `DIV-064` and `DIV-065`. None is
+retired and none is renumbered. No open question is raised, so the index of
+[open-questions.md](open-questions.md) stays empty. [glossary.md](glossary.md)
+gains *session statement*.
+
+- **A password a cache hit never needed** — rmp `#310`. `FR-CONF-056`, new,
+  in [configuration-model.md](configuration-model.md): the six fields of
+  `FR-CONF-015` are expanded, and `password_command` is run, only when the
+  entry is resolved for a connection — a read that misses the cache or
+  carries `--direct`, a read a render returns to, `tpl cache load` and
+  `tpl cfg database test` — and a read served from the cache does neither.
+  Every field, and not the password alone, because a hit reads none of
+  them. The conditions expansion and the helper raise, the `78` of
+  `FR-CONF-022` among them, are raised at the cache-or-connection step and
+  never on a hit. `FR-CONF-022` and `FR-CACHE-006` gain a note,
+  `FR-CONF-050` and `FR-ERR-006` an amendment that moves the refusal of an
+  empty expansion, and the expansion itself, out of entry resolution.
+- **Three statements with no deadline of their own** — rmp `#339`.
+  `FR-CONF-005`: the [session statement](glossary.md#session-statement) is a
+  phase, and each of the read-only session statement, its read-back and the
+  version probe takes the deadline of `core.query_timeout` on its own, the
+  deadline the implementation already applied. `FR-ERR-027` names the
+  statement whose deadline expired, the version probe as the version probe,
+  with three examples, and puts the expiry on `69` whichever statement it
+  ends. The `69` row of `FR-ERR-034` names the phase, `FR-SRV-010` gains a
+  note, and the table of `FR-GLOB-026` names the session statements and
+  counts the connection phases as four, which two of its rows still counted
+  as three.
+- **A line for every connection phase** — rmp `#340`. `FR-GLOB-017`, in
+  [global-flags.md](global-flags.md): at `INFO`, a line for each phase of
+  `FR-CONF-005` the connection ran — DNS resolution, the TCP connect, the
+  TLS handshake where one is negotiated, the login, whose line carries the
+  time of its two stretches together, and each session statement — written
+  once the connection has opened or failed, or the statement has ended.
+- **The errors a privilege probe reads as no privilege** — rmp `#341`.
+  `FR-CFG-044`, in [cfg-commands.md](cfg-commands.md): a privilege error is
+  an error packet carrying `1044`, `1142`, `1143` or `1227`, the denials a
+  `SELECT` can meet, named alike in MariaDB's and MySQL's error references,
+  read on 2026-11-05; any other error packet ends the command with `69`
+  under the third way of `FR-ERR-036`, whose paragraph on the probe follows.
+- **A truncated greeting** — rmp `#342`. `FR-ERR-047`: a truncated or
+  malformed greeting is the second outcome, at `69`, and never the `70` of
+  `FR-ERR-030`; a greeting cut short by the connection is the first. Both
+  were within the outcomes as written; the sentences make a test of them
+  derivable.
+- **Two tables that read alike** — rmp `#349`. `FR-LITE-043`, new, in
+  [sqlite-contract.md](sqlite-contract.md): a `sqlite` read groups rows and
+  matches names on the bytes the file holds, and refuses with `78` a file in
+  which two names of one set — the tables and views, or the columns, the
+  indexes or the triggers of one table — differ in their bytes and convert to
+  one text under `FR-OUT-017`. `FR-LITE-007` gains its row, `BR-LITE-003` and
+  `FR-OUT-017` a note, and `FR-LITE-038` three databases.
+- **A name that reaches a statement** — rmp `#352`. `FR-SRV-043`, new, in
+  [server-contract.md](server-contract.md), and `FR-MYSQL-048`, new, in
+  [mysql-contract.md](mysql-contract.md): a name the system did not write
+  itself changes no part of a catalogue statement but the value its rows are
+  compared with, whatever characters it holds. How it reaches the statement
+  is left to the technical specification, as rmp `#352` asks.
+- **The rewrite of `.tpl/.cfg`** — rmp `#313`. `FR-CFG-041`: every step of
+  the rewrite acts in the folder whose `.cfg` was checked, creates its
+  temporary file new, and is redirected by no link, the property the cache's
+  paths and the read of `.cfg` already hold. `FR-SEC-027` gains a note.
+- **A suggestion that named the template asking** — rmp `#311`.
+  `FR-TMPL-033` bars a nearest-match suggestion for an entry that exists and
+  is not a regular file, on the command line and in a template, and
+  `FR-TMPL-009` keeps the template that holds a name out of the candidates
+  of any suggestion offered for it.
+- **The worked examples over all three providers** — rmp `#353`, by the
+  user's decision. `FR-EX-011`, new, in [examples.md](examples.md): all four
+  examples also read the `freight` schema of the fixture of
+  `scripts/mysql/`, through a `mysql` entry, from one server of the most
+  recent series of `FR-MYSQL-003`, and compile its data layer. `FR-EX-012`,
+  new: they also read, through a `sqlite` entry, the main database the
+  fixture of `scripts/sqlite/` builds from `freight.sql`, and compile its
+  data layer. `FR-EX-006` gains a note; `FR-EX-007`, `FR-EX-008`, whose type
+  mappings now cover the values of `json` and `geomcollection` and the five
+  SQLite affinities, and `BR-EX-002` reach both; and `UC-013` in
+  [use-cases.md](use-cases.md) gains their preconditions, their two forms of
+  `tpl cfg database add` and an alternate flow for the file.
+- **The register** — [upstream-divergences.md](upstream-divergences.md)
+  raises `DIV-063`, `DIV-064` and `DIV-065` against the root `README.md`,
+  and its counts move.
+- **This file** — the edition count of the Scope, and this record.
+
+**What changes for a `mariadb` entry, and what does not.** `FR-CONF-056`
+changes when a `mariadb` and a `mysql` entry expand a reference and run
+their helper, and so which invocations exit `78` for an undefined variable:
+a read served from the cache no longer does. `FR-ERR-027` changes the
+message of an expired session statement, `FR-GLOB-017` the diagnostic
+lines, `FR-CFG-044` the outcome of a privilege probe answered with an error
+packet that is not a denial, from `0` to `69`, and `FR-CFG-041` where a
+rewrite acts. `FR-CONF-005` states the deadline the implementation already
+applies, `FR-ERR-047` changes no message, and `FR-SRV-043` and
+`FR-MYSQL-048` state a property and change no output where it holds. No
+requirement of a `sqlite` entry changes meaning but `FR-LITE-043`, whose
+refusal is new and whose grouping on the bytes corrects what a read
+presents. `FR-CONF-004`, `FR-CONF-049`, `FR-CACHE-002`, `FR-CACHE-038`,
+`FR-CACHE-039`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-SRV-006`, `FR-SRV-042`,
+`FR-MYSQL-015`, `FR-MYSQL-017`, `FR-MYSQL-019`, `FR-ERR-019`,
+`FR-ERR-021`, `FR-ERR-048`, `FR-TMPL-027`, `FR-PROJ-028`, `FR-PROJ-030`,
+`FR-LITE-009`, `FR-LITE-021` and `NFR-PERF-008` were read against the
+changes, and none is amended.
+
+The fifth validation rule is applied for this edition: neither root
+document has changed since `9468588`, which the seventy-eighth edition
+read in its working tree; at `b3f87a2` both were searched for every subject
+this edition amends — a reference expanded on a cache hit, a deadline of a
+session statement, the diagnostic lines of a connection, the privilege
+probe, a greeting, a SQLite name that is not valid UTF-8, a name in a
+catalogue statement, the rewrite of `.tpl/.cfg`, a suggestion for a
+template, and the worked examples. Three passages of `README.md` paraphrase
+a requirement this edition amends, and
+[upstream-divergences.md](upstream-divergences.md) raises `DIV-063`,
+`DIV-064` and `DIV-065` against them. `CLAUDE.md` paraphrases none.
+
+### Eightieth edition — a database name the server refuses, one it never sees whole, and the databases a quoting could mistake
+
+The seventy-ninth edition was committed at `5b1a568`, so the follow-up pass
+of sprint 29 is an edition of its own. It specifies rmp `#357`, which the
+user brought into the sprint from the security review of the `mysql`
+provider; the fixture rmp `#352` needs to prove the property `FR-SRV-043`
+states; and, for rmp `#342`, every short packet of the login on which the
+driver may panic.
+
+**One identifier is assigned**: `FR-CONF-057`. None is retired and none is
+renumbered. No open question is raised, so the index of
+[open-questions.md](open-questions.md) stays empty, no divergence entry is
+raised or discharged, and [glossary.md](glossary.md) is unchanged.
+
+- **A database name the server refuses** — rmp `#357`. `FR-ERR-048` gains
+  the row of `1102`, `ER_WRONG_DB_NAME`, read alike for both providers, at
+  `78`: the server refuses the name the entry gives, as for a name ending
+  with a space, and the next step is the entry's `database` key. Its
+  message names the host and port, the number and the name between
+  quotation marks, and its `hint` the command that changes the name; it no
+  longer says that the operation can be run again. Both error references
+  were read for the number, and both identifier pages for the trailing
+  space; which number a MariaDB server sends for that name is not observed.
+  A name ending with a space is not refused before connecting: the server's
+  rules for a name are the server's.
+- **A name the server never sees whole** — rmp `#357`. `FR-CONF-057`, new,
+  in [configuration-model.md](configuration-model.md), in a section of its
+  own: a NUL character is refused in `host`, `user`, `password` and
+  `database`, in each of those parts of a `dsn` once percent-decoded, in a
+  `sqlite` entry's `path`, and in the password a `password_command` prints —
+  with `64` on the command line, with `78` at entry resolution in the file,
+  and with `78` where the helper runs — because the login, the servers' C
+  interface and SQLite's open each end the value at it. `FR-CONF-054` gains
+  a note.
+- **The databases a quoting could mistake** — rmp `#352`. `FR-MYSQL-044`
+  gains item 17: a target database whose name holds a quotation mark, a
+  backslash and a backtick, with objects of its own, among them a table
+  whose name holds a `%`; four decoys — the name without the backslash, with
+  it doubled, a name its pattern matches, and a case variant; and, in item
+  16, the reduced-grant reader's grant on the target and on no decoy. The
+  note on it states what each test of `FR-SRV-043` expects on both series.
+  `FR-SRV-043` gains a note naming the item and recording that the fixture
+  of `scripts/mariadb/` holds no such database, and the rationale of
+  `FR-MYSQL-048` names the item.
+- **Every short packet of the login** — rmp `#342`. `FR-ERR-047`'s second
+  outcome reaches every packet of the login that ends before its fields or
+  holds what none of its kind holds — the greeting, an error packet in the
+  greeting's place or later in the login, a request to switch the method, and
+  a packet that continues one, such as a `caching_sha2_password` packet cut
+  to its byte `0x01` — at `69` and never `70`; and `FR-ERR-048` says so of an
+  error packet it cannot read. Each case was the second outcome as written.
+- **This file** — the edition count of the Scope, and this record.
+
+**What changes for a `mariadb` entry, and what does not.** `1102` moves from
+`69` to `78` for both server providers, and its message changes;
+`FR-CONF-057` refuses, for every provider, values that were accepted and
+then cut. `FR-ERR-047` and `FR-ERR-048` change no message: they bar a `70`
+that no requirement permitted. `FR-MYSQL-044` obliges the MySQL fixture and
+changes nothing `tpl` does. `FR-CONF-015`, `FR-CONF-040`, `FR-CONF-041`,
+`FR-CONF-049`, `FR-CONF-050`, `FR-CONF-056`, `FR-CFG-010`, `FR-CFG-027`,
+`FR-CFG-031`, `FR-CFG-055`, `FR-ERR-006`, `FR-ERR-034`, `FR-ERR-036`,
+`FR-PRIV-021`, `FR-SRV-006`, `FR-MYSQL-015` and `FR-LITE-005` were read
+against the changes, and none is amended.
+
+The fifth validation rule is applied for this edition: neither root
+document has changed since `9468588`; at `5b1a568` both were searched for
+an error packet of the login, a database name, a NUL character, the
+contents of the MySQL fixture and a short packet. Neither paraphrases a
+requirement this edition amends, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-first edition — a decoding no requirement asked for, and a host in a hint
+
+Two conflicts the implementation of the eightieth edition met, at `f7c5385`
+and `e2260b8`, and the session coordinator relayed. **No identifier is
+assigned, retired or renumbered**; no open question is raised, no divergence
+entry is raised or discharged, and [glossary.md](glossary.md) is unchanged.
+
+- **A `dsn` part as written** — rmp `#357`. `FR-CONF-057` read a part of a
+  `dsn` after a percent-decoding that no requirement states: `FR-CONF-009`
+  fixes the grammar and `FR-CONF-018` the order of parsing, expansion and
+  encoding, and neither decodes. The requirement now reads each part as the
+  `dsn` holds it, so a `%00` is three characters, and it states that a Unix
+  argument vector carries no NUL character, so the refusal on the command
+  line is a guard verified in process.
+- **A host in a hint** — rmp `#344`. `FR-ERR-022` governs the whole of a
+  `hint` and admits no host; the examples of `FR-ERR-047` and `FR-ERR-049`
+  wrote one into the prose. The requirement stands and says so, and the five
+  examples refer to "the host and port named above", as the `hint` of
+  `FR-ERR-027` for the TCP connect already did.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied for this edition: neither root
+document paraphrases a `dsn` part's decoding or the prose of a `hint`, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-second edition — two parts of a cached table decoded when they are reached
+
+rmp `#347`, of sprint 29, found that a cached render decodes each table's
+embedded neighbours whether or not the template reads them, so that a render
+the direct path performs is refused at the render memory limit. **No
+identifier is assigned, retired or renumbered**; no open question or
+divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **The deferred parts** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-038` admits deferring the decoding of a table's `foreign_keys`
+  and `referenced_by` until the template first reaches each, validates the
+  part then, makes a faulty part a miss answered by `FR-CACHE-039`, and keeps
+  the document, and so the output, that of an up-front read. Every other
+  command that reads the cache decodes everything before its first byte of
+  output. `FR-CACHE-039` gains a note.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-CACHE-033`, `FR-CTX-006`, `FR-RND-034`, `FR-RND-039`, `FR-ERR-006` and
+`NFR-PERF-003` were read against the change, and none is amended. The fifth
+validation rule is applied: neither root document states when a cached file
+is decoded, so [upstream-divergences.md](upstream-divergences.md) raises no
+entry.
+
+### Eighty-third edition — a rewrite of `.tpl/.cfg` made durable
+
+rmp `#313`, of sprint 29: the user decided that the rewrite of `.tpl/.cfg`
+be made durable, and the implementation does it at `401b6f1`. **No
+identifier is assigned, retired or renumbered**; no open question or
+divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **Durability, and a failure after the rename** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-041` states that the new
+  content is on the device before the rename names it, and the rename
+  before the command exits `0`, without naming the calls; that a failure up
+  to the rename leaves the previous file; and that a failure to make the
+  rename durable exits `74` with a message stating that the file holds the
+  new content, whose durability is not confirmed, and a `hint` carrying
+  `tpl cfg list`.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-CFG-042`, `FR-PROJ-028`, `FR-ERR-001` and `FR-ERR-034` were read
+against the change, and none is amended. The fifth validation rule is
+applied: the root `README.md` describes the rewrite as atomic, which stays
+true, and says nothing of a failure after the rename, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-fourth edition — the time of a connection phase, as far as it can be read
+
+rmp `#340`, of sprint 29: the timing lines of `FR-GLOB-017` are implemented,
+and the user decided to accept and document the one thing they cannot always
+report. **No identifier is assigned, retired or renumbered**; no open
+question or divergence entry is raised, and [glossary.md](glossary.md) is
+unchanged.
+
+- **Where the attribution of time stops** —
+  [global-flags.md](global-flags.md). `FR-GLOB-017` states that a phase's
+  time is attributed from readings taken while the connection runs; that
+  under `required`, `verify-ca` and `verify-identity` the handshake always
+  has its line, which may carry zero; that under `preferred` a handshake
+  completed between two readings may have no line; and that a caller may
+  rely on the set of lines and the sum of the connection phases' times, and
+  not on one phase's time nor, under `preferred`, on the handshake's line as
+  evidence of encryption.
+- **This file** — the edition count of the Scope, and this record.
+
+`NFR-DET-001`, `NFR-PERF-008`, `FR-CONF-005` and `FR-CONF-013` were read
+against the change, and none is amended. The fifth validation rule is
+applied: the root `README.md` says only that stderr carries phase timings
+outside the contract, which stays true, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-fifth edition — three divergences discharged
+
+`536f836` corrected the three passages of the root `README.md` against
+which the seventy-ninth edition raised `DIV-063`, `DIV-064` and `DIV-065`.
+This edition reads the file at that commit and records what it found; no
+requirement changes. **No identifier is assigned, retired or renumbered**;
+no open question is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **Three entries discharged** — each part of each correction was found
+  made, and each entry's status names `536f836` and keeps the status it was
+  raised with. `DIV-065`'s correction was owed with the implementation of
+  `FR-EX-011` and `FR-EX-012`, and the commit follows it.
+- **The counts** — the Overview of
+  [upstream-divergences.md](upstream-divergences.md) counts sixty-five
+  entries: three due in full, fifty-eight discharged and four partly
+  discharged; seven still owe something, five to `CLAUDE.md` and two to
+  `README.md`. `DIV-032` and `DIV-041` restate the count.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied: the corrected sections were read
+against `FR-CONF-005`, `FR-CONF-056`, `FR-EX-006`, `FR-EX-011`, `FR-EX-012`
+and `FR-EX-008`, and agree with them; the rest of the file was not re-read
+for status.
+
+### Eighty-sixth edition — help that names the three providers
+
+rmp `#358`, which the user brought into sprint 29: the help of `tpl` named
+MariaDB alone, and no requirement fixed what it says of a provider.
+**One identifier is assigned**: `FR-HELP-038`, in
+[help-and-version.md](help-and-version.md). None is retired and none is
+renumbered; no open question or divergence entry is raised, and
+[glossary.md](glossary.md) is unchanged.
+
+- **A provider named only where the statement is that provider's** —
+  `FR-HELP-038`: a statement of the help, text or JSON, names a provider only
+  where it holds of that provider alone, names MariaDB and MySQL both, or
+  the server, where it holds of both, and never describes `tpl` as reading
+  MariaDB alone; eight statements are fixed word for word — the first
+  sentence of the description of `tpl`, its row on a database entry, the
+  purposes of `--host`, `--port` and `--schema`, a sentence of
+  `tpl cfg database add`, an answer of `tpl cfg database test`, and the
+  clause of the `78` outcome on the server.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-HELP-030`, `FR-HELP-037`, `BR-HELP-002`, `FR-CFG-033` and `FR-CONF-051`
+were read against the change, and none is amended. The fifth validation rule
+is applied: the root `README.md` quotes no help text, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-seventh edition — where the help's provider statements live
+
+Two points the implementation of `FR-HELP-038` met, at `1639e40`. **No
+identifier is assigned, retired or renumbered**; no open question or
+divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **The root's two statements** — `FR-HELP-038` requires its statements in
+  the JSON command tree only where the tree carries their string, so the
+  description of `tpl` and its row on a database entry are required in the
+  text help alone; `FR-HELP-019` gives the root no entry, and `FR-HELP-017`'s
+  document is unchanged.
+- **The purpose of `-d/--database`** — a ninth row fixes it, naming the
+  three kinds of database an entry reaches, in the text help and in
+  `data.global_flags`.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied: the root `README.md` quotes no help
+text, so [upstream-divergences.md](upstream-divergences.md) raises no entry.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
   library API. Only the JSON document and the command line are contract, so the
   shape of the library is an architecture decision and not a requirement. The
   database driver is part of this: `FR-CONF-036` states what one must be able
-  to express, and no requirement names one.
+  to express, and no requirement names one. The SQLite driver is chosen by the
+  rule of `FR-LITE-004`, which names none either, and the release of the
+  SQLite library the binary carries is chosen under `FR-LITE-039` and recorded
+  in the project's decision records, per `FR-LITE-001`.
 - The text of any catalogue query. What is read is specified; how it is read is
   not.
 - Every **measured** performance figure and every reading. Those live in
@@ -4978,6 +6825,8 @@ Where the specification touches one of these boundaries, it names it and stops.
 | [template-environment.md](template-environment.md) | `ENV` | Filters, tests, global functions, and what is contract |
 | [render-semantics.md](render-semantics.md) | `SEM` | Whitespace, operands, null versus absence, boolean rendering, author-signalled failure |
 | [server-contract.md](server-contract.md) | `SRV` | The supported version window, differences between series, the closed statement list, the read-only promise |
+| [sqlite-contract.md](sqlite-contract.md) | `LITE` | The `sqlite` provider: the library, the driver selection, the database file, its hardening, the closed statement list, what a read covers, and how SQLite fills the model |
+| [mysql-contract.md](mysql-contract.md) | `MYSQL` | The `mysql` provider: the supported series and their rule, the product and version checks, the closed statement and table lists, the read-only session, connection and TLS, what a read covers, how MySQL fills the model, its divergences from MariaDB, and the fixture of `scripts/mysql/` |
 | [privileges-and-completeness.md](privileges-and-completeness.md) | `PRIV` | Complete and incomplete reads, and how a short read is reported |
 | [cache-documents.md](cache-documents.md) | `CDOC` | Cache versions, completeness records, and the `source` field |
 | [performance-requirements.md](performance-requirements.md) | `PERF` | Requirements of form, reference workloads, measurement protocol, the measurement set |
@@ -4989,8 +6838,8 @@ Where the specification touches one of these boundaries, it names it and stops.
 Identifiers are stable once assigned. They are never renumbered to tidy a file,
 never reused after a requirement is withdrawn, and are the reference used in
 commit messages, task descriptions, and test names. A gap in a sequence is
-therefore expected, not a defect: all seventy-five open questions are closed and
-their numbers are not reused. The *Closed* table of
+therefore expected, not a defect: all seventy-eight open questions raised
+are closed and their numbers are not reused. The *Closed* table of
 [open-questions.md](open-questions.md#closed) records each and what answered
 it.
 
@@ -5057,12 +6906,14 @@ because they constrain the whole module rather than one interaction.
   is named here so that it is not read as drift.** Where a requirement fixes an
   artefact of the repository rather than a behaviour of the binary, the
   artefact is the subject: `FR-CONF-038`'s second paragraph obliges the fixture
-  of `scripts/mariadb/`, and every requirement of [examples.md](examples.md)
-  obliges a worked example. The test is whether the statement could be
-  satisfied by a change to `tpl` at all; where it could not, `tpl` is the wrong
-  subject and naming it would make the requirement unsatisfiable rather than
-  conventional. *Stated in the thirty-fourth edition, which wrote the second of
-  the two.*
+  of `scripts/mariadb/`, `FR-LITE-038` the fixture of `scripts/sqlite/`,
+  `FR-MYSQL-044` the fixture of `scripts/mysql/`, and every requirement of
+  [examples.md](examples.md) obliges a worked example.
+  The test is whether the statement could be satisfied by a change to `tpl` at
+  all; where it could not, `tpl` is the wrong subject and naming it would make
+  the requirement unsatisfiable rather than conventional. *Stated in the
+  thirty-fourth edition, which wrote the second of the two; the sixty-fifth
+  wrote the third, and the seventy-third the fourth.*
 - Exit codes are always written as the bare number and, on first mention in a
   section, with the `sysexits.h` name: `78` (`EX_CONFIG`).
 - Command lines are shown in fenced blocks without a shell prompt, unless the
@@ -5077,6 +6928,35 @@ because they constrain the whole module rather than one interaction.
   the limit. Three requirements are written this way — `FR-SRV-041`,
   `FR-PRIV-020` and `FR-CONF-039` — and each cites the other two, so that
   three honest limits read as one pattern rather than three accidents.
+  `FR-MYSQL-007` applies the first of them to a `mysql` entry, in its terms,
+  and is not a fourth member. *Stated in the seventy-third edition.*
+- **A statement of a database's behaviour that has not been observed is
+  marked where it is written.** It rests on that database's published
+  documentation, cited by page and with the date it was checked, or on prior
+  art, and it carries a note headed *Pending observation.* that says what the
+  source states, cites it, and names the observation that would confirm it. A
+  table whose rows are such statements carries one note for all of them. The
+  note qualifies the ground of a fact and never the force of the requirement
+  that states it: the requirement is in force. It is discharged by an
+  *Observed* note in its place, or by the amendment an observation makes
+  necessary where the observation contradicts it. The term is
+  [pending observation](glossary.md#pending-observation). *Stated in the
+  seventy-third edition*, at the request that every MySQL fact not yet
+  observed be visibly marked; no convention for it existed, and every
+  statement of MySQL behaviour in [mysql-contract.md](mysql-contract.md)
+  carried the note until rmp `#326` observed them. *Amended in the
+  seventy-fifth edition*: six carried it, each because the project's
+  fixture could not observe it, and each note said so. *Amended in the
+  seventy-seventh edition*: three carry it now, each because the project's
+  fixture cannot observe it, and each note says so. The tests of the `mysql`
+  provider observed the two that were codes of `tpl`, and the observation of
+  `FR-CONF-039` discharged the one owed to the driver. **Where a server
+  contradicts its own documentation**, the observation governs, and the
+  requirement that states the fact writes both down — the documentation's
+  words, cited by page, and what the servers did — in a note headed
+  *Observed, and the manual contradicted.* The seventy-fifth edition wrote
+  the first four, in [mysql-contract.md](mysql-contract.md); before it, no
+  passage of this corpus recorded a server contradicting its manual.
 - **A term that has a definition has exactly one, and it is in
   [glossary.md](glossary.md).** That file states one half of the rule of
   itself — a term used in a requirement without an entry there is a defect —
@@ -5100,14 +6980,19 @@ because they constrain the whole module rather than one interaction.
   members cite each other. A limit on the **evidence** for a guarantee — the
   observation that cannot be made, rather than the promise that cannot be kept
   — takes the same note shapes, as many of them as it has content for, without
-  joining that family, because it qualifies a different kind of claim. Four
+  joining that family, because it qualifies a different kind of claim. Six
   requirements are written this way:
   `FR-ERR-031`, where no invocation of the distributed binary is observed
   returning `70`; `NFR-PERF-005`, where the file-open observation is made
   on the Linux targets and not on the macOS ones; `FR-PRIV-021`, where no
-  invocation is observed producing a schema read that returns no row; and
+  invocation is observed producing a schema read that returns no row;
   `FR-SRV-013`, where no server is observed producing a read-back that does not
-  confirm the read-only session, so that half of it is exercised in process.
+  confirm the read-only session, so that half of it is exercised in process;
+  `FR-LITE-018`, where a statement that fails when it is prepared, or is
+  never run, is absent from the statement trace; and `NFR-PERF-004`, where the
+  connection count of a `sqlite` entry is observed on the Linux targets and
+  not on the macOS ones. *The fifth was added in the sixty-sixth edition, and
+  the sixth in the sixty-seventh.*
 
 ## Status legend
 
@@ -5146,7 +7031,7 @@ makes the other four exhaustive, and it is read where a reader is counting
 them; moving it to a paragraph below would leave the list looking open.
 
 
-1. Seven decision logs. The first interview settled 53 points about the CLI
+1. Decision logs. The first interview settled 53 points about the CLI
    surface; the second settled 28 points about the model, the document, the
    template surface, the server contract, and performance, and recorded four
    defects found in the first edition; the third is the audit of 2026-09-10,
@@ -5158,11 +7043,25 @@ them; moving it to a paragraph below would leave the list looking open.
    reversed a recommendation and reordered two values this corpus had held to
    be compatible; the seventh, of 2026-09-21, settled the one point the joined
    arms raised, that a boolean interpolated into a generated file renders
-   `true` and not `True`, which `FR-SEM-021` writes in. Each
-   decision carries its own reasoning and the alternatives it rejected; where
-   the reasoning explains why a requirement reads as it does, it is preserved in
-   the `Rationale`, the `Rejected`, or the `Accepted cost` note under that
-   requirement.
+   `true` and not `True`, which `FR-SEM-021` writes in. Every decision taken
+   since is recorded in the record of the edition that writes it in, with its
+   date or its rmp task — the thirty-sixth edition's of the product owner, on
+   the performance gates, and the seventy-fourth edition's three of the user,
+   on the supported MySQL series, on authentication without TLS and on the
+   starter template, are two such records — and they are not counted here.
+   Each decision carries its own reasoning and the alternatives it rejected;
+   where the reasoning explains why a requirement reads as it does, it is
+   preserved in the `Rationale`, the `Rejected`, or the `Accepted cost` note
+   under that requirement.
+
+   *Amended in the seventy-fifth edition.* The item opened "Seven decision
+   logs", a count that was true when the twenty-ninth edition recorded the
+   seventh and that no later decision moved, although editions from the
+   thirty-sixth onward record decisions of the user and of the product
+   owner. The count is removed rather than corrected, because a count kept
+   here goes stale at the next decision without a sign, which is what this
+   one did; the record of each edition is where a decision is found. The
+   first seven are described as they were.
 2. The root `README.md` and `CLAUDE.md`, used only where no decision contradicts
    them. Such requirements carry a provenance note.
 3. A published external authority, cited by name and by date. The fourth
@@ -5187,6 +7086,24 @@ them; moving it to a paragraph below would leave the list looking open.
    by a second observation in a way a decision is not. Behaviour that has not
    been observed is never written down, however confidently it could be
    inferred from MySQL or from documentation.
+
+   *Amended in the seventy-third edition: one exception, marked where it is
+   made.* A statement of a database's behaviour that its published
+   documentation states, cited under the third provenance, MAY be written
+   before it is observed WHERE it carries the *Pending observation* note the
+   writing conventions above fix. It is then a statement of what the
+   documentation says, not a record of behaviour, and the note says so in
+   place. The exception exists for [mysql-contract.md](mysql-contract.md),
+   which had to be written before any MySQL server could be observed. The
+   rule above stands for everything else: an unmarked statement of behaviour
+   is a record of an observation, and the exception never licenses an
+   inference that the documentation does not state.
+
+   *Amended in the seventy-fifth edition.* The paragraph said that every such
+   statement of [mysql-contract.md](mysql-contract.md) was owed an
+   observation by rmp `#326`. That observation was made on 2026-11-04 and
+   discharged all but six, and each of the six names why the project's
+   fixture cannot observe it; the exception stands for those six alone.
 5. Nothing else. Where information is missing, this specification records an
    entry in [open-questions.md](open-questions.md) rather than filling the
    gap. Where it is not merely missing but unobtainable, the entry closes on
@@ -5196,31 +7113,86 @@ them; moving it to a paragraph below would leave the list looking open.
 
 ## Maintenance debt
 
-**One item is outstanding**, recorded by the twentieth edition and listed
-below. The eight items this section has held before it are all discharged; the
-most recent of those was recorded by the thirty-second edition and discharged
-by the thirty-third, inside one sprint. The item this section carried through
-the sixth edition — twenty catalogue field lists that no observation had
-recorded — was discharged by the
-seventh: the fixture was read against all four series of `FR-SRV-015` on
-2026-09-10, every field list was recorded verbatim, and each is now a
-requirement in [catalogue-coverage.md](catalogue-coverage.md) or
+**One item is outstanding**, recorded by the seventy-third edition and
+narrowed by the seventy-fifth and the seventy-seventh: three statements of
+MySQL behaviour in [mysql-contract.md](mysql-contract.md) carry a *Pending
+observation* note, each because the fixture of `FR-MYSQL-044` does not stage
+the server it needs: one that generates its own TLS material, for the notes
+on `FR-MYSQL-021` and on row 24 of `FR-MYSQL-040`, and one with the
+masking-policy component installed, for the note on `FR-MYSQL-030`. Every
+such note opens a paragraph with the heading
+`*Pending observation.*`, so a search for that heading at the start of a
+line finds every one, and the item is discharged when the search finds
+none. No requirement of a `mariadb` or a `sqlite` entry waits on it.
+
+*Amended in the seventy-seventh edition,* for a follow-up of rmp `#329`. The
+paragraph counted six notes, each because the fixture cannot observe it, and
+said that three were owed to the `mysql` provider once it existed: the `69`
+of three cells of `FR-MYSQL-021`, the `78` and the message of
+`FR-MYSQL-045`, both to be observed by the tests `FR-MYSQL-043` requires,
+and trust material, to be observed once the driver was chosen. The provider
+exists, at `2d652bd`. Its tests observed the first two on both series, and
+each note is now an *Observed* note. The driver chosen is the one
+`FR-CONF-039` observed, so the third is discharged by that observation, and
+its note now says so.
+
+*Amended in the seventy-third edition.* This paragraph opened "No item is
+outstanding", which was true until this edition. The nine items this section
+held before it are all discharged. The last, recorded by the twentieth edition,
+was discharged by the sixty-ninth; the one before it was recorded by the
+thirty-second edition and discharged by the thirty-third, inside one sprint.
+The item this section carried through the sixth edition — twenty catalogue
+field lists that no observation had recorded — was discharged by the seventh:
+the fixture was read against all four series of `FR-SRV-015` on 2026-09-10,
+every field list was recorded verbatim, and each is now a requirement in
+[catalogue-coverage.md](catalogue-coverage.md) or
 [context-document.md](context-document.md). The document shapes and the field
 lists are frozen, and implementation is no longer blocked on them.
 
-[open-questions.md](open-questions.md) has an empty index: no entry of this
-corpus is open. The last, `OQ-042`, is closed and was never debt of this
-corpus — it waited on evidence no fixture of MariaDB servers can produce, and
-it is very likely unobtainable at all, so the limit is written into
-`FR-SRV-041` instead. Nothing in this specification claims a detection it
-does not have: that requirement states, in its own text, that a server
-determined to pass as MariaDB will pass.
+*Amended in the seventy-fifth edition.* The item read that every statement
+of MySQL behaviour carried the note and none had been observed, and that rmp
+`#326` owed each an observation through a fixture that did not yet exist. The
+fixture exists, and rmp `#326` observed the thirty statements on 2026-11-04 —
+twenty-nine in [mysql-contract.md](mysql-contract.md) and one on
+`FR-ERR-046` in [errors-and-exit-codes.md](errors-and-exit-codes.md):
+sixteen were confirmed, ten refined and four contradicted. The note on
+`FR-ERR-046` is discharged, and six notes remain, which is what the
+paragraph now lists.
+
+The index of [open-questions.md](open-questions.md) is empty. `OQ-076` and
+`OQ-077`, raised by the seventy-third edition, and `OQ-078`, raised by the
+seventy-fifth, waited on decisions of the user, and none was debt of this
+corpus, because none was a point the corpus could settle on its own; the
+seventy-fourth edition closed the first two on those decisions, and the
+seventy-fifth closed the third. *Amended in the seventy-third edition*: the
+paragraph read that the index was empty. *Amended in the seventy-fourth
+edition*: the paragraph read that the index held the two entries, open.
+*Amended in the seventy-fifth edition*: the paragraph named two entries, and
+names the third, raised and closed in that edition. Before them, the
+last open entry, `OQ-042`, was closed and was never debt of this corpus — it
+waited on evidence no fixture of MariaDB servers can produce, and it is very
+likely unobtainable at all, so the limit is written into `FR-SRV-041`
+instead. Nothing in this specification claims a detection it does not have:
+that requirement states, in its own text, that a server determined to pass as
+MariaDB will pass.
 
 One obligation is not debt but recurs, and is recorded so that it is not
 mistaken for either: `FR-SRV-019` requires the table of `FR-SRV-015` to be
 re-verified against MariaDB's maintenance policy before every release. It
 decays on a schedule this project does not set, and the earliest date on which
 it is known to be wrong is 2028-02-16.
+
+*A second obligation of the same kind, added in the seventy-third edition.*
+`FR-MYSQL-005` requires the table of `FR-MYSQL-003` to be re-verified against
+Oracle's sources before every release. Its set is known to change when
+Oracle first releases a new LTS series, which no source read on 2026-11-04
+dates, and, by the count that requirement derives, in 2032, when the first
+of its series leaves Extended Support; its column of latest releases goes
+stale at every maintenance release. *Amended in the seventy-fourth
+edition*: the paragraph read that the table decays faster than MariaDB's,
+being known to be wrong at the next MySQL Innovation release. Under
+`FR-MYSQL-002` as amended an Innovation release changes nothing in the
+table.
 
 The eighth edition adds one obligation outside this corpus and none inside it.
 `FR-CONF-038` requires the fixture of `scripts/mariadb/` to present, at each
@@ -5661,10 +7633,36 @@ narrowed here, and whether an entry is owed for it is a judgement for a reading
 of that section. It is debt only in the sense `DIV-036` is, and it blocks
 nothing. The item below was untouched by this edition and stays outstanding.
 
-The section therefore carries the item the twentieth edition recorded, and the
-eight it has held before are all accounted for below.
+The sixty-fifth edition adds no obligation inside this corpus and **three
+outside it**. `DIV-057` and `DIV-058` are corrections owed to the two root
+documents, which the edition makes incomplete by giving `tpl` a second
+provider. The third is the fixture of `scripts/sqlite/`, which `FR-LITE-038`
+requires and which does not exist yet; like the fixture obligation of the
+eighth edition, it is work with an owner and a trigger, and every observation
+[sqlite-contract.md](sqlite-contract.md) records is re-taken against it when it
+exists. No requirement of this corpus waits on any of the three, and the item
+below was untouched by the edition.
 
-One item is outstanding.
+**Two of those three obligations are discharged, by the seventy-second
+edition's reading.** `DIV-057` and `DIV-058` are discharged by `60bf9df`,
+which made every part of both corrections; the register records each and the
+commit. The third, the fixture of `scripts/sqlite/`, was not read for this
+and stays as the paragraphs here leave it.
+
+The sixty-ninth edition adds no obligation inside this corpus and one outside
+it: the fixture of `scripts/sqlite/` gains the seven databases `FR-LITE-038`
+now lists, which, like the fixture obligations before it, is work with an
+owner and a trigger. It **discharges the item the twentieth edition
+recorded**, by the user's decision of 2026-11-03: `FR-ERR-024` and
+`FR-OUT-018` now escape the C1 range and the bidirectional formatting
+characters, for both providers.
+
+The section therefore carries no outstanding item, and the nine it has held
+are all accounted for below.
+
+Nine items recorded here have been discharged. The ninth is the first below,
+recorded by the twentieth edition and discharged by the sixty-ninth; the
+eighth is the sweep after it, recorded and discharged inside one sprint.
 
 - **Escaping stops at C0, and a C1 control can still reach a terminal.**
   Recorded by the twentieth edition. `FR-ERR-024` escapes `\n`, `\r`, `\t`
@@ -5685,10 +7683,13 @@ One item is outstanding.
   editorial tidy, which is why it is a task of its own, on the ground the
   thirteenth edition used for the two readings with no home. Nothing in this
   corpus is ambiguous while it stands: both requirements say exactly what they
-  escape, and a reader of either is told where the gap is.
-
-Eight items previously recorded here have been discharged. The eighth is the
-sweep below, recorded and discharged inside this sprint.
+  escape, and a reader of either is told where the gap is. **Discharged in the
+  sixty-ninth edition**, for rmp `#321`, by the user's decision of 2026-11-03
+  to close the gap in sprint 27 for both providers: `FR-ERR-024` and
+  `FR-OUT-018` escape the C1 range and the twelve bidirectional formatting
+  characters as they escape the C0 range, `text` keeps its tab exception,
+  `json` writes them as JSON's own `\u` escape so that the parsed document is
+  unchanged, and the byte-for-byte outputs of `FR-OUT-019` are untouched.
 
 - **The corpus has not been swept for terms defined outside the glossary.**
   Recorded by the thirty-second edition, which wrote the rule that every

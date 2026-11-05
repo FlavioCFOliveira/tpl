@@ -1,8 +1,8 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-09-24
-related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md]
+last-reviewed: 2026-11-05
+related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Security Rules Across the Surface
@@ -38,6 +38,10 @@ module, `BR-SEC-003` excepted.
 | Catalogue values | Table, column, and routine names and comments are free text on the server |
 | A `--context` document | An ordinary JSON file, from anywhere |
 | Files under `.tpl/templates/` | May arrive in a clone and be read before being reviewed |
+| A SQLite database file | Written by any program, possibly crafted; its schema is SQL the library parses and compiles |
+
+*Note added in the sixty-fifth edition.* The last row is new. `FR-SEC-028`
+states the rule that answers it.
 
 ## Credentials
 
@@ -72,6 +76,18 @@ module, `BR-SEC-003` excepted.
   The child's stderr stays barred without exception, per `FR-CONF-032`, and so
   does its stdout, which is the password.
 
+  *Note added in the sixty-seventh edition.* For a `sqlite` entry, the result
+  code and the message the SQLite library returns are not the raw driver
+  error, and a `cause` line a requirement obliges to state them carries them
+  escaped; `FR-GLOB-018` states it.
+
+  *Note added in the seventy-seventh edition,* for rmp `#335`, `#337` and
+  `#338`. For a `mariadb` or a `mysql` entry, the error number of a server's
+  error packet and the error number the operating system reports for the
+  connection are not the raw driver error, and a `cause` line a requirement
+  obliges to name one carries it; the packet's message stays barred.
+  `FR-GLOB-018` states it.
+
   *The threat this leaves open is stated where it is created*, in
   `FR-CONF-033`: `${VAR}` cannot put a secret into the array, per
   `FR-CONF-017`, but a caller who writes one there literally sees it in the
@@ -85,6 +101,9 @@ module, `BR-SEC-003` excepted.
 
 - **FR-SEC-007**: `${VAR}` SHALL expand only in `dsn`, `host`, `port`, `user`,
   `password`, and `database`. See `FR-CONF-015`.
+
+  *Note added in the sixty-fifth edition.* `${VAR}` does not expand in `path`
+  either, and a reference there is refused, per `FR-CONF-054`.
 
 - **FR-SEC-008**: `${VAR}` SHALL NOT expand in `tls`, so that an injected value
   cannot turn off encryption; nor in `password_command`, so that the environment
@@ -192,9 +211,69 @@ module, `BR-SEC-003` excepted.
 
   *Added in the sixty-third edition,* for rmp `#307`.
 
+  *Note added in the seventy-ninth edition,* for rmp `#313`. A `cfg` command
+  that rewrites `.tpl/.cfg` acts in the folder whose `.cfg` was checked and in
+  no other, and writes through no link, as `FR-CFG-041` requires.
+  *Threat closed.* A link put in place of a component of the project's path
+  between the checks and the rewrite must not send the configuration,
+  credentials included, outside the project, nor let the rename replace a
+  file there.
+
   *Note added in the forty-eighth edition.* `--tpl-dir` SHALL name a directory
   whose last segment is `.tpl`, per `FR-PROJ-027`, so that the flag names no
   folder the walk would not find.
+
+## SQLite database files
+
+- **FR-SEC-028**: A SQLite database file SHALL be read only from a regular
+  file, established before the library opens it, SHALL be opened read-only and
+  never created, and SHALL be read under the hardening controls and limits
+  SQLite's own guidance gives for an untrusted file, with the library's
+  temporary storage held in memory, each confirmed by reading it back; a
+  control that does not take effect ends the invocation with `70` before any
+  byte of the file is parsed. A file whose schema holds a table or a view
+  named like a pragma table-valued function, or a schema-table value of a
+  storage class the table's contract excludes, SHALL be refused with `78`
+  before the catalogue is read, and the check that refuses it and every
+  catalogue statement SHALL read one snapshot of the file. A value read from
+  the file SHALL enter a diagnostic line only within the bound of
+  `FR-ERR-046`. See `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` through
+  `FR-LITE-014`, `FR-LITE-017`, `FR-LITE-041`, `FR-LITE-042` and
+  `FR-ERR-046`.
+
+  *Threat closed.* A FIFO in the place of the file must not hang the
+  invocation, and a crafted file must not reach the library's parser without
+  the checks the library offers: a schema that runs a function with side
+  effects from a view or a constraint, a malformed page read without its cells
+  checked, a page read through a memory map another process can change, an
+  extension loaded from a path, or a single value sized to exhaust memory. Nor
+  may it make the library write its content to a temporary file outside the
+  project, or flood with one name the diagnostic line a calling agent reads.
+  Nor may a table or a view of the file take the place of a function the read
+  reads through and forge the catalogue `tpl` presents at exit `0` — whether
+  the file holds it when the read begins or another connection adds it during
+  the read — nor may a read make the library compile a view or run a virtual
+  table's module.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the temporary
+  storage of `FR-LITE-010` and the bound of `FR-ERR-046` are named, with the
+  two threats they close.
+
+  *Amended in the sixty-ninth edition,* for rmp `#317`: the check of
+  `FR-LITE-041` is named, and the threat closes the forgery it refuses and the
+  compile of a view and the run of a module, which no statement of
+  `FR-LITE-015` makes since the user's decision recorded under `FR-LITE-020`.
+  The views control `FR-LITE-010` adds, as defence in depth, is one of the
+  controls SQLite's guidance gives, which the first sentence already names.
+
+  *Amended in the seventieth edition,* for rmp `#317`: the check and the
+  catalogue statements read one snapshot, in the read transaction of
+  `FR-LITE-042`, and the threat names a table or a view another connection
+  adds during the read. Without it, a writer that committed a table between
+  the check and a later statement forged the catalogue at exit `0`, as
+  observed under that requirement.
 
 ## Template containment
 
@@ -285,15 +364,17 @@ module, `BR-SEC-003` excepted.
   spelling of a command, a flag and a key, none of which a server, a file or a
   caller can influence.
 
-- **FR-SEC-020**: C0 control characters SHALL be escaped in every value the
-  system prints or interpolates, whatever its source. Two requirements own the
+- **FR-SEC-020**: C0 control characters, C1 control characters and
+  [bidirectional formatting characters](glossary.md#bidirectional-formatting-character)
+  SHALL be escaped in every value the system prints or interpolates, whatever
+  its source and whichever provider the entry names. Two requirements own the
   rule, and they differ in their treatment of one character:
 
   | Where | Rule | Owner |
   |---|---|---|
-  | The `text` output of a read command | C0 escaped, tab excepted | `FR-OUT-018` |
-  | The `json` output of a read command | C0 escaped, tab included as the escape JSON defines for it | `FR-OUT-018` |
-  | Any diagnostic message | C0 escaped, tab included | `FR-ERR-024` |
+  | The `text` output of a read command | C0, C1 and bidirectional formatting characters escaped, tab excepted | `FR-OUT-018` |
+  | The `json` output of a read command | C0 escaped, tab included, as the escape JSON defines for it; C1 and bidirectional formatting characters as JSON's `\u` escape | `FR-OUT-018` |
+  | Any diagnostic message | C0, C1 and bidirectional formatting characters escaped, tab included | `FR-ERR-024` |
 
   Two outputs are excluded and are emitted byte for byte: the result of
   `tpl render`, and the template source printed by `tpl template show`. See
@@ -301,7 +382,10 @@ module, `BR-SEC-003` excepted.
 
   *Threat closed.* An escape sequence in a column comment cannot rewrite what
   the user sees, and a newline in a catalogue value cannot forge a whole
-  diagnostic line in the line-oriented error format.
+  diagnostic line in the line-oriented error format. The one-character
+  control sequence introducer, U+009B, cannot start a control sequence either,
+  and a bidirectional override cannot show a reader a name other than the one
+  printed.
 
   *Amended in the third edition.* The tab exception is now stated per rule
   rather than across both, because the first edition's single statement
@@ -315,6 +399,12 @@ module, `BR-SEC-003` excepted.
   `text`, where a tab is column layout, and in `json` a tab arrives as the
   escape the format defines, so no value reaches a consumer as a raw tab on
   either path. The threat this requirement closes is unchanged.
+
+  *Amended in the sixty-ninth edition,* for rmp `#321`: the C1 range and the
+  bidirectional formatting characters join the rule, per the amendments to
+  `FR-ERR-024` and `FR-OUT-018`, by the user's decision recorded under the
+  first, for both providers. The two outputs emitted byte for byte are
+  unchanged.
 
 ## Transport
 
@@ -338,6 +428,52 @@ module, `BR-SEC-003` excepted.
   the set of certificates that pass `verify-ca` instead of narrowing it. The
   hostname check of `verify-identity`, which is the default, is what carries
   the guarantee an operator pinning a CA is usually reaching for.
+
+  *Note added in the seventy-fifth edition,* for rmp `#326`. A `mysql` entry
+  set to a mode that leaves the session unencrypted — `disabled`, or
+  `preferred` against a server offering no TLS — meets one more path to the
+  password. The default authentication method of every supported MySQL
+  series sends the password, over such a session, encrypted with the
+  server's RSA public key, and a key the client requests over that session
+  can be replaced by an active intermediary, who then reads the password.
+  `FR-MYSQL-045` closes the path: the system never requests the key over a
+  session TLS does not protect, and ends a login that needs it with `78`,
+  whose `hint` names `verify-identity`. See
+  [mysql-contract.md](mysql-contract.md), which owns the requirement.
+
+  *Note added in the seventy-sixth edition,* for rmp `#329`. A `mariadb`
+  entry can meet the same path, and its outcome does not change. MariaDB's
+  documentation describes a server-side `caching_sha2_password` plugin,
+  "available from these versions: MariaDB Community Server 11.4.9 / 11.8.4 /
+  12.1", in the library `auth_mysql_sha2`, not installed by default, and
+  calls it MySQL-compatible
+  (`https://mariadb.com/docs/server/reference/plugins/authentication-plugins/authentication-plugin-caching_sha2_password`,
+  checked 2026-11-04). No server of the fixture of `scripts/mariadb/` offers
+  it, and nothing in this corpus has observed whether its login asks for the
+  server's RSA public key as MySQL's does. WHERE the login of a `mariadb`
+  entry, over a session TLS does not protect, needs that key, the system does
+  not request it, as it does not for a `mysql` entry, and the login ends at
+  exit `69` (`EX_UNAVAILABLE`), under the third outcome of `FR-ERR-047`: its
+  `cause` names the facts `FR-MYSQL-045` names for a `mysql` entry, and its
+  `hint` names `verify-identity`. `FR-MYSQL-045` and its `78` govern a
+  `mysql` entry alone. *Rejected, by the user on 2026-11-04:* exit `78` for a
+  `mariadb` entry too. It would change the code a `mariadb` entry exits with,
+  and the user's requirement for the `mysql` provider is that nothing about
+  MariaDB support changes, per the provenance of `FR-MYSQL-001`.
+
+  *Amended in the seventy-seventh edition,* for rmp `#332`. The note read
+  that the login ended at `69` "with the message the project's decision
+  records give the same login before the `mysql` provider existed", that the
+  system gave the condition no message of its own, and that it amended no
+  requirement of a `mariadb` entry. That message was the one of a refused TCP
+  connect, whose `cause` says that the host refused the connection or that
+  nothing listens on the port: false of this login, which `FR-ERR-034` bans.
+  By the user's decision of 2026-11-04 to fix it in sprint 28, the message
+  changes and the code does not, and `FR-ERR-047` now states both. The
+  rejection of `78` stands. The project's decision records were amended the
+  same day and state this outcome, which `FR-ERR-047` records as observed
+  with a MySQL server standing in for a MariaDB server offering
+  `caching_sha2_password`; no fixture stages the latter.
 
 ## Availability
 
@@ -425,6 +561,19 @@ module, `BR-SEC-003` excepted.
   establish or confirm the session refuses the connection with `78`, per
   `FR-SRV-010`. There is no flag that disables either part, per `FR-SRV-011`.
   See [server-contract.md](server-contract.md), which owns both.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry the promise
+  has three parts, two of which prevent: the read-only open, the closed list of
+  `FR-LITE-015`, and `query_only` beside them. `BR-LITE-001` states it, and
+  `FR-LITE-008` states the files the library itself may create beside a
+  database in write-ahead-log mode.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the promise has the two parts it has for a `mariadb` entry: the closed
+  lists of `FR-MYSQL-015` and `FR-MYSQL-016`, which prevent, and the read-only
+  session of `FR-MYSQL-018`, read back under `@@session.transaction_read_only`
+  and refused with `78` where it does not hold, per `FR-MYSQL-019`.
+  `BR-MYSQL-002` states it.
 
 ## Dependencies
 

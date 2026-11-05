@@ -15,12 +15,12 @@ exit:  66 (EX_NOINPUT)
 - Errors are never JSON, whatever `--format` says. Don't try to parse stderr as JSON.
 - `hint:` often holds a runnable command, built from your own invocation (it keeps your `-d` and `--tpl-dir`), and often a nearest-match name. It never suggests a command that deletes or overwrites something you did not name. It is usually the right next step, but check a suggested name before using it.
 - Warnings (for example "cache kept, clear it with …") also go to stderr with exit 0. Relay them to the user and act on them.
-- Checks run in a fixed order, and the first failure wins: argument parsing (64), then project discovery and trust (78), `.cfg` validation (78), template name (66), entry resolution (78 or 66), cache or connection (69, 77 or 78), object lookup (66), render (65). A 64 therefore tells you nothing about the project, and a 69 means everything before the connection was valid.
+- Checks run in a fixed order, and the first failure wins: argument parsing (64), then project discovery and trust (78), `.cfg` validation (78), template name (66), entry resolution (78 or 66), cache or connection (69, 74, 77 or 78), object lookup (66), render (65). A 64 therefore tells you nothing about the project, and a 69 means everything before the connection was valid. Within the connection, the order for a server entry is DNS resolution, the TCP connect, the login (with the TLS handshake inside it), the read-only session, then the product and series checks; the `cause` names the phase that failed.
 
 ## Playbook by code
 
 ### 64 EX_USAGE: the invocation is wrong
-Causes: an unknown command or flag (commands must be spelled in full; prefixes are never accepted), a missing argument, a flag given twice, conflicting flags (`--table` with `--view`, `--context` with `-d` or `--direct`, `-v` with `-q`, `--dsn` with `--host`), `--pretty` without `--format json`, a malformed value (`--timeout 0`, a bad `--set`, a bad `--tls` mode), an unknown `cfg set` key or a wrong value type, `cfg database add` on an existing name, a bare routine name shared by a procedure and a function, `tpl init X/.tpl`, and `--format` on `schema dump`.
+Causes: an unknown command or flag (commands must be spelled in full; prefixes are never accepted), a missing argument, a flag given twice, conflicting flags (`--table` with `--view`, `--context` with `-d` or `--direct`, `-v` with `-q`, `--dsn` with `--host`, `--path` with any server flag or with `--provider mariadb` or `--provider mysql`), `--pretty` without `--format json`, a malformed value (`--timeout 0`, a bad `--set`, a bad `--tls` mode, a `--provider` other than `mariadb`, `mysql` or `sqlite`, an empty `--path` or one holding `${`), `cfg database add --path` without `--provider sqlite`, a `cfg` write that would leave an entry carrying a key its provider does not take, an unknown `cfg set` key or a wrong value type, `cfg database add` on an existing name, a bare routine name shared by a procedure and a function, `tpl init X/.tpl`, and `--format` on `schema dump`.
 Action: run `tpl help <path>`, fix the command, and retry. A value that starts with `-` must be written `--flag=-value`.
 
 ### 65 EX_DATAERR: a template or its input is wrong
@@ -28,15 +28,16 @@ Causes: a syntax error (line and column given), an evaluation error (undefined v
 Action: for a `--context` version mismatch or a missing version, don't edit the document. Produce a new one with the installed tpl: `tpl -d <entry> schema dump > context.json`, then render with `--context context.json`. For an unbound object, add the `--table`, `--view` or `--routine` flag the hint names. For the rest, run `tpl template check NAME` for syntax. Read the `cause`, which names the expression and often lists the valid attributes. Fix the template and re-render. For a limit, confirm the template does not loop without end before raising the `core.render_*` key the message names.
 
 ### 66 EX_NOINPUT: a named thing does not exist
-Causes: a template, table, view or routine, a database entry (`-d` or `cfg database show`, `update`, `remove`, `test`), a key that `cfg get` or `cfg unset` finds unset (the message states the default), an object to `cache clean` that the cache does not hold, an object missing from a `--context` document, or `tpl cfg set core.database X` where no entry is named exactly `X` (nothing is written).
+Causes: a template, table, view or routine, a database entry (`-d` or `cfg database show`, `update`, `remove`, `test`), a key that `cfg get` or `cfg unset` finds unset (the message states the default), an object to `cache clean` that the cache does not hold, an object missing from a `--context` document, a routine named on a SQLite read (SQLite has none), or `tpl cfg set core.database X` where no entry is named exactly `X` (nothing is written).
 Action: list what exists (`tpl template list`, `tpl -d NAME schema tables --format json`, `tpl cfg database list`) and retry with an exact name. Names are case-sensitive. For `core.database`, run the `tpl cfg set core.database <candidate>` the hint offers after checking the candidate. If the file declares no entry at all, run `tpl cfg database add <name> …` first, then set the default. A value that is not a valid entry name (1 to 64 letters, digits or underscores) is 64, not 66.
 
 ### 69 EX_UNAVAILABLE: the server cannot be reached
-Causes: DNS failure, connection refused, a network or TLS handshake failure, or a connection step past `core.connect_timeout`, `core.query_timeout` or `--timeout`.
-Action: check the host and port (`tpl cfg database show NAME`) and whether the server is up. Every operation is read-only, so retrying is safe. A failed `cache load` leaves the old cache intact. If the server stays down, work from the cache or from a `--context` dump.
+Causes, each named by the `cause` with its phase: DNS failure; a TCP connect refused, or a host or network the operating system reports unreachable, or one that never answered; a TLS handshake failure; a login that did not complete (the connection closed, or what answered is not the server the entry's provider names); a statement that failed on an open session (the `cause` names the server error number where the server sent one); a server at its limit on connections, an account over a resource limit, a host the server blocks, or a login error packet `tpl` does not classify, each naming the server error number; a connection phase past `core.connect_timeout` (DNS resolution, the TCP connect, the TLS handshake and the login share it), a query past `core.query_timeout`, or `--timeout`. For a `mariadb` entry, also a login over an unencrypted session that needs the server's RSA public key. For a SQLite entry: a writer kept the database locked, or a statement ran, past `core.query_timeout` or `--timeout`.
+Action: check the host and port (`tpl cfg database show NAME`) and whether the server is up; for SQLite, what holds the file. Every operation is read-only, so retrying is safe. A failed `cache load` leaves the old cache intact. If the server stays down, work from the cache or from a `--context` dump. For a blocked host, the server's administrator must unblock it; for the RSA key, follow the `--tls verify-identity` hint.
 Trap: a cache miss connects. A **mistyped object name** is a miss, so with the server down it reports 69 instead of 66. Check the name against a cached listing first.
 
 ### 70 EX_SOFTWARE: a bug in tpl
+Causes include, for a SQLite entry, a safeguard of the read that did not take effect; the `cause` names it.
 Action: stop. Report the exact command and `tpl version` to the user. Don't retry variants to work around it, and don't edit cache or config files to "fix" it.
 
 ### 73 EX_CANTCREAT: only from `tpl init`
@@ -44,12 +45,12 @@ Causes: `.tpl` already exists at the destination (nothing is changed), or the de
 Action: use the existing project, or choose another path. Check permissions.
 
 ### 74 EX_IOERR: a file or stream failed
-Causes: reading or writing a file under `.tpl`, the `--context` file, `ca_file` or `ca_path`, or writing stdout. That includes a pipe closed part-way through a JSON document (`tpl … --format json | head`).
-Action: check the path, permissions and free disk space. Write JSON to a file instead of piping it into a consumer that stops early. A consumer that closes a text stream early exits 0.
+Causes: reading or writing a file under `.tpl`, the `--context` file, `ca_file` or `ca_path`, or writing stdout. That includes a pipe closed part-way through a JSON document (`tpl … --format json | head`). For a SQLite entry: the path names nothing or a dangling link, the file cannot be opened or read, or, in write-ahead-log mode, its directory refuses the absent `-wal` and `-shm` files.
+Action: check the path, permissions and free disk space. For SQLite, `tpl cfg database show NAME` gives the path, and a relative path is resolved against the directory that holds `.tpl/`. Write JSON to a file instead of piping it into a consumer that stops early. A consumer that closes a text stream early exits 0.
 
 ### 77 EX_NOPERM: the server refused
-Causes: login refused (wrong user or password), or the user may not read the catalogue. That includes an object named with `schema table|view|routine`, or bound for `render`, that could only be read in part.
-Action: check the user and the password source (`${VAR}` value or `password_command`) without printing the secret. Ask the user or a DBA for catalogue read access. `tpl cfg database test NAME --format json` separates a failed login (77) from missing privileges (`can_read_catalogue: false`, exit 0).
+Causes: login refused — a wrong user or password, a user not allowed from this client's host, an expired password, or a locked account or one blocked after failed logins, the `cause` naming which — or the user may not read the catalogue. That includes an object named with `schema table|view|routine`, or bound for `render`, that could only be read in part.
+Action: check the user and the password source (`${VAR}` value or `password_command`) without printing the secret. For a host, an expired password or a locked or blocked account, follow the hint: the fix is on the server, and `tpl` cannot change an expired password. Ask the user or a DBA for catalogue read access. `tpl cfg database test NAME --format json` separates a failed login (77) from missing privileges (`can_read_catalogue: false`, exit 0). A SQLite entry never exits 77: an unreadable file is 74.
 
 ### 78 EX_CONFIG: the project or its configuration is unusable
 Causes and actions:
@@ -62,9 +63,14 @@ Causes and actions:
 | Malformed `.cfg`, unknown key, bad value, dsn with a `?`, `${` in `ca_file` or `ca_path` | Fix it with `cfg set`/`unset`, or edit the named line |
 | No entry selected | `-d NAME`, or `tpl cfg set core.database NAME` for an entry that already exists |
 | Entry incomplete (no host or no server database) | `tpl cfg database update NAME --host … --schema …` |
-| `${VAR}` undefined | Define it in the environment of the command, cache hits included |
+| `${VAR}` undefined | Define it in the environment of the command. Only a command that connects reads it: a cache miss, `--direct`, `tpl cache load`, `tpl cfg database test`. A read served from the cache does not |
 | `password_command` failed, timed out or printed too much | Run the command yourself (without echoing its output) and fix it |
-| Session could not be made read-only; the server is not MariaDB or its series is unsupported | Report to the user. Don't try to bypass it |
+| Session could not be made read-only; the server is not the product the entry's provider names (MariaDB for `mariadb`, MySQL for `mysql`), or its series is unsupported | Report to the user. Where the entry names the wrong product, ask the user before changing its provider with `tpl cfg set database.NAME.provider mysql` (or `mariadb`); the hint itself only repoints the entry. Don't try to bypass it |
+| MySQL: the login over an unencrypted session needs the server's RSA public key, which `tpl` never requests | `tpl cfg database update NAME --tls verify-identity`, with `--ca-file` where the certificate is not publicly trusted; a server offering no TLS must be given TLS first |
+| The server accepts only encrypted sessions (server error 3159) and `tls` does not encrypt | `tpl cfg database update NAME --tls verify-identity` |
+| Entry carries a key its provider does not take (often `path` with no `provider`) | `tpl cfg database show NAME`, then `tpl cfg set database.NAME.provider sqlite`, or remove the stray key |
+| SQLite entry with no `path` | `tpl cfg database update NAME --path FILE` |
+| SQLite path is not a regular file, not a SQLite database, damaged, or holds a schema `tpl` refuses | Point the entry at another file: `tpl cfg database update NAME --path FILE`. Don't try to repair or work around the file |
 
 ## Success that still needs attention
 

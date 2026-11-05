@@ -1,8 +1,8 @@
 ---
 title: Server Contract
 status: approved
-last-reviewed: 2026-09-24
-related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md]
+last-reviewed: 2026-11-05
+related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Server Contract
@@ -19,6 +19,20 @@ to supporting them. The third is the read-only promise, which
 the first edition stated as a session setting and which is restated here in the
 two parts it actually has — a closed list of statements `tpl` will issue, and a
 session setting that catches what the list already prevents.
+
+*Note added in the sixty-fifth edition.* This file governs a database entry
+whose provider is `mariadb`, per `FR-CONF-051`, and every requirement in it is
+read with that scope. An entry whose provider is `sqlite` is governed by
+[sqlite-contract.md](sqlite-contract.md), which states which of the rules here
+it adopts and on what ground. No requirement of this file changes for a
+`mariadb` entry.
+
+*Note added in the seventy-third edition,* for rmp `#324`. An entry whose
+provider is `mysql` is governed by [mysql-contract.md](mysql-contract.md),
+which adopts requirements of this file by citing each, with the MySQL series
+of `FR-MYSQL-003` in place of the MariaDB series of `FR-SRV-015`. No
+requirement of this file changes for a `mariadb` entry, and a `mariadb` entry
+that reaches a MySQL server is refused as before.
 
 ## Scope
 
@@ -66,9 +80,9 @@ record has not been observed, and SHALL NOT be written down.
 
 ## The supported version window
 
-- **FR-SRV-001**: The system SHALL support MariaDB and no other product, and
-  SHALL support exactly those MariaDB release series that satisfy **both** of
-  the following conditions:
+- **FR-SRV-001**: For a `mariadb` entry, the system SHALL support MariaDB and
+  no other product, and SHALL support exactly those MariaDB release series that
+  satisfy **both** of the following conditions:
 
   1. the series belongs to one of the **three most recent MariaDB major
      families**; and
@@ -79,6 +93,19 @@ record has not been observed, and SHALL NOT be written down.
   withdrawn: 10.6 left community maintenance on 2026-07-06 and is no longer a
   version `tpl` can claim to serve. The window above replaces it and, for the
   first time, states a ceiling as well as a floor.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The opening clause is
+  new. The requirement read "The system SHALL support MariaDB and no other
+  product", and the system now also reads SQLite, through an entry whose
+  provider is `sqlite`, per `FR-CONF-051` and
+  [sqlite-contract.md](sqlite-contract.md). A server reached through a
+  `mariadb` entry that is not MariaDB is still refused, per `FR-SRV-003`, and
+  the window is unchanged.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The system also
+  reads MySQL, through an entry whose provider is `mysql`, under the supported
+  set of `FR-MYSQL-002`. This requirement, the window and its table are
+  unchanged, and they govern a `mariadb` entry alone.
 
   *Rationale.* Both conditions are load-bearing and neither is sufficient alone.
   The family condition alone would admit `10.5` and `10.6`, which no longer
@@ -404,6 +431,16 @@ record has not been observed, and SHALL NOT be written down.
   condition and the one `FR-SRV-020` refuses share the code `78`, so the
   `cause` is what separates them for the reader who has to act.
 
+  *Note added in the seventy-third edition,* for rmp `#324`. MySQL is read
+  through a `mysql` entry, by a reader written for the three divergences the
+  rationale above names, per [mysql-contract.md](mysql-contract.md). This
+  requirement is unchanged and governs a `mariadb` entry: its rationale still
+  holds for the MariaDB reader, and its `cause` still states that `tpl`
+  supports MariaDB only, which is true of a `mariadb` entry. `FR-MYSQL-012`
+  records that a `mariadb` entry on a supported MySQL server is expected to
+  be refused at the read-back of `FR-SRV-009`, under `FR-SRV-010`, before
+  this check is reached.
+
 - **FR-SRV-020**: IF the server is MariaDB, its series is not one of
   `FR-SRV-015`, and its series is older than the newest series of `FR-SRV-015`,
   THEN the system SHALL exit `78` with the message of `FR-SRV-030`, and SHALL
@@ -428,7 +465,8 @@ record has not been observed, and SHALL NOT be written down.
   `tpl` cannot vouch for, indistinguishable from a model it can. Also rejected:
   a distinct code per case — maintenance ended, rolling release, family out of
   window — which the caller cannot act on differently; the `cause` line of
-  `FR-SRV-030` carries the distinction, per `FR-ERR-034`. Also rejected: a flag
+  `FR-SRV-030` names the series found and the series that are supported,
+  which is what the caller acts on, per `FR-ERR-034`. Also rejected: a flag
   or configuration key
   that overrides the window. The command tree is closed by `FR-CLI-002`, so no
   such flag exists unless this specification declares one, and declaring one
@@ -446,6 +484,15 @@ record has not been observed, and SHALL NOT be written down.
   message of `FR-SRV-030` was already the whole of what a caller receives, and
   it already carries the three cases in its `cause`; the reference now points
   at it.
+
+  *Amended in the seventy-seventh edition,* for rmp `#333`. The rejection of
+  a code per case said that the `cause` of `FR-SRV-030` carries the
+  distinction between the three cases, and the fifth edition's note above
+  says the same. The example of `FR-SRV-030` carried it, through a reason
+  particular to `10.6`, and the implementation never did. `FR-SRV-030` now
+  fixes one reason for all three, and the rejection stands on its own ground:
+  the caller cannot act on the three cases differently. The requirement is
+  unchanged.
 
 - **FR-SRV-034**: The product check of `FR-SRV-003`, the version check of
   `FR-SRV-020`, and the marked read of `FR-SRV-031` SHALL apply to every command
@@ -474,6 +521,14 @@ record has not been observed, and SHALL NOT be written down.
   *Closes* `OQ-074`, now listed under [Closed](open-questions.md#closed). The
   consequence for what that command reports is `FR-CFG-039`.
 
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry the same
+  commands open the database file, and `FR-LITE-003` states that none of the
+  three checks applies to it.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the same commands open a connection, and `FR-MYSQL-011` applies the
+  three checks of [mysql-contract.md](mysql-contract.md) to each of them.
+
 - **FR-SRV-021**: The comparison of `FR-SRV-020` SHALL be made against the
   series, not the point release, and series SHALL be ordered by version number —
   major family first, then series number. `10.11.14` and `10.11.2` are therefore
@@ -487,17 +542,62 @@ record has not been observed, and SHALL NOT be written down.
 
 - **FR-SRV-030**: The message of `FR-SRV-020` SHALL name the series found and
   the database entry that reached it. Its `cause` SHALL state that the
-  connection and the authentication succeeded, SHALL state why the series found
-  is not supported, and SHALL list the series that are. Its `hint` SHALL carry
-  the `tpl cfg database update` command that repoints the entry, with the entry
-  name filled in:
+  connection and the authentication succeeded; SHALL name the series found;
+  SHALL state why it is not supported as one reason, the same for every
+  series `FR-SRV-020` refuses: that the series is outside the supported
+  window of `FR-SRV-001`; and SHALL list the series that are. Its `hint` SHALL
+  carry the `tpl cfg database update` command that repoints the entry, with
+  the entry name filled in:
 
   ```
   error: server series '10.6' is not supported, for database entry 'shop'
-  cause: connected and authenticated; the server reports 10.6.21-MariaDB, and 10.6 left community maintenance on 2026-07-06. tpl supports 12.3, 11.8, 11.4 and 10.11
+  cause: database entry 'shop' connected and authenticated, and the server reports series '10.6', which is outside the supported window; tpl supports 12.3, 11.8, 11.4 and 10.11
   hint:  repoint the entry at a supported server: tpl cfg database update shop --host <host>
   exit:  78 (EX_CONFIG)
   ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  *Why one reason for every series.* The binary holds the table of
+  `FR-SRV-015` and the comparison of `FR-SRV-021`, and nothing else about a
+  series it refuses. The window is therefore the one reason it can state that
+  is true of every series `FR-SRV-020` reaches — a series whose maintenance
+  ended, a rolling release, and a series of a family the window has left —
+  and it stays true for as long as the table the binary carries is current,
+  per `FR-SRV-019`. It is the ground `FR-MYSQL-009` gives for the reason a
+  `mysql` entry's refusal states. *The supported window* is this file's name
+  for the criterion of `FR-SRV-001`, and the list that follows it in the
+  `cause` is that criterion's instance on the date `FR-SRV-015` records.
+
+  *Rejected: a reason particular to the series found*, the date its
+  community maintenance ended, as the example read before the
+  seventy-seventh edition: "10.6 left community maintenance on 2026-07-06".
+  The binary could state it only from a second table, of every series it may
+  refuse with a date for each, which `FR-SRV-015` does not hold; a rolling
+  release has no such date at all, per `FR-SRV-016`; and no requirement needs
+  the date in the message. *Rejected: the two conditions of `FR-SRV-001`
+  stated in full*, as `FR-MYSQL-009` states the criterion of `FR-MYSQL-002`.
+  It would change the message a `mariadb` entry prints, and the user's
+  decisions for sprint 28 change one such message, under `FR-ERR-047`, and no
+  other.
+
+  *Not required: the version string.* The example named the string the probe
+  returned, `10.6.21-MariaDB`, where the implementation names the series
+  alone. The requirement never asked for the string, and the `78` row of
+  `FR-ERR-034` asks for the series found; requiring it would change a
+  `mariadb` message, as above. `FR-MYSQL-009` asks for it of a `mysql` entry.
+
+  *Amended in the seventy-seventh edition,* for rmp `#333`. The requirement
+  asked the `cause` to state why the series found is not supported and left
+  the reason open, and the example gave a reason particular to `10.6`, the
+  date its maintenance ended, and the version string. The implementation
+  names the series and states one reason, the window, which no example of
+  this corpus showed. The requirement now names the series and fixes the
+  reason, and the example is the message the implementation prints. The
+  condition, the code, the series listed and the `hint` are unchanged, and
+  so is the implementation: no line of the message changes.
 
   *Rationale for the `cause`.* This is the line that separates `78` here from
   `69` and `77`. All three mean "the read did not happen", and a caller's next
@@ -1424,8 +1524,11 @@ variable is `version_ssl_library`, and the fixture reads it, so this is a
 second run of a reading that already exists rather than an ad-hoc read whose
 first step is recovering a name. **Nothing in this corpus waits on
 it.** No requirement reads any of the three, so it is not an open question and
-no entry is opened for it; the index of
-[open-questions.md](open-questions.md) stays empty.
+no entry is opened for it in the index of
+[open-questions.md](open-questions.md). *Corrected in the seventy-third
+edition:* the clause read that the index "stays empty", which stopped being
+true when that edition opened two entries for the `mysql` provider; no entry
+concerns this reading.
 
 **This passage takes the note shapes of a stopped verification and joins
 neither family the [README](README.md#writing-conventions) names.** The two
@@ -1599,9 +1702,67 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   `INFORMATION_SCHEMA`, and SHALL NOT invoke an external process such as a dump
   utility to read structure.
 
+  *Note added in the sixty-fifth edition.* `FR-SRV-006` and this requirement
+  close the statements of a `mariadb` entry. The closed list of a `sqlite`
+  entry is `FR-LITE-015`, with `FR-LITE-016`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The closed list
+  of a `mysql` entry is `FR-MYSQL-015`, with `FR-MYSQL-016`.
+
 - **BR-SRV-001**: The closed list is the read-only guarantee. It is a property of
   what `tpl` is built to send, it holds whatever the server permits, and it is
   the only part of the promise that prevents rather than detects.
+
+- **FR-SRV-043**: WHERE a statement of `FR-SRV-006` is restricted by a name
+  the system did not write itself — the server-side database the entry
+  names, per `FR-CONF-041`, or the name of a table, a view or a routine a
+  command names — the name SHALL change no part of the statement but the
+  value its rows are compared with. Whatever characters the name holds — a
+  quotation mark, a backslash, a backtick, a `%` or an `_`, or text that
+  would read as SQL — the statement SHALL remain the statement of the closed
+  list it is for every other name, SHALL read the rows the server compares
+  equal to that name and no other, and SHALL NOT take a character of the name
+  as part of its syntax or as a pattern character. How the name reaches the
+  statement is not fixed by this corpus.
+
+  *Rationale.* `BR-SRV-001` makes the closed list the read-only guarantee,
+  and the list fixes which statements exist. A name a caller supplies is the
+  one value that can change what a statement is: a statement it changed would
+  be outside the list whatever the list says, and a name read as a pattern
+  would read another database or another object than the one named, at exit
+  `0`. `FR-SCH-013` already keeps the pattern of `--pattern` out of every
+  statement; this requirement is the boundary for the names that do reach
+  one, and no requirement stated it — rmp `#352`, from a gap the technical
+  specification recorded and could not settle without a requirement.
+
+  *Which rows compare equal is the server's.* The server compares the name
+  under the collation of the catalogue field it is compared with, so whether
+  two spellings name one database is the server's answer, and this
+  requirement does not change it. What it fixes is that the name is compared
+  as a value, the answer a literal equal to it would get, and nothing else.
+
+  *Not fixed: the means.* A value the driver binds and a value written into
+  the text under the server's quoting rules can both meet the property; which
+  one the implementation uses is the technical specification's to record.
+
+  *Demonstrable.* A read whose entry names a database the server does not
+  hold, under a name holding a quotation mark, a backslash and a `%`, reads
+  no database and is reported under `FR-PRIV-021`, and never reads a database
+  whose name the pattern would match; and a table or a view requested by a
+  name holding a quotation mark, a backtick or a `%` is read as the object of
+  that name, or is reported absent under `FR-SCH-010`, and never as another.
+
+  *Added in the seventy-ninth edition,* for rmp `#352`.
+
+  *Note added in the eightieth edition,* for rmp `#352`. For a `mysql` entry
+  the databases these clauses read are those of item 17 of `FR-MYSQL-044`: a
+  target whose name holds a quotation mark, a backslash and a backtick, and
+  four decoys a quoting or a pattern could read in its place. A server can
+  compare a name with letter case folded, so a read of the target meets the
+  decoy in another case exactly where a statement naming the target as a
+  literal meets it. No database of the fixture of `scripts/mariadb/` holds
+  such a name, and `FR-CONF-038` does not oblige one, so for a `mariadb`
+  entry these clauses have no fixture to run against.
 
 ## The order of the connection start
 
@@ -1713,6 +1874,12 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 
 - **FR-SRV-010**: IF the setting cannot be applied, or the read-back does not
   confirm it, THEN the system SHALL exit `78` and SHALL NOT read the catalogue.
+
+  *Note added in the seventy-ninth edition,* for rmp `#339`. A deadline that
+  expires while either statement runs is not this condition: it is the `69`
+  of `FR-ERR-027`, under the deadline `FR-CONF-005` gives each
+  [session statement](glossary.md#session-statement), and the catalogue is
+  not read either.
 
 - **FR-SRV-011**: There SHALL be no flag, configuration key, or environment
   condition that disables `FR-SRV-006` through `FR-SRV-010`.
@@ -2010,6 +2177,10 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 
 ## Dependencies
 
+- [sqlite-contract.md](sqlite-contract.md) — the contract of a `sqlite` entry,
+  which stands beside this one.
+- [mysql-contract.md](mysql-contract.md) — the contract of a `mysql` entry,
+  which stands beside this one and adopts requirements of it by citation.
 - [catalogue-coverage.md](catalogue-coverage.md) — the fields whose absence
   `FR-SRV-004` turns into `null`, and `FR-CAT-029`, the ambiguous-meaning
   exclusion list that `FR-SRV-025` writes into.

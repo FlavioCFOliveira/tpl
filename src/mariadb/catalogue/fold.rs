@@ -146,7 +146,7 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::panic::Location;
 
-use sqlx::mysql::MySqlRow;
+use sqlx_mysql::MySqlRow;
 
 use super::Catalogue;
 use super::completeness::{self, Marking, Property};
@@ -158,7 +158,7 @@ use crate::model::check_constraint::{CheckConstraint, ConstraintLevel};
 use crate::model::column::{Column, Generated, GeneratedStorage};
 use crate::model::column_default::ColumnDefault;
 use crate::model::column_type::{CatalogueType, ColumnType};
-use crate::model::database::Database;
+use crate::model::database::{Database, Provider};
 use crate::model::document::order;
 use crate::model::foreign_key::{
     ForeignKey, ForeignKeyColumn, IncomingForeignKey, ReferentialAction,
@@ -242,14 +242,14 @@ fn yes(row: &MySqlRow, field: &str) -> Result<bool, Error> {
 /// byte-wise comparison `NFR-DET-002` fixes. It is a lookup and not a
 /// presented collection, so it goes through [`Ord`] rather than through
 /// `order::compare`; nothing a caller sees is ordered by it.
-struct Positions<K: Ord + Copy> {
+pub(crate) struct Positions<K: Ord + Copy> {
     /// The key of each object, with its position in the collection.
     entries: Vec<(K, usize)>,
 }
 
 impl<K: Ord + Copy> Positions<K> {
     /// The lookup `entries` describes.
-    fn of(mut entries: Vec<(K, usize)>) -> Self {
+    pub(crate) fn of(mut entries: Vec<(K, usize)>) -> Self {
         entries.sort_unstable_by_key(|entry| entry.0);
 
         Self { entries }
@@ -257,7 +257,7 @@ impl<K: Ord + Copy> Positions<K> {
 
     /// Where the object `key` names stands, or [`None`] where the fold carries
     /// no object of that key.
-    fn find(&self, key: K) -> Option<usize> {
+    pub(crate) fn find(&self, key: K) -> Option<usize> {
         self.entries
             .binary_search_by(|(carried, _)| carried.cmp(&key))
             .ok()
@@ -267,7 +267,11 @@ impl<K: Ord + Copy> Positions<K> {
 }
 
 /// The covered tables, and the lookup that attaches a member row to one.
-struct Tables<'a> {
+///
+/// It is `pub(crate)`, with [`foreign_keys`] and [`assemble`], because a
+/// `mysql` read attaches its keys and assembles its tables exactly as a
+/// `mariadb` read does (`FR-MYSQL-033`, `FR-MYSQL-032`).
+pub(crate) struct Tables<'a> {
     /// The tables, in the order the table read returned them.
     parts: Vec<TableParts<'a>>,
 
@@ -276,6 +280,15 @@ struct Tables<'a> {
 }
 
 impl<'a> Tables<'a> {
+    /// The covered tables `parts` describes, in that order, and the lookup
+    /// over the names `positions` pairs with their places.
+    pub(crate) fn new(parts: Vec<TableParts<'a>>, positions: Vec<(&'a str, usize)>) -> Self {
+        Self {
+            parts,
+            positions: Positions::of(positions),
+        }
+    }
+
     /// Where the table `name` names stands, or [`None`] where it is not
     /// covered.
     ///
@@ -283,12 +296,12 @@ impl<'a> Tables<'a> {
     /// side: a row whose owning object the model does not carry is presented
     /// nowhere. It is answered before the rest of the row is decoded, so an
     /// uncovered object's rows cost one lookup each and nothing more.
-    fn position(&self, name: &str) -> Option<usize> {
+    pub(crate) fn position(&self, name: &str) -> Option<usize> {
         self.positions.find(name)
     }
 
     /// The table at `position`, which [`Tables::position`] answered.
-    fn at(&mut self, position: usize) -> Option<&mut TableParts<'a>> {
+    pub(crate) fn at(&mut self, position: usize) -> Option<&mut TableParts<'a>> {
         self.parts.get_mut(position)
     }
 }
@@ -372,7 +385,8 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'_>, Error> {
     Ok(Database {
         name: Cow::Borrowed(name),
         charset: Cow::Borrowed(text(row, "DEFAULT_CHARACTER_SET_NAME")?),
-        collation: Cow::Borrowed(text(row, "DEFAULT_COLLATION_NAME")?),
+        collation: Some(Cow::Borrowed(text(row, "DEFAULT_COLLATION_NAME")?)),
+        provider: Provider::Mariadb,
         server: catalogue.server().clone(),
         tables: assemble(tables)?,
         views: views(catalogue.rows(Read::Views))?,
@@ -526,7 +540,7 @@ fn generated<'a>(row: &'a MySqlRow, attribute: &str) -> Result<Option<Generated<
         // The field is declared nullable and reads SQL `NULL` on every column
         // that is not generated; on the nine that are, it carries the
         // expression.
-        expression: Cow::Borrowed(text_or_empty(row, "GENERATION_EXPRESSION")?),
+        expression: Some(Cow::Borrowed(text_or_empty(row, "GENERATION_EXPRESSION")?)),
         storage,
     }))
 }
@@ -591,7 +605,7 @@ fn index<'a>(row: &'a MySqlRow, name: &'a str, first: IndexColumn<'a>) -> Result
         // `0` for the primary key and for a unique index.
         unique: signed(row, "NON_UNIQUE")? == 0,
         columns: vec![first],
-        index_type: Cow::Borrowed(text(row, "INDEX_TYPE")?),
+        index_type: Some(Cow::Borrowed(text(row, "INDEX_TYPE")?)),
         comment: Cow::Borrowed(text(row, "INDEX_COMMENT")?),
         ignored: text(row, "IGNORED")? != NOT_IGNORED,
     })
@@ -614,7 +628,7 @@ fn index<'a>(row: &'a MySqlRow, name: &'a str, first: IndexColumn<'a>) -> Result
 /// `FR-CAT-057` excludes a key whose referenced table lives in another schema,
 /// and the referenced-schema field of the key-column row is the only place
 /// either read says where that table is.
-fn foreign_keys<'a>(
+pub(crate) fn foreign_keys<'a>(
     rules: &'a [MySqlRow],
     key_columns: &'a [MySqlRow],
     schema: &str,
@@ -776,7 +790,7 @@ fn rule<'a>(row: &'a MySqlRow, table: &'a str, name: &'a str) -> Result<Rule<'a>
         referenced_table,
         crosses_a_schema: false,
         key: ForeignKey {
-            name: Cow::Borrowed(name),
+            name: Some(Cow::Borrowed(name)),
             columns: Vec::new(),
             referenced_table: referenced_table.map(Cow::Borrowed),
             referenced_key: maybe_text(row, "UNIQUE_CONSTRAINT_NAME")?.map(Cow::Borrowed),
@@ -799,7 +813,7 @@ fn checks<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Error
         let constraint = CheckConstraint {
             name: Cow::Borrowed(text(row, "CONSTRAINT_NAME")?),
             // FR-CAT-055: a third level is carried as the catalogue wrote it.
-            level: ConstraintLevel::from_catalogue(text(row, "LEVEL")?),
+            level: Some(ConstraintLevel::from_catalogue(text(row, "LEVEL")?)),
             clause: Cow::Borrowed(text(row, "CHECK_CLAUSE")?),
         };
 
@@ -839,16 +853,16 @@ fn trigger(row: &MySqlRow) -> Result<Trigger<'_>, Error> {
         name: Cow::Borrowed(text(row, "TRIGGER_NAME")?),
         event: TriggerEvent::from_catalogue(text(row, "EVENT_MANIPULATION")?),
         timing: TriggerTiming::from_catalogue(text(row, "ACTION_TIMING")?),
-        action_order: signed(row, "ACTION_ORDER")?,
+        action_order: Some(signed(row, "ACTION_ORDER")?),
         statement: maybe_text(row, "ACTION_STATEMENT")?.map(Cow::Borrowed),
         orientation: Cow::Borrowed(text(row, "ACTION_ORIENTATION")?),
         old_row_alias: Cow::Borrowed(text(row, "ACTION_REFERENCE_OLD_ROW")?),
         new_row_alias: Cow::Borrowed(text(row, "ACTION_REFERENCE_NEW_ROW")?),
-        sql_mode: Cow::Borrowed(text(row, "SQL_MODE")?),
+        sql_mode: Some(Cow::Borrowed(text(row, "SQL_MODE")?)),
         definer: maybe_text(row, "DEFINER")?.map(Cow::Borrowed),
-        character_set_client: Cow::Borrowed(text(row, "CHARACTER_SET_CLIENT")?),
-        collation_connection: Cow::Borrowed(text(row, "COLLATION_CONNECTION")?),
-        database_collation: Cow::Borrowed(text(row, "DATABASE_COLLATION")?),
+        character_set_client: Some(Cow::Borrowed(text(row, "CHARACTER_SET_CLIENT")?)),
+        collation_connection: Some(Cow::Borrowed(text(row, "COLLATION_CONNECTION")?)),
+        database_collation: Some(Cow::Borrowed(text(row, "DATABASE_COLLATION")?)),
     })
 }
 
@@ -857,11 +871,13 @@ fn trigger(row: &MySqlRow) -> Result<Trigger<'_>, Error> {
 ///
 /// The five collections ordered here are the ones the **default** rule of
 /// `NFR-DET-002` governs — name, ascending, byte-wise. A table's columns are
-/// not among them: their order is the ordinal position, which the statement's
-/// own `ORDER BY` already produced, and it is one of the six exceptions the
+/// not among them: their order is the ordinal position, which they already
+/// arrive in — produced by the `COLUMNS` statement's own `ORDER BY` for a
+/// `mariadb` read, and by the fold's sort on the value of the position for a
+/// `mysql` read (`FR-MYSQL-027`) — and it is one of the six exceptions the
 /// requirement names. Neither is an index's column list, a foreign key's, or a
 /// routine's parameters.
-fn assemble(tables: Tables<'_>) -> Result<Vec<Table<'_>>, Error> {
+pub(crate) fn assemble(tables: Tables<'_>) -> Result<Vec<Table<'_>>, Error> {
     let mut assembled = Vec::with_capacity(tables.parts.len());
 
     for mut parts in tables.parts {
@@ -870,15 +886,18 @@ fn assemble(tables: Tables<'_>) -> Result<Vec<Table<'_>>, Error> {
         order::sort_by_name(&mut parts.check_constraints);
         parts
             .foreign_keys
-            .sort_by(|left, right| order::compare(&left.name, &right.name));
+            .sort_by(|left, right| order::compare(name_of(left), name_of(right)));
         // An entry of this collection is a pair and has no single name, so the
         // default rule is read over the two names it does have — the
         // referencing table first, the constraint second — exactly as the
         // document's own build site reads it.
         parts.referenced_by.sort_by(|left, right| {
             order::compare(&left.table, &right.table)
-                .then_with(|| order::compare(&left.key.name, &right.key.name))
+                .then_with(|| order::compare(name_of(&left.key), name_of(&right.key)))
         });
+        // FR-CAT-043: the primary key is the index named PRIMARY, from the
+        // index collection and from no other source.
+        let parts = parts.with_primary_index();
 
         // FR-CAT-044. On this path the violation is an internal invariant:
         // FR-CAT-043 chose the index catalogue as the primary key's source so
@@ -894,6 +913,12 @@ fn assemble(tables: Tables<'_>) -> Result<Vec<Table<'_>>, Error> {
     order::sort_by_name(&mut assembled);
 
     Ok(assembled)
+}
+
+/// The name a MariaDB key carries, which every key of this read has
+/// (`FR-CAT-045`).
+fn name_of<'k>(key: &'k ForeignKey<'_>) -> &'k str {
+    key.name.as_deref().unwrap_or_default()
 }
 
 /// The views of the view read (`FR-CAT-007`, `FR-CAT-047`, `FR-PRIV-011`).
@@ -914,13 +939,13 @@ fn views(rows: &[MySqlRow]) -> Result<Vec<View<'_>>, Error> {
         views.push(View {
             name: Cow::Borrowed(text(row, "TABLE_NAME")?),
             definition: Cow::Borrowed(definition),
-            check_option: Cow::Borrowed(text(row, "CHECK_OPTION")?),
-            is_updatable: yes(row, "IS_UPDATABLE")?,
-            definer: Cow::Borrowed(text(row, "DEFINER")?),
-            security_type: Cow::Borrowed(text(row, "SECURITY_TYPE")?),
-            character_set_client: Cow::Borrowed(text(row, "CHARACTER_SET_CLIENT")?),
-            collation_connection: Cow::Borrowed(text(row, "COLLATION_CONNECTION")?),
-            algorithm: Cow::Borrowed(text(row, "ALGORITHM")?),
+            check_option: Some(Cow::Borrowed(text(row, "CHECK_OPTION")?)),
+            is_updatable: Some(yes(row, "IS_UPDATABLE")?),
+            definer: Some(Cow::Borrowed(text(row, "DEFINER")?)),
+            security_type: Some(Cow::Borrowed(text(row, "SECURITY_TYPE")?)),
+            character_set_client: Some(Cow::Borrowed(text(row, "CHARACTER_SET_CLIENT")?)),
+            collation_connection: Some(Cow::Borrowed(text(row, "COLLATION_CONNECTION")?)),
+            algorithm: Some(Cow::Borrowed(text(row, "ALGORITHM")?)),
             // FR-PRIV-005 marks the view that is short; FR-PRIV-007 leaves
             // every other view of the same document unmarked, which is what
             // sealing an empty marking answers.

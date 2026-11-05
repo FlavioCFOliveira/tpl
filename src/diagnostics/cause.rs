@@ -21,10 +21,12 @@
 use std::borrow::Cow;
 
 use crate::error::{
-    ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
-    KeyAbsence, Missing, PasswordCommandFault, ReadOnlyFault, ReferenceFault, RenderReason,
+    AccountRefusal, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair,
+    Error, KeyAbsence, LoginFault, LoginRefusal, Missing, NulField, NulPlace, PasswordCommandFault,
+    ReadOnlyFault, ReferenceFault, RefusedKind, RenderReason, SqliteEnd, StatementFault, TcpFault,
     TlsFault, TplDirFault, Unresolved, context_name, password_pair,
 };
+use crate::model::database::Provider;
 
 /// The separator between two links of a template-engine error chain.
 const CHAIN_SEPARATOR: &str = ": caused by ";
@@ -71,7 +73,29 @@ const DATABASE_IS_NOT_A_FIELD_OF_ANY_FORM: &str = "; -d/--database was given, an
                                                    entry for commands that connect, not a \
                                                    field; the database on the server is set \
                                                    with --schema, or is the path part of --dsn \
-                                                   for an entry defined by dsn";
+                                                   for an entry defined by dsn; the database \
+                                                   file of a sqlite entry is set with --path";
+
+/// The product whose server an entry of `provider` reads, as a `cause` or a
+/// `hint` names it (`FR-ERR-047`).
+pub(super) const fn server_name(provider: Provider) -> &'static str {
+    match provider {
+        Provider::Mariadb => "MariaDB",
+        Provider::Mysql => "MySQL",
+        Provider::Sqlite => "SQLite",
+    }
+}
+
+/// The entries that take a key of one provider family (`FR-CONF-052`): the
+/// keys of a server, which a `mariadb` and a `mysql` entry take alike, or
+/// `path`, which a `sqlite` entry alone takes.
+const fn takers(server: bool) -> &'static str {
+    if server {
+        "a mariadb or a mysql entry"
+    } else {
+        "a sqlite entry"
+    }
+}
 
 /// The content of the `cause` line for `error`, without its label.
 ///
@@ -155,8 +179,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             database_given,
         } => Cow::Owned(format!(
             "no --dsn, and none of --host, --port, --user or --schema, was given for entry \
-             '{entry}'; --tls, --password-command, --ca-file and --ca-path do not say where to \
-             connect{}",
+             '{entry}', and no --provider sqlite with --path; --tls, --password-command, \
+             --ca-file and --ca-path do not say where to connect{}",
             if *database_given {
                 DATABASE_IS_NOT_A_FIELD
             } else {
@@ -283,6 +307,20 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{value}' was supplied for '{parameter}', which takes {expected}; a ${{VAR}} may \
              stand for one part of the URL, never for the whole of it"
         )),
+        // FR-CONF-051 item 1: the key and the three values; the value given is
+        // reproduced only under the set of FR-ERR-022, and described otherwise.
+        Error::MalformedValue {
+            parameter, value, ..
+        } if is_provider(parameter) => {
+            Cow::Owned(if crate::project::config::keys::is_entry_name(value) {
+                format!("{parameter} takes mariadb, mysql or sqlite; the value given is {value}")
+            } else {
+                format!(
+                    "{parameter} takes mariadb, mysql or sqlite; the value given holds characters \
+                     outside letters, digits and underscores, or is longer than 64"
+                )
+            })
+        }
         Error::MalformedValue {
             parameter,
             value,
@@ -336,11 +374,33 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 reference_named(name)
             )),
         },
+        // FR-CONF-057, item 1: the flag or the key, that the value holds a
+        // NUL character, the part before it where the field is not the
+        // password, and why tpl refuses it.
+        Error::NulValueGiven {
+            parameter,
+            field,
+            in_dsn,
+            before,
+            ..
+        } => Cow::Owned(format!(
+            "{} holds a NUL character (U+0000){}; tpl refuses it, because {}",
+            if *in_dsn {
+                format!("the {field} part of the value given to {parameter}")
+            } else {
+                format!("the value given to {parameter}")
+            },
+            nul_position(before.as_deref()),
+            nul_consequence(*field, before.as_deref())
+        )),
         // FR-CONF-050: the flag or the key, and that the value is empty.
         Error::EmptyValue { parameter, .. } => Cow::Owned(format!(
             "{parameter} is empty or holds only whitespace; an entry must name {}",
             if parameter.ends_with("host") {
                 "a host"
+            } else if names_database_path(parameter) {
+                // FR-CONF-053: the empty path is refused as an empty host is.
+                "a database file"
             } else {
                 "a database"
             }
@@ -435,6 +495,20 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "'{value}' begins with '-' and was written as a token of its own, so tpl read it as a \
              flag rather than as the value of '{flag}'"
         )),
+        // FR-CONF-051 item 1: the value given is reproduced only under the set
+        // of FR-ERR-022.
+        Error::ValueOutsideEnumeration {
+            flag,
+            value,
+            permitted,
+            ..
+        } if flag == "--provider" && !crate::project::config::keys::is_entry_name(value) => {
+            Cow::Owned(format!(
+                "{flag} takes {}; the value given holds characters outside letters, digits and \
+                 underscores, or is longer than 64",
+                alternatives(permitted)
+            ))
+        }
         Error::ValueOutsideEnumeration {
             flag,
             value,
@@ -625,11 +699,24 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 None => format!("the cache of entry '{entry}' holds no {sought} named '{name}'"),
             })
         }
+        // A `sqlite` read searched the schema of a file, not a catalogue.
         Error::CatalogueObjectNotFound {
             kind,
             name,
             entry,
             database,
+            provider: Provider::Sqlite,
+            ..
+        } => Cow::Owned(format!(
+            "the schema '{database}' of the SQLite database read through database entry \
+             '{entry}' holds no {kind} named '{name}'"
+        )),
+        Error::CatalogueObjectNotFound {
+            kind,
+            name,
+            entry,
+            database,
+            provider: Provider::Mariadb | Provider::Mysql,
             ..
         } => Cow::Owned(format!(
             "no row of INFORMATION_SCHEMA matches {kind} '{name}' in database '{database}', read \
@@ -731,6 +818,107 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             "the TCP connect to {host}:{port} did not open a session: the host refused it, or \
              nothing is listening on that port"
         )),
+        // FR-ERR-049, outcomes 2 to 4: what the operating system reported, by
+        // its POSIX name, or its number where tpl names none.
+        Error::TcpConnectFailed {
+            host, port, fault, ..
+        } => match fault {
+            TcpFault::HostUnreachable => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: the network reports the host unreachable"
+            )),
+            TcpFault::NetworkUnreachable => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: the network reports the host's network \
+                 unreachable"
+            )),
+            TcpFault::NoAnswer => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: nothing answered, and the operating \
+                 system abandoned the attempt"
+            )),
+            TcpFault::Other(Some(number)) => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed: the operating system reported error \
+                 {number}"
+            )),
+            TcpFault::Other(None) => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} failed, and the operating system reported no \
+                 error number"
+            )),
+        },
+        // FR-ERR-047, outcomes 1 and 2: the login, the host and port, and
+        // what it returned; never the TCP connect as the phase that failed.
+        Error::LoginNotCompleted {
+            host,
+            port,
+            provider,
+            fault,
+            ..
+        } => match fault {
+            LoginFault::ConnectionClosed => Cow::Owned(format!(
+                "the TCP connect to {host}:{port} succeeded, and the connection failed before the \
+                 login completed: the server closed it, it was reset, or the operating system \
+                 abandoned it"
+            )),
+            LoginFault::NotAccepted => {
+                let server = server_name(*provider);
+                Cow::Owned(format!(
+                    "what answered the login at {host}:{port} did not answer as a {server} server \
+                     does: it does not speak the {server} protocol, or it asked for a step tpl \
+                     does not implement, such as an authentication method"
+                ))
+            }
+        },
+        // FR-ERR-048: a limit, a blocked host or a number tpl classifies no
+        // further, each with the number under FR-GLOB-018.
+        Error::LoginRefused {
+            host,
+            port,
+            number,
+            reason,
+            ..
+        } => Cow::Owned(match reason {
+            LoginRefusal::ServerConnectionLimit => format!(
+                "the server at {host}:{port} refused the login with server error {number}: it \
+                 has reached its limit on connections"
+            ),
+            LoginRefusal::UserConnectionLimit => format!(
+                "the server at {host}:{port} refused the login with server error {number}: the \
+                 user has reached its limit on simultaneous connections"
+            ),
+            LoginRefusal::ResourceLimit => format!(
+                "the server at {host}:{port} refused the login with server error {number}: the \
+                 account has exceeded a resource limit"
+            ),
+            LoginRefusal::HostBlocked => format!(
+                "the server at {host}:{port} refused the login with server error {number}: it \
+                 blocks this client's host after connection errors"
+            ),
+            LoginRefusal::Unclassified => format!(
+                "the server at {host}:{port} ended the login with server error {number}, which \
+                 tpl does not classify further"
+            ),
+        }),
+        // FR-ERR-036: the statement, the host and port, and which of the
+        // three ways it failed.
+        Error::StatementFailed {
+            host,
+            port,
+            statement,
+            fault,
+            ..
+        } => Cow::Owned(match fault {
+            StatementFault::ConnectionFailed => format!(
+                "the session with {host}:{port} was open, and the connection failed while \
+                 {statement} was running: the server closed it, it was reset, or the operating \
+                 system abandoned it"
+            ),
+            StatementFault::OutsideProtocol => format!(
+                "the session with {host}:{port} was open, and the server's answer to {statement} \
+                 did not follow the client-server protocol"
+            ),
+            StatementFault::ServerError(number) => format!(
+                "the session with {host}:{port} was open, and the server answered {statement} \
+                 with server error {number}"
+            ),
+        }),
         Error::TlsHandshakeFailed {
             host, port, fault, ..
         } => match fault {
@@ -751,9 +939,20 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             limit,
             ..
         } => match bound {
+            // FR-ERR-027 with FR-CONF-005: the four connection phases share
+            // one budget, and the cause says so rather than that it bounds the
+            // phase alone.
+            DeadlineBound::Phase if phase.connecting() => Cow::Owned(format!(
+                "{phase} for {host}:{port} had not finished when the connection budget of \
+                 {limit:?} expired; core.connect_timeout sets that budget, which DNS resolution, \
+                 the TCP connect, the TLS handshake and the login share"
+            )),
+            // FR-ERR-027: a session statement or a catalogue query, under the
+            // deadline core.query_timeout gives each statement on its own.
             DeadlineBound::Phase => Cow::Owned(format!(
                 "{phase} for {host}:{port} had not finished when its own deadline of {limit:?} \
-                 expired; that deadline bounds this phase alone"
+                 expired; core.query_timeout sets that deadline, which bounds each statement on \
+                 its own"
             )),
             DeadlineBound::Overall => Cow::Owned(format!(
                 "{phase} for {host}:{port} had not finished when the overall budget of {limit:?} \
@@ -812,6 +1011,15 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
             path.display(),
             os(returned)
         )),
+        // FR-CFG-041, the eighty-third edition: the rename took effect, so the
+        // file holds the new content, and the previous one is never said to
+        // stand.
+        Error::ProjectFileNotDurable { path, returned } => Cow::Owned(format!(
+            "{} holds the new content; making the rename durable failed: the filesystem \
+             returned {}",
+            path.display(),
+            os(returned)
+        )),
         Error::StdoutUnwritable { returned } => Cow::Owned(format!(
             "the write to standard output returned: {}",
             os(returned)
@@ -828,6 +1036,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         Error::AuthenticationRefused { user, host, .. } => Cow::Owned(format!(
             "the server at '{host}' rejected the user '{user}' or its password; the refusal came \
              from the server"
+        )),
+        // FR-ERR-048: the reason the row states, and no error number.
+        Error::AccountRefused {
+            user, host, reason, ..
+        } => Cow::Owned(format!(
+            "the server at '{host}' refused the user '{user}' because {}; the refusal came from \
+             the server",
+            match reason {
+                AccountRefusal::HostNotPrivileged => "it may not connect from this client's host",
+                AccountRefusal::PasswordExpired => "its password has expired",
+                AccountRefusal::Locked => "its account is locked",
+                AccountRefusal::Blocked => "its account is blocked after failed logins",
+            }
         )),
         Error::PropertyNotReadable {
             kind,
@@ -1141,14 +1362,19 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              trusts",
             path.display()
         )),
-        Error::ReadOnlySessionNotEnforced { entry, fault, .. } => match fault {
+        Error::ReadOnlySessionNotEnforced {
+            entry,
+            fault,
+            read_back,
+            ..
+        } => match fault {
             ReadOnlyFault::NotApplied => Cow::Owned(format!(
                 "the session opened for database entry '{entry}' did not accept the read-only \
                  setting, so tpl cannot guarantee that the session issues no write"
             )),
             ReadOnlyFault::ReadBackDisagreed => Cow::Owned(format!(
                 "the session opened for database entry '{entry}' accepted the read-only setting \
-                 and the read-back of @@session.tx_read_only did not confirm it"
+                 and the read-back of {read_back} did not confirm it"
             )),
         },
         // FR-CONF-040 and FR-CONF-041: the cause names the file, the entry and
@@ -1226,7 +1452,370 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              '{series}', which is outside the supported window; tpl supports {}",
             listed(supported)
         )),
+        // FR-MYSQL-008: the connection and the authentication succeeded, the
+        // product the server reported — MariaDB where the string carries the
+        // marker, and the string itself otherwise — and that a mysql entry
+        // reads MySQL only.
+        Error::ServerNotMysql { reported, .. } => Cow::Owned(
+            if reported.contains(crate::mysql::session::MARIADB_MARKER) {
+                format!(
+                    "connected and authenticated; the server reports {reported}, which is \
+                     MariaDB, and a mysql entry reads MySQL only"
+                )
+            } else {
+                format!(
+                    "connected and authenticated; the server reports '{reported}', which is not \
+                     a MySQL version string, and a mysql entry reads MySQL only"
+                )
+            },
+        ),
+        // FR-MYSQL-009: the connection and the authentication succeeded, why
+        // the series is not supported — the criterion of FR-MYSQL-002 it fails
+        // — and the series that are.
+        Error::MysqlSeriesNotSupported {
+            version,
+            series,
+            supported,
+            ..
+        } => Cow::Owned(format!(
+            "connected and authenticated; the server reports {version}, and {series} is not a \
+             MySQL LTS series under Oracle Premier or Extended Support, and is older than the \
+             newest that is. A mysql entry supports {}",
+            listed(supported)
+        )),
+        // FR-ERR-048, error 1102: the host and port, the number, the name
+        // between quotation marks, the key or the part of dsn that carries it
+        // and the file, and that the server does not accept that name.
+        Error::DatabaseNameRefused {
+            entry,
+            by_dsn,
+            host,
+            port,
+            name,
+            file,
+        } => Cow::Owned(format!(
+            "the server at {host}:{port} refused the login with server error 1102: it does not \
+             accept '{name}' as a database name, which {} gives in {}",
+            if *by_dsn {
+                format!("the database part of database.{entry}.dsn")
+            } else {
+                format!("database.{entry}.database")
+            },
+            file.display()
+        )),
+        // FR-CONF-057, items 2 and 3: the key or the part of dsn and the file,
+        // or the command as stored; the part before the NUL where the field is
+        // not the password; and why tpl refuses it.
+        Error::ValueHoldsNul {
+            field,
+            place,
+            before,
+            ..
+        } => Cow::Owned(format!(
+            "{} holds a NUL character (U+0000){}; tpl refuses it, because {}",
+            match place {
+                NulPlace::Key { key, file } => format!("{key} in {}", file.display()),
+                NulPlace::DsnPart { key, file } =>
+                    format!("the {field} part of {key} in {}", file.display()),
+                NulPlace::Helper { command } =>
+                    format!("the password password_command {command:?} printed"),
+            },
+            nul_position(before.as_deref()),
+            nul_consequence(*field, before.as_deref())
+        )),
+        // FR-ERR-048, error 3159: the host and port, the number, and the mode
+        // under which the session was not encrypted.
+        Error::SecureTransportRequired {
+            host, port, tls, ..
+        } => Cow::Owned(format!(
+            "the server at {host}:{port} refused the login with server error 3159: it accepts \
+             only encrypted sessions, and the session was not encrypted under tls '{tls}'"
+        )),
+        // FR-MYSQL-045, and FR-ERR-047 outcome 3 for a mariadb entry: the
+        // connection succeeded and the authentication was not completed; the user, the host and the port, the tls mode in force and,
+        // under `preferred`, that the server offered no TLS; the method the
+        // server asked for; and that tpl does not request the key over a
+        // session TLS does not protect.
+        Error::PublicKeyRequestRefused {
+            user,
+            host,
+            port,
+            tls,
+            no_tls_offered,
+            method,
+            ..
+        } => Cow::Owned(format!(
+            "connected to {host}:{port} as user '{user}' under tls '{tls}'{}, so the session is \
+             not encrypted; the authentication was not completed: the server asks for the full \
+             {method} exchange, which needs its RSA public key, and tpl does not request that \
+             key over a session TLS does not protect",
+            if *no_tls_offered {
+                " and the server offered no TLS"
+            } else {
+                ""
+            }
+        )),
+
+        // ---------------------------------------------- the provider ---
+        // FR-CFG-055: the flags that cannot stand together, and the provider
+        // that decides it.
+        Error::FlagRefusedByProvider {
+            flag,
+            provider: Provider::Sqlite,
+            ..
+        } => Cow::Owned(format!(
+            "a sqlite entry is described by --path alone; {flag} belongs to a mariadb or a mysql \
+             entry"
+        )),
+        // FR-CFG-055 item 2, for either server provider: `--provider mysql`
+        // takes the flags `--provider mariadb` takes (FR-CONF-052).
+        Error::FlagRefusedByProvider {
+            flag,
+            provider: provider @ (Provider::Mariadb | Provider::Mysql),
+            given,
+            ..
+        } => Cow::Owned(if *given {
+            format!(
+                "{flag} belongs to a sqlite entry, and --provider {provider} makes this a {provider} entry"
+            )
+        } else {
+            format!(
+                "{flag} belongs to a sqlite entry, and without --provider sqlite the entry is a {provider} entry"
+            )
+        }),
+        Error::PathRequired { .. } => Cow::Borrowed(
+            "a sqlite entry names its database file with --path, and the invocation gave none",
+        ),
+        // FR-CFG-048 as amended: the provider, the key written, every key
+        // the entry carries that the other provider takes, and that a change
+        // of provider requires removing them.
+        // The cfg-commands note of the seventy-third edition: with three
+        // providers, the keys are named by the providers that take them, and
+        // a `mysql` entry takes exactly the keys a `mariadb` entry takes.
+        Error::ProviderIncoherentWrite {
+            entry,
+            provider,
+            own,
+            written,
+            carried,
+            ..
+        } => {
+            let leaf = written.rsplit('.').next().unwrap_or(written);
+            if leaf == "provider" {
+                Cow::Owned(format!(
+                    "entry '{entry}' carries {}, which only {} takes; changing its provider \
+                     requires removing them",
+                    conjoined(carried),
+                    takers(!provider.reads_a_server())
+                ))
+            } else {
+                Cow::Owned(format!(
+                    "entry '{entry}' is a {own} entry and carries {}, which only {} takes, and \
+                     {leaf} belongs to {}; changing its provider requires removing them",
+                    conjoined(carried),
+                    takers(own.reads_a_server()),
+                    takers(provider.reads_a_server())
+                ))
+            }
+        }
+        // FR-CONF-052: the file, the entry, its provider and how it is known,
+        // and every key the provider refuses.
+        Error::ProviderRefusesKeys {
+            entry,
+            file,
+            provider,
+            written,
+            keys,
+        } => Cow::Owned(format!(
+            "{} gives database entry '{entry}' the provider {provider}{}, and that provider does \
+             not take {}",
+            file.display(),
+            if *written {
+                ""
+            } else {
+                ", taken from an absent provider key"
+            },
+            conjoined(keys)
+        )),
+
+        // ------------------------------------------------ the SQLite file ---
+        // FR-LITE-005: the path as resolved, the kind found, and the rule.
+        Error::SqliteNotRegularFile { path, kind, .. } => Cow::Owned(format!(
+            "{} is a {kind}, and a SQLite database is read only from a regular file",
+            path.display()
+        )),
+        // FR-LITE-005 and the first row of FR-LITE-007: the check of the kind,
+        // and what the filesystem returned.
+        Error::SqliteFileLookup { path, returned, .. } => Cow::Owned(format!(
+            "checking the kind of {} failed: {}",
+            path.display(),
+            os(returned)
+        )),
+        // FR-LITE-007 and FR-LITE-040: the path, the operation and what the
+        // library returned, in the form FR-GLOB-018 fixes.
+        Error::SqliteFileUnreadable {
+            path, at, report, ..
+        }
+        | Error::SqliteFileRefused {
+            path, at, report, ..
+        } => Cow::Owned(format!(
+            "{at} of {} failed: the library returned {report}",
+            path.display()
+        )),
+        // FR-LITE-041: the path, the check, the row's type and name, and the
+        // kind of row — what SQLite does with the name; the column and the
+        // class it holds; the root page and what the text creates; that SQLite
+        // writes no other type; that the library reads a row with no text as
+        // an index's; the column holding the NUL character; or that SQLite
+        // writes a trigger's text beginning CREATE TRIGGER, the trigger's name
+        // being the row's.
+        Error::SqliteSchemaRefused { path, row, .. } => {
+            let refused = format!(
+                "the check of the schema table main.sqlite_schema of {} refused the row of type \
+                 '{}' named '{}'",
+                path.display(),
+                row.row_type,
+                row.name
+            );
+            Cow::Owned(match row.kind {
+                RefusedKind::PragmaName => format!(
+                    "{refused}: SQLite reads a table or a view so named in place of the pragma \
+                     table-valued function of that name"
+                ),
+                RefusedKind::StorageClass { column, class } => format!(
+                    "{refused}: its {column} holds a value of the storage class {class}, which the \
+                     schema table's contract excludes"
+                ),
+                RefusedKind::RootPage {
+                    rootpage,
+                    creates_virtual,
+                } => format!(
+                    "{refused}: its root page is {} and its text {} a virtual table",
+                    rootpage.map_or_else(|| "NULL".to_owned(), |page| page.to_string()),
+                    if creates_virtual {
+                        "creates"
+                    } else {
+                        "does not create"
+                    }
+                ),
+                RefusedKind::Type => format!(
+                    "{refused}: its type is not exactly one of table, index, view and trigger, \
+                     and SQLite writes no other type"
+                ),
+                RefusedKind::NoText { null } => format!(
+                    "{refused}: its sql is {}, and the library reads a row with no text as an \
+                     index's",
+                    if null { "NULL" } else { "the empty text" }
+                ),
+                RefusedKind::Nul { column } => {
+                    format!("{refused}: its {column} holds a NUL character")
+                }
+                RefusedKind::TriggerHeader => format!(
+                    "{refused}: SQLite writes a trigger's text beginning CREATE TRIGGER followed \
+                     by the trigger's name, and this text does not"
+                ),
+            })
+        }
+        // FR-LITE-043: the path, the kind of the two objects, the table that
+        // holds a column, an index or a trigger, the text both names convert
+        // to, and why the model cannot carry them apart.
+        Error::SqliteNamesAlike { path, names, .. } => Cow::Owned(format!(
+            "{} holds {}{} whose names both read '{}': they differ only in bytes that are not \
+             valid UTF-8, and tpl names each object by its text",
+            path.display(),
+            match &names.table {
+                Some(table) => format!("in table '{table}', "),
+                None => String::new(),
+            },
+            names.kind,
+            names.text
+        )),
+        // The note on FR-ERR-034 for a `sqlite` entry: the path, the statement
+        // and what ended it, naming a lock only on the library's word.
+        Error::SqliteUnavailable {
+            path,
+            statement,
+            ended,
+            ..
+        } => match ended {
+            SqliteEnd::Locked {
+                report,
+                waited: Some((bound, limit)),
+            } => Cow::Owned(format!(
+                "the database {} was locked while {statement} ran: the library returned {report} \
+                 once {} of {} expired while it waited",
+                path.display(),
+                sqlite_bound(*bound),
+                seconds(*limit)
+            )),
+            SqliteEnd::Locked {
+                report,
+                waited: None,
+            } => Cow::Owned(format!(
+                "the database {} was locked while {statement} ran: the library returned {report}",
+                path.display()
+            )),
+            SqliteEnd::Deadline { bound, limit } => Cow::Owned(format!(
+                "{statement} on {} did not finish within {} of {}",
+                path.display(),
+                sqlite_bound(*bound),
+                seconds(*limit)
+            )),
+            SqliteEnd::Contended { report } => Cow::Owned(format!(
+                "{statement} on {} was ended by another connection: the library returned \
+                 {report}",
+                path.display()
+            )),
+        },
+        // FR-LITE-012: the control or limit, the value set and the value read
+        // back; FR-ERR-034's row for 70 is the invariant and where.
+        Error::SqliteControlNotInEffect {
+            path,
+            control,
+            set,
+            read_back,
+            ..
+        } => Cow::Owned(format!(
+            "the SQLite library the binary carries did not confirm {control} on {}: it was set \
+             to {set} and read back {read_back}, so nothing was read from the file",
+            path.display()
+        )),
+        Error::SqliteDefect {
+            path,
+            at,
+            invariant,
+            report,
+            location,
+            ..
+        } => Cow::Owned(match report {
+            Some(report) => format!(
+                "{invariant}: {at} of {} failed and the library returned {report} (detected at \
+                 {}:{})",
+                path.display(),
+                location.file(),
+                location.line()
+            ),
+            None => format!(
+                "{invariant}, at {at} of {} (detected at {}:{})",
+                path.display(),
+                location.file(),
+                location.line()
+            ),
+        }),
     }
+}
+
+/// Which bound of `FR-GLOB-012` ended a SQLite statement, in words.
+const fn sqlite_bound(bound: crate::error::DeadlineBound) -> &'static str {
+    match bound {
+        crate::error::DeadlineBound::Phase => "the catalogue-query deadline",
+        crate::error::DeadlineBound::Overall => "the overall budget of --timeout",
+    }
+}
+
+/// A duration as a number of seconds, the unit every deadline key takes.
+fn seconds(limit: std::time::Duration) -> String {
+    format!("{} s", limit.as_secs())
 }
 
 /// The rule of `FR-CONF-007` a pair of password sources breaks.
@@ -1341,10 +1930,16 @@ pub(super) fn is_port_reference(parameter: &str, value: &str) -> bool {
 /// Whether `value`, given for `ca_file` or `ca_path` or for their flags,
 /// holds `${`, which `FR-CONF-047` refuses in either key.
 pub(crate) fn is_path_reference(parameter: &str, value: &str) -> bool {
-    (matches!(parameter, "--ca-file" | "--ca-path")
+    (matches!(parameter, "--ca-file" | "--ca-path" | "--path")
         || parameter.ends_with(".ca_file")
-        || parameter.ends_with(".ca_path"))
+        || parameter.ends_with(".ca_path")
+        || parameter.ends_with(".path"))
         && value.contains("${")
+}
+
+/// Whether `parameter` writes the provider of an entry (`FR-CONF-051`).
+pub(super) fn is_provider(parameter: &str) -> bool {
+    parameter == "--provider" || parameter.ends_with(".provider")
 }
 
 /// What is wrong with an entry name `FR-CONF-048` refuses, described rather
@@ -1399,6 +1994,13 @@ pub(super) fn is_whole_dsn_reference(parameter: &str, value: &str) -> bool {
 /// string: the flag of `FR-CFG-046`, or the key of `FR-CONF-002`.
 pub(super) fn is_password_command(parameter: &str) -> bool {
     parameter == "--password-command" || parameter.ends_with(".password_command")
+}
+
+/// Whether `parameter` is one that names the database file of a `sqlite`
+/// entry: the flag of `FR-CFG-055`, or the key of `FR-CONF-053`. `ca_path`
+/// ends in `path` too, and is not one.
+pub(super) fn names_database_path(parameter: &str) -> bool {
+    parameter == "--path" || parameter.ends_with(".path")
 }
 
 /// What the step of an expression rooted at a bound variable found
@@ -1503,6 +2105,44 @@ fn global_flags() -> String {
         )
         .collect();
     flags.join(", ")
+}
+
+/// Where the NUL character of `FR-CONF-057` stands: after the part named, or
+/// at the start of the value. The password's part is never named
+/// (`FR-ERR-013`), so it has no position either.
+fn nul_position(before: Option<&str>) -> String {
+    match before {
+        Some("") => " at its start".to_owned(),
+        Some(before) => format!(" after '{before}'"),
+        None => String::new(),
+    }
+}
+
+/// Why `tpl` refuses a value that holds a NUL character: the interface that
+/// receives it would cut it there (`FR-CONF-057`).
+fn nul_consequence(field: NulField, before: Option<&str>) -> String {
+    let kept = before.unwrap_or_default();
+    match field {
+        NulField::Host => format!(
+            "a host name ends at its first NUL and the connection would reach '{kept}', not the \
+             host written"
+        ),
+        NulField::User => format!(
+            "the login ends a user name at its first NUL and would present '{kept}', not the user \
+             written"
+        ),
+        NulField::Password => "the login would cut the password at it, and present a password \
+                               other than the one written"
+            .to_owned(),
+        NulField::Database => format!(
+            "the login ends a database name at its first NUL and the session would select \
+             '{kept}', not the name written"
+        ),
+        NulField::Path => format!(
+            "the SQLite library ends a file name at its first NUL and would open '{kept}', not \
+             the file written"
+        ),
+    }
 }
 
 #[cfg(test)]

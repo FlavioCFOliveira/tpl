@@ -5,7 +5,7 @@ tool exists to produce: an application's data layer, built from a database
 schema, through the command line and nothing else.
 
 `specification/examples.md` defines what a worked example is — `FR-EX-001` to
-`FR-EX-009`, `BR-EX-001` and `BR-EX-002` — and `UC-013` in
+`FR-EX-012`, `BR-EX-001` and `BR-EX-002` — and `UC-013` in
 `specification/use-cases.md` is the flow each one realises end to end. This file
 is how a reader runs them.
 
@@ -37,20 +37,22 @@ compile the rendered crate nor fetch what it depends on.
 
 ## What the four share
 
-`FR-EX-007` requires them to read the same schemas from the same server under
-the same conditions, because the set is comparable only while one axis varies:
-where two examples render different data layers, the difference must be
-attributable to their templates and their type mappings, which is what the set
-exists to compare.
+`FR-EX-007` requires them to make every read under the same conditions, because
+the set is comparable only while one axis varies: where two examples render
+different data layers, the difference must be attributable to their templates and
+their type mappings, which is what the set exists to compare. The conditions are
+per provider: no comparison sets a read of one provider beside a read of another.
 
 | | |
 |---|---|
-| **One server** | The fixture's most recent supported series, `12.3`, on `127.0.0.1:13309`, over TLS at `verify-identity` |
-| **Three schemas** | `sakila` (16 tables), `world` (3) and `freight` (17) — **36 tables and 362 columns** |
+| **MariaDB** | The fixture's most recent supported series, `12.3`, on `127.0.0.1:13309`, over TLS at `verify-identity`: `sakila` (16 tables), `world` (3) and `freight` (17), per `FR-EX-006` |
+| **MySQL** | The MySQL fixture's most recent supported series, `9.7`, on `127.0.0.1:13321`, over TLS at `verify-identity`: `freight` (22 tables), per `FR-EX-011`, read through the entry `freight_mysql` |
+| **SQLite** | The SQLite fixture's main database, built by the driver from `scripts/sqlite/freight.sql` on every run and never committed (24 tables), per `FR-EX-012`, read through the entry `freight_sqlite` |
+| **In all** | Five reads, **82 tables and 755 columns** |
 | **One driver** | [`_driver/`](_driver/README.md), the five-command workflow of `FR-EX-004` written once, in Python, for all four |
 
-The driver holds the server, the schemas and the access, and asks each example
-for one thing only: which template renders into which file. Everything else it
+The driver holds the servers, the database file and the access, and asks each
+example for one thing only: which template renders into which file. Everything else it
 does — checking every exit code, keeping the two streams apart, redirecting a
 render's bytes into a file, reading `can_read_catalogue` rather than inferring
 it from exit `0` — is documented in its own README and is the same for all four.
@@ -70,18 +72,52 @@ mapping written against the two published datasets would have been complete over
 project's own schema and exists to carry exactly that complement, per
 `FR-EX-006`.
 
+### What MySQL and SQLite add
+
+`FR-EX-011` and `FR-EX-012` have the four render and compile the data layer of a
+MySQL schema and of a SQLite database as well, so that every provider `tpl` reads
+is shown to generate code a toolchain accepts. Over the five reads the model
+reports **44 distinct `data_type` values**: the 39 above, MySQL's `json` and
+`geomcollection` (`FR-MYSQL-028`), and the SQLite affinities `integer`, `real` and
+`numeric` (`FR-LITE-026`), which no server read produces. Each mapping covers all
+44.
+
+The two catalogues also carry shapes the three MariaDB schemas do not, and each
+template set meets them the same way:
+
+| Shape | Where | What the templates do |
+|---|---|---|
+| A table with no primary key | MySQL `currency`, `edi_message_staging` | The row type is rendered and no repository: there is no key to address a row by. The aggregate of repositories leaves the table out and says so |
+| Two tables whose names differ only in letter case | SQLite `Émbarque`, `émbarque` | Each is numbered by its position in the group — `Émbarque_1`, `émbarque_2` — in its identifiers and its file names, which would otherwise be one file on a filesystem that ignores letter case |
+| A name holding a space, a quote or a backtick | SQLite `customs entry` and its columns, MySQL `legacy_edi_field` | Every name in a string literal is escaped, and every module is named by the identifier its imports use |
+| A key column that admits `NULL` and is assigned by the database | SQLite's rowid alias, `INTEGER PRIMARY KEY` | The assigned key is written back wrapped in the nullable type |
+| A database named `main` | Every SQLite read, per `FR-LITE-019` | The package or module is named after the entry, passed to each render as `vars.layer` |
+
+The provenance line of each rendered package names the provider — `MariaDB`,
+`MySQL` or `SQLite` — from `database.provider`.
+
+**Each data layer keeps its example's one database driver**, whatever the
+provider: the rendered SQLite layer is code the target toolchain accepts, written
+against the MySQL-protocol driver of the table above. `FR-EX-012` obliges the
+render and the compile gate, not a SQLite driver.
+
+The MariaDB output of every example is byte for byte what it was before the two
+reads were added.
+
 ---
 
 ## Running one
 
-The fixture must be up and carrying the two published datasets, which are not in
-its image. From the repository root:
+The MariaDB fixture must be up and carrying the two published datasets, which are
+not in its image, and the MySQL fixture's newest server must be up. The SQLite
+database needs nothing: the driver builds it. From the repository root:
 
 ```sh
 cargo build --release                       # the binary the driver looks for first
 ./scripts/mariadb/up.sh 12.3                # the one server FR-EX-006 names
 ./scripts/mariadb/seed-datasets.sh 12.3     # load sakila and world, then verify
-export FIXTURE_PW=tpl-root                  # the password; see below
+./scripts/mysql/up.sh 9.7                   # the one server FR-EX-011 names
+export FIXTURE_PW=tpl-root                  # the password of both; see below
 ```
 
 Then any one of the four:
@@ -110,11 +146,15 @@ When you are done:
 
 ```sh
 ./scripts/mariadb/down.sh 12.3
+./scripts/mysql/down.sh 9.7
 ```
 
 [`scripts/mariadb/README.md`](../scripts/mariadb/README.md) documents the
-fixture, and its *published datasets* section documents `seed-datasets.sh` — what
-it loads, what it verifies, and why loading the two schemas by hand is refused.
+MariaDB fixture, and its *published datasets* section documents
+`seed-datasets.sh` — what it loads, what it verifies, and why loading the two
+schemas by hand is refused. [`scripts/mysql/README.md`](../scripts/mysql/README.md)
+documents the MySQL fixture and [`scripts/sqlite/README.md`](../scripts/sqlite/README.md)
+the text the SQLite database is built from.
 The driver script and `_driver` take no dependency beyond the Python standard
 library; the packages in the table above are needed by the *rendered* code and by
 the gate that reads it.
@@ -123,17 +163,20 @@ the gate that reads it.
 
 ## What each one produces
 
-The same 36 tables, four times over. Every file is one invocation of
+The same 82 tables, four times over. Every file is one invocation of
 `tpl render`, because `tpl render` writes to standard output and nowhere else —
 `FR-RND-028` — so a rendered file is a redirection the caller performs, which is
 `FR-EX-005`.
 
 | Example | Rendered files | Lines | Committed under |
 |---|---:|---:|---|
-| `go-data-layer` | 111 | 20 049 | `out/` |
-| `rust-data-layer` | 111 | 26 137 | `src/` |
-| `python-data-layer` | 114 | 26 132 | `datalayer/` |
-| `node-data-layer` | 114 | 25 001 | `src/` |
+| `go-data-layer` | 247 | 43 192 | `out/` |
+| `rust-data-layer` | 247 | 56 189 | `src/` |
+| `python-data-layer` | 252 | 56 739 | `datalayer/` |
+| `node-data-layer` | 252 | 54 317 | `src/` |
+
+One package, module or directory per read, named after the entry that reads it:
+`sakila`, `world`, `freight`, `freight_mysql` and `freight_sqlite`.
 
 The rendered tree is committed in each case, so an example can be read without
 being run. None of the four records a timestamp: `now` is the single documented
@@ -155,7 +198,7 @@ extension point the specification offers instead is a template macro, and these
 four examples are the demonstration that it is usable.
 
 Each example therefore carries its own `templates/<language>/_types.jinja`,
-covering all 39 `data_type` values, per `FR-EX-008`. Nothing falls through: the
+covering all 44 `data_type` values, per `FR-EX-008`. Nothing falls through: the
 final branch of each macro calls `fail()`, so a type the macro has never met ends
 the render with `65` and names the column.
 

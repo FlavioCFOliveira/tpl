@@ -29,6 +29,7 @@ use serde::Serialize;
 
 use super::keys::EntryKey;
 use crate::error::Position;
+use crate::model::database::Provider;
 use crate::project::secret::Redacted;
 
 /// The five TLS modes of `FR-CONF-013`, defaulting to `verify-identity`.
@@ -391,6 +392,12 @@ pub(crate) struct Entry {
     pub(crate) ca_file: Option<PathBuf>,
     /// `ca_path` (`FR-CONF-014`).
     pub(crate) ca_path: Option<PathBuf>,
+    /// `provider` as written, or [`None`] where the entry carries no such key
+    /// and is therefore a `mariadb` entry (`FR-CONF-051`).
+    pub(crate) provider: Option<Provider>,
+    /// `path`, the SQLite database file, as written and never expanded
+    /// (`FR-CONF-053`, `FR-CONF-054`).
+    pub(crate) path: Option<PathBuf>,
 }
 
 impl fmt::Debug for Entry {
@@ -413,11 +420,19 @@ impl fmt::Debug for Entry {
             .field("tls", &self.tls)
             .field("ca_file", &self.ca_file)
             .field("ca_path", &self.ca_path)
+            .field("provider", &self.provider)
+            .field("path", &self.path)
             .finish()
     }
 }
 
 impl Entry {
+    /// The entry's provider: the one written, or `mariadb` where the entry
+    /// carries no `provider` key (`FR-CONF-051`).
+    pub(crate) fn provider(&self) -> Provider {
+        self.provider.unwrap_or_default()
+    }
+
     /// Whether the entry declares `field`.
     pub(crate) const fn declares(&self, field: EntryKey) -> bool {
         match field {
@@ -431,6 +446,8 @@ impl Entry {
             EntryKey::Port => self.port.is_some(),
             EntryKey::Tls => self.tls.is_some(),
             EntryKey::User => self.user.is_some(),
+            EntryKey::Provider => self.provider.is_some(),
+            EntryKey::Path => self.path.is_some(),
         }
     }
 
@@ -458,6 +475,8 @@ impl Entry {
             }),
             EntryKey::Tls => self.tls.map(|mode| Written::Text(mode.name())),
             EntryKey::User => text(self.user.as_ref()),
+            EntryKey::Provider => self.provider.map(|provider| Written::Text(provider.name())),
+            EntryKey::Path => path(self.path.as_deref()),
         }
     }
 }
@@ -474,8 +493,13 @@ impl Entry {
 /// It exists so that **one** piece of code applies the rule to two entries: the
 /// entry a file carries, which the reader validates, and the entry an
 /// invocation would leave behind, which `FR-CFG-048` refuses before writing.
-/// The `tls`, `ca_file` and `ca_path` keys take no part in the rule and are
-/// therefore not carried.
+///
+/// Since the sixty-fifth edition it applies a second rule over the same
+/// entries, `FR-CONF-052`'s: which keys each provider takes. It therefore also
+/// carries the provider, written or taken from an absent key, and whether the
+/// entry declares each key the providers divide between them — `tls`,
+/// `ca_file`, `ca_path` and `path` among them, which `FR-CONF-007` does not
+/// read.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct Combination {
     /// Whether the entry declares `dsn`.
@@ -494,6 +518,16 @@ pub(crate) struct Combination {
     database: bool,
     /// Whether it declares `password_command`.
     password_command: bool,
+    /// Whether it declares `tls`.
+    tls: bool,
+    /// Whether it declares `ca_file`.
+    ca_file: bool,
+    /// Whether it declares `ca_path`.
+    ca_path: bool,
+    /// Whether it declares `path`.
+    path: bool,
+    /// The `provider` it declares, or [`None`] where it declares none.
+    provider: Option<Provider>,
 }
 
 impl Combination {
@@ -507,8 +541,39 @@ impl Combination {
         for field in EntryKey::ALL {
             combination.declare(field, entry.declares(field));
         }
+        combination.provider = entry.provider;
 
         combination
+    }
+
+    /// The same combination, with `provider` written into it, or with the key
+    /// removed where `provider` is [`None`].
+    pub(crate) const fn with_provider(mut self, provider: Option<Provider>) -> Self {
+        self.provider = provider;
+        self
+    }
+
+    /// The provider: the one declared, or `mariadb` where none is
+    /// (`FR-CONF-051`).
+    pub(crate) fn provider(self) -> Provider {
+        self.provider.unwrap_or_default()
+    }
+
+    /// Whether the provider is written rather than taken from an absent key.
+    pub(crate) const fn provider_written(self) -> bool {
+        self.provider.is_some()
+    }
+
+    /// Every key the entry declares that its provider refuses
+    /// (`FR-CONF-052`), in the order `FR-CONF-002` states them, or an empty
+    /// list where it declares none.
+    pub(crate) fn refused_by_provider(self) -> Vec<EntryKey> {
+        let provider = self.provider();
+
+        EntryKey::ALL
+            .into_iter()
+            .filter(|field| self.declares(*field) && !field.taken_by(provider))
+            .collect()
     }
 
     /// The same combination, with the DSN known to carry a password or not.
@@ -519,10 +584,9 @@ impl Combination {
 
     /// Records that the entry does or does not declare `field`.
     ///
-    /// A field the rule does not read — `tls`, `ca_file`, `ca_path` — is
-    /// accepted and recorded nowhere, so that a caller applying an invocation
-    /// to a combination may hand it every key it writes without sorting them
-    /// first.
+    /// The provider's value is not a declaration of this kind: a caller that
+    /// writes one records it through [`Combination::with_provider`], so this
+    /// records only whether the key is present.
     pub(crate) const fn declare(&mut self, field: EntryKey, declared: bool) {
         match field {
             EntryKey::Dsn => self.dsn = declared,
@@ -532,7 +596,15 @@ impl Combination {
             EntryKey::Password => self.password = declared,
             EntryKey::Database => self.database = declared,
             EntryKey::PasswordCommand => self.password_command = declared,
-            EntryKey::Tls | EntryKey::CaFile | EntryKey::CaPath => {}
+            EntryKey::Tls => self.tls = declared,
+            EntryKey::CaFile => self.ca_file = declared,
+            EntryKey::CaPath => self.ca_path = declared,
+            EntryKey::Path => self.path = declared,
+            EntryKey::Provider => {
+                if !declared {
+                    self.provider = None;
+                }
+            }
         }
     }
 
@@ -563,8 +635,6 @@ impl Combination {
     }
 
     /// Whether the combination declares `field`.
-    ///
-    /// A field the rule does not read is never declared, per [`declare`](Self::declare).
     pub(crate) const fn declares(self, field: EntryKey) -> bool {
         match field {
             EntryKey::Dsn => self.dsn,
@@ -574,7 +644,11 @@ impl Combination {
             EntryKey::Password => self.password,
             EntryKey::Database => self.database,
             EntryKey::PasswordCommand => self.password_command,
-            EntryKey::Tls | EntryKey::CaFile | EntryKey::CaPath => false,
+            EntryKey::Tls => self.tls,
+            EntryKey::CaFile => self.ca_file,
+            EntryKey::CaPath => self.ca_path,
+            EntryKey::Path => self.path,
+            EntryKey::Provider => self.provider.is_some(),
         }
     }
 }

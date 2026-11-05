@@ -1,8 +1,8 @@
 ---
 title: Upstream Divergences
 status: approved
-last-reviewed: 2026-09-25
-related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md]
+last-reviewed: 2026-11-05
+related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md, mysql-contract.md]
 ---
 
 # Upstream Divergences
@@ -20,10 +20,92 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Fifty-six entries are recorded. As of 2026-09-25, three are due in full,
-forty-nine are discharged, and four are partly discharged.** Seven entries
-still owe something: five owe it to `CLAUDE.md` and two to `README.md`, and no
-entry is in both counts.
+**Sixty-five entries are recorded. As of 2026-11-05, three are due in full,
+fifty-eight are discharged, and four are partly discharged.** Seven entries
+still owe something: five owe it to `CLAUDE.md` and two to `README.md`, and
+no entry is in both counts.
+
+*The counts moved in the eighty-fifth edition, and three entries moved
+them.* `536f836` corrected the three passages of the root `README.md` the
+seventy-ninth edition raised entries against, and the file was read at that
+commit on 2026-11-05. `DIV-063`, `DIV-064` and `DIV-065` are discharged in
+full: they leave the **due** count and that file's count, and join the
+discharged one. No other entry was re-read for status. The counts restated
+in `DIV-032` and `DIV-041` move with this paragraph.
+
+*The counts moved in the seventy-ninth edition, and three entries moved
+them.* The edition makes the session statement a phase bounded by
+`core.query_timeout`, places the `${VAR}` expansion and `password_command`
+at the resolution of an entry for a connection, and has the worked examples
+also read a schema through a `mysql` entry and a database through a `sqlite`
+entry. The root `README.md` paraphrases
+all three, in its sections *Deadlines*, *Keeping a password off disk* and
+*Worked examples*. Both files were read at `b3f87a2`, unchanged since
+`9468588`, against every requirement the edition writes and amends.
+`DIV-063`, `DIV-064` and `DIV-065` are raised against `README.md`; they join
+the **due** count and that file's count, and each was raised by an amendment
+to this corpus rather than by an edit to the target. `CLAUDE.md` paraphrases
+none of them. No other entry was re-read for status. The counts restated in
+`DIV-032` and `DIV-041` move with this paragraph.
+
+*The counts moved in the seventy-eighth edition, and four entries moved them,
+the last of them twice.* The documentation effort of rmp `#330` corrected both
+root documents in the working tree over `cc511e2`, and the commit of rmp
+`#330` records the correction together with this edition, so the commit that
+discharges each entry is named as that commit and not by a hash this register
+could not yet read. Both files were read in that working tree on 2026-11-04.
+`DIV-059`, `DIV-060` and `DIV-061` are discharged in full: they leave the
+**due** count, two leave the count of `README.md` and one the count of
+`CLAUDE.md`, and all three join the discharged one. The same reading found one
+passage the correction of `DIV-059` added that this corpus contradicts, and
+`DIV-062` was raised against `README.md`; rmp `#330` corrected that row in the
+same working tree, and a second reading found the correction made, so
+`DIV-062` is discharged as well: it adds one entry to the total and one to the
+discharged count, and leaves the **due** count and both files' counts as they
+were. `DIV-036`, `DIV-037` and `DIV-050`, whose passages of `CLAUDE.md` sit
+beside the lines the correction changed, were read and stand as they were. No
+other entry was re-read for status. The counts restated in `DIV-032` and
+`DIV-041` move with this paragraph.
+
+*The counts moved in the seventy-seventh edition, and one entry moved them.*
+The edition amends `FR-CONF-005`, which the root `README.md` paraphrases,
+making the login a fourth phase under the budget of `core.connect_timeout`.
+Both files were read at `2d652bd` against every requirement the edition
+writes and amends. `DIV-061` is raised against `README.md`; it joins the
+**due** count and that file's count, and was raised by an amendment to this
+corpus rather than by an edit to the target. `CLAUDE.md` paraphrases none
+of them. No other entry was re-read for status. The counts restated in
+`DIV-032` and `DIV-041` move with this paragraph.
+
+*The counts moved in the seventy-third edition, and two entries moved them.*
+The edition gives `tpl` a third provider, MySQL, and amends `FR-CONF-051`,
+which both root documents paraphrase as two providers, `mariadb` and
+`sqlite`; the root `README.md` also states that MySQL is not a target. Both
+files were read at `e72e299` against the requirements the edition writes and
+amends. `DIV-059` is raised against `README.md` and `DIV-060` against
+`CLAUDE.md`; both join the **due** count, one joins each file's count, and
+both were raised by an amendment to this corpus rather than by an edit to the
+target. No other entry was re-read for status. The counts restated in
+`DIV-032` and `DIV-041` move with this paragraph.
+
+*The counts moved in the seventy-second edition, and two entries moved them.*
+`DIV-057` and `DIV-058`, the two entries the sixty-fifth edition raised, were
+read on 2026-11-04 against both root documents at `a9d8fed`. `60bf9df` made
+every part of each correction, so both are discharged: both leave the **due**
+count, one leaves each file's count, and both join the discharged one. No
+other entry was re-read for status, so every other status these counts count
+stands as of the date it names. The counts restated in `DIV-032` and `DIV-041`
+move with this paragraph.
+
+*The counts moved in the sixty-fifth edition, and two entries moved them.*
+The edition gives `tpl` a second provider, SQLite, and amends `FR-SRV-001`,
+which both root documents paraphrase as *MariaDB only*. Both files were read at
+`6203216` against the requirements the edition writes and amends. `DIV-057` is
+raised against `README.md` and `DIV-058` against `CLAUDE.md`; both join the
+**due** count, one joins each file's count, and both were raised by an
+amendment to this corpus rather than by an edit to the target. No other entry
+was re-read for status. The counts restated in `DIV-032` and `DIV-041` move
+with this paragraph.
 
 *The counts moved in the sixty-fourth edition, and two entries moved them.*
 Both root documents were re-read against `c360c80`. `DIV-054` is discharged
@@ -441,6 +523,15 @@ register was opened, and `DIV-025` cites it for a search of the history.
 | [DIV-054](#div-054) | `README.md` | Overstatement | Discharged, `455e48d` and `015a77e` | Two passages saying no command reaches a server |
 | [DIV-055](#div-055) | `CLAUDE.md` | Contradiction | Discharged, `9562fb2` | A regression against a recorded baseline said to fail the change |
 | [DIV-056](#div-056) | `README.md` | Contradiction | Discharged, `6bc8513` | The `.cfg` key space counted short of the eighteen keys of `FR-CONF-002` |
+| [DIV-057](#div-057) | `README.md` | Contradiction | Discharged, `60bf9df` | MariaDB as the only database, no write outside `.tpl`, and eighteen keys |
+| [DIV-058](#div-058) | `CLAUDE.md` | Contradiction | Discharged, `60bf9df` | MariaDB as the only database, `INFORMATION_SCHEMA` as the only catalogue, and the MariaDB fixture as the only one |
+| [DIV-059](#div-059) | `README.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | MySQL as no target, MariaDB and SQLite as the only providers, and no MySQL fixture |
+| [DIV-060](#div-060) | `CLAUDE.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | MariaDB and SQLite as the only providers, and no contract or catalogue rule for a `mysql` entry |
+| [DIV-061](#div-061) | `README.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | `connect_timeout` shared by three connection phases, where the login is a fourth |
+| [DIV-062](#div-062) | `README.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | A MySQL reader's restricted views and routines said to be marked, where one requested by name exits `77` |
+| [DIV-063](#div-063) | `README.md` | Contradiction | Discharged, `536f836` | `query_timeout` said to bound catalogue queries, where it also bounds each session statement |
+| [DIV-064](#div-064) | `README.md` | Contradiction | Discharged, `536f836` | The `schema` subcommands said to resolve the configuration for a connection, where a read served from the cache does not |
+| [DIV-065](#div-065) | `README.md` | Contradiction | Discharged, `536f836` | The worked examples said to read three schemas from one server, where they also read one through a `mysql` entry and one through a `sqlite` entry |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -1130,7 +1221,8 @@ in *Estrutura do Projecto*, below the project tree and unchanged since
 `3f65b5f`, through every commit that has touched `CLAUDE.md` since — the three
 most recent of them `3a360d6`, `6a66d14` and `9562fb2`, none of which reaches
 this passage. It is one of the seven entries this register still owes
-something on, and one of the five owed to that file. Re-read on 2026-09-25 at
+something on, and one of the five owed to that file, as counted in the
+eighty-fifth edition. Re-read on 2026-09-25 at
 `c360c80`: `6bc8513`, `390c6c6` and `70661da` touched `CLAUDE.md` since and
 none reaches this passage.
 
@@ -1546,8 +1638,9 @@ sentence.
 verbatim under *Plataformas Suportadas*, unmoved by `3a360d6`, `6a66d14` or
 `9562fb2`, and the two rules beside it still restate what `NFR-PERF-018` and
 `NFR-PERF-012` carry. It is one of the seven entries this register still
-owes something on. Re-read on 2026-09-25 at `c360c80`: the deferral stands,
-unmoved by `6bc8513`, `390c6c6` and `70661da`.
+owes something on, as counted in the eighty-fifth edition. Re-read on
+2026-09-25 at `c360c80`: the deferral stands, unmoved by `6bc8513`,
+`390c6c6` and `70661da`.
 
 *Corrected in the thirty-sixth edition, with `DIV-032`*, and for the reason
 given there.
@@ -2755,6 +2848,460 @@ direction `DIV-053` first recorded. The sentence was an exact summary of
 `FR-CONF-002` when it was written. Its paragraph on deadlines is unaffected:
 the four `[core]` keys it names still supply every deadline, and the three
 new keys set bounds that are not deadlines.
+
+## DIV-057
+
+**Target**: `README.md`, the opening paragraph, the note on the three joined
+arms, *Two properties bound the tool*, *Requirements*, and *Configuration*.
+**Kind**: contradiction.
+
+**Status**: **discharged** by `60bf9df`, re-read on 2026-11-04 against
+`README.md` at `a9d8fed`. Every part of the correction is made. The opening
+paragraph says that `tpl` reads a MariaDB database or a SQLite database file,
+and that which of the two an entry reads is its provider. The note on the
+joined arms opens one connection to the MariaDB server or the SQLite database
+file the selected entry names. *Two properties bound the tool* names
+`<file>-wal` and `<file>-shm` as the second exception to writing only inside
+`.tpl`, and points at `FR-PROJ-024` and `FR-LITE-008`. The *Requirements* table carries
+a `SQLite` row requiring read access to the database file and no privilege.
+*The key space is closed* drops its counts and keeps the pointer to
+`FR-CONF-002`, the form `DIV-056` named as the one that stops the count
+falling behind. The paragraph on MySQL stands, as this entry asked. Nothing
+is owed.
+
+*Status when raised*: **due**, on 2026-11-03 at `6203216`. No commit had
+discharged any part of it.
+
+*Says*: "`tpl` is a command-line tool that reads the structure — the DDL, or
+schema — of a **MariaDB** database"; "The eight `schema` subcommands and
+`tpl cache load` open one connection to the MariaDB server the selected entry
+names"; "**Almost nothing is written to disk.** `tpl` writes inside its own
+`.tpl` folder and nowhere else, the one exception being the destination
+directory `tpl init` creates"; the *Requirements* table names "The MariaDB
+series that are supported" as the database and "`SELECT` on
+`INFORMATION_SCHEMA` for the target database" as the privileges; and
+"`.tpl/.cfg` admits exactly eighteen keys — eight under `[core]` and ten per
+`[database.<name>]` block".
+*Specification*: `FR-CONF-051` and `FR-CONF-052`, which give every entry a
+provider, `mariadb` or `sqlite`; `FR-SRV-001` as amended in the sixty-fifth
+edition, which scopes the MariaDB window to a `mariadb` entry;
+[sqlite-contract.md](sqlite-contract.md), which reads a SQLite database file
+and needs read access to that file and no privilege; `FR-LITE-008`, under
+which the library may create `<file>-wal` and `<file>-shm` beside a database in
+write-ahead-log mode; and `FR-CONF-002`, which now holds twenty key forms,
+twelve per entry.
+*Correction*: say that `tpl` reads a MariaDB database or a SQLite database
+file, chosen by the entry's provider; say that the joined arms open one
+connection to the server or to the file the entry names; state the one write
+outside `.tpl` a SQLite read can cause, or point at `FR-LITE-008`; give the
+*Requirements* table a row for SQLite, with read access to the file as its
+requirement; and change the key counts to twenty and twelve, or drop them and
+keep the pointer to `FR-CONF-002`. The paragraph on MySQL is correct and
+stays: a server reached through a `mariadb` entry that is not MariaDB is still
+refused.
+
+*Raised by an amendment to this corpus, and not by an edit to the target*, the
+direction `DIV-053` first recorded. Every passage was an exact summary of the
+corpus when it was written. The key count is the one `DIV-056` said would be
+owed again the next time `FR-CONF-002` gained a key; it is recorded here, in
+the entry the same edition raised against the same file, rather than by
+re-opening a discharged entry.
+
+## DIV-058
+
+**Target**: `CLAUDE.md`, *Overview*, *Product scope*, the *Where to look for
+each subject* table, the *Non-Negotiable Rules* table, *Implementation
+Invariants* item 1, and *Testing against MariaDB*. **Kind**: contradiction.
+
+**Status**: **discharged** by `60bf9df`, re-read on 2026-11-04 against
+`CLAUDE.md` at `a9d8fed`. Every part of the correction is made. *Overview*
+names SQLite database files beside MariaDB databases, chosen by the provider
+each entry names. *Product scope* adds the write-ahead-log files a
+SQLite read may cause beside the database to the disk writes `tpl` makes, and
+points at `FR-LITE-008`. The subject table narrows the row of
+`specification/server-contract.md` to the read-only promise of a `mariadb`
+entry and adds a row for `specification/sqlite-contract.md`. The
+*Non-Negotiable Rules* table and item 1 of *Implementation Invariants* both
+read the catalogue through `INFORMATION_SCHEMA` for a `mariadb` entry and
+through `sqlite_schema` and the pragma functions of `FR-LITE-015` for a
+`sqlite` entry. *Testing against MariaDB* requires the fixture of the
+provider a test reads, names `scripts/sqlite/` for SQLite, and gives that
+fixture a paragraph of its own. The rule that `tpl` never writes to the
+database stands for both providers, as this entry asked. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-03 at `6203216`. No commit had
+discharged any part of it.
+
+*Says*: "`tpl` is a **command-line application written in Rust** that reads
+the structure (DDL / schema) of **MariaDB** databases"; "the only disk writes
+it makes are those explicitly requested on the command line, plus the
+management of its own project folder"; the subject table names
+`specification/server-contract.md` for "the read-only promise" and has no row
+for a SQLite provider; the rules table reads "The catalogue is read only
+through `INFORMATION_SCHEMA`", and the first implementation invariant "The
+catalogue is read through `INFORMATION_SCHEMA` — never through `mysqldump` or
+any external process"; and "Tests or
+validations that need a real database **must** use the fixture defined in
+`scripts/mariadb/`".
+*Specification*: `FR-CONF-051`, under which an entry's provider is `mariadb`
+or `sqlite`; [sqlite-contract.md](sqlite-contract.md), which reads a SQLite
+catalogue through `sqlite_schema` and the pragma table-valued functions of
+`FR-LITE-015`, states the read-only promise of a `sqlite` entry in
+`BR-LITE-001`, and obliges the fixture of `scripts/sqlite/` in `FR-LITE-038`;
+and `FR-LITE-008`, under which a SQLite read may cause the library to create
+two files beside a database in write-ahead-log mode.
+*Correction*: name SQLite beside MariaDB in the overview; state the
+write-ahead-log files as the one write outside the project folder a read can
+cause, or point at `FR-LITE-008`; add a row for
+`specification/sqlite-contract.md` to the subject table; read the catalogue
+rule as "through `INFORMATION_SCHEMA` for a `mariadb` entry, and through
+`sqlite_schema` and the pragma functions of `FR-LITE-015` for a `sqlite`
+entry", in both places; and name `scripts/sqlite/` as the fixture of a test
+that reads a SQLite database. The rule that `tpl` never writes to the database
+stands for both providers and stays.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+The target was read in its English translation at `6203216`. The headings this
+entry cites are that translation's, and the entries of this register raised
+before it cite the earlier Portuguese headings — a difference this edition
+records and does not correct, because no entry's status turns on it.
+
+## DIV-059
+
+**Target**: `README.md`, the opening paragraph, the note on the three joined
+arms, *Two properties bound the tool*, *Requirements*, the paragraph on
+MySQL below it, *A database entry and its provider*, and *Development*.
+**Kind**: contradiction.
+
+**Status**: **discharged** by the commit of rmp `#330`, re-read on
+2026-11-04 against `README.md` in the working tree over `cc511e2`, which that
+commit records. Every part of the correction is made. The opening paragraph
+names a MySQL database beside a MariaDB database and a SQLite database file,
+and calls the provider which of the three an entry reads. The note on the
+joined arms opens one connection to "the MariaDB or MySQL server or the
+SQLite database file". *Two properties bound the tool* sets "a MariaDB or
+MySQL session" read-only and points at
+[mysql-contract.md](mysql-contract.md). The *Requirements* table has a MySQL
+row that cites `FR-MYSQL-002` for the rule and `FR-MYSQL-003` for the
+current members, as the MariaDB row cites its pair, and names no version. The
+paragraph that said MySQL is not a target now says that MySQL is read through
+a `mysql` entry, that a `mariadb` entry still refuses a server that is not
+MariaDB, and that a `mysql` entry refuses a MariaDB server, citing
+`FR-MYSQL-008` and `FR-MYSQL-012`. *A database entry and its provider* names
+`mysql` among the three providers. *Development* names `scripts/mysql/` as
+the fixture of a test that reads a MySQL server, operated through its own
+scripts, and points at `scripts/mysql/README.md`. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-04 at `e72e299`, and re-read on
+2026-11-04 at `1b3ff53`, the commit that added `scripts/mysql/`. No commit
+had discharged any part of it.
+
+*Says*: "`tpl` is a command-line tool that reads the structure — the DDL, or
+schema — of a **MariaDB** database or a **SQLite** database file … Which of
+the two a database entry reads is its provider"; "open one connection to the
+MariaDB server or the SQLite database file the selected entry names"; "a
+MariaDB session is set read-only on every connection, as defence in depth,
+and a SQLite database file is opened read-only and never created"; the
+*Requirements* table has rows for MariaDB, MariaDB privileges and SQLite and
+none for MySQL; "MySQL is not a target. A server that is not MariaDB is
+refused rather than read, because the two diverge in `INFORMATION_SCHEMA` in
+ways that would make the model silently wrong"; and "Every entry has a
+provider, named by its `provider` key: `mariadb` — the provider of an entry
+without the key — or `sqlite`"; and *Development* reads "Tests that need a
+live database use the containers defined in `scripts/mariadb/`" and "The
+tests of the SQLite provider build their databases at test time from the
+SQL text in `scripts/sqlite/`", and names no other fixture.
+*Specification*: `FR-CONF-051` and `FR-CONF-052` as amended in the
+seventy-third edition, under which the provider is `mariadb`, `mysql` or
+`sqlite`, and a `mysql` entry takes the keys of a `mariadb` entry;
+[mysql-contract.md](mysql-contract.md), which reads a MySQL server through a
+`mysql` entry, supports the series of `FR-MYSQL-002` and `FR-MYSQL-003`,
+sets a MySQL session read-only under `FR-MYSQL-018`, and obliges the
+fixture of `scripts/mysql/` in `FR-MYSQL-044`; and `FR-MYSQL-012`, under
+which a `mariadb` entry that reaches a MySQL server is refused as before.
+*Correction*: name MySQL as the third provider in the opening paragraph, the
+joined-arms note and the paragraph on providers; name a MySQL session beside
+a MariaDB one as set read-only, or point at
+[mysql-contract.md](mysql-contract.md); give the *Requirements* table a row
+for MySQL that cites `FR-MYSQL-002` for the rule and `FR-MYSQL-003` for the
+current members, as the MariaDB row cites its pair; and replace the paragraph
+on MySQL with one saying that MySQL is read through a `mysql` entry, and that
+a server that is not MariaDB is still refused through a `mariadb` entry. In
+*Development*, beside the paragraphs on `scripts/mariadb/` and
+`scripts/sqlite/`, name `scripts/mysql/` as the fixture a test that reads a
+MySQL server uses, operated through its own scripts, and point at
+`scripts/mysql/README.md` for what it holds and how it is driven, as the
+paragraph on `scripts/mariadb/` points at that directory's README.
+
+*Raised by an amendment to this corpus, and not by an edit to the target*, the
+direction `DIV-053` first recorded. Every passage was an exact summary of the
+corpus when it was written, and `DIV-057` asked that the paragraph on MySQL
+stay, which it then rightly did.
+
+*Amended in the seventy-fifth edition,* for rmp `#326`. The correction ended:
+"The testing section owes nothing yet: `scripts/mysql/`, which
+`FR-MYSQL-044` obliges, does not exist at `e72e299`, and the section
+describes the fixtures that do." `1b3ff53` added the directory, and its
+`README.md` with it; *Development* in the target still names
+`scripts/mariadb/` and `scripts/sqlite/` alone, so the section now owes the
+sentence above, is named among the targets and is quoted under *Says*, and
+`FR-MYSQL-044` joins the *Specification*. The status is unchanged, so no
+count of the Overview moves.
+
+## DIV-060
+
+**Target**: `CLAUDE.md`, *Overview*, the *Where to look for each subject*
+table, the *Non-Negotiable Rules* table, *Implementation Invariants* item 1,
+and *Testing against MariaDB*. **Kind**: contradiction.
+
+**Status**: **discharged** by the commit of rmp `#330`, re-read on
+2026-11-04 against `CLAUDE.md` in the working tree over `cc511e2`, which that
+commit records. Every part of the correction is made. *Overview* names MySQL
+databases beside MariaDB databases and SQLite database files. The subject
+table has a row for `specification/mysql-contract.md`. The *Non-Negotiable
+Rules* table and item 1 of *Implementation Invariants* both read the
+catalogue through `INFORMATION_SCHEMA` for a `mariadb` and a `mysql` entry —
+for a `mysql` entry, "the tables of `FR-MYSQL-015` alone" — and through
+`sqlite_schema` and the pragma functions of `FR-LITE-015` for a `sqlite`
+entry, and the paragraph under the invariant points at
+`specification/mysql-contract.md` for the detail of a `mysql` entry's
+guarantee. *Testing against MariaDB* names `scripts/mysql/` as the fixture
+of a test that reads a MySQL server, and gives it a paragraph of its own that
+cites `FR-MYSQL-044`. The rule that `tpl` never writes to the database stands
+for every provider, as this entry asked. The *Stack* table and the project
+tree, which the correction did not reach, were also brought up to date —
+the driver row cites `ADR-014` for the `mysql` provider, and the tree names
+`src/mysql/` and `scripts/mysql/` — and neither states anything this corpus
+contradicts. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-04 at `e72e299`. No commit had
+discharged any part of it.
+
+*Says*: "`tpl` is a **command-line application written in Rust** that reads
+the structure (DDL / schema) of **MariaDB** databases and **SQLite** database
+files — the provider each database entry names"; the subject table has rows
+for `specification/server-contract.md` and
+`specification/sqlite-contract.md` and none for a MySQL contract; the rules
+table and the first implementation invariant read "The catalogue is read
+only through `INFORMATION_SCHEMA` for a `mariadb` entry, and through
+`sqlite_schema` and the pragma functions of `FR-LITE-015` for a `sqlite`
+entry", and "The catalogue is read through `INFORMATION_SCHEMA` for a
+`mariadb` entry, and through `sqlite_schema` and the pragma functions of
+`FR-LITE-015` for a `sqlite` entry"; and the testing section requires "the
+fixture of the provider they read: `scripts/mariadb/` for MariaDB, and
+`scripts/sqlite/` for SQLite".
+*Specification*: `FR-CONF-051` as amended in the seventy-third edition;
+[mysql-contract.md](mysql-contract.md), which reads a MySQL catalogue
+through the twelve `INFORMATION_SCHEMA` tables `FR-MYSQL-015` closes, states
+the read-only promise of a `mysql` entry in `BR-MYSQL-002`, and obliges the
+fixture of `scripts/mysql/` in `FR-MYSQL-044`.
+*Correction*: name MySQL beside MariaDB and SQLite in the overview; add a row
+for `specification/mysql-contract.md` to the subject table; read the
+catalogue rule, in both places, as reading `INFORMATION_SCHEMA` for a
+`mariadb` and a `mysql` entry — for a `mysql` entry, the tables of
+`FR-MYSQL-015` alone — and `sqlite_schema` and the pragma functions of
+`FR-LITE-015` for a `sqlite` entry; and name `scripts/mysql/` as the fixture
+of a test that reads a MySQL server, once that directory exists. The rule
+that `tpl` never writes to the database stands for every provider and stays.
+The *Stack* table and the project tree are not reached: which driver reads
+MySQL is an architecture decision, not a requirement of this corpus.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+
+## DIV-061
+
+**Target**: `README.md`, the section *Deadlines*. **Kind**: contradiction.
+
+**Status**: **discharged** by the commit of rmp `#330`, re-read on
+2026-11-04 against `README.md` in the working tree over `cc511e2`, which that
+commit records. The paragraph now reads "`connect_timeout`, shared by DNS
+resolution, the TCP connect, the TLS handshake and the login", the words the
+correction proposed, and the paragraph below it counts "the four connection
+phases" where it counted three. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-04 at `2d652bd`. No commit had
+discharged any part of it.
+
+*Says*: "Four `[core]` keys supply them: `connect_timeout`, shared by DNS
+resolution, TCP connect and the TLS handshake; `query_timeout`, per
+catalogue query; `password_timeout`, for `password_command`; and
+`render_timeout`, for one render."
+*Specification*: `FR-CONF-005` as amended in the seventy-seventh edition,
+under which the [login](glossary.md#login) is a fourth connection phase and
+shares the one budget of `core.connect_timeout` with DNS resolution, the TCP
+connect and the TLS handshake.
+*Correction*: name the login among the phases `connect_timeout` bounds —
+"shared by DNS resolution, the TCP connect, the TLS handshake and the login"
+— or point at `FR-CONF-005` for the phases. The rest of the paragraph stands.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+The sentence was an exact summary of `FR-CONF-005` when it was written; the
+login ran under the same budget then, unnamed.
+
+## DIV-062
+
+**Target**: `README.md`, the *Requirements* table, the row *MySQL
+privileges*. **Kind**: contradiction.
+
+**Status**: **discharged** by the commit of rmp `#330`, re-read on
+2026-11-04 against `README.md` in the working tree over `cc511e2`, which that
+commit records. The row now qualifies the marking by where it happens: "in a
+listing or a dump such views and routines are marked `restricted`, one
+requested by name — `tpl schema view`, `tpl schema routine`, or a
+`tpl render` object flag — exits `77`, and triggers it may not see are
+absent", which is the correction's first form, and it still cites
+`FR-MYSQL-041`. The row *MariaDB privileges* makes no claim about a short
+read and is unchanged. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-04 against `README.md` in the
+working tree over `cc511e2`. The row had been added by the correction of
+`DIV-059`, and no change had discharged any part of it.
+
+*Says*: "A reader that sees the target database's objects. One that lacks
+the privileges to read view definitions, routine bodies or triggers gets a
+short read: such views and routines are marked `restricted`, and triggers it
+may not see are absent, as `FR-MYSQL-041` states".
+*Specification*: `FR-MYSQL-041`, under which the rules of
+[privileges-and-completeness.md](privileges-and-completeness.md) hold for a
+`mysql` read: an incomplete object in a listing or a dump is marked under
+`FR-PRIV-005` through `FR-PRIV-007`, and an incomplete object requested by
+name — `tpl schema view`, `tpl schema routine`, or a `tpl render` object
+flag — exits `77` under `FR-PRIV-003`; and `FR-PRIV-020`, under which
+triggers the reader may not see are absent.
+*Correction*: qualify the marking by where it happens — such views and
+routines are marked `restricted` in a listing or a dump, and one requested
+by name exits `77` — or point at `FR-MYSQL-041` for what a short read
+yields. The rest of the row stands.
+
+*Raised by a re-read of the target, and not by an amendment to this
+corpus.* The row is new; it states the marking alone, which is half of what
+`FR-MYSQL-041` makes of a short read, and a caller who requests such a view
+by name meets the other half, the `77`, with nothing in the row to say so.
+
+## DIV-063
+
+**Target**: `README.md`, the section *Deadlines*. **Kind**: contradiction.
+
+**Status**: **discharged** by `536f836`, re-read on 2026-11-05 against
+`README.md` at that commit. The paragraph now reads "`query_timeout`, per
+catalogue query and per session statement — the read-only statement, its
+read-back and the version probe, each with a deadline of its own", and the
+paragraph two below names "the three session statements" among what bounds
+a read that misses the cache, citing `FR-CONF-005`: the correction's first
+form, in both places. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-05 at `b3f87a2`. No commit had
+discharged any part of it.
+
+*Says*: "Four `[core]` keys supply them: `connect_timeout`, shared by DNS
+resolution, the TCP connect, the TLS handshake and the login;
+`query_timeout`, per catalogue query; `password_timeout`, for
+`password_command`; and `render_timeout`, for one render." and, two
+paragraphs below, "The four connection phases and the catalogue query bound
+a read that misses the cache".
+*Specification*: `FR-CONF-005` as amended in the seventy-ninth edition, under
+which the [session statement](glossary.md#session-statement) is a blocking
+phase, and each of the three — the read-only session statement, its
+read-back and the version probe — has a deadline of `core.query_timeout` of
+its own; and `FR-ERR-027`, which names the statement whose deadline
+expired.
+*Correction*: name the session statements among what `query_timeout` bounds
+— "`query_timeout`, per catalogue query and per session statement" — and
+among what bounds a read that misses the cache, or point at `FR-CONF-005`
+for the phases. The rest of both paragraphs stands.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+The sentence was an exact summary of `FR-CONF-005` when it was written; the
+session statements ran under `query_timeout` then, unnamed.
+
+## DIV-064
+
+**Target**: `README.md`, the section *Keeping a password off disk*. **Kind**:
+contradiction.
+
+**Status**: **discharged** by `536f836`, re-read on 2026-11-05 against
+`README.md` at that commit. The passage now names `tpl cache load`,
+`tpl cfg database test`, "and a `schema` subcommand or a `tpl render` whose
+context comes from the database, on a read that misses the cache or carries
+`--direct`", and adds "A read served from the cache expands no variable and
+runs no `password_command`", citing `FR-CONF-056`; the first sentence and the
+sentence on the commands that only read or write `.tpl/.cfg` stand. Nothing
+is owed.
+
+*Status when raised*: **due**, on 2026-11-05 at `b3f87a2`. No commit had
+discharged any part of it.
+
+*Says*: "Both take effect when the configuration is **resolved for a
+connection** — which is what every command that opens one does: the
+`schema` subcommands, `tpl cache load`, `tpl cfg database test`, and
+`tpl render` when its context comes from the database rather than from
+`--context`."
+*Specification*: `FR-CONF-056`, under which the fields `FR-CONF-015` names
+are expanded, and `password_command` is run, only by an invocation that opens
+a connection — a read that misses the cache or carries `--direct`,
+`tpl cache load` and `tpl cfg database test` — and a read served from the
+cache expands no variable and runs no `password_command`.
+*Correction*: qualify the `schema` subcommands and `tpl render` by the read
+that opens a connection — they resolve the configuration for one on a read
+that misses the cache or carries `--direct` — and state that a read served
+from the cache expands no variable and runs no `password_command`, or point
+at `FR-CONF-056`. The first sentence of the paragraph, and the sentence on
+the commands that only read or write `.tpl/.cfg`, stand.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+The passage names the `schema` subcommands among the commands that open a
+connection, which each of them does on a miss and none does on a hit; until
+`FR-CONF-056` the corpus did not say when the expansion happens, and the
+implementation expanded on a hit, which is rmp `#310`.
+
+## DIV-065
+
+**Target**: `README.md`, the section *Worked examples*. **Kind**:
+contradiction.
+
+**Status**: **discharged** by `536f836`, re-read on 2026-11-05 against
+`README.md` at that commit, which follows the implementation of
+`FR-EX-011` and `FR-EX-012`, as the correction required. The section states
+that all four examples make "the same five reads, through all three
+providers" — the three MariaDB schemas, the `freight` schema of the MySQL
+fixture through a `mysql` entry, and the main database the SQLite fixture
+builds from `scripts/sqlite/freight.sql` through a `sqlite` entry — and
+restates the counts, 82 tables and 755 columns, 247 to 252 files, and 44
+values of `data_type`, `json`, `geomcollection` and the three SQLite
+affinities no server read produces among them. The counts are the
+examples' own, which this register does not check. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-05 at `b3f87a2`. No commit had
+discharged any part of it.
+
+*Says*: "All four read the same three schemas — `sakila`, `world` and
+`freight`, **36 tables and 362 columns** — from one server of the most recent
+supported series", and "each example carries its own macro, covering all
+**39 `data_type` values** the three schemas declare".
+*Specification*: `FR-EX-011`, under which all four examples also read the
+`freight` schema of the fixture of `scripts/mysql/` through a `mysql` entry,
+from one server of the most recent series of `FR-MYSQL-003`, and render and
+compile its data layer; `FR-EX-012`, under which they also read, through a
+`sqlite` entry, the main database the fixture of `scripts/sqlite/` builds
+from `freight.sql`, and render and compile its data layer; and `FR-EX-008`
+as amended in the same edition, under which each macro covers the values of
+`data_type` of both, `json` and `geomcollection` among the first and the
+five affinities of `FR-LITE-026` for the second.
+*Correction*: state that the examples read their schemas through all three
+providers — the three MariaDB schemas, the `freight` schema of the MySQL
+fixture through a `mysql` entry, and the main database of the SQLite fixture
+through a `sqlite` entry — and restate the counts of tables, columns, files
+and `data_type` values from the examples as they then stand. **The
+correction is owed with the implementation of `FR-EX-011` and `FR-EX-012`,
+and not before it**: until the examples render those schemas the passage is
+true of the repository, which the root documentation is obliged to describe
+faithfully, and a passage written ahead of the examples would be false of
+them; it may be made in two parts, one per requirement, the status then
+reading partly discharged.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+The passage was an exact summary of `FR-EX-006` and of the examples when it
+was written.
 
 ## A candidate read, and not recorded
 

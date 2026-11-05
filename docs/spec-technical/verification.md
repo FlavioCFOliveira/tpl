@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -38,20 +38,29 @@ them. **This whole document was re-audited against the tree at commit `243c4d6`
 on 2026-09-21**: every count, every per-file breakdown and every statement that
 a component is a later sprint's was re-measured rather than carried forward.
 
-**Twenty-six of the twenty-seven rows of the register below carry at least one
-test; row 8 alone carries none.** Row 27 was added on 2026-09-23, with
-`FR-RND-040`, and is whole. Row 2 is a unit test over the seam
-`FR-ERR-031` requires, and it asserts what that row asserts: the guard produces
-the condition of `FR-ERR-030` carrying the message `FR-ERR-032` requires. Rows 3
-to 6 were written with the command surface, at commit `f8f335d` of 2026-09-15,
-and [Help](#help-snapshots-at-every-depth) names each. **Seven rows are not
-whole**, and each is named where it falls short rather than counted as answered:
+**Thirty-two of the thirty-three rows of the register below carry at least one
+test; row 8 carries none.** Rows 28 to 30 were added on 2026-11-03, for the
+SQLite provider; row 31 the same day, for rmp `#317`, against the sixty-eighth
+edition; and rows 32 and 33 the same day, against the sixty-ninth. **All six
+are whole at `19abb1f`**, read against the seventy-first edition, and
+*What rows 28 to 33 reach*, below the register, names each test. Row 27
+was added on 2026-09-23, with `FR-RND-040`, and is whole. Row 2 is a unit test
+over the seam `FR-ERR-031` requires, and it asserts what that row asserts: the
+guard produces the condition of `FR-ERR-030` carrying the message `FR-ERR-032`
+requires. Rows 3 to 6 were written with the command surface, at commit
+`f8f335d` of 2026-09-15, and [Help](#help-snapshots-at-every-depth) names each.
+Row 10 is whole since `b61661d` of 2026-09-20: the failing outcome is asserted
+in process through the seam `FR-SRV-013` authorises,
+`fr_srv_013_a_read_back_that_does_not_confirm_is_refused_before_the_catalogue`
+in `src/mariadb/session.rs`, against one fixture server and bound to no series,
+because the answer under test is the seam's and not the server's.
+**Six rows are not whole**, and each is named where it falls short rather
+than counted as answered:
 
 | Row | What is reached | What is not |
 |---|---|---|
 | 1 | Eight of the nine codes, by integration test | `73`. `tpl init` is written and exercised, and no test in `tests/` drives it against a destination that already carries a `.tpl`; `src/error.rs` asserts the code inside the library instead, which is not what `BR-ERR-001` asks for |
 | 8 | Nothing at all | `BR-SEC-003`'s sentinel is named in no test of the tree. Searching `src/` and `tests/` for the word and for the identifier returns nothing (2026-09-21) |
-| 10 | The confirming outcome, on every series | The failing outcome, which no real MariaDB produces — see [what is not established](#what-is-not-established) |
 | 13 | The refusal, as a **unit** test in `src/mariadb/catalogue.rs` | The integration test against a container outside the window, which the fixture does not provision |
 | 22 | The shipped example's text, as a **unit** test in `src/project/init.rs` | The render against a table of a supported series, which the row makes a server test |
 | 23 | The key invariant, as **unit** tests in `src/model/table.rs` | The server form the row names |
@@ -66,48 +75,65 @@ trace, and, where the test exists, where it lives — never an outcome.
 
 ## The suite as it stands
 
-Read at commit `c360c80` on 2026-09-25, by `cargo test --all-features -- --list`
-and again with `--ignored`, and recorded with its point in history because it
-is a count that moves: **1 403 tests**, made of 1 055 unit tests inside the
-library, 346 integration tests over the binary, and 2 doc-tests. The binary's
-own test target carries none. **Thirteen are measurement tests** carrying
+Read at commit `9d2538e` on 2026-11-05, from the source and not from a run:
+each count is of `#[test]` attributes, and the ignored count of `#[ignore]`
+attributes, in each file. The method gives the counts the listing gave at
+`c360c80` for every target that has not changed since. Recorded with its point
+in history because it is a count that moves: **1 689 test functions**, made of
+1 252 unit tests inside the library and 437 integration tests over the binary;
+doc-tests were not re-counted, and were two at `c360c80`. The binary's own
+test target carries none. **Thirteen are measurement tests** carrying
 `#[ignore]` under [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md),
-Decision 10 — six unit tests and seven integration tests — so
-`cargo test --all-features` runs 1 390.
+Decision 10 — six unit tests and seven integration tests.
 
-| Integration target | Tests | Ignored | Gated on the fixture |
+| Integration target | Tests | Ignored | Gated on a fixture |
 |---|---|---|---|
 | `tests/project_and_configuration.rs` | 121 | 0 | 1 |
-| `tests/schema_and_cache.rs` | 52 | 0 | 47 |
+| `tests/schema_and_cache.rs` | 55 | 0 | 50 |
 | `tests/render_command.rs` | 49 | 6 | 11 |
+| `tests/sqlite_provider.rs` | 39 | 0 | 0 |
 | `tests/help_surface.rs` | 30 | 0 | 0 |
+| `tests/mysql_provider.rs` | 21 | 0 | 18 |
 | `tests/cache_containment.rs` | 17 | 0 | 0 |
 | `tests/template_commands.rs` | 17 | 0 | 0 |
 | `tests/outside_the_process.rs` | 15 | 1 | 11 |
 | `tests/invocation_surface.rs` | 13 | 0 | 0 |
 | `tests/cfg_validation.rs` | 10 | 0 | 0 |
+| `tests/login_faults.rs` | 9 | 0 | 4 |
+| `tests/non_regular_files.rs` | 9 | 0 | 0 |
 | `tests/connectivity_command.rs` | 8 | 0 | 6 |
-| `tests/non_regular_files.rs` | 7 | 0 | 0 |
+| `tests/session_statements.rs` | 7 | 0 | 0 |
+| `tests/truncated_greeting.rs` | 7 | 0 | 0 |
 | `tests/help_environment.rs` | 4 | 0 | 0 |
+| `tests/sqlite_library.rs` | 3 | 0 | 0 |
 | `tests/run_from.rs` | 2 | 0 | 0 |
 | `tests/timeout_without_phase.rs` | 1 | 0 | 0 |
-| **Total** | **346** | **7** | **76** |
+| **Total** | **437** | **7** | **101** |
 
-It was 1 010 at commit `243c4d6` of 2026-09-21, 621 at commit `fd51ca2`, 504 in
-the working tree of 2026-09-17 and 272 at commit `f8f335d` of 2026-09-15.
+It was 1 403, by `cargo test --all-features -- --list`, at commit `c360c80` of
+2026-09-25, 1 010 at commit `243c4d6` of 2026-09-21, 621 at commit `fd51ca2`,
+504 in the working tree of 2026-09-17 and 272 at commit `f8f335d` of
+2026-09-15.
 
-`tests/support/` holds three modules and no test target: `fixture.rs`, which is
-the gate and the three server-side instruments; `differential.rs`, which is the
-fourth; and `sandbox.rs`, which is the temporary directory and cleared
-environment every launch of the binary runs under. All three are reached by
-`#[path]` from the files that use them — `sandbox.rs` by eleven targets,
-`fixture.rs` by five, `differential.rs` by one.
+`tests/support/` holds five modules and no test target, each reached by
+`#[path]` from the files that use it:
 
-**Seventy-six tests need a server**, in five targets — the fourth column above —
-and every one is gated on the fixture: it runs where the fixture is up and is
-skipped, with a printed reason, where it is not. The count is of tests whose
-body calls `fixture::series` or `fixture::exclusive`, directly or through a
-helper of its own file.
+| Module | What it is | Reached by |
+|---|---|---|
+| `sandbox.rs` | The temporary directory and cleared environment every launch of the binary runs under | Sixteen targets |
+| `fixture.rs` | The gate of `scripts/mariadb/` and its three server-side instruments | Eight targets |
+| `mysql.rs` | The same for `scripts/mysql/`: the gate, the inventory by role, the two server-side instruments and the authentication cache | `tests/login_faults.rs`, `tests/mysql_provider.rs` |
+| `sqlite.rs` | The databases of `FR-LITE-038`, built from `scripts/sqlite/` into a test's own directory | `tests/sqlite_provider.rs` |
+| `differential.rs` | The fourth instrument of `NFR-PERF-007` | One target |
+
+**A hundred and one tests need a server**, in seven targets — the fourth column
+above — and every one is gated on its fixture: it runs where the fixture is up
+and is skipped, with a printed reason, where it is not. The count is of tests
+whose body calls `series`, `servers` or `exclusive` of `fixture.rs` or
+`mysql.rs`, directly or through a helper of its own file. Three targets reach a
+peer of the test's own instead of a fixture: `tests/session_statements.rs` and
+`tests/truncated_greeting.rs` a scripted server on the loopback interface, and
+`tests/login_faults.rs` a closed port or a listener for five of its tests.
 `tests/template_commands.rs` reaches no server **by design**: `FR-TMPL-003`
 makes the absence of a connection the property under test, and that target
 establishes it with a control run instead of a fixture, which its own header
@@ -233,6 +259,12 @@ produce the behaviour, on the same footing as the behaviour itself.
 | 25 | The three detections | Each shape of a privilege-driven absence is detected as the shape the catalogue gives it | Server, reduced-privilege reader | `FR-PRIV-011`, `FR-PRIV-017`, `FR-PRIV-019`, `FR-PRIV-012` |
 | 26 | Type non-coercion | A naming filter applied to a non-string fails the render rather than coercing; a test applied to a non-column fails rather than answering `false` | Integration | `FR-ENV-034`, `FR-SEM-008`, `FR-SEM-009`; `FR-ENV-040`, `FR-SEM-005` |
 | 27 | Nothing of the read alive during a render | Two observations, both required: the server records the session ended before the first byte of the render reaches stdout; and, in process, no connection is open and no driver runtime alive when the template begins | Server, observed on the server; and unit | `FR-RND-040` |
+| 28 | The SQLite statement record | Over the main fixture database and over an empty file: every statement the trace reports without the prefix `-- ` is in the closed list of `FR-LITE-015`, in the order of `FR-LITE-017` — `BEGIN DEFERRED` immediately before the check and `COMMIT` after the last catalogue statement among them; every one reported with it is nested, and is neither checked nor counted | Unit, through the seam of `FR-ERR-031` | `FR-LITE-018`, `FR-LITE-042` |
+| 29 | The SQLite read-only promise, from outside the process | Over a read of the main fixture database in rollback-journal mode, the file's bytes, size and modification time are unchanged, and no file appears in its directory | Integration, over the SQLite fixture | `FR-LITE-018`, `BR-LITE-001` |
+| 30 | The SQLite statement count | The catalogue statements row 28 records are as many over the main fixture database as over an empty file | Unit, the same record | `FR-LITE-037`, `NFR-PERF-001` |
+| 31 | No view named | The read of the main fixture database succeeds over the three views of item 10 that do not compile; a statement that named one would end the read with `70` | Unit, over the SQLite fixture | `FR-LITE-018` (sixty-eighth edition, as amended in the sixty-ninth), `FR-LITE-038` |
+| 32 | No view compiled, no module run | Over the database of `FR-LITE-038` holding an `fts5` table and a view over it that compiles, the record of row 28 holds no nested statement but one beginning `-- PRAGMA ` | Unit, the same record | `FR-LITE-018` (sixty-ninth edition), `FR-LITE-038` |
+| 33 | A schema the check refuses | A read of each of the fourteen databases of `FR-LITE-038` named like a pragma function or written under `writable_schema` ends with `78`, the `cause` naming the row and its kind | Unit, over the SQLite fixture | `FR-LITE-038`, `FR-LITE-041` |
 
 **Recorded change — the kind of rows 4 to 6.** This document gave the three
 tests of `BR-HELP-003` as integration tests; they are written as unit tests, and
@@ -294,15 +326,29 @@ magnitude in object count. The workloads are loaded by `seed-bench.sql` through
 `tests/render_command.rs::fr_rnd_040_the_server_records_the_session_ended_before_the_first_byte_of_the_render`
 watches the statement log for the render's `Quit` while the process is still
 running a slow render whose output is held until it ends, on every series. In
-process, `bounded()` refuses to start a render unless `mariadb::quiescent()`
-holds, so
+process, `bounded()` refuses to start a render unless `provider::quiescent()`
+holds, which answers for `mariadb/`, `mysql/` and `sqlite/` together, so
 `tests/render_command.rs::fr_rnd_040_every_server_read_of_a_render_is_closed_before_the_template_evaluates`
 asserts success on all three paths that read the server — `--direct`, a miss,
 and the re-read after an abandoned render — and the count itself is asserted by
 `fr_rnd_040_a_closed_session_leaves_no_connection_and_no_runtime_alive` in
 `src/mariadb/catalogue.rs` and
 `fr_rnd_040_a_runtime_is_counted_until_it_is_shut_down_and_on_its_own_thread`
-in `src/mariadb.rs`.
+in `src/mariadb.rs`; for a `mysql` read, by
+`fr_rnd_040_a_mysql_runtime_and_connection_are_counted_on_their_own_thread` in
+`src/mysql.rs`.
+
+**What rows 28 to 33 reach**, at `19abb1f`. Each test is in
+`src/sqlite/tests.rs` unless another file is named.
+
+| Row | Test | What it adds to the row |
+|---|---|---|
+| 28 | `fr_lite_018_the_statements_issued_are_the_closed_list_in_the_order_of_fr_lite_017` | The write-ahead-log copy of the main database as a third file. The record is compared with the crate's own constants, which `src/sqlite/catalogue/statements.rs` checks in turn: `fr_lite_015_the_connection_start_and_the_read_are_members_of_the_closed_list`, `fr_lite_015_no_statement_invokes_pragma_table_list_or_passes_a_view_to_a_pragma_function` and `fr_lite_016_no_statement_writes_attaches_or_names_another_schema` |
+| 29 | `tests/sqlite_provider.rs::fr_lite_018_a_read_leaves_the_database_and_every_file_outside_tpl_as_found` | — |
+| 30 | `fr_lite_037_the_plan_issues_as_many_statements_over_the_fixture_as_over_an_empty_file` | The probe once and seven catalogue statements over each file; `BEGIN DEFERRED` and `COMMIT` once each, and not counted |
+| 31 | `fr_lite_018_no_statement_names_a_view_and_the_read_succeeds_over_the_views_that_do_not_compile` | The record of the read holds the read transaction, the check and the six statements of the plan, none naming a view; the control compiles each of the three views on the reader's own connection and sees it fail |
+| 32 | `fr_lite_018_over_the_fts5_database_no_statement_compiles_a_view_or_connects_a_virtual_table` | The control runs the view on a plain connection and sees the module's own statement in the record |
+| 33 | `fr_lite_041_each_database_the_check_refuses_is_78_naming_its_row_and_no_statement_follows` | The `cause` names the path and the check, and the `hint` the repointing command; the record ends at the check, with no `COMMIT` (`FR-LITE-042`), and nothing of the read is alive afterwards. Through the binary, `tests/sqlite_provider.rs::fr_cfg_056_the_test_of_a_sqlite_entry_reports_the_four_steps` refuses each of the fourteen with `78` |
 
 ### The tests of the forty-second edition
 
@@ -317,7 +363,7 @@ re-measured** and remain the count at `243c4d6`.
 | `FR-RND-039` | Through the binary, where the counter is installed: a doubling render past a 16 MiB limit is `65` and writes nothing; the default stops it; raising the limit lets a large render pass | `tests/render_command.rs` |
 | `FR-RND-038` | Under the defaults, endless output reaches the output limit before the memory limit | `tests/render_command.rs` |
 | `FR-CACHE-039` with `FR-RND-038` | An abandoned render keeps evaluating after a miss reached through a lookup function; crossing each of the four bounds after the miss is `65`, writes nothing and opens no connection, with a control that reads the server | `src/cli/render.rs`; `tests/render_command.rs`, gated on the fixture |
-| `FR-CONF-045`, `FR-CONF-002` | The eighteen key forms; each range at its extremes and one past them, `78` from the file with key, value and range named, `64` from `tpl cfg set`; the memory floor through the binary | `src/project/config/keys.rs`, `src/project/config.rs`, `src/project/edit.rs`, `tests/render_command.rs` |
+| `FR-CONF-045`, `FR-CONF-002` | The key forms — eighteen at that edition, twenty since the sixty-fifth; each range at its extremes and one past them, `78` from the file with key, value and range named, `64` from `tpl cfg set`; the memory floor through the binary | `src/project/config/keys.rs`, `src/project/config.rs`, `src/project/edit.rs`, `tests/render_command.rs` |
 | `FR-ERR-034` row `65` | The `cause` and `hint` of each bound name the bound, the value and the key | `src/diagnostics/render.rs` |
 | `FR-CTX-042` | A dangling `foreign_keys` and a dangling `referenced_by` are `ContextFault::DanglingReference`; a column's absent `table_name` is not; the `cause` names all four values and escapes them; the render is `65`, not `70` | `src/model/document.rs`, `src/diagnostics/render.rs`, `src/cli/render.rs` |
 | `FR-CACHE-033`, `FR-CDOC-008` | A named table, view or routine read whose file holds another name or kind is a miss; an object file that is a symbolic link is a miss for a named read, a collection, the whole store and a render | `src/cache.rs` |
@@ -327,6 +373,29 @@ re-measured** and remain the count at `243c4d6`.
 asserted the behaviour `FR-RND-038` now forbids. **No test plants a FIFO** at an
 object file; `read_object()` refuses any non-regular file, and the case is
 reasoned from the `lstat` check rather than exercised.
+
+### The tests of the seventy-ninth to eighty-fourth editions
+
+Read from the tree at `9d2538e` on 2026-11-05, by name.
+
+| Requirement | What is asserted | Where |
+|---|---|---|
+| `FR-CONF-056` | A read the cache serves expands no variable and runs no child; the first invocation that connects raises the `78` | `tests/schema_and_cache.rs` |
+| `FR-CONF-057` | A NUL character in the file is `78` at entry resolution; in a flag value or a `tpl cfg set`, `64` and nothing written; a helper's output holding one is `78`, and neither a password nor that output is reproduced | `src/project/settings.rs`, `src/project/edit.rs`, `src/cli/cfg/entries.rs`, `src/diagnostics/render.rs` |
+| `FR-CONF-005`, `FR-ERR-027` | Each session statement takes the statement deadline on its own; a version probe that does not answer is reported as the version probe, at `69` | `src/deadline.rs`; `tests/session_statements.rs`, against a scripted server; `src/diagnostics/render.rs` |
+| `FR-GLOB-017` | One line per connection phase and session statement, naming it; a failed or expired phase keeps its line; a handshake under a mode that refuses plaintext has its line where no reading saw it, and a phase not reached has none | `tests/session_statements.rs`, `tests/login_faults.rs` on every series of both server fixtures, `tests/outside_the_process.rs`; `src/mariadb/connect.rs`, `src/diagnostics/emit.rs` |
+| `FR-CFG-044`, `FR-ERR-036` | A privilege error is the probe's `false` at `0`; another error packet is `69` naming its number | `tests/session_statements.rs`; `src/mariadb/fault.rs` |
+| `FR-ERR-047`, `FR-ERR-048` | A greeting, an error packet and a `caching_sha2_password` packet cut short are the second outcome, `69`, never `70`; a greeting cut by the connection is the first | `tests/truncated_greeting.rs`, against a scripted listener |
+| `FR-ERR-048`, error `1102` | A database name the server refuses is `78` and names the entry, on every MySQL server; the row for each provider | `tests/login_faults.rs`; `src/mariadb/fault.rs` |
+| `FR-SRV-043`, `FR-MYSQL-048` | The target database of item 17 of `FR-MYSQL-044` is read whole and no decoy with it, by both accounts, on `8.4` and `9.7`; each statement reaches the server with the literal in its placeholder; the read is unchanged under sessions that change how text is read | `tests/mysql_provider.rs`; `src/mysql/catalogue/tests.rs` |
+| `FR-LITE-043` | Two names of one set that convert alike are `78`, with no model and no cache, whatever order their rows come in; names of different sets that convert alike are read | `tests/sqlite_provider.rs`; `src/sqlite/catalogue.rs`, `src/sqlite/catalogue/fold.rs` |
+| `FR-CFG-041` | Every step of the rewrite acts through the held folder, a link or a swapped ancestor redirecting nothing; the file is synced before the rename and the folder after it; a failed folder sync is `74` and the new content stands | `src/at.rs`, `src/project/edit.rs`, `src/project.rs`, `src/diagnostics/render.rs`; `tests/project_and_configuration.rs` |
+| `FR-TMPL-009`, `FR-TMPL-033` | An include suggestion never names the including template; a FIFO named anywhere carries no suggestion | `tests/non_regular_files.rs`; `src/render/root.rs` |
+| `FR-CACHE-038` | No object file is read before the template reaches it; a malformed deferred part a render never reaches is no miss, and one it reaches is a miss answered from the database; `schema dump` decodes every part first | `src/cli/render/context/lazy.rs`, `src/cache.rs`, `src/cli/render.rs`; `tests/sqlite_provider.rs` |
+
+`FR-EX-011` and `FR-EX-012` are verified by the compile gates of the worked
+examples, which no test target runs
+([operations.md](operations.md#the-fixture-as-an-operational-asset)).
 
 ### Owed, and discharged
 
@@ -563,6 +632,19 @@ candidate.
 
 These are the limits the requirements state. This document cites them and
 invents none of its own.
+
+**`FR-LITE-018` reaches the SQLite statement trace through the same seam.** The
+hook that installs the trace is a `#[cfg(test)]` construct of `sqlite/`, and the
+feature it calls is enabled for tests alone, so the record of row 28 is taken by
+a unit test and the distributed binary carries neither the call nor the binding
+([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)).
+It adds no third seam: the mechanism, and the two reasons it stays off the
+surface, are the table's. **The writer test of `FR-LITE-042` uses the same
+mechanism**:
+`src/sqlite/tests.rs::fr_lite_042_a_pragma_table_a_writer_commits_after_the_check_is_not_read_in_either_journal_mode`
+reaches the moment between the check and the next statement through
+`catalogue::race`, a `#[cfg(test)]` construct of `sqlite/` that runs, on the
+test's own thread, what the test set, once the check has read.
 
 ## Exit codes: nine integration tests and one exception
 
@@ -915,7 +997,7 @@ obligation each part discharges, and what a test suite still has to decide.
 
 | Obligation | Source | Discharged by |
 |---|---|---|
-| Every validation that needs a database uses the containers of `scripts/mariadb/` — never a mock, never a stub, never an external instance | `CLAUDE.md`, *Testes contra MariaDB* | The fixture is the only database; nothing else is provisioned |
+| Every validation that needs a database uses the containers of `scripts/mariadb/` — never a mock, never a stub, never an external instance | `CLAUDE.md`, *Testing against MariaDB* | The fixture is the only database; nothing else is provisioned |
 | Containers are launched before a run and stopped after it; **no container is left running** | `scripts/mariadb/README.md` | `up.sh` and `down.sh`, the latter asking the daemon what is left rather than asserting it |
 | All four series run **side by side**, each with its own image, container and published port, so that a cross-series comparison is one run rather than four | `FR-SRV-029`, `FR-SRV-015` | Four images, four containers, four ports — **and a fifth container that is not a fifth series**: the `--skip-ssl` server `FR-CONF-038` obliges, on a fifth port |
 | A container is confirmed to have initialised cleanly before any test runs against it, because a failure inside the init directory leaves the schema incomplete while the container still reports itself up | `scripts/mariadb/README.md` | `up.sh` checks each server twice — the published port answering, and the log and object count — and removes a server it cannot make healthy |
@@ -986,14 +1068,210 @@ two outcomes establishes nothing until the arrangement is shown to be potent.
 
 Two rows of this table were discharged at commit `a6d1fed` and are recorded
 above rather than deleted: the fourth instrument, and what the suite does with
-each value of the gate.
+each value of the gate. A third, the failing outcome of `FR-SRV-013`, was
+discharged at `b61661d` by the seam that requirement authorises (row 10 of
+the register).
 
 | Open | Why it is not answered here |
 |---|---|
 | **The file-open instrument does not exist on either Darwin target.** On a host with no `strace` the harness traces a Linux build inside a container and says so; `NFR-PERF-005` forbids crediting that observation to macOS | The limit is the platform's, recorded by `NFR-PERF-005` with the three commands that established it. What would lift it is named there, and is not this folder's to take |
 | **What the refusal test of `FR-SRV-029` runs against** | The contradiction is recorded under [cross-series equivalence](#cross-series-equivalence-across-four-series) and is the functional owner's; the fixture provisions no container outside the window |
-| **One observation the fixture cannot produce**: the failing outcome of `FR-SRV-013` | It needs a server that accepts the read-only statement and does not apply it, which no real MariaDB does — a fault-injection seam in `tpl`, not a container, and no such seam is decided |
 | **The sentinel of `BR-SEC-003`** | Row 8 of the register carries no test at all. The fixture supplies what it needs; the whole-surface sweep over every command at maximum verbosity is the suite's, and it is not written |
+
+## The SQLite provider
+
+What the tests of the SQLite provider must assert and what each needs. **At
+`19abb1f` the fixture and a test for every row below exist, written against the
+seventy-first edition**: the library's unit tests in `src/sqlite/tests.rs` and
+beside each submodule of `sqlite/`, the integration tests in
+`tests/sqlite_provider.rs`, and the fixture builder in `tests/support/sqlite.rs`.
+Nothing is owed;
+[Discharged at `19abb1f`](#discharged-at-19abb1f--what-the-sixty-ninth-edition-owed)
+names the tests that answer what the sixty-ninth edition left owed.
+
+### The fixture, and the kind of test it admits
+
+`scripts/sqlite/` holds SQL text, and `tests/support/sqlite.rs` builds from it,
+in the test's own process and into a temporary directory of its own, every
+artefact `FR-LITE-038` lists: the main database of items 1 to 14, its
+write-ahead-log copy, the empty, text and truncated files, the directory, the
+FIFO, the link to the main database and the dangling one, the length-limit
+database and the database of internal tables alone; and, since the sixty-ninth
+edition, the databases holding a view named `pragma_table_list` and a table
+named `PRAGMA_TABLE_XINFO`, the twelve whose schema table is written under
+`writable_schema` — eight of them since the seventy-first — and the `fts5`
+database of row 32
+([`OD-37`](open-decisions.md#od-37--the-sqlite-fixture-and-the-statement-record)).
+**A SQLite test is of kind Vector, Unit or Integration, and never Server**: it
+needs no container and no gate, and runs on all four targets in both workflows
+of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md). One test skips,
+with a printed reason, when its process runs as root: the directory that must
+refuse the write-ahead-log files refuses no such process.
+
+### What each part of the contract is verified by
+
+Every test is named for the requirement it verifies, per
+[Test naming](#test-naming-binds-a-test-to-a-requirement).
+
+| Requirements | Test | Kind | Fixture case |
+|---|---|---|---|
+| `FR-LITE-005` | A directory and a FIFO are `78`, and the FIFO is never opened; the link to the main database is read through | Integration | The directory, the FIFO, the link |
+| `FR-LITE-006`, `FR-LITE-007` | A path naming nothing and the dangling link are `74`, nothing is created at either, and the `cause` names the check of the kind and what the filesystem returned; the text file, the truncated file and the length-limit database are `78`; the write-ahead-log copy in a directory refusing writes is `74`; each `cause` names the resolved path and what the library returned | Integration | The artefacts named |
+| `FR-LITE-008` | The write-ahead-log copy is read, and no file but its two is created | Integration | The write-ahead-log copy |
+| `FR-LITE-009` | A database held by an exclusive transaction of the test process, under `core.query_timeout` of `1`, is `69` within the bound, and the `cause` names the lock and the resolved deadline; a remaining bound past `i32::MAX` milliseconds sets the busy timeout to that maximum and does not panic ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)) | Integration; Unit | The main database, in rollback-journal mode |
+| `FR-LITE-010` … `FR-LITE-012` | Every control and limit reads back as set — views disabled among them, since the sixty-ninth edition — `temp_store` with the `TEMP_STORE` row of `PRAGMA compile_options`; the comparison, given a value read back that differs or a `TEMP_STORE` row of `0` or none, is the `70` naming the control, the value set and the value read | Unit | The main database |
+| `FR-LITE-041` | The verdict of `sqlite/catalogue/check.rs` over each of the seven kinds: a `pragma_` name on a table and on a view, in each letter case, as text and as a BLOB, refused, and on an index and on a trigger, which pass; each excluded storage class in each column; both contradictions of the root page, with `VIRTUAL` after a block comment and after a line comment, and a table named `"virtual"`, which passes; every spelling of a type the library loads — upper, title and mixed case, and the type followed by a NUL character — refused, `pragma_encoding` typed `TABLE` among them; `NULL` and the empty text refused on every type but `index`; a NUL character before, after and inside `name`, `tbl_name` and `sql`, refused under its column; `TEMP`, `TEMPORARY`, `IF NOT EXISTS` and a text not beginning `CREATE TRIGGER`, refused, and lower case, a comment inside the header and a trigger named `temp` or a quoted `IF`, admitted; rows SQLite writes pass every kind; a row refused under several kinds is reported under the first. `trigger.rs` holds the header and the word after `CREATE` as vectors. Through the reader, row 33, and a view named `pragma_encoding` refused beside an index and a trigger so named, which pass | Vector; Unit | The fourteen databases of row 33 |
+| `FR-LITE-042` | The record of row 28 places `BEGIN DEFERRED` and `COMMIT`; a read the check refuses issues no `COMMIT` (row 33); `tpl cfg database test` issues the check alone and neither statement, and over a refused database ends at the check; a table `pragma_encoding` a second connection commits between the check and the next statement is not read, in either journal mode — the writer fails with `SQLITE_BUSY` in rollback-journal mode and commits unseen in write-ahead-log mode — and the next read refuses it | Unit | The main database and its write-ahead-log copy; a database of row 33 |
+| `FR-LITE-015`, `FR-LITE-016` | Over the constants of `statements.rs`: none writes, attaches, names another schema, or is a transaction statement but `BEGIN DEFERRED` and `COMMIT`; none invokes `pragma_table_list`; each pragma function that takes a name is reached through a schema row restricted to type `table` and a root page other than `0`, by `CROSS JOIN`; every statement after the check that reads the schema table selects `type` then `name`. Through the reader, the shapes of the security review's two proofs of concept — thirteen nested views over a table of 2 000 columns, and ten thousand views — read with the constant plan, and the top view fails to compile on the reader's connection | Vector; Unit | Databases built by the test |
+| `FR-LITE-040` | The classification of `sqlite/fault.rs`, over each stage and statement kind: every row of `FR-LITE-007` and of `FR-LITE-040`'s table, with an extended code under each primary that has one, `SQLITE_READONLY` with and without one, and a primary code SQLite has not published | Vector | — |
+| `FR-ERR-046` | A value of the file of 256 characters is written whole, one of 257 is cut with the marker counting what was left out, and a cut that would fall inside each escape form — a C1 or bidirectional escape among them — keeps the form whole outside the kept part; the same value from a `mariadb` read or a `--context` document is written whole; through the binary, a value of the file is bounded in a `cause`, a name from the argument vector is written whole, and a name of the file past 64 characters reaches no suggestion while one of 64 is suggested whole | Vector; Unit; Integration | Databases built by the test |
+| `FR-ERR-024`, `FR-OUT-018` | Every C1 control and bidirectional formatting character takes the C0 form in a diagnostic line and in `text`, and JSON's own `\u` escape in `json`, in a value and in a map key, in both forms, the parsed document unchanged; a value carrying none is written as before, byte for byte; through the binary, a name of the file carrying both is escaped in `text`, in `json` and in a diagnostic, and, for a `mariadb` entry, a name carrying both is escaped in a diagnostic and the fixture's values, carrying none, reach `text` and `json` unchanged | Vector; Unit; Integration, the `mariadb` tests gated on the fixture | Databases built by the test; the MariaDB fixture |
+| `FR-ENV-041` | Over a context from the main database, a rowid-alias column, an `INTEGER PRIMARY KEY DESC` column and a column of a `WITHOUT ROWID` key each satisfy `primary_key` and `unique`; every answer of row 18 over a `mariadb` document is unchanged | Unit | The main database |
+| `FR-LITE-002`, `FR-LITE-003` | The `server` object carries the library's version, its `<major>.<minor>`, and `supported` | Unit | Any |
+| `FR-LITE-019` … `FR-LITE-034`, `BR-LITE-003` | One test per case of items 1 to 14 over the fold — since the sixty-ninth edition, the five shadow tables of item 12 covered as `BASE TABLE`, the `ANY` column of item 2 as `numeric`, and `WITHOUT ROWID` as `pragma_index_info` reports it; since the seventy-first, the names of item 14 written in another letter case attached to their objects and carried under the objects' own names, the two tables that differ outside ASCII kept apart, the key of item 8 of another arity excluded, and the trigger of item 11 written in lower case and the one named `temp` read; every trigger and key of the main database counted against the library on a plain connection, so that one the match dropped would show; the match itself, and the trigger header reader over every header form of item 11, as vectors | Unit; Vector | The main database |
+| `FR-LITE-018`, `FR-LITE-033`, `FR-LITE-036`; `FR-LITE-035`, withdrawn in the sixty-eighth edition, is verified by nothing | The read of the main database succeeds over the three views of item 10 that do not compile, marks no object, and presents every view with the nine properties of `FR-CAT-047` and no columns; naming one of the three exits `0` | Unit; Integration | The main database |
+| `FR-CFG-056` | The four fields over the main database and the empty file; `78` over the text file and the directory, `74` over a path naming nothing, and `78` over each database the check refuses, the `cause` naming the schema table and the kind | Integration | The main database, the empty and text files, the directory, the fourteen databases of row 33 |
+| `FR-CONF-051` … `FR-CONF-054`, `FR-CFG-055` | Each refusal, at its step and with its code; a relative `path` read from a subdirectory of the project resolves against the project directory, and, through a `.tpl` reached by a link, against the parent of the canonical folder | Integration | The main database |
+| `FR-CTX-043`, `FR-CDOC-018` | A document without `provider` reads as `mariadb` and one with a third value is `65`; a cache record without `provider` is served as `mariadb`, and a served read carries the record's provider after the entry's changed | Unit | — |
+
+**One test is mandated by a decision record rather than by the corpus.**
+[`ADR-013`](../adr/adr-013-sqlite-driver.md) point 3 requires a test that
+`PRAGMA compile_options` lists `OMIT_LOAD_EXTENSION` and no
+`ENABLE_LOAD_EXTENSION` option, and that the library answering
+`sqlite_version()` is the one compiled in, asserting no literal release. It is
+written as the two tests of `tests/sqlite_library.rs`, which open an in-memory
+database and launch no process, so they run wherever the suite runs, on all
+four targets.
+
+### Discharged at `19abb1f` — what the sixty-ninth edition owed
+
+This subsection listed, at `f2d1753`, six tests that asserted what the
+sixty-ninth edition changed, and the escaping it owed tests on every path. Each
+is answered at `19abb1f`:
+
+| Owed at `f2d1753` | Answered at `19abb1f` by |
+|---|---|
+| The five shadow tables of `cargo_note` covered as `BASE TABLE` (`FR-LITE-020`, `FR-LITE-021`) | `src/sqlite/tests.rs::fr_lite_019_the_read_covers_main_and_its_tables_and_views_and_no_routine` |
+| `manifest_line.payload`, `STRICT` and `ANY`, as `numeric` (`FR-LITE-026`) | `src/sqlite/tests.rs::fr_lite_026_the_type_is_the_declared_text_and_its_affinity` |
+| Seven catalogue statements, the check first (`FR-LITE-037`) | `src/sqlite/tests.rs::fr_lite_037_the_plan_issues_as_many_statements_over_the_fixture_as_over_an_empty_file` |
+| Nine controls, views disabled among them (`FR-LITE-010`) | `src/sqlite/tests.rs::fr_lite_010_every_control_and_limit_reads_back_as_set_on_the_connection` |
+| No statement names `pragma_table_list`, and every join through the schema table is restricted to type `table` and a root page other than `0` (`FR-LITE-015`) | `src/sqlite/catalogue/statements.rs::fr_lite_015_no_statement_invokes_pragma_table_list_or_passes_a_view_to_a_pragma_function`, which replaced `fr_lite_015_no_statement_passes_a_view_to_a_pragma_function` |
+| U+009B escaped in `text`, as every C1 control is (`FR-OUT-018`) | `src/output/escape.rs::fr_out_018_a_c1_control_and_a_bidirectional_formatting_character_take_the_c0_form` and `fr_out_018_a_character_outside_the_escaped_set_is_left_alone`, which replaced `fr_out_018_a_character_above_the_c0_range_is_left_alone` |
+| A C1 control and a bidirectional formatting character escaped in a diagnostic line | `src/diagnostics/escape.rs::fr_err_024_a_c1_control_and_a_bidirectional_formatting_character_take_the_c0_form` and `fr_err_024_the_escaped_line_carries_no_character_of_the_set`; through the binary, `tests/sqlite_provider.rs::fr_err_024_a_c1_control_and_a_bidirectional_character_are_escaped_in_a_diagnostic` and, gated on the fixture, `tests/schema_and_cache.rs::fr_err_024_a_c1_control_and_a_bidirectional_character_are_escaped_in_a_mariadb_diagnostic` |
+| The same in `text` output | `src/output/escape.rs`, above; through the binary, `tests/sqlite_provider.rs::fr_out_018_a_c1_control_and_a_bidirectional_character_of_the_file_are_escaped_in_text` |
+| The same in `json` output, the document parsing back to the same string | `src/output/json.rs::fr_out_018_a_c1_control_and_a_bidirectional_formatting_character_take_json_s_own_escape`; through the binary, `tests/sqlite_provider.rs::fr_out_018_a_c1_control_and_a_bidirectional_character_of_the_file_take_json_s_escape` |
+| A value carrying neither left unchanged | `src/output/json.rs::fr_out_018_a_value_carrying_no_character_of_the_set_is_written_as_serde_json_writes_it`; gated on the fixture, `tests/schema_and_cache.rs::fr_out_018_a_mariadb_value_carrying_no_character_of_the_set_is_written_unchanged` |
+| The bound of `FR-ERR-046` cutting outside each new escape | `src/diagnostics/escape.rs::fr_err_046_a_cut_never_falls_inside_a_c1_or_bidirectional_escape`; through the binary, `tests/sqlite_provider.rs::fr_err_046_a_value_of_the_file_is_bounded_in_a_cause_and_never_cut_inside_an_escape` |
+
+**One path is reached for one provider alone.** A `mariadb` value carrying a C1
+control or a bidirectional formatting character, in `text` or `json` read
+output, is reached by the emitter's unit tests above and by no integration
+test: the MariaDB fixture holds no such value. The emitter escapes whatever the
+source, so the unit tests reach the same code a `mariadb` read takes.
+
+### The requirements of form, for a `sqlite` entry
+
+`FR-LITE-037` holds the six for a `sqlite` entry and names the record of row 28
+as the count's instrument. A SQLite connection has no server side to observe, so
+the server's two instruments have no counterpart here.
+
+| Requirement | Instrument | Where it runs |
+|---|---|---|
+| `NFR-PERF-001`, `NFR-PERF-002` | The in-process statement record of `FR-LITE-018`, row 30 | All four targets |
+| `NFR-PERF-003`, `NFR-PERF-006` | A differential run: once the cache is filled, the database file is removed, and a cached read still exits `0` with the same stdout; its inversion, the same read under `--direct`, exits `74` | All four targets |
+| `NFR-PERF-004` | A syscall trace counting the opens of the database path | The two Linux targets; on the two macOS targets the assertion skips with the reason `NFR-PERF-004` states, and is never reported as passed |
+| `NFR-PERF-005` | Unchanged: the four commands reach no reader | As for a `mariadb` entry |
+| `NFR-PERF-008` | A unit test drives one invocation, `schema dump --direct --no-cache -v` with `--tpl-dir` naming a project whose entry reads the main fixture database, through `run_from` on its own thread; a `#[cfg(test)]` capture in `diagnostics/emit.rs` keeps the lines that thread writes, and the count carrying the per-query token equals the catalogue statements the record of row 28 reports — the check and the six of the plan — in `src/sqlite/tests.rs::nfr_perf_008_the_query_lines_equal_the_catalogue_statements_the_record_shows`; `BEGIN DEFERRED` and `COMMIT` carry no line and are not counted. The verbosity level is process-wide (`diagnostics/verbosity.rs`), so every unit test that sets it holds one shared lock for as long as it depends on the level | All four targets |
+
+**Discharged in the sixty-seventh edition — two gaps this section recorded.**
+`NFR-PERF-004` now names the syscall trace as its instrument for a `sqlite`
+entry and states the skip on the macOS targets, and `NFR-PERF-008` names the
+record of `FR-LITE-018` as the other side of its comparison; the two rows above
+apply them.
+
+### What is not established
+
+| Open | Why it is not answered here |
+|---|---|
+| **A statement that fails when it is prepared, or is prepared and never run**, is absent from the record of row 28, while the line of `FR-GLOB-017` for it is written | `FR-LITE-018` and `NFR-PERF-008` state it as the record's limit; `FR-LITE-015` and `FR-LITE-016` bind such a statement all the same |
+| **A file swapped for a FIFO between the lookup and the open** | `FR-LITE-005`'s accepted cost; no test can produce the race deterministically |
+
+## The MySQL provider
+
+What the tests of the `mysql` provider and of the classification of a failed
+server connection assert, and what each needs. **At `9d2538e` a test exists for
+every row below**: the integration tests in `tests/mysql_provider.rs`,
+twenty-one, and `tests/login_faults.rs`, nine; the unit tests beside each part of `mysql/`
+and in `src/mysql/catalogue/tests.rs`; and the classification's own tests in
+`src/mariadb/fault.rs`.
+
+### The fixture, and the kind of test it admits
+
+A test that reaches a MySQL server is of kind Server. It asks
+`tests/support/mysql.rs`, which is `tests/support/fixture.rs` for
+`scripts/mysql/`: the gate is `status.sh --quiet`, mapped by value as the
+MariaDB gate is — `0` runs the body, `1` skips it with a printed reason, any
+other answer fails the run; the inventory and the accounts are read from
+`status.sh --export` and `series.env`; servers are selected by role — a
+supported series, a supported series offering no TLS, the series outside the
+set; the two server-side instruments are `observe.sh`'s; and the
+authentication cache is set through `auth-cache.sh` before a body whose
+outcome depends on it. No `docker` command is issued from Rust. A body runs on
+every server of its role, and holds the fixture's lock while it does.
+
+Three bodies of `tests/mysql_provider.rs` need no server, and one needs the
+MariaDB fixture beside the MySQL one. In `tests/login_faults.rs`, five bodies
+need no server — what answers at the address is a closed port or a listener
+of the test's own — and four reach a fixture.
+
+### What each part of the contract is verified by
+
+| Requirements | What is asserted | Kind | Test |
+|---|---|---|---|
+| `FR-CONF-051`, `FR-CONF-052`, `FR-CFG-055` | `provider = "mysql"` is read, written and refused as a server entry's keys are; a `mysql` entry carrying `path` is refused at entry resolution | Integration | `tests/mysql_provider.rs` |
+| `FR-MYSQL-006` … `FR-MYSQL-010`, `FR-MYSQL-002`, `FR-MYSQL-003` | The `server` object carries the probe unaltered; a MariaDB string or one outside the form is not MySQL; a series below the set is refused naming the version and the set; a newer one is read and marked; the table is the two LTS series, newest first | Unit | `src/mysql/session.rs`, `src/mysql/window.rs` |
+| `FR-MYSQL-009` | The `8.0` server is refused with `78` | Server | `tests/mysql_provider.rs` |
+| `FR-MYSQL-008`, `FR-MYSQL-012` | A `mysql` entry on a MariaDB server, and a `mariadb` entry on a MySQL server, are both `78` | Server, both fixtures | `tests/mysql_provider.rs` |
+| `FR-MYSQL-015`, `FR-MYSQL-016`, `FR-MYSQL-042` | Each statement reads one table of the closed list and no other; the plan is twelve whatever the database holds; the view statement names no algorithm field | Unit | `src/mysql/catalogue/statements.rs`, `src/mysql/session.rs` |
+| `FR-MYSQL-023` … `FR-MYSQL-039` | Every object kind of the fixture is read into the document; every field of the twelve tables decodes through the driver on every series | Server | `tests/mysql_provider.rs`; `src/mysql/catalogue/tests.rs` |
+| `FR-MYSQL-029`, `FR-MYSQL-030`, `FR-MYSQL-046` | Every row of the default classification by its shape; the outer pair removed once; the phrases of the attribute field in any order; one layer of escaping removed from the observed texts, every other backslash kept | Vector | `src/mysql/catalogue/expression.rs`, `src/mysql/catalogue/fold.rs` |
+| `FR-MYSQL-046`, `FR-MYSQL-027`, `FR-MYSQL-033` | The fixture's expressions carried with one layer removed; the generated invisible primary key and the `SET DEFAULT` rule carried as reported | Server | `tests/mysql_provider.rs` |
+| `FR-MYSQL-041` | The reduced-grant reader reads every object, the short ones marked, no trigger shown, and `77` for a named short object | Server | `tests/mysql_provider.rs` |
+| `FR-MYSQL-021` | The five modes against a server offering TLS and one offering none | Server | `tests/mysql_provider.rs` |
+| `FR-MYSQL-045` | The uncached login over an unencrypted session ends with `78`, the cache emptied first | Server | `tests/mysql_provider.rs` |
+| `FR-PROJ-021` | The starter template renders against every table of the fixture, on both series | Server | `tests/mysql_provider.rs` |
+| `FR-CFG-024`, `FR-CTX-043`, `FR-ENV-049` | `tpl cfg database test` reports a MySQL server and its probe; a dump renders through `--context`; `json` is `textual` and `geomcollection` and `vector` are in no family | Server; Vector | `tests/mysql_provider.rs`; `src/render/predicate.rs` |
+| `FR-MYSQL-034` | A `null` level is written as `null`, read back, and a document without the key is still refused | Unit | `src/model/check_constraint.rs` |
+| `FR-RND-040`, `ADR-005` | A `mysql` runtime and connection are counted on their own thread; the runtime is a current-thread one | Unit | `src/mysql.rs` |
+| `FR-CONF-055`, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 5 | An account with no password logs in, with `password = ""` and with no password key, on every MariaDB server and on every MySQL server, the authentication cache emptied before each MySQL login; each source of the empty password reaches the driver as the empty string | Server; Unit | `tests/login_faults.rs`; `src/mariadb/connect.rs` |
+| `FR-ERR-049` | A refused TCP connect carries the first outcome word for word, for both providers; every operating-system report is its own outcome; an I/O error outside the TCP connect is not classified as one | Integration; Unit | `tests/login_faults.rs`; `src/mariadb/fault.rs` |
+| `FR-ERR-047`, `FR-CONF-005`, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 6 | A connection closed in the login and an answer outside the protocol are the login's first two outcomes; the phase is the one the driver recorded; a `mariadb` entry whose login needs the server's RSA public key ends at `69` | Integration; Unit; Server | `tests/login_faults.rs`; `src/mariadb/fault.rs`; `src/mysql/catalogue/tests.rs` |
+| `FR-ERR-048` | Every row of the table, for each provider; a second login beyond the account's limit is `69` on every series of both fixtures | Unit; Server | `src/mariadb/fault.rs`; `src/mysql/catalogue/tests.rs` |
+| `FR-ERR-036`, `FR-ERR-050` | A statement fails in one of three ways; every failure while the TLS handshake runs is that phase | Unit | `src/mariadb/fault.rs` |
+| [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 4 | A configuration error of another origin is not the refusal | Unit | `src/mysql/fault.rs` |
+| `FR-MYSQL-048`, with item 17 of `FR-MYSQL-044` | A database named with a quotation mark, a backslash and a backtick is read alone, its decoys unread, by the root account and the reduced reader; a missing name of the same characters is `77` | Server | `tests/mysql_provider.rs` |
+
+### The verifications `FR-MYSQL-043` reapplies
+
+| Requirement it reapplies | Test | Kind |
+|---|---|---|
+| `FR-SRV-012`: the closed list, observed on the server, in the order of `FR-MYSQL-017` | `tests/mysql_provider.rs::fr_mysql_043_the_server_receives_the_closed_list_in_the_order_of_fr_mysql_017` | Server, observed on the server |
+| `FR-SRV-013`: the read-back's confirming outcome on every series, and its failing outcome through the seam it authorises | The test of `FR-SRV-012` above, whose read completes after the read-back of `@@session.transaction_read_only` on every series and asserts that spelling; `src/mysql/catalogue/tests.rs::fr_mysql_043_a_read_back_that_does_not_confirm_is_refused_before_the_catalogue` | Server; Unit, through the seam |
+| `FR-SRV-014`: the connection count | `tests/mysql_provider.rs::fr_mysql_042_an_invocation_opens_one_connection_and_a_cache_hit_opens_none` | Server, observed on the server |
+| `FR-SRV-029`: equivalence across the set, and the refusal outside it | `tests/mysql_provider.rs::fr_mysql_013_identical_ddl_yields_identical_documents_on_every_series`; `fr_mysql_009_a_series_outside_the_set_and_older_than_its_newest_is_refused_with_78` | Server |
+| `FR-SRV-035`: the marked read, through the seam it authorises | `src/mysql/catalogue/tests.rs::fr_mysql_043_a_series_newer_than_the_window_is_read_and_marked_through_the_seam`; `src/mysql/window.rs::fr_mysql_043_the_seam_of_fr_srv_035_narrows_the_mysql_window_too` | Unit, through the seam |
+| The product refusal of `FR-MYSQL-008`, against a MariaDB server | `tests/mysql_provider.rs::fr_mysql_008_a_mysql_entry_on_a_mariadb_server_is_refused_with_78` | Server, both fixtures |
+
+### The requirements of form, for a `mysql` entry
+
+`FR-MYSQL-042` verifies them from the server's records, on every series of
+`FR-MYSQL-003`.
+
+| Requirement | Instrument | Test |
+|---|---|---|
+| `NFR-PERF-001`, `NFR-PERF-002`, `NFR-PERF-008` | The server's statement record, over `freight`, `freight_empty` and a named read, against the per-query lines | `tests/mysql_provider.rs::fr_mysql_042_the_statement_count_is_the_same_over_freight_freight_empty_and_a_named_read`; in process, `src/mysql/catalogue/tests.rs::fr_mysql_042_a_read_issues_the_twelve_statements_of_the_plan_and_nothing_else` |
+| `NFR-PERF-003`, `NFR-PERF-004` | The connections the server accepts | `tests/mysql_provider.rs::fr_mysql_042_an_invocation_opens_one_connection_and_a_cache_hit_opens_none` |
+| `NFR-PERF-005`, `NFR-PERF-006` | Unchanged: no command that needs no catalogue reaches `provider.rs` | As for a `mariadb` entry |
 
 ## What this document defers, and to what
 
@@ -1003,6 +1281,7 @@ each value of the gate.
 | Every measured figure, every dispersion, and the conditions a reading was taken under | `BENCHMARKS.md` |
 | The validation pipeline, the release gates and the fixture's operational standing | [operations.md](operations.md) |
 | The fixture's contents, its credentials, its deliberate omissions, the harness scripts and their recorded output, and the nine differences its own passes observed between the series | `scripts/mariadb/README.md` |
+| The same for the MySQL fixture: its five servers, its pinned images, its accounts, its harness and the authentication cache | `scripts/mysql/README.md` |
 | The record of every difference observed between the series — fourteen | `FR-SRV-038` |
 | The privilege detections as built, the diagnostic renderer, the emitter and the help surface | [interfaces.md](interfaces.md) |
 | The engine construction the seams and the vectors run against | [architecture.md](architecture.md) |

@@ -1,8 +1,8 @@
 ---
 title: Configuration Commands
 status: approved
-last-reviewed: 2026-09-24
-related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md]
+last-reviewed: 2026-11-05
+related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Configuration Commands
@@ -61,6 +61,10 @@ tpl cfg database test   <name>
 
 - **FR-CFG-005**: No `cfg` subcommand SHALL contact a server, with the single
   exception of `tpl cfg database test`.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry, the same
+  command is the single `cfg` subcommand that opens the database file, per
+  `FR-CFG-056`; no other opens it.
 
 ## Key commands
 
@@ -310,10 +314,16 @@ tpl cfg database test   <name>
   the command accepts, and `FR-CONF-050` refuses an empty `--host` or
   `--schema`.
 
-- **FR-CFG-016**: `tpl cfg database add` SHALL require either `--dsn` or at
-  least one of the discrete connection flags. The two groups are mutually
-  exclusive, and at least one is required. IF neither is supplied, THEN the
-  system SHALL exit `64`.
+- **FR-CFG-016**: WHERE `tpl cfg database add` is not given
+  `--provider sqlite`, it SHALL require either `--dsn` or at least one of the
+  discrete connection flags. The two groups are mutually exclusive, and at
+  least one is required. IF neither is supplied, THEN the system SHALL exit
+  `64`. WHERE it is given `--provider sqlite`, `FR-CFG-055` states what it
+  requires.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The opening clause is
+  new. An entry with the `sqlite` provider is described by `--path` and by no
+  connection flag, so the rule as written refused every such entry.
 
 - **FR-CFG-017**: IF `tpl cfg database add` names an entry that already exists,
   THEN the system SHALL exit `64`, with a hint pointing at
@@ -342,7 +352,7 @@ tpl cfg database test   <name>
   ```
   error: nothing to change: tpl cfg database update needs at least one field flag
   cause: no field flag was given for entry 'shop'
-  hint:  give at least one of --dsn, --host, --port, --user, --schema, --tls, --password-command, --ca-file, --ca-path
+  hint:  give at least one of --dsn, --host, --port, --user, --schema, --tls, --password-command, --ca-file, --ca-path, --provider, --path
   exit:  64 (EX_USAGE)
   ```
 
@@ -356,14 +366,15 @@ tpl cfg database test   <name>
   also state that `-d/--database` was given, that it selects the entry for
   commands that connect and is not a field flag, and that the database on the
   server is set with `--schema`, or is the path part of `--dsn`, per
-  `FR-CONF-009`, for an entry defined by `dsn`. The `cause` SHALL NOT
+  `FR-CONF-009`, for an entry defined by `dsn`, and that the database file of
+  a `sqlite` entry is set with `--path`. The `cause` SHALL NOT
   reproduce the value given to `-d/--database`. The `hint` is unchanged.
 
   ```
   tpl cfg database update shop --database shop2
   error: nothing to change: tpl cfg database update needs at least one field flag
-  cause: no field flag was given for entry 'shop'; -d/--database was given, and it selects the entry for commands that connect, not a field; the database on the server is set with --schema, or is the path part of --dsn for an entry defined by dsn
-  hint:  give at least one of --dsn, --host, --port, --user, --schema, --tls, --password-command, --ca-file, --ca-path
+  cause: no field flag was given for entry 'shop'; -d/--database was given, and it selects the entry for commands that connect, not a field; the database on the server is set with --schema, or is the path part of --dsn for an entry defined by dsn; the database file of a sqlite entry is set with --path
+  hint:  give at least one of --dsn, --host, --port, --user, --schema, --tls, --password-command, --ca-file, --ca-path, --provider, --path
   exit:  64 (EX_USAGE)
   ```
 
@@ -385,17 +396,23 @@ tpl cfg database test   <name>
   `.tpl/.cfg` is read, so the `cause` cannot know the form of the entry and
   names both, which is true of either form.
 
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The `hint` lists
+  `--provider` and `--path`, the two flags `FR-CFG-027` gains, and the `cause`
+  names `--path` as the third form, for a `sqlite` entry, on the same ground:
+  the refusal is decided before the provider of the entry is known.
+
 - **FR-CFG-051**: WHEN `tpl cfg database add` or `tpl cfg database update` is
   given `-d/--database`, in either spelling and at any position `FR-GLOB-002`
   accepts, the system SHALL accept the flag, SHALL give it no effect, per
   `FR-GLOB-007`, and SHALL write exactly one warning line to stderr, per
-  `FR-OUT-020`. The line takes one of four forms:
+  `FR-OUT-020`. The line takes one of five forms:
 
   ```
   warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that connect; the database on the server is set with --schema <value>
   warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that connect
   warning: -d/--database has no effect on tpl cfg database update; it selects the entry for commands that connect; the database on the server is the path part of --dsn
   warning: -d/--database has no effect on tpl cfg database update; it selects the entry for commands that connect; the name argument already names the entry
+  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that connect; the database file of a sqlite entry is set with --path
   ```
 
   1. **No effect.** The system SHALL NOT resolve the name `-d/--database`
@@ -417,12 +434,17 @@ tpl cfg database test   <name>
         is byte-for-byte equal to the `<name>` operand of the command. The
         line SHALL state that the name argument already names the entry, and
         SHALL name neither `--schema` nor any value.
-     4. **Otherwise.** The line SHALL state that the database on the server is
-        set with `--schema`, and SHALL reproduce the value given to
-        `-d/--database` in place of `<value>` only where that value matches
-        the set of `FR-ERR-022` for a database entry; otherwise it SHALL write
-        the placeholder `<database>` and SHALL NOT reproduce the value in any
-        form.
+     4. **Otherwise.** WHERE the invocation uses or targets a `sqlite` entry
+        — `tpl cfg database add` is given `--provider sqlite`, or
+        `tpl cfg database update` is given it or names an entry that
+        `.tpl/.cfg` gives the `sqlite` provider — the line SHALL state that
+        the database file of a `sqlite` entry is set with `--path`, and SHALL
+        name neither `--schema` nor any value. In every other case the line
+        SHALL state that the database on the server is set with `--schema`,
+        and SHALL reproduce the value given to `-d/--database` in place of
+        `<value>` only where that value matches the set of `FR-ERR-022` for a
+        database entry; otherwise it SHALL write the placeholder `<database>`
+        and SHALL NOT reproduce the value in any form.
   3. **When.** The line SHALL be written once, after step 3 of `FR-ERR-006`
      passes and before any later check, so it is the first line on stderr and
      precedes any error the invocation then raises. Step 3 is the earliest
@@ -450,6 +472,7 @@ tpl cfg database test   <name>
   tpl -d ds cfg database update ds --host h2                   warning (path part of --dsn), then 64 per FR-CFG-048, where ds is defined by dsn
   tpl -q cfg database add hs4 --host h -d shop                 no line; 0
   tpl cfg database update shop --database shop2                no line; 64 per FR-CFG-020
+  tpl cfg database add lg --provider sqlite --path l.db -d lg2 warning (--path for a sqlite entry), then 0
   ```
 
   *Amended in the fifty-second edition.* The line always
@@ -481,6 +504,14 @@ tpl cfg database test   <name>
   entry.* The clause still reads as a correction, and a caller that copies it
   still overwrites the server database.
 
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The fifth form, and
+  the clause for a `sqlite` entry in condition 4, are new. The clause stands
+  inside that condition so that the four conditions keep the numbers this
+  requirement and the edition log cite. A `sqlite` entry has no server
+  database, and `FR-CFG-055` refuses `--schema` for it, so the advice
+  condition 4 gave could not succeed. Conditions 1 to 3 keep their precedence,
+  and no clause of theirs names a value.
+
   *Rationale.* `cfg database show` prints the server database under the key
   `database`, so `--database` is the natural guess for the flag that writes it.
   `FR-CFG-028` gives that flag the name `--schema`, and `FR-GLOB-007` gives the
@@ -508,13 +539,14 @@ tpl cfg database test   <name>
   `FR-OUT-023`:
 
   - `tpl cfg database update <name>` given at least one of the flags
-    `FR-CACHE-029` names: `--host`, `--port`, `--user`, `--schema`, `--tls`
-    or `--dsn`;
+    `FR-CACHE-029` names: `--host`, `--port`, `--user`, `--schema`, `--tls`,
+    `--dsn`, `--provider` or `--path`;
   - `tpl cfg set` given one of the keys `database.<name>.host`,
     `database.<name>.port`, `database.<name>.user`,
-    `database.<name>.database`, `database.<name>.tls` or
-    `database.<name>.dsn`, which hold what those flags write;
-  - `tpl cfg unset` given one of those six keys.
+    `database.<name>.database`, `database.<name>.tls`,
+    `database.<name>.dsn`, `database.<name>.provider` or
+    `database.<name>.path`, which hold what those flags write;
+  - `tpl cfg unset` given one of those eight keys.
 
   ```
   tpl cfg database update shop --host db-staging.example.com
@@ -554,7 +586,7 @@ tpl cfg database test   <name>
 
   An invocation refused before or at the rewrite writes no such line. An
   invocation given only `--password-command`, `--ca-file` or `--ca-path`, and
-  a `tpl cfg set` or `tpl cfg unset` given any key other than the six above,
+  a `tpl cfg set` or `tpl cfg unset` given any key other than the eight above,
   writes no such line: those fields do not change where the entry points.
   `tpl cfg unset` given the block `database.<name>`, or the block `database`,
   writes the lines of `FR-CFG-052` instead.
@@ -607,6 +639,15 @@ tpl cfg database test   <name>
   before the invocation.* The facts the line states hold for any entry of
   that name, per `FR-CACHE-002`, and the extra condition would spare a line
   that is still true.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. `--provider` and
+  `--path`, and their two keys, join the list. Each changes what the entry
+  reads — the provider it is read through, or the database file — and the data
+  cached for the entry is kept across either, per `FR-CACHE-029`. WHERE the
+  invocation writes or removes `provider` or `path`, or the entry is a `sqlite`
+  entry after the write, the line SHALL state that the entry may now read
+  another database, in place of another server; every other fact item 1 names
+  is unchanged.
 
   *Amended in the fifty-fifth edition: item 1 states what is known.* The line
   said that the entry "was repointed" and that data cached for it "is kept",
@@ -678,6 +719,36 @@ tpl cfg database test   <name>
   The wording of each line is the implementation's, under `FR-ERR-008`
   through `FR-ERR-012`. The example fixes the facts named, the command
   carried and the code.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The combinations
+  `FR-CONF-052` refuses are refused here exactly as those of `FR-CONF-007`
+  are: an entry that would carry a key its provider refuses, after the write,
+  is not written, and the system exits `64`. The provider after the write is
+  the one the entry would carry, or `mariadb` where it would carry none. The
+  `cause` SHALL name the provider, the key the invocation writes and every key
+  the entry carries that the other provider takes, and SHALL state that
+  changing the provider of an entry requires removing the keys its present
+  provider takes. The `hint` SHALL carry a `tpl cfg database add` of a new
+  entry, with a placeholder for its name, carrying the provider and the
+  value the invocation asked for, and SHALL NOT carry a command that removes a
+  key, per `BR-ERR-005`.
+
+  ```
+  tpl cfg set database.shop.provider sqlite
+  error: cannot give entry 'shop' the provider sqlite
+  cause: entry 'shop' carries host, port, user and database, which only a mariadb or a mysql entry takes; changing its provider requires removing them
+  hint:  register the database file as a new entry: tpl cfg database add <name> --provider sqlite --path <path>
+  exit:  64 (EX_USAGE)
+  ```
+
+  *Note added in the seventy-third edition,* for rmp `#324`. With three
+  providers, *the other provider* is the provider the entry would carry after
+  the write, and the keys the `cause` names are those that provider refuses,
+  per `FR-CONF-052`. A `mysql` entry takes and refuses the keys a `mariadb`
+  entry does, so a write that moves an entry between `mariadb` and `mysql`
+  leaves no key refused and is not refused here. The example's `cause`, which
+  said that only a `mariadb` entry takes the keys, names both server
+  providers. Nothing a `mariadb` or a `sqlite` write is refused for changes.
 
   *Amended in the fiftieth edition,* for rmp `#282`. The `hint` named "the
   `tpl cfg unset` of the field that conflicts, or `tpl cfg database remove`
@@ -900,7 +971,8 @@ tpl cfg database test   <name>
   are unchanged. This is rmp `#291`.
 
 - **FR-CFG-024**: `tpl cfg database test <name>` SHALL perform exactly the
-  following four steps, in this order, and SHALL report the outcome of each:
+  following four steps, in this order, and SHALL report the outcome of each.
+  For a `sqlite` entry, `FR-CFG-056` states the four steps:
 
   1. connect to the server described by that entry and authenticate;
   2. enforce the read-only session of `FR-SRV-008` and confirm it under
@@ -932,6 +1004,14 @@ tpl cfg database test   <name>
   needs the order of the connection-start statements reads `FR-SRV-042`, in
   [server-contract.md](server-contract.md).
 
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the four steps are these four, with the MySQL counterpart of each:
+  step 2 enforces and confirms the read-only session of `FR-MYSQL-018`; step 3
+  verifies that the server is a supported MySQL series, per `FR-MYSQL-011`;
+  and step 4 runs the privilege probe of `FR-CFG-044` against one of the
+  tables `FR-MYSQL-015` closes. The order is `FR-MYSQL-017`'s, which is
+  `FR-SRV-042`'s.
+
 - **FR-CFG-043**: IF the server the entry reaches is not a supported MariaDB
   series, THEN `tpl cfg database test` SHALL exit `78` with the message of
   `FR-SRV-030`, whose `cause` states that the connection and the authentication
@@ -956,6 +1036,61 @@ tpl cfg database test   <name>
   under `FR-SRV-031`, so this command exits `0` and reports it, per
   `FR-CFG-039`.
 
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry the same holds of a MySQL server: one that is not MySQL exits `78`
+  with the message of `FR-MYSQL-008`, a series below the supported set with
+  the message of `FR-MYSQL-009`, and a series newer than it is read under
+  `FR-MYSQL-010` and exits `0`. Every such `cause` states that the connection
+  and the authentication succeeded.
+
+- **FR-CFG-056**: For a `sqlite` entry, the four steps of `FR-CFG-024` SHALL
+  be the following, in this order, and the fields of `FR-CFG-039` SHALL report
+  them:
+
+  1. establish the kind of the file and open it read-only, per `FR-LITE-005`
+     and `FR-LITE-006` — `connected`;
+  2. apply and confirm every control of `FR-LITE-010` and every limit of
+     `FR-LITE-011` — `read_only_session`;
+  3. issue the version probe of `FR-LITE-002` — `server`, the object of that
+     requirement;
+  4. issue the catalogue probe, which is the check of `FR-LITE-041`: exactly
+     one `SELECT` against `sqlite_schema` of the schema `main`, whose result
+     the system SHALL NOT read as model content. `can_read_catalogue` SHALL
+     be true WHEN the check is answered and returns no row that requirement
+     refuses; a row it refuses ends the command with `78` under it.
+
+  The command SHALL exit `0`, `69`, `70`, `74` or `78`, under `FR-LITE-005`,
+  `FR-LITE-007`, `FR-LITE-009`, `FR-LITE-012`, `FR-LITE-040` and
+  `FR-LITE-041`; it never exits `77`, and
+  `FR-CFG-043` does not reach it. Its `source` is `server`, per `FR-CFG-035`.
+
+  *Why an answered probe is enough.* `FR-CFG-044` asks for a row because a
+  server reader may see no part of a database it can connect to. SQLite has no
+  privileges, per `FR-LITE-036`, and an empty database is a database: the
+  schema table of a zero-byte file returns no row and the file is readable. A
+  probe that fails is not `can_read_catalogue: false` but an exit code — `78`
+  for a file that is not a database, whose schema cannot load, or whose
+  schema the check refuses, `74` for a read that fails, `69` for a lock that
+  outlasts the deadline — so on every `sqlite` test that exits `0` the field
+  is true.
+
+  *Accepted cost.* The field carries no information for a `sqlite` entry, and
+  it is kept so that the document of `FR-CFG-039` has one shape for both
+  providers, per `FR-OUT-027`.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: `FR-LITE-040` joins
+  the requirements the exit codes are taken under, because it gives a code to
+  every result code the other four do not classify. The codes are unchanged.
+
+  *Amended in the sixty-ninth edition,* for rmp `#317`: the catalogue probe is
+  the check of `FR-LITE-041`, so that a file every read refuses with `78` is
+  not reported here as readable — the ground `FR-CFG-024` gives its third
+  step, that an entry every other command refuses must not be reported as
+  working. The probe stays one statement against the schema table, and the
+  steps, the fields and the codes are unchanged.
+
 - **FR-CFG-025**: `tpl cfg database test` SHALL NOT read or write the cache, per
   `FR-CACHE-010`.
 
@@ -970,6 +1105,58 @@ tpl cfg database test   <name>
   SHALL read only for two facts: whether the statement was answered without a
   privilege error, and whether it returned at least one row. The system SHALL
   set `can_read_catalogue` to true WHEN both hold, and to false otherwise.
+
+  A **privilege error** is an error packet carrying one of the following
+  numbers, read alike for a `mariadb` and a `mysql` entry:
+
+  | Number | Name in the error references | What the server refuses |
+  |---|---|---|
+  | `1044` | `ER_DBACCESS_DENIED_ERROR` | Access to the database |
+  | `1142` | `ER_TABLEACCESS_DENIED_ERROR` | The command on the table |
+  | `1143` | `ER_COLUMNACCESS_DENIED_ERROR` | The command on a column of the table |
+  | `1227` | `ER_SPECIFIC_ACCESS_DENIED_ERROR` | The operation, for want of a privilege it names |
+
+  IF the server answers the probe with an error packet carrying any other
+  number, THEN the probe has not been answered, `can_read_catalogue` SHALL
+  NOT be reported, and the command SHALL end as a statement that fails on an
+  open session ends: with `69` (`EX_UNAVAILABLE`), by the third way of
+  `FR-ERR-036`, whose `cause` names the number. A failure of the probe that
+  is not an error packet is the first or the second way of that requirement,
+  and an expired deadline is `FR-ERR-027`'s.
+
+  *Sources.* The error references, read on 2026-11-05: MariaDB's, at
+  `https://mariadb.com/docs/server/reference/error-codes/mariadb-error-code-reference`,
+  and MySQL's, at
+  `https://dev.mysql.com/doc/mysql-errors/8.4/en/server-error-reference.html`.
+  Both name each of the four numbers as the second column names it, with
+  SQLSTATE `42000` and the same message: "Access denied for user '%s'@'%s'
+  to database '%s'", "%s command denied to user '%s'@'%s' for table '%s'",
+  "%s command denied to user '%s'@'%s' for column '%s' in table '%s'", and
+  "Access denied; you need (at least one of) the %s privilege(s) for this
+  operation". The numbers are those of the denials a `SELECT` can meet: on
+  the database, on the table, on a column, and on a privilege the operation
+  needs. *Bounded claim.* This requirement classifies numbers. No server of
+  either fixture was observed answering the probe with an error packet, and
+  it states no observation of which number, if any, a server sends.
+
+  *Why another error is not `false`.* `false` tells the caller that this
+  reader cannot see the named database, and the next step it calls for is a
+  grant. An error packet of another number — a statement the server killed,
+  a resource it ran out of, a query it interrupted — says nothing about the
+  reader, and reporting it as `false` at exit `0` would send the caller to
+  the grants when the server was the fault: a wrong diagnosis, presented as
+  a fact of the reader. Reported under `FR-ERR-036`, it carries the number and
+  the step the operation allows, which is to run it again. *Rejected:
+  `false` for every error packet*, which the implementation did, on the
+  ground that the statement's text is fixed and only the reader's standing
+  can be refused: the text is fixed, and the server's state is not. *Rejected:
+  classifying by SQLSTATE*, because `42000` also carries errors that are not
+  denials, limits on connections among them, as `FR-ERR-048` records for the
+  login.
+
+  *Amended in the seventy-ninth edition,* for rmp `#341`. The requirement
+  named a privilege error and did not say which errors are one, and the
+  implementation read every error packet as one.
 
   *What the probe proves.* That this reader, on this connection, can see the
   named database in the catalogue at all. That is the fact a caller needs from
@@ -1052,12 +1239,20 @@ tpl cfg database test   <name>
   | `--password-command <command>` | `database.<name>.password_command` |
   | `--ca-file <path>` | `database.<name>.ca_file` |
   | `--ca-path <path>` | `database.<name>.ca_path` |
+  | `--provider <provider>` | `database.<name>.provider` |
+  | `--path <path>` | `database.<name>.path` |
 
   *Amended in the fifth edition.* The last three rows are new, and close
   `OQ-017`. The three keys were already in the key space of `FR-CONF-002` and
   were reachable only through `tpl cfg set`, so registering an entry that used
   a keychain lookup and a private certificate authority took three invocations
   where the mapping promised one. Every key of an entry now has a flag.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The last two rows are
+  new, for the two keys `FR-CONF-002` gains, so that every key of an entry
+  still has a flag. Which flags one invocation may combine depends on the
+  provider, per `FR-CFG-055`. Neither flag carries a short form, per
+  `FR-GLOB-024`.
 
 - **FR-CFG-046**: `--password-command` SHALL accept a single string and SHALL
   store the array `FR-CONF-025` splits it into. It SHALL NOT accept an array on
@@ -1090,6 +1285,71 @@ tpl cfg database test   <name>
 
 - **FR-CFG-029**: `--dsn` SHALL be mutually exclusive with the discrete
   connection flags in one invocation.
+
+- **FR-CFG-055**: The flags one invocation of `tpl cfg database add` or
+  `tpl cfg database update` may combine SHALL follow the provider, per
+  `FR-CONF-052`:
+
+  1. **`--provider sqlite`.** IF the invocation is given `--provider sqlite`
+     together with any of `--dsn`, `--host`, `--port`, `--user`, `--schema`,
+     `--tls`, `--password-command`, `--ca-file` or `--ca-path`, THEN the
+     system SHALL exit `64` (`EX_USAGE`) at argument parsing, step 1 of
+     `FR-ERR-006`, and SHALL write nothing. `tpl cfg database add` given
+     `--provider sqlite` SHALL also be given `--path`, and IF it is not, THEN
+     the system SHALL exit `64` at the same step.
+  2. **No provider, `--provider mariadb` or `--provider mysql`.** IF
+     `tpl cfg database add` is given `--path` without `--provider sqlite`,
+     THEN the system SHALL exit `64` at argument parsing and SHALL write
+     nothing; `FR-CFG-016` then governs what it requires. IF
+     `tpl cfg database update` is given `--path` together with
+     `--provider mariadb` or `--provider mysql`, or together with any flag of
+     item 1's list, THEN the system SHALL exit `64` at argument parsing.
+  3. **The entry after the write.** Every other combination given to
+     `tpl cfg database update` is decided against the entry as it would
+     stand after the write, per `FR-CFG-048`.
+  4. **The value of `--path`.** IF the value is empty under the definition of
+     `FR-CONF-050`, or contains `${`, per `FR-CONF-054`, THEN the system SHALL
+     exit `64` and SHALL write nothing. The value SHALL be stored as written,
+     per `FR-CONF-054`.
+
+  In items 1 and 2 the `cause` SHALL name the flags that cannot stand together
+  and the provider that decides it, per the `64` row of `FR-ERR-034`, and the
+  `hint` SHALL show the invocation with the flags of one provider only, with
+  placeholders where the values are the caller's.
+
+  ```
+  tpl cfg database add ledger --provider sqlite --host db.example.com
+  error: --host cannot be given with --provider sqlite
+  cause: a sqlite entry is described by --path alone; --host belongs to a mariadb or a mysql entry
+  hint:  give the database file: tpl cfg database add ledger --provider sqlite --path <path>
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  *Rationale.* Everything items 1 and 2 refuse is decidable from the command
+  line alone, which is the ground `FR-CFG-029` and `FR-RND-041` give for
+  refusing a contradiction at step 1. An `update` that writes only `--path`,
+  or only `--provider sqlite`, may be correct or not depending on what the
+  entry already holds, and only `.tpl/.cfg` can say, so it is decided where
+  `FR-CFG-048` decides every other combination.
+
+  *Rejected: writing `provider = "mariadb"` on every `add` that is not given
+  `--provider`.* An absent key already means `mariadb`, per `FR-CONF-051`, and
+  writing it would put a key into entries that a binary released before this
+  edition refuses, per `FR-CONF-034`, for no change in meaning.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventy-third edition,* for rmp `#324`: item 2 names
+  `--provider mysql` beside `--provider mariadb`, because a `mysql` entry
+  takes the flags a `mariadb` entry takes, per `FR-CONF-052`; `tpl cfg
+  database add` given `--provider mysql` therefore requires what
+  `FR-CFG-016` requires of any entry not given `--provider sqlite`. The
+  example's `cause` names both server providers. Nothing a `mariadb` or a
+  `sqlite` invocation is refused for changes.
 
 - **FR-CFG-030**: The system SHALL NOT declare a `--password` or `-p` flag on
   any command.
@@ -1164,6 +1424,20 @@ tpl cfg database test   <name>
   `--ca-path` SHALL also state that the value is read as a literal path and
   that a value containing `${` is refused, per `FR-CONF-047`.
 
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The help of `--path`,
+  and the row of `database.<name>.path` in the help of `tpl cfg set`, SHALL
+  state that the value is read as a literal path, that a value containing `${`
+  is refused, and that a relative path is resolved against the directory that
+  holds the `.tpl` folder and not against the working directory, per
+  `FR-CONF-054`. The help of `--provider` SHALL state its values, that an
+  entry with no provider is a `mariadb` entry, and which flags each provider
+  takes, per `FR-CFG-055`. A path is not a secret, so neither help carries the
+  process-table warning.
+
+  *Amended in the seventy-third edition,* for rmp `#324`: the help of
+  `--provider` states the three values `FR-CONF-051` gives the key, where it
+  stated two.
+
   *Amended in the forty-ninth edition.* The help of `--password-command`, and
   the row of `database.<name>.password_command` in the help of
   `tpl cfg set`, SHALL also state that `${VAR}` is not expanded in the
@@ -1225,6 +1499,85 @@ tpl cfg database test   <name>
   *Amended in the forty-eighth edition: the paragraph above is new,* for rmp
   `#265`. A clone holds no `.cfg`, per `FR-PROJ-003`, so the first `cfg`
   writer creates the file rather than rewriting it.
+
+  Every step of the procedure SHALL act in the `.tpl` folder the
+  invocation's checks were made on — the folder `FR-PROJ-009` canonicalised,
+  on whose `.cfg` `FR-PROJ-010`, `FR-PROJ-011` and `FR-PROJ-030` were
+  checked, or which the second item of `FR-PROJ-028` checked — and in no
+  other: no symbolic link, and no file, folder or link put in place of a
+  component of that folder's path after it was canonicalised, SHALL redirect
+  the creation of the temporary file, its write, its mode or the rename to
+  another folder or another file. The temporary file SHALL be created as a
+  new file, so that nothing already at its path, a symbolic link included,
+  is opened or written; and the rename SHALL replace the entry named `.cfg`
+  of that folder, a symbolic link there included, and no file a link points
+  at. A rewrite that cannot act in that folder SHALL fail under the first
+  paragraph, with `74`, and SHALL NOT act elsewhere. How the folder is held
+  between the checks and the rename is not fixed by this corpus.
+
+  The rewrite SHALL make its result durable before the command reports
+  success: the content of the temporary file SHALL be on the storage device
+  before the rename gives it the name `.cfg`, and the rename SHALL be on the
+  device before the command exits `0`, so that a crash at any moment leaves
+  either the previous file or the new one whole under the name `.cfg`. The
+  means is not fixed by this corpus. A failure up to and including the
+  rename is the failure of the first paragraph: the previous `.cfg`, or no
+  `.cfg` where there was none, stays in place. IF the rename has taken
+  effect and the system then cannot establish that it is durable, THEN the
+  system SHALL exit `74` (`EX_IOERR`), and SHALL NOT state that the previous
+  file is in place: the `error` line SHALL state that `.tpl/.cfg` was
+  written and its durability could not be confirmed; the `cause` SHALL name
+  the path, state that the file holds the new content, and name the
+  operation that failed and what the filesystem returned, per the `74` row
+  of `FR-ERR-034`; and the `hint` SHALL state that the change is in the file
+  and may not survive a crash of the machine, and SHALL carry
+  `tpl cfg list`, which shows the file as it stands.
+
+  ```
+  tpl cfg set core.query_timeout 60
+  error: .tpl/.cfg was written, and its durability could not be confirmed
+  cause: /home/ana/shop/.tpl/.cfg holds the new content; making the rename durable failed: the filesystem returned EIO
+  hint:  the change is in the file and may not survive a crash of this machine; check the filesystem, and see the file with: tpl cfg list
+  exit:  74 (EX_IOERR)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  *Amended in the eighty-third edition: the paragraph above is new,* for rmp
+  `#313`. The user decided that the rewrite be made durable, and the
+  implementation does it; the requirement stated atomicity and not
+  durability, and its first paragraph promised the previous `.cfg` after any
+  failure, which cannot hold once the rename has taken effect. The code `74`
+  is the one the first paragraph already gives a failed step, and the
+  caller's next step is the one its row of `FR-ERR-001` states, the
+  filesystem; what changes is what the caller is told, because a message
+  that the previous file stands would be false, and the caller would set
+  again a value already written. *Why the property and not the calls.* The
+  calls that make a write durable differ by system and are the technical
+  specification's to record, as every other means of this corpus is; the
+  property — either file whole after a crash, and success only once the new
+  one is durable — is what a caller relies on. *Rejected: undoing the rename
+  after the failure.* The undo is a second write subject to the same
+  failure, and the content written is the content the caller asked for.
+
+  *Amended in the seventy-ninth edition: the paragraph above is new,* for rmp
+  `#313`. The requirement fixed the procedure and not where it acts, and the
+  implementation, as rmp `#313` records it, performs each step by path,
+  resolving the path again every time: a link put in place of a component of
+  the path between the checks of step 2 of `FR-ERR-006` and the rename would
+  send the caller's configuration, credentials included, to a folder of
+  another's choosing, or let the rename replace a file outside the project.
+  That is the check-then-use class (CWE-367) that every path of the cache is
+  held against, under `FR-SEC-026` and `FR-CACHE-044`, and that the read of
+  `.cfg` is held against, under the first item of `FR-PROJ-030`; the rewrite
+  was the one write of the project's files that no requirement bound. The
+  paragraph states the property and not the means, as those requirements
+  do. It can be shown by a test that, through the system's own test
+  configuration, replaces a component of the folder's path between the
+  checks and the rewrite, and finds the file the replacement points at
+  untouched.
 
   *Rationale.* This is the rule `FR-CACHE-030` already applies to the other
   thing `tpl` writes, and it matters more here: a truncated `.cfg` is a `78` on
@@ -1384,6 +1737,15 @@ tpl cfg database test   <name>
   anything finer would be a field list, and no field list has been recorded
   against the four series. Adding a field is non-breaking, per `FR-OUT-014`.
 
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry, `server` is
+  the object of `FR-LITE-002`, `read_only_session` reports the controls and
+  limits of `FR-LITE-010` and `FR-LITE-011`, and `FR-CFG-056` states the rest.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. For a `mysql`
+  entry, `server` is the object of `FR-MYSQL-006` and `read_only_session`
+  reports the read-back of `FR-MYSQL-018`; the fields and their order are
+  unchanged.
+
   *Accepted cost.* `can_read_catalogue: true` does not promise that a
   subsequent read is complete. It promises exactly what `FR-CFG-044` says the
   probe proves and no more; completeness is `FR-PRIV-001` and only a full read
@@ -1398,6 +1760,11 @@ tpl cfg database test   <name>
 
 - [configuration-model.md](configuration-model.md) — the key space, the value
   types, and the validation these commands apply.
+- [sqlite-contract.md](sqlite-contract.md) — the steps `FR-CFG-056` performs
+  for a `sqlite` entry.
+- [mysql-contract.md](mysql-contract.md) — the checks the steps of
+  `FR-CFG-024` perform for a `mysql` entry, and the messages of `FR-MYSQL-008`
+  and `FR-MYSQL-009`.
 - [cache-commands.md](cache-commands.md) — why repointing an entry does not
   invalidate the cache, and `FR-CACHE-041`, the clean of a cache left by a
   deleted entry, which `FR-CFG-052` names.

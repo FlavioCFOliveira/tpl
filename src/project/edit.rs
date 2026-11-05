@@ -18,27 +18,44 @@
 //! would emit a file the serialiser composed, which is a file that has lost
 //! every comment its author wrote.
 //!
-//! **The temporary file is created with the mode rather than chmod'd into it.**
-//! `OpenOptions::mode` sets the permissions at creation, so there is no instant
-//! at which the new file exists at the umask's mode holding the credentials the
-//! old one held. `FR-CFG-042` then makes the rename the whole of the
-//! concurrency story: two processes yield one whole file or the other, and a
-//! killed process leaves nothing locked and nothing half-written.
+//! **The temporary file is created with the mode, and then given it.** The
+//! `openat` that creates it carries `0600`, so there is no instant at which the
+//! new file exists at a looser mode holding the credentials the old one held;
+//! the umask can only narrow that mode, and the `fchmod` on the same
+//! descriptor sets it exactly. `FR-CFG-042` then makes the rename the whole of
+//! the concurrency story: two processes yield one whole file or the other, and
+//! a killed process leaves nothing locked and nothing half-written.
+//!
+//! **Every step acts in the `.tpl` the trust checks judged** (`FR-CFG-041`,
+//! `FR-SEC-027`). The checks of [`super::trust`] open that folder once, judge
+//! `.cfg` on a descriptor relative to it and read its text there, and the
+//! project keeps the folder's descriptor; [`Editor::new`] is handed both, and
+//! the creation of the temporary, its write, its mode, its `fsync`, the rename
+//! and the folder's `fsync` are each made relative to that descriptor by
+//! [`crate::at`]. Nothing on the rewrite path resolves the folder's path again,
+//! so a link or a folder put in place of a component of it after the checks
+//! redirects none of those steps.
 
-use std::fs::OpenOptions;
-use std::io::Write as _;
-use std::os::unix::fs::OpenOptionsExt as _;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use rustix::fd::OwnedFd;
+use rustix::fs::Mode;
 
 use toml_edit::{Array, DocumentMut, Item, Table, Value, value};
 
 use super::config::entry::{PasswordCommand, TlsMode};
 use super::config::keys::{EntryKey, Key, Target, ValueType};
 use crate::error::{Error, Position};
+use crate::model::database::Provider;
 use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
 
 /// The mode `FR-PROJ-019` creates `.tpl/.cfg` with and `FR-CFG-034` keeps.
 pub(crate) const MODE: u32 = 0o600;
+
+/// [`MODE`] as the mode `rustix` takes, whose width differs by platform.
+const FILE_MODE: Mode = Mode::RUSR.union(Mode::WUSR);
 
 /// The name of the configuration file inside `.tpl`.
 pub(crate) const CONFIGURATION: &str = ".cfg";
@@ -52,9 +69,9 @@ const DATABASE: &str = "database";
 /// One `.tpl/.cfg` open for writing.
 #[derive(Debug)]
 pub(crate) struct Editor {
-    /// The `.tpl` folder the temporary file is written inside, per
-    /// `FR-CFG-041`.
-    directory: PathBuf,
+    /// The `.tpl` folder the trust checks judged, the file was read from and
+    /// the temporary file is written inside, held open, per `FR-CFG-041`.
+    folder: Arc<OwnedFd>,
     /// The file the temporary one is renamed over.
     file: PathBuf,
     /// The document, with its comments and its key order intact.
@@ -62,54 +79,22 @@ pub(crate) struct Editor {
 }
 
 impl Editor {
-    /// Opens the `.cfg` of the `.tpl` folder `directory`.
+    /// An editor over `text`, the `.cfg` the trust checks read from `folder`,
+    /// the `.tpl` folder they judged and hold open; `file` is the path of that
+    /// `.cfg`, for a message.
     ///
-    /// A file that does not exist opens as an empty document, which is what
-    /// lets `tpl cfg set` write the first key of a project whose file was
-    /// removed by hand.
+    /// Nothing is opened or read here: the rewrite starts from the text the
+    /// checks judged, and acts in the folder they judged (`FR-CFG-041`). An
+    /// absent file is the empty text, which is what lets `tpl cfg set` write
+    /// the first key of a project whose file was removed by hand.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::ProjectFileUnreadable`] where the file exists and
-    /// cannot be read, and [`Error::ConfigurationMalformed`] where it is not
-    /// TOML — which the reader of [`super::config`] has already refused for
-    /// every command that reaches this one, and which is refused again here
-    /// rather than assumed.
-    pub(crate) fn open(directory: &Path) -> Result<Self, Error> {
-        let file = directory.join(CONFIGURATION);
-
-        // FR-PROJ-030 and FR-SEC-027: the file the rewrite starts from is read
-        // on a descriptor opened relative to `.tpl` without following a link
-        // and without waiting for a writer, and typed on that descriptor, so a
-        // FIFO swapped in after the trust checks cannot hang the command.
-        let unreadable = |returned: std::io::Error| Error::ProjectFileUnreadable {
-            path: file.clone(),
-            returned,
-        };
-        let folder = crate::at::directory(directory, directory)
-            .map_err(|fault| unreadable(fault.into_io()))?;
-        let text = match crate::at::read_checked(&folder, std::ffi::OsStr::new(CONFIGURATION), None)
-        {
-            Ok(text) => text,
-            Err(crate::at::Unread::NotRegular(kind)) => {
-                return Err(Error::ConfigurationNotRegular {
-                    path: file,
-                    kind: crate::at::kind_name(kind),
-                });
-            }
-            Err(crate::at::Unread::Io(returned))
-                if returned.kind() == std::io::ErrorKind::NotFound =>
-            {
-                String::new()
-            }
-            Err(crate::at::Unread::Io(returned)) => return Err(unreadable(returned)),
-            Err(crate::at::Unread::Oversized) => {
-                return Err(unreadable(std::io::Error::from(
-                    std::io::ErrorKind::InvalidData,
-                )));
-            }
-        };
-
+    /// Returns [`Error::ConfigurationMalformed`] where `text` is not TOML —
+    /// which the reader of [`super::config`] has already refused for every
+    /// command that reaches this one, and which is refused again here rather
+    /// than assumed.
+    pub(crate) fn new(folder: Arc<OwnedFd>, file: PathBuf, text: &str) -> Result<Self, Error> {
         let document =
             text.parse::<DocumentMut>()
                 .map_err(|refused| Error::ConfigurationMalformed {
@@ -129,10 +114,48 @@ impl Editor {
                 })?;
 
         Ok(Self {
-            directory: directory.to_owned(),
+            folder,
             file,
             document,
         })
+    }
+
+    /// Opens the `.cfg` of the `.tpl` folder `directory`, for the tests of the
+    /// write path that start from a folder rather than from a project.
+    ///
+    /// The production path never comes here: [`crate::project::Project::editor`]
+    /// hands [`Editor::new`] the folder and the text the trust checks judged.
+    #[cfg(test)]
+    pub(crate) fn open(directory: &Path) -> Result<Self, Error> {
+        let file = directory.join(CONFIGURATION);
+        let unreadable = |returned: std::io::Error| Error::ProjectFileUnreadable {
+            path: file.clone(),
+            returned,
+        };
+        let folder = crate::at::directory(directory, directory)
+            .map_err(|fault| unreadable(fault.into_io()))?;
+        let text = match crate::at::read_checked(&folder, OsStr::new(CONFIGURATION), None) {
+            Ok(text) => text,
+            Err(crate::at::Unread::Io(returned))
+                if returned.kind() == std::io::ErrorKind::NotFound =>
+            {
+                String::new()
+            }
+            Err(crate::at::Unread::NotRegular(kind)) => {
+                return Err(Error::ConfigurationNotRegular {
+                    path: file,
+                    kind: crate::at::kind_name(kind),
+                });
+            }
+            Err(crate::at::Unread::Io(returned)) => return Err(unreadable(returned)),
+            Err(crate::at::Unread::Oversized) => {
+                return Err(unreadable(std::io::Error::from(
+                    std::io::ErrorKind::InvalidData,
+                )));
+            }
+        };
+
+        Self::new(Arc::new(folder), file, &text)
     }
 
     /// The file this editor writes.
@@ -244,53 +267,35 @@ impl Editor {
     /// # Errors
     ///
     /// Returns [`Error::ProjectFileUnwritable`] naming the **target** where the
-    /// temporary file could not be created or written, or the rename failed.
-    /// In every one of those cases the previous `.cfg` is still in place,
-    /// unchanged.
+    /// temporary file could not be created, written, given mode `0600` or made
+    /// durable, or the rename failed. In every one of those cases the previous
+    /// `.cfg` is still in place, unchanged, and no step has acted outside the
+    /// folder the trust checks judged. Returns
+    /// [`Error::ProjectFileNotDurable`] where the rename took effect and its
+    /// durability could not then be established: the file holds the new
+    /// content (`FR-CFG-041`, as amended in the eighty-third edition).
     pub(crate) fn save(&self) -> Result<(), Error> {
         let rendered = self.document.to_string();
-        let temporary = self
-            .directory
-            .join(format!("{CONFIGURATION}.{}.tmp", std::process::id()));
+        let temporary = format!("{CONFIGURATION}.{}.tmp", std::process::id());
 
-        let unwritable = |returned: std::io::Error| Error::ProjectFileUnwritable {
-            path: self.file.clone(),
-            returned,
-        };
-
-        let written = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(MODE)
-            .open(&temporary)
-            .and_then(|mut handle| {
-                handle.write_all(rendered.as_bytes())?;
-                handle.flush()
-            });
-
-        if let Err(returned) = written {
-            let _ = std::fs::remove_file(&temporary);
-            return Err(unwritable(returned));
-        }
-
-        // A file that already existed keeps whatever mode it had, because
-        // `create` does not apply `mode` to it; FR-CFG-034 requires 0600
-        // whatever the previous run left behind.
-        if let Err(returned) = std::fs::set_permissions(
-            &temporary,
-            std::os::unix::fs::PermissionsExt::from_mode(MODE),
-        ) {
-            let _ = std::fs::remove_file(&temporary);
-            return Err(unwritable(returned));
-        }
-
-        if let Err(returned) = std::fs::rename(&temporary, &self.file) {
-            let _ = std::fs::remove_file(&temporary);
-            return Err(unwritable(returned));
-        }
-
-        Ok(())
+        crate::at::replace_in(
+            &self.folder,
+            OsStr::new(CONFIGURATION),
+            OsStr::new(&temporary),
+            FILE_MODE,
+            rendered.as_bytes(),
+        )
+        .map_err(|unreplaced| match unreplaced {
+            crate::at::Unreplaced::Failed(returned) => Error::ProjectFileUnwritable {
+                path: self.file.clone(),
+                returned,
+            },
+            // FR-CFG-041, the eighty-third edition: the rename took effect.
+            crate::at::Unreplaced::NotDurable(returned) => Error::ProjectFileNotDurable {
+                path: self.file.clone(),
+                returned,
+            },
+        })
     }
 }
 
@@ -334,7 +339,14 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
         expected: expects.expected(),
     };
 
-    if let Key::Entry { field, .. } = key {
+    if let Key::Entry { entry, field } = key {
+        // FR-CONF-057, item 1: a value the login, the connection or the
+        // library would cut at a NUL character is refused where the caller
+        // wrote it, and nothing is written.
+        if let Some(refused) = nul_given(&key.to_string(), "cfg set", entry, *field, supplied) {
+            return Err(refused);
+        }
+
         // FR-CONF-049: a value the next expansion would refuse is refused
         // where the caller wrote it. The port keeps its own refusal, since
         // this command takes it as a number only.
@@ -354,8 +366,10 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
             });
         }
 
-        // FR-CONF-050: an empty string names no host and no database.
-        if matches!(field, EntryKey::Host | EntryKey::Database)
+        // FR-CONF-050: an empty string names no host and no database; and
+        // FR-CONF-053 refuses an empty `path` as item 1 of FR-CONF-050
+        // refuses an empty host.
+        if matches!(field, EntryKey::Host | EntryKey::Database | EntryKey::Path)
             && super::config::keys::is_blank(supplied)
         {
             return Err(Error::EmptyValue {
@@ -449,9 +463,79 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
             }
             value(supplied)
         }
+        // FR-CONF-051 item 1: exactly one of the three values, compared exactly.
+        ValueType::Provider => {
+            let provider = Provider::from_name(supplied).ok_or_else(refused)?;
+            value(provider.name())
+        }
+        // FR-CONF-054: a literal path, stored as written and never resolved;
+        // a `${` is refused rather than stored, as for `ca_file`.
+        ValueType::DatabasePath => {
+            if supplied.contains("${") {
+                return Err(refused());
+            }
+            value(supplied)
+        }
     };
 
     Ok(item)
+}
+
+/// The refusal of `FR-CONF-057`, item 1, where `supplied` — given to
+/// `parameter` of `command` for `field` of `entry` — holds a NUL character.
+///
+/// For `dsn` the value is the whole URL, and the part named is the first of
+/// its four parts that carries one, as `tpl` reads them; a NUL elsewhere in it
+/// is left to the grammar, which refuses what is not a part.
+pub(crate) fn nul_given(
+    parameter: &str,
+    command: &str,
+    entry: &str,
+    field: EntryKey,
+    supplied: &str,
+) -> Option<Error> {
+    use crate::error::NulField;
+
+    let refused = |field: NulField, in_dsn: bool, before: &str| Error::NulValueGiven {
+        parameter: parameter.to_owned(),
+        command: command.to_owned(),
+        entry: entry.to_owned(),
+        field,
+        in_dsn,
+        before: (field != NulField::Password).then(|| before.to_owned()),
+    };
+    let before_nul = super::settings::before_nul;
+
+    let field = match field {
+        EntryKey::Host => NulField::Host,
+        EntryKey::User => NulField::User,
+        EntryKey::Password => NulField::Password,
+        EntryKey::Database => NulField::Database,
+        EntryKey::Path => NulField::Path,
+        EntryKey::Dsn => {
+            before_nul(supplied)?;
+            let parsed = super::config::dsn::parse(supplied, parameter, Path::new("")).ok()?;
+            return [
+                (NulField::Host, Some(parsed.host())),
+                (NulField::User, parsed.user()),
+                (NulField::Password, parsed.password()),
+                (NulField::Database, Some(parsed.database())),
+            ]
+            .into_iter()
+            .find_map(|(field, part)| {
+                part.and_then(|part| before_nul(part.raw()))
+                    .map(|before| refused(field, true, before))
+            });
+        }
+        EntryKey::Port
+        | EntryKey::PasswordCommand
+        | EntryKey::Tls
+        | EntryKey::CaFile
+        | EntryKey::CaPath
+        | EntryKey::Provider => return None,
+    };
+
+    before_nul(supplied).map(|before| refused(field, false, before))
 }
 
 /// `arguments` as a TOML array.
@@ -587,6 +671,159 @@ mod tests {
     }
 
     #[test]
+    fn fr_cfg_034_the_mode_the_rewrite_passes_is_six_hundred() {
+        // FR-CFG-034: the mode handed to `fchmod` is the one the file keeps.
+        assert_eq!(u32::from(super::FILE_MODE.bits()), MODE);
+    }
+
+    /// An editor over `directory` that sets `core.database` to `shop`.
+    fn edited(directory: &std::path::Path) -> Editor {
+        let mut editor = Editor::open(directory).expect("the file parses");
+        editor.set(
+            &key("core.database"),
+            assign(&key("core.database"), "shop").expect("an entry name is a string"),
+        );
+
+        editor
+    }
+
+    #[test]
+    fn fr_cfg_041_a_folder_swapped_for_a_link_after_the_open_redirects_nothing() {
+        // FR-CFG-041, the paragraph of the seventy-ninth edition: the `.tpl`
+        // the file was read from is replaced by a link to another folder
+        // between the open and the rewrite. The rewrite lands in the folder it
+        // was read from, and the file the link reaches is untouched.
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let elsewhere = scratch.directory("elsewhere");
+        let decoy = scratch.file("elsewhere/.cfg", "decoy\n");
+
+        let editor = edited(&directory);
+        let moved = scratch.path("moved");
+        std::fs::rename(&directory, &moved).expect("the folder moves");
+        scratch.link(&elsewhere, &directory);
+
+        editor
+            .save()
+            .expect("the rewrite acts in the folder it holds");
+
+        assert_eq!(
+            std::fs::read_to_string(&decoy).expect("the decoy is there"),
+            "decoy\n"
+        );
+        let left: Vec<_> = std::fs::read_dir(&elsewhere)
+            .expect("the folder is there")
+            .filter_map(|found| Some(found.ok()?.file_name()))
+            .collect();
+        assert_eq!(left, [".cfg"], "nothing was created through the link");
+        assert_eq!(
+            std::fs::read_to_string(moved.join(".cfg")).expect("the file is there"),
+            "[core]\ndatabase = \"shop\"\n"
+        );
+        assert_eq!(scratch.mode(&moved.join(".cfg")), MODE);
+    }
+
+    #[test]
+    fn fr_cfg_041_the_rename_replaces_a_link_at_cfg_and_not_the_file_it_reaches() {
+        // FR-CFG-041: `.cfg` replaced by a link after the open. The rename
+        // replaces the entry named `.cfg`, the link, and the file it pointed
+        // at keeps its bytes.
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let outside = scratch.file("outside", "outside\n");
+
+        let editor = edited(&directory);
+        std::fs::remove_file(directory.join(".cfg")).expect("the file is removed");
+        scratch.link(&outside, &directory.join(".cfg"));
+
+        editor.save().expect("the rewrite replaces the link");
+
+        assert_eq!(
+            std::fs::read_to_string(&outside).expect("the target is there"),
+            "outside\n"
+        );
+        let written = std::fs::symlink_metadata(directory.join(".cfg")).expect("the file is there");
+        assert!(written.file_type().is_file(), "the link was not replaced");
+    }
+
+    #[test]
+    fn fr_cfg_041_a_link_at_the_temporary_name_is_not_opened() {
+        // FR-CFG-041: the temporary is created as a new file, so a link
+        // standing at its name is never opened or written through.
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let outside = scratch.file("outside", "outside\n");
+        let temporary = directory.join(format!(".cfg.{}.tmp", std::process::id()));
+        scratch.link(&outside, &temporary);
+
+        edited(&directory).save().expect("the rewrite succeeds");
+
+        assert_eq!(
+            std::fs::read_to_string(&outside).expect("the target is there"),
+            "outside\n"
+        );
+        assert!(std::fs::symlink_metadata(&temporary).is_err());
+        assert_eq!(
+            std::fs::read_to_string(directory.join(".cfg")).expect("the file is there"),
+            "[core]\ndatabase = \"shop\"\n"
+        );
+    }
+
+    #[test]
+    #[allow(
+        clippy::print_stderr,
+        reason = "a run as the superuser cannot observe the refusal, and says so rather than \
+                  passing in silence"
+    )]
+    fn fr_cfg_041_a_rewrite_that_cannot_act_in_the_folder_is_74_and_leaves_the_file() {
+        // FR-CFG-041: a temporary that cannot be created is 74, and the
+        // previous `.cfg` is in place, unchanged. A process that bypasses the
+        // folder's mode cannot observe the refusal, and says so.
+        if rustix::process::getuid().is_root() {
+            eprintln!("skipped: the superuser bypasses the folder's mode");
+            return;
+        }
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let editor = edited(&directory);
+        scratch.chmod(&directory, 0o500);
+
+        let refused = editor.save().expect_err("the folder refuses the temporary");
+        scratch.chmod(&directory, 0o700);
+
+        assert!(matches!(refused, Error::ProjectFileUnwritable { .. }));
+        assert_eq!(refused.exit_code(), 74);
+        assert_eq!(
+            std::fs::read_to_string(directory.join(".cfg")).expect("the file is there"),
+            "[core]\n"
+        );
+    }
+
+    #[test]
+    fn fr_cfg_041_a_rename_whose_durability_fails_is_74_and_the_new_content_stands() {
+        // FR-CFG-041 as amended in the eighty-third edition: the folder's
+        // `fsync` fails after the rename, through the seam of `crate::at`, as
+        // a device error would. The rewrite exits 74 with its own condition,
+        // and the file holds the new content, which is not undone.
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let editor = edited(&directory);
+        crate::at::steps::fail_folder_sync();
+
+        let refused = editor.save().expect_err("the folder's fsync fails");
+
+        assert!(
+            matches!(refused, Error::ProjectFileNotDurable { .. }),
+            "{refused:?}"
+        );
+        assert_eq!(refused.exit_code(), 74);
+        assert_eq!(
+            std::fs::read_to_string(directory.join(".cfg")).expect("the file is there"),
+            "[core]\ndatabase = \"shop\"\n"
+        );
+    }
+
+    #[test]
     fn fr_cfg_008_a_new_entry_is_written_as_its_own_block() {
         let scratch = Scratch::new();
         let directory = project(&scratch, "[core]\ndatabase = \"shop\"\n");
@@ -716,6 +953,86 @@ mod tests {
         assign(&key("database.shop.password"), "$${1X}").expect("a doubled dollar");
         assign(&key("database.shop.password_command"), "echo ${PW}")
             .expect("FR-CONF-017: password_command passes a reference through");
+    }
+
+    #[test]
+    fn fr_conf_057_a_value_holding_a_nul_is_refused_on_write() {
+        // FR-CONF-057, item 1: the five keys of the rule, and each part of a
+        // dsn; a key outside the rule is not this condition.
+        use crate::error::NulField;
+
+        for (spelling, supplied, field, in_dsn, before) in [
+            (
+                "database.shop.host",
+                "db\0.example.com",
+                NulField::Host,
+                false,
+                Some("db"),
+            ),
+            (
+                "database.shop.user",
+                "\0alice",
+                NulField::User,
+                false,
+                Some(""),
+            ),
+            (
+                "database.shop.password",
+                "hun\0ter2",
+                NulField::Password,
+                false,
+                None,
+            ),
+            (
+                "database.shop.database",
+                "freight\0x",
+                NulField::Database,
+                false,
+                Some("freight"),
+            ),
+            (
+                "database.ledger.path",
+                "a\0b.sqlite",
+                NulField::Path,
+                false,
+                Some("a"),
+            ),
+            (
+                "database.shop.dsn",
+                "mysql://ali\0ce@db.example.com/freight",
+                NulField::User,
+                true,
+                Some("ali"),
+            ),
+            (
+                "database.shop.dsn",
+                "mysql://alice@db\0x/freight",
+                NulField::Host,
+                true,
+                Some("db"),
+            ),
+        ] {
+            let condition = assign(&key(spelling), supplied).expect_err("the value holds a NUL");
+
+            assert_eq!(condition.exit_code(), 64, "{spelling}");
+            match condition {
+                Error::NulValueGiven {
+                    parameter,
+                    command,
+                    field: refused,
+                    in_dsn: part,
+                    before: kept,
+                    ..
+                } => {
+                    assert_eq!(parameter, spelling);
+                    assert_eq!(command, "cfg set");
+                    assert_eq!(refused, field, "{spelling}");
+                    assert_eq!(part, in_dsn, "{spelling}");
+                    assert_eq!(kept.as_deref(), before, "{spelling}");
+                }
+                other => panic!("{spelling}: {other:?}"),
+            }
+        }
     }
 
     #[test]

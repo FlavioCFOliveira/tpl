@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-11-05
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md, security.md]
 ---
 
@@ -79,6 +79,12 @@ read from the server on a miss.
   no file it reads is a miss. An invocation that abandons a render under
   `FR-CACHE-039` is a miss, and the connection it then opens is the first and
   only one of the invocation.
+
+  *Note added in the seventy-ninth edition,* for rmp `#310`. A hit also
+  expands no `${VAR}` and runs no `password_command`, per `FR-CONF-056`: the
+  entry is resolved for a connection only by an invocation that opens one,
+  so a variable the entry references may be unset while every read is a
+  hit.
 
 - **FR-CACHE-007**: WHEN a cached read misses, the system SHALL read the server,
   SHALL write the result to the cache except for the objects `FR-CACHE-037`
@@ -196,6 +202,52 @@ read from the server on a miss.
   listed before the wanted one, and it would make a damaged file the template
   never uses a miss only because its name sorts earlier.
 
+  WHEN the system reads the file of a table under this requirement, it MAY
+  defer the decoding of two parts of it, the table's `foreign_keys` and its
+  `referenced_by`, keeping each as the bytes the file holds until the
+  template first reaches that part — reading it, iterating it, or applying a
+  filter, a test or a function that reads it — and SHALL then decode it and
+  validate it as `FR-CACHE-033` validates a whole file. No other part SHALL be
+  deferred. IF a deferred part fails that validation, THEN the file SHALL be
+  a miss under `FR-CACHE-033` at that moment, and the render SHALL be
+  answered under `FR-CACHE-039`: abandoned, with no byte of it on stdout,
+  and rendered again from the server's document. A deferred part the
+  template never reaches is never decoded, and a fault in it is not a miss
+  of that invocation, as a file the template never reaches is not. The
+  document the template sees SHALL be the one an up-front read of the same
+  files would produce, under every equivalence of the first paragraph, so
+  that the output is byte for byte the output of an up-front read, and,
+  where every file is one `tpl` wrote, of a direct read.
+
+  The deferral is the render's alone. Every other command that reads the
+  cache — the eight `schema` subcommands, `tpl schema dump` among them —
+  SHALL decode and validate every part of every file it serves before it
+  writes the first byte of its output, so that a malformed part is a miss
+  under `FR-CACHE-033`, read from the server, and never a document cut off
+  on stdout.
+
+  *Amended in the eighty-second edition: the two paragraphs above are new,*
+  for rmp `#347`. A cached render decoded each table's file whole when the
+  template reached the table, and each file embeds the tables one hop away,
+  per `FR-CTX-006`, so a render of every table decoded about four times the
+  columns of the database: at 2 000 tables `go/schema` held 108 MB of the
+  heap `FR-RND-039` counts, and `rust/schema` ended with `65` from 2 450
+  tables cached while a direct read passed at 3 000, a cached read refused
+  where a direct one succeeds. The figures are recorded in the reading rmp
+  `#347` took and are informative, per `BR-PERF-008`; the rule rests on the
+  identical document. Deferring the two parts moves when a fault in them is
+  found, and the answer to it is the one this requirement already gives a
+  file found faulty during the render. *Why the render alone.* Its output is
+  held until it ends, per `FR-RND-034` with `FR-CACHE-039`, so a miss found
+  late can still be answered whole; a `schema` command writes as it goes,
+  and a part found faulty after its first byte could only be answered with a
+  document cut short. *Rejected: deferring every part.* The listing's names
+  and the order they give are read from the files' paths and the bound
+  object up front, and the two parts named are the ones that carry the
+  embedded tables; a wider deferral buys little and multiplies the moments a
+  fault can surface. *Rejected: keeping the whole decode.* It refuses a read
+  the direct path performs.
+
 - **FR-CACHE-039**: IF a file read under `FR-CACHE-038` during the render is a
   miss under `FR-CACHE-033`, including a file removed after the listing was
   read, THEN the system SHALL abandon the render, SHALL treat the invocation as
@@ -214,6 +266,11 @@ read from the server on a miss.
   server, and SHALL let no byte of the abandoned render reach stdout, per
   `FR-RND-034`. The server read and the second render follow only an abandoned
   render that returned within every bound.
+
+  *Note added in the eighty-second edition,* for rmp `#347`. A part of a
+  file whose decoding `FR-CACHE-038` defers, found faulty when the template
+  first reaches it, makes that file a miss read during the render, and is
+  answered by this requirement.
 
   *Added in the fortieth edition.* The miss is answered exactly as a miss found
   before the render is answered: one whole read of the server, the write of
@@ -281,6 +338,9 @@ read from the server on a miss.
   field, nothing cacheable. This requirement now says that, so the three
   citations resolve to something that is the case.
 
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry, contacting the
+  server is opening the database file, per `FR-CFG-056`.
+
 - **FR-CACHE-011**: No `template` subcommand and no `cfg` subcommand other than
   `database test` SHALL contact a database or touch the cache.
 
@@ -310,8 +370,14 @@ read from the server on a miss.
   | `--direct --no-cache` | database | no |
 
 - **FR-CACHE-016**: `--direct --no-cache` SHALL be the pure read: it touches
-  neither the cache nor any other file, and is the form that works when `.tpl/`
-  is not writable.
+  neither the cache nor any other file, save the two files `FR-PROJ-024`
+  admits beside a SQLite database in write-ahead-log mode, and is the form that
+  works when `.tpl/` is not writable.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the exception is
+  new, for the reason `FR-PROJ-024` gives. It writes nothing inside `.tpl`,
+  so the form still works where `.tpl/` is not writable, and nothing a
+  `mariadb` entry does changes.
 
 - **FR-CACHE-017**: `--direct` and `--no-cache` SHALL be declared by exactly the
   eight `schema` subcommands, `tpl render`, and `tpl cache load`. Every other
@@ -787,12 +853,18 @@ tpl -d shop cache status
   cache the rationale of `FR-CACHE-008` rejects.
 
 - **FR-CACHE-029**: Changing where an entry points — `--host`, `--port`,
-  `--user`, `--schema`, `--tls`, or `--dsn` — SHALL NOT invalidate anything.
+  `--user`, `--schema`, `--tls`, `--dsn`, `--provider`, or `--path` — SHALL
+  NOT invalidate anything.
 
   ```
   tpl cfg database update shop --host db-staging.example.com
   tpl -d shop cache clean
   ```
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. `--provider` and
+  `--path` are new. An entry whose provider or database file changes keeps the
+  data cached under its name, and the document served from it states the
+  provider of the read that wrote it, per `FR-CDOC-018`.
 
 - **BR-CACHE-003**: The consequence is accepted and must be documented plainly:
   after repointing an entry, a read serves the previous server's catalogue with

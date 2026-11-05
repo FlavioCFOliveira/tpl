@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""The Node.js worked example: a data layer for three schemas, and the gate that
+"""The Node.js worked example: a data layer for every read, and the gate that
 decides whether it is correct.
 
 ``FR-EX-002`` fixes what this produces — source files that declare the tables of
-``sakila``, ``world`` and ``freight`` as JavaScript types — and ``FR-EX-009``
+``sakila``, ``world`` and ``freight`` from MariaDB, of ``freight`` from MySQL and
+of the SQLite fixture's main database as JavaScript types — and ``FR-EX-009``
 fixes what makes it correct: not that ``tpl`` exited ``0``, but that the target
 language's own readers accept every file that was rendered. JavaScript has no
 compiler, so the clause's second reader applies, and it is two tools rather than
@@ -45,6 +46,7 @@ from _driver import (  # noqa: E402
     MalformedEnvelope,
     PasswordNotInEnvironment,
     Render,
+    Schema,
     UnexpectedDocument,
     run,
 )
@@ -120,10 +122,34 @@ def _module_file(directory: Path, name: str) -> Path:
     return candidate
 
 
+def _file_stems(schema: Schema) -> dict[str, str]:
+    """Name each table's files: the table's own name, unless another table's
+    name is equal to it ignoring letter case.
+
+    Two such names — ``Émbarque`` and ``émbarque``, which a SQLite database
+    holds as two tables — would be one file on a filesystem that ignores
+    letter case, as macOS's does by default, and the second render would
+    replace the first. Each name of such a group takes its 1-based position in
+    the group, in the order the schema read listed the tables, which is the
+    rule ``table_key`` of ``templates/node/_types.jinja`` names every import
+    by.
+    """
+    groups: dict[str, list[str]] = {}
+    for table in schema.tables:
+        groups.setdefault(table.name.lower(), []).append(table.name)
+    stems: dict[str, str] = {}
+    for names in groups.values():
+        for position, name in enumerate(names, start=1):
+            stems[name] = name if len(names) == 1 else f"{name}_{position}"
+    return stems
+
+
 def plan(catalogue: Catalogue) -> list[Render]:
     """Say what to render, which is this example's whole contribution.
 
-    One ES module directory per schema, and within it:
+    One ES module directory per read — the three schemas of ``FR-EX-006``, the
+    MySQL ``freight`` of ``FR-EX-011`` and the SQLite database of
+    ``FR-EX-012`` — named after the entry that reads it, and within it:
 
     * ``core.js``, rendered once with the whole database in context and no
       object flag, per ``FR-RND-006``: the schema name, the errors, the
@@ -131,8 +157,10 @@ def plan(catalogue: Catalogue) -> list[Render]:
       connection;
     * ``index.js``, rendered the same way: the package's public surface and the
       aggregate of every repository;
-    * three files per table — the row and the types that address it, the base
-      class that is the contract, and the mysql2 implementation of it.
+    * for each table, the row and the types that address it, and for a table
+      that declares a primary key the base class that is the contract and the
+      mysql2 implementation of it too: a table with no key has no key to
+      address a row by.
 
     The schema's material is split across two files where the Rust example
     needs one, and the reason is the language: an ES module's classes are
@@ -142,14 +170,15 @@ def plan(catalogue: Catalogue) -> list[Render]:
 
     A rendered file is named for the table exactly as the catalogue names it,
     and every import this example writes names it the same way, so no
-    transformation stands between a module's name and its file's.
+    transformation stands between a module's name and its file's — except
+    where two names differ only in letter case, which :func:`_file_stems`
+    numbers as the templates do.
 
-    One file is one invocation, per ``FR-EX-005``, so this returns
-    ``3 x tables + 2 x schemas`` renders.
+    One file is one invocation, per ``FR-EX-005``.
     """
     renders: list[Render] = []
     for schema in catalogue:
-        directory = _module_file(OUTPUT, schema.name)
+        directory = _module_file(OUTPUT, schema.entry)
         for template, name in (("node/core", "core.js"), ("node/index", "index.js")):
             renders.append(
                 Render(
@@ -158,16 +187,19 @@ def plan(catalogue: Catalogue) -> list[Render]:
                     entry=schema.entry,
                 )
             )
+        stems = _file_stems(schema)
         for table in schema.tables:
-            for template, suffix in (
-                ("node/model", ".js"),
-                ("node/repository", "_repository.js"),
-                ("node/mysql2", "_mysql2.js"),
-            ):
+            templates = [("node/model", ".js")]
+            if table.raw.get("primary_key"):
+                templates += [
+                    ("node/repository", "_repository.js"),
+                    ("node/mysql2", "_mysql2.js"),
+                ]
+            for template, suffix in templates:
                 renders.append(
                     Render(
                         template=template,
-                        destination=_module_file(directory, table.name + suffix),
+                        destination=_module_file(directory, stems[table.name] + suffix),
                         entry=table.entry,
                         table=table.name,
                     )
@@ -359,7 +391,7 @@ def report(catalogue: Catalogue, written: int) -> None:
 
     The count of distinct ``data_type`` values is the measure that matters for
     ``FR-EX-008``: the mapping is obliged over every value the model reports for
-    a column of the three schemas, and this says how many that was.
+    a column of every read, and this says how many that was.
     """
     types: set[str] = set()
     columns = 0
@@ -372,7 +404,10 @@ def report(catalogue: Catalogue, written: int) -> None:
 
     print(f"\nrendered {written} files into {OUTPUT}", file=sys.stderr)
     for schema in catalogue:
-        print(f"  {schema.name:8s} {len(schema.tables):3d} tables", file=sys.stderr)
+        print(
+            f"  {schema.entry:14s} {schema.provider:7s} {len(schema.tables):3d} tables",
+            file=sys.stderr,
+        )
     print(
         f"  {columns} columns carrying {len(types)} distinct data_type values, "
         f"every one of them mapped by templates/node/_types.jinja",

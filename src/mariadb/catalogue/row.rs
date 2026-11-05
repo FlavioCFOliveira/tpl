@@ -83,8 +83,8 @@
 
 use std::panic::Location;
 
-use sqlx::Row as _;
-use sqlx::mysql::MySqlRow;
+use sqlx_core::row::Row as _;
+use sqlx_mysql::MySqlRow;
 
 use crate::error::Error;
 
@@ -106,7 +106,7 @@ const fn undecodable(location: &'static Location<'static>) -> Error {
 
 /// A field the catalogue declares `NOT NULL`, borrowed from the row.
 #[track_caller]
-pub(super) fn text<'r>(row: &'r MySqlRow, field: &str) -> Result<&'r str, Error> {
+pub(crate) fn text<'r>(row: &'r MySqlRow, field: &str) -> Result<&'r str, Error> {
     let location = Location::caller();
 
     row.try_get::<&str, _>(field)
@@ -115,7 +115,7 @@ pub(super) fn text<'r>(row: &'r MySqlRow, field: &str) -> Result<&'r str, Error>
 
 /// A field that admits SQL `NULL`, [`None`] where the catalogue returned one.
 #[track_caller]
-pub(super) fn maybe_text<'r>(row: &'r MySqlRow, field: &str) -> Result<Option<&'r str>, Error> {
+pub(crate) fn maybe_text<'r>(row: &'r MySqlRow, field: &str) -> Result<Option<&'r str>, Error> {
     let location = Location::caller();
 
     row.try_get::<Option<&str>, _>(field)
@@ -145,7 +145,7 @@ pub(super) fn maybe_text<'r>(row: &'r MySqlRow, field: &str) -> Result<Option<&'
 /// catalogue produced, and a model field that cannot tell the two apart makes
 /// an absent value indistinguishable from an empty one.
 #[track_caller]
-pub(super) fn text_or_empty<'r>(row: &'r MySqlRow, field: &str) -> Result<&'r str, Error> {
+pub(crate) fn text_or_empty<'r>(row: &'r MySqlRow, field: &str) -> Result<&'r str, Error> {
     Ok(maybe_text(row, field)?.unwrap_or_default())
 }
 

@@ -1,22 +1,25 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
-//! A data layer for three MariaDB schemas, rendered from their catalogue.
+//! A data layer for three MariaDB schemas, one MySQL schema and one SQLite
+//! database, rendered from their catalogue.
 //!
 //! This crate is the output of the Rust worked example. Everything below this
 //! file is generated: one module per schema, and three modules per table of
 //! that schema — the row, the repository trait, and the `sqlx` implementation
 //! of that trait. Nothing here is written by hand except this file, which
-//! carries the crate's attributes and names the three schema modules.
+//! carries the crate's attributes and names the five schema modules.
 //!
-//! | Module | Schema | Tables |
-//! |---|---|---|
-//! | [`sakila`] | `sakila` | 16 |
-//! | [`world`] | `world` | 3 |
-//! | [`freight`] | `freight` | 17 |
+//! | Module | Provider | Schema | Tables |
+//! |---|---|---|---|
+//! | [`sakila`] | MariaDB | `sakila` | 16 |
+//! | [`world`] | MariaDB | `world` | 3 |
+//! | [`freight`] | MariaDB | `freight` | 17 |
+//! | [`freight_mysql`] | MySQL | `freight` | 22 |
+//! | [`freight_sqlite`] | SQLite | `main` | 24 |
 //!
-//! The three are rendered from one server by one template set, so what differs
-//! between them is the catalogue and nothing else.
+//! The five are rendered by one template set, the first three from one server,
+//! so what differs between them is the catalogue and nothing else.
 //!
 //! # Using it
 //!
@@ -45,5 +48,7 @@
 //! `unsafe` is forbidden, in this crate as in the tool that rendered it.
 
 pub mod freight;
+pub mod freight_mysql;
+pub mod freight_sqlite;
 pub mod sakila;
 pub mod world;

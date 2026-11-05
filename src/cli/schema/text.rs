@@ -37,6 +37,7 @@ use std::borrow::Cow;
 use super::super::layout::{Cell, PROPERTY, Sections, count, emit, flag, optional, text};
 use crate::cache::{Listed, Summary};
 use crate::error::Error;
+use crate::model::check_constraint::ConstraintLevel;
 use crate::model::document::shape::TableDocument;
 use crate::model::routine::Routine;
 use crate::model::view::View;
@@ -76,6 +77,12 @@ const PARAMETERS: [&str; 3] = ["NAME", "MODE", "TYPE"];
 /// What the cell of a default whose kind is `null` reads as (`FR-CTX-012`).
 const NULL: &str = "NULL";
 
+/// An optional flag as a cell, empty where there is none — a view of a
+/// `sqlite` read, which reports no updatability (`FR-LITE-033`).
+fn optional_flag(value: Option<bool>) -> Cell<'static> {
+    value.map_or(Cow::Borrowed(""), flag)
+}
+
 // --------------------------------------------------------------- listings ---
 
 /// Writes the listing of `tpl schema tables` (`FR-SCH-026`).
@@ -110,9 +117,9 @@ pub(super) fn views<W: std::io::Write>(out: W, selected: &[&View<'_>]) -> Result
         .map(|view| {
             [
                 text(&view.name),
-                flag(view.is_updatable),
-                text(&view.algorithm),
-                text(&view.security_type),
+                optional_flag(view.is_updatable),
+                optional(view.algorithm.as_deref()),
+                optional(view.security_type.as_deref()),
             ]
         })
         .collect();
@@ -159,7 +166,8 @@ pub(super) fn info<W: std::io::Write>(out: W, summary: &Summary<'_>) -> Result<(
     let rows: Vec<[Cell<'_>; 2]> = vec![
         [text("name"), text(&summary.name)],
         [text("charset"), text(&summary.charset)],
-        [text("collation"), text(&summary.collation)],
+        [text("collation"), optional(summary.collation.as_deref())],
+        [text("provider"), text(summary.provider.name())],
         [text("server"), text(summary.server.version())],
         [text("series"), text(summary.server.series())],
         [text("standing"), text(summary.server.standing().name())],
@@ -222,7 +230,7 @@ pub(super) fn table<W: std::io::Write>(out: W, table: &TableDocument<'_>) -> Res
             [
                 text(&index.name),
                 flag(index.unique),
-                text(&index.index_type),
+                optional(index.index_type.as_deref()),
                 Cow::Owned(
                     index
                         .columns
@@ -242,7 +250,7 @@ pub(super) fn table<W: std::io::Write>(out: W, table: &TableDocument<'_>) -> Res
         .iter()
         .map(|key| {
             [
-                text(&key.name),
+                optional(key.name.as_deref()),
                 Cow::Owned(
                     key.columns
                         .iter()
@@ -279,7 +287,7 @@ pub(super) fn table<W: std::io::Write>(out: W, table: &TableDocument<'_>) -> Res
         .map(|incoming| {
             [
                 text(&incoming.table.name),
-                text(&incoming.key.name),
+                optional(incoming.key.name.as_deref()),
                 Cow::Owned(
                     incoming
                         .key
@@ -314,7 +322,7 @@ pub(super) fn table<W: std::io::Write>(out: W, table: &TableDocument<'_>) -> Res
         .map(|check| {
             [
                 text(&check.name),
-                text(check.level.name()),
+                optional(check.level.as_ref().map(ConstraintLevel::name)),
                 text(&check.clause),
             ]
         })
@@ -332,18 +340,21 @@ pub(super) fn table<W: std::io::Write>(out: W, table: &TableDocument<'_>) -> Res
 pub(super) fn view<W: std::io::Write>(out: W, view: &View<'_>) -> Result<(), Error> {
     let rows: Vec<[Cell<'_>; 2]> = vec![
         [text("name"), text(&view.name)],
-        [text("updatable"), flag(view.is_updatable)],
-        [text("algorithm"), text(&view.algorithm)],
-        [text("check_option"), text(&view.check_option)],
-        [text("security_type"), text(&view.security_type)],
-        [text("definer"), text(&view.definer)],
+        [text("updatable"), optional_flag(view.is_updatable)],
+        [text("algorithm"), optional(view.algorithm.as_deref())],
+        [text("check_option"), optional(view.check_option.as_deref())],
+        [
+            text("security_type"),
+            optional(view.security_type.as_deref()),
+        ],
+        [text("definer"), optional(view.definer.as_deref())],
         [
             text("character_set_client"),
-            text(&view.character_set_client),
+            optional(view.character_set_client.as_deref()),
         ],
         [
             text("collation_connection"),
-            text(&view.collation_connection),
+            optional(view.collation_connection.as_deref()),
         ],
         [text("definition"), text(&view.definition)],
     ];

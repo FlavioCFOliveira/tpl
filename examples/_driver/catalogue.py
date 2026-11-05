@@ -55,11 +55,17 @@ class Table:
 class Schema:
     """One schema, the entry that reads it, and the tables it holds."""
 
-    #: The server-side schema name.
+    #: The server-side schema name, or ``main`` for a SQLite database
+    #: (``FR-LITE-019``).
     name: str
-    #: The ``.tpl/.cfg`` entry registered for it.
+    #: The ``.tpl/.cfg`` entry registered for it. It is unique among the reads,
+    #: where :attr:`name` is not — the MariaDB and the MySQL ``freight`` share
+    #: a name — so an example names what it renders for a read by it.
     entry: str
     tables: tuple[Table, ...]
+    #: The entry's provider: ``mariadb``, ``mysql`` or ``sqlite``
+    #: (``FR-CONF-051``).
+    provider: str = "mariadb"
 
     def table(self, name: str) -> Table:
         """Return the table called ``name``.
@@ -77,12 +83,15 @@ class Schema:
 
 @dataclass(frozen=True)
 class Catalogue:
-    """The three schemas of ``FR-EX-006``, read once each."""
+    """Every read of the workflow, once each: the three schemas of
+    ``FR-EX-006``, the schema of ``FR-EX-011`` and the database of
+    ``FR-EX-012``."""
 
     schemas: tuple[Schema, ...]
 
     def __iter__(self) -> Iterator[Schema]:
-        """Iterate the schemas in the order ``FR-EX-006`` names them."""
+        """Iterate the reads: the three of ``FR-EX-006`` in the order it names
+        them, then ``FR-EX-011``'s, then ``FR-EX-012``'s."""
         return iter(self.schemas)
 
     def __len__(self) -> int:
@@ -95,13 +104,14 @@ class Catalogue:
         return tuple(table for schema in self.schemas for table in schema.tables)
 
     def schema(self, name: str) -> Schema:
-        """Return the schema called ``name``.
+        """Return the read whose entry is ``name``; the entry of each schema of
+        ``FR-EX-006`` is the schema's own name.
 
         Raises:
-            KeyError: if no schema of that name was read.
+            KeyError: if no read was made through that entry.
         """
         for schema in self.schemas:
-            if schema.name == name:
+            if schema.entry == name:
                 return schema
         known = ", ".join(s.name for s in self.schemas) or "(none)"
         raise KeyError(f"no schema {name!r} was read. Read: {known}")

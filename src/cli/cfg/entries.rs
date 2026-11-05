@@ -31,8 +31,9 @@ use toml_edit::{Item, value};
 
 use super::super::local::Format;
 use super::{Supplied, coherence, form, project};
-use crate::diagnostics::emit::ServerDatabase;
+use crate::diagnostics::emit::{Reach, ServerDatabase};
 use crate::error::{EntryNameGiven, Error};
+use crate::model::database::Provider;
 use crate::output::{self, Collection, Document, Order, Source, Table};
 use crate::project::config::entry::{Entry as Block, PasswordCommand};
 use crate::project::config::keys::{EntryKey, Key, is_entry_name};
@@ -99,13 +100,29 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
         });
     }
 
+    // FR-CFG-055 items 1 and 2, decidable from the command line alone.
+    flags.by_provider(ADD, name)?;
     flags.exclusive()?;
 
-    if !flags.connects() {
-        return Err(Error::ConnectionDetailsMissing {
-            entry: name.to_owned(),
-            database_given: supplied.database.is_some(),
-        });
+    match flags.provider {
+        // FR-CFG-055 item 1: a `sqlite` entry is described by --path.
+        Some(Provider::Sqlite) => {
+            if flags.path.is_none() {
+                return Err(Error::PathRequired {
+                    entry: name.to_owned(),
+                });
+            }
+        }
+        // FR-CFG-016: otherwise --dsn or a discrete connection flag, for a
+        // `mysql` entry as for a `mariadb` one (FR-CFG-055 item 2).
+        Some(Provider::Mariadb | Provider::Mysql) | None => {
+            if !flags.connects() {
+                return Err(Error::ConnectionDetailsMissing {
+                    entry: name.to_owned(),
+                    database_given: supplied.database.is_some(),
+                });
+            }
+        }
     }
 
     let project = project(supplied)?;
@@ -116,7 +133,7 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
     if let Some(given) = supplied.database {
         crate::diagnostics::emit::database_has_no_effect(
             ADD,
-            flags.server_database(false, given, name),
+            flags.server_database(false, false, given, name),
         );
     }
 
@@ -132,8 +149,15 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
     // Every value is validated, and the entry the flags would leave behind is
     // then measured against `FR-CONF-007` — both before the editor is asked to
     // hold anything, so a refusal of either leaves the file as it was.
-    let written = flags.items().map_err(|refused| at(refused, ADD))?;
-    coherence::refuse(&configuration, ADD, name, &named(&written), flags.dsn)?;
+    let written = flags.items().map_err(|refused| at(refused, ADD, name))?;
+    coherence::refuse(
+        &configuration,
+        ADD,
+        name,
+        &named(&written),
+        flags.dsn,
+        flags.provider,
+    )?;
 
     apply(&mut editor, name, written);
 
@@ -164,20 +188,23 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
         });
     }
 
+    // FR-CFG-055 items 1 and 2, decidable from the command line alone.
+    flags.by_provider(UPDATE, name)?;
     flags.exclusive()?;
 
     let project = project(supplied)?;
     let configuration = project.configuration()?;
 
     // FR-CFG-051: steps 1 to 3 of FR-ERR-006 have passed, and step 3 is where
-    // `.tpl/.cfg` says whether the entry is defined by `dsn`.
+    // `.tpl/.cfg` says whether the entry is defined by `dsn`, and which
+    // provider it has.
     if let Some(given) = supplied.database {
-        let by_dsn = configuration
-            .entry(name)
-            .is_some_and(|block| block.declares(EntryKey::Dsn));
+        let block = configuration.entry(name);
+        let by_dsn = block.is_some_and(|block| block.declares(EntryKey::Dsn));
+        let file = block.is_some_and(|block| block.provider() == Provider::Sqlite);
         crate::diagnostics::emit::database_has_no_effect(
             UPDATE,
-            flags.server_database(by_dsn, given, name),
+            flags.server_database(by_dsn, file, given, name),
         );
     }
 
@@ -185,13 +212,31 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
         return Err(configuration.entry_not_found(name, false));
     }
 
-    let written = flags.items().map_err(|refused| at(refused, UPDATE))?;
+    let written = flags.items().map_err(|refused| at(refused, UPDATE, name))?;
 
     // `FR-CFG-020` leaves the rest of the entry untouched, so the combination
     // measured is the entry as it stands with these fields changed — and
     // `FR-CFG-048` refuses the write rather than removing what it was not asked
     // to remove.
-    coherence::refuse(&configuration, UPDATE, name, &named(&written), flags.dsn)?;
+    coherence::refuse(
+        &configuration,
+        UPDATE,
+        name,
+        &named(&written),
+        flags.dsn,
+        flags.provider,
+    )?;
+
+    // FR-CFG-053, the sixty-fifth edition: the entry as it stands after the
+    // write — the provider given, or the one `.tpl/.cfg` holds — decides
+    // whether it may now point at another server or read another database.
+    let provider = flags.provider.unwrap_or_else(|| {
+        configuration
+            .entry(name)
+            .map(Block::provider)
+            .unwrap_or_default()
+    });
+    let reach = Reach::of(flags.provider.is_some() || flags.path.is_some(), provider);
 
     let mut editor = project.editor()?;
     apply(&mut editor, name, written);
@@ -201,7 +246,7 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
     // FR-CFG-053: after the rewrite, and after the line of FR-CFG-051; the
     // cache is not consulted, so the line does not depend on one existing.
     if flags.repoints() {
-        crate::diagnostics::emit::entry_repointed(name);
+        crate::diagnostics::emit::entry_repointed(name, reach);
     }
 
     Ok(())
@@ -359,9 +404,23 @@ fn apply(editor: &mut Editor, name: &str, written: Vec<(EntryKey, Item)>) {
 }
 
 /// `refused` with the command whose help states what its flag takes, where it
-/// is a value the flag did not accept.
-fn at(refused: Error, command: &str) -> Error {
+/// is a value the flag did not accept, and the entry `name` it was given for.
+fn at(refused: Error, command: &str, name: &str) -> Error {
     match refused {
+        Error::NulValueGiven {
+            parameter,
+            field,
+            in_dsn,
+            before,
+            ..
+        } => Error::NulValueGiven {
+            parameter,
+            command: command.to_owned(),
+            entry: name.to_owned(),
+            field,
+            in_dsn,
+            before,
+        },
         Error::MalformedValue {
             parameter,
             value,
@@ -420,6 +479,10 @@ pub(crate) struct Flags<'a> {
     pub(crate) ca_file: Option<&'a std::path::Path>,
     /// `--ca-path`.
     pub(crate) ca_path: Option<&'a std::path::Path>,
+    /// `--provider` (`FR-CONF-051`).
+    pub(crate) provider: Option<Provider>,
+    /// `--path` (`FR-CONF-053`).
+    pub(crate) path: Option<&'a std::path::Path>,
 }
 
 impl Flags<'_> {
@@ -437,20 +500,88 @@ impl Flags<'_> {
             || self.schema.is_some()
     }
 
-    /// Whether the invocation supplied none of the nine flags (`FR-CFG-020`).
+    /// Whether the invocation supplied none of the eleven flags
+    /// (`FR-CFG-020`).
     const fn is_empty(&self) -> bool {
         !self.connects()
             && self.tls.is_none()
             && self.password_command.is_none()
             && self.ca_file.is_none()
             && self.ca_path.is_none()
+            && self.provider.is_none()
+            && self.path.is_none()
     }
 
     /// Whether the invocation gives a flag that changes where the entry
-    /// points: one of the six `FR-CACHE-029` names, per `FR-CFG-053`.
+    /// points: one of the eight `FR-CACHE-029` names, per `FR-CFG-053`.
     /// `--password-command`, `--ca-file` and `--ca-path` do not.
     const fn repoints(&self) -> bool {
-        self.connects() || self.tls.is_some()
+        self.connects() || self.tls.is_some() || self.provider.is_some() || self.path.is_some()
+    }
+
+    /// The flags of a `mariadb` entry this invocation gives, as their names,
+    /// in the order of `FR-CFG-027` (`FR-CFG-055`, item 1).
+    fn server_flags(&self) -> impl Iterator<Item = &'static str> {
+        [
+            ("--dsn", self.dsn.is_some()),
+            ("--host", self.host.is_some()),
+            ("--port", self.port.is_some()),
+            ("--user", self.user.is_some()),
+            ("--schema", self.schema.is_some()),
+            ("--tls", self.tls.is_some()),
+            ("--password-command", self.password_command.is_some()),
+            ("--ca-file", self.ca_file.is_some()),
+            ("--ca-path", self.ca_path.is_some()),
+        ]
+        .into_iter()
+        .filter_map(|(flag, given)| given.then_some(flag))
+    }
+
+    /// Refuses the combinations of flags and provider the command line alone
+    /// decides (`FR-CFG-055`, items 1 and 2).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::FlagRefusedByProvider`] naming the flag the provider
+    /// refuses.
+    fn by_provider(&self, command: &'static str, name: &str) -> Result<(), Error> {
+        let refused = |flag: &'static str, provider: Provider, given: bool| {
+            Err(Error::FlagRefusedByProvider {
+                command,
+                entry: name.to_owned(),
+                flag,
+                provider,
+                given,
+            })
+        };
+
+        // Item 1: --provider sqlite beside a flag of a mariadb entry.
+        if self.provider == Some(Provider::Sqlite)
+            && let Some(flag) = self.server_flags().next()
+        {
+            return refused(flag, Provider::Sqlite, true);
+        }
+
+        if self.path.is_some() {
+            match (command, self.provider) {
+                // Item 2: `add` given --path without --provider sqlite.
+                (ADD, None) => return refused("--path", Provider::Mariadb, false),
+                // Item 2: --path beside --provider mariadb or --provider mysql.
+                (_, Some(provider @ (Provider::Mariadb | Provider::Mysql))) => {
+                    return refused("--path", provider, true);
+                }
+                // Item 2: `update` given --path beside a flag of a mariadb
+                // entry, which no provider admits together.
+                (_, None) => {
+                    if let Some(flag) = self.server_flags().next() {
+                        return refused(flag, Provider::Sqlite, false);
+                    }
+                }
+                (_, Some(Provider::Sqlite)) => {}
+            }
+        }
+
+        Ok(())
     }
 
     /// Where the database on the server of the entry written comes from, for
@@ -461,13 +592,23 @@ impl Flags<'_> {
     /// The four conditions are tried in the order of `FR-CFG-051` item 2:
     /// the dsn form and a given `--schema` precede the equality of condition
     /// 3, which is byte for byte.
-    fn server_database<'g>(&self, by_dsn: bool, given: &'g str, name: &str) -> ServerDatabase<'g> {
+    fn server_database<'g>(
+        &self,
+        by_dsn: bool,
+        file: bool,
+        given: &'g str,
+        name: &str,
+    ) -> ServerDatabase<'g> {
         if by_dsn || self.dsn.is_some() {
             ServerDatabase::Dsn
         } else if self.schema.is_some() {
             ServerDatabase::SchemaGiven
         } else if given == name {
             ServerDatabase::NamesEntry
+        } else if self.provider == Some(Provider::Sqlite) || (file && self.provider.is_none()) {
+            // Condition 4 of FR-CFG-051: the invocation uses or targets a
+            // `sqlite` entry.
+            ServerDatabase::File
         } else {
             ServerDatabase::Schema(given)
         }
@@ -526,19 +667,37 @@ impl Flags<'_> {
         let mut written: Vec<(EntryKey, Result<Item, Error>)> = Vec::with_capacity(9);
 
         if let Some(dsn) = self.dsn {
-            written.push((EntryKey::Dsn, referenced(DSN, dsn).and_then(dsn_item)));
+            written.push((
+                EntryKey::Dsn,
+                without_nul(DSN, EntryKey::Dsn, dsn)
+                    .and_then(|dsn| referenced(DSN, dsn))
+                    .and_then(dsn_item),
+            ));
         }
         if let Some(host) = self.host {
-            written.push((EntryKey::Host, nonempty("--host", host)));
+            written.push((
+                EntryKey::Host,
+                without_nul("--host", EntryKey::Host, host)
+                    .and_then(|host| nonempty("--host", host)),
+            ));
         }
         if let Some(port) = self.port {
             written.push((EntryKey::Port, Ok(value(i64::from(port)))));
         }
         if let Some(user) = self.user {
-            written.push((EntryKey::User, referenced("--user", user).map(value)));
+            written.push((
+                EntryKey::User,
+                without_nul("--user", EntryKey::User, user)
+                    .and_then(|user| referenced("--user", user))
+                    .map(value),
+            ));
         }
         if let Some(schema) = self.schema {
-            written.push((EntryKey::Database, nonempty("--schema", schema)));
+            written.push((
+                EntryKey::Database,
+                without_nul("--schema", EntryKey::Database, schema)
+                    .and_then(|schema| nonempty("--schema", schema)),
+            ));
         }
         if let Some(command) = self.password_command {
             written.push((EntryKey::PasswordCommand, command_item(command)));
@@ -552,8 +711,25 @@ impl Flags<'_> {
         if let Some(path) = self.ca_path {
             written.push((EntryKey::CaPath, path_item(EntryKey::CaPath, path)));
         }
+        if let Some(provider) = self.provider {
+            written.push((EntryKey::Provider, Ok(value(provider.name()))));
+        }
+        if let Some(path) = self.path {
+            written.push((EntryKey::Path, database_path_item(path)));
+        }
 
         written
+    }
+}
+
+/// `written`, where it holds no NUL character (`FR-CONF-057`, item 1).
+///
+/// The command and the entry are filled in by the caller, as for every refused
+/// flag value.
+fn without_nul<'v>(flag: &str, field: EntryKey, written: &'v str) -> Result<&'v str, Error> {
+    match edit::nul_given(flag, "", "", field, written) {
+        Some(refused) => Err(refused),
+        None => Ok(written),
     }
 }
 
@@ -627,6 +803,36 @@ fn command_item(written: &str) -> Result<Item, Error> {
     })?;
 
     Ok(value(edit::array(command.arguments())))
+}
+
+/// The item `--path` writes (`FR-CFG-055`, item 4): not empty under the
+/// definition of `FR-CONF-050`, holding no `${`, and stored as written, never
+/// resolved (`FR-CONF-054`).
+fn database_path_item(path: &std::path::Path) -> Result<Item, Error> {
+    let written = path.to_str().ok_or_else(|| Error::MalformedValue {
+        parameter: "--path".to_owned(),
+        command: String::new(),
+        value: path.to_string_lossy().into_owned(),
+        expected: "a filesystem path",
+    })?;
+
+    let written = without_nul("--path", EntryKey::Path, written)?;
+    if crate::project::config::keys::is_blank(written) {
+        return Err(Error::EmptyValue {
+            parameter: "--path".to_owned(),
+            command: String::new(),
+        });
+    }
+    if written.contains("${") {
+        return Err(Error::MalformedValue {
+            parameter: "--path".to_owned(),
+            command: String::new(),
+            value: written.to_owned(),
+            expected: "a filesystem path, read literally and never expanded",
+        });
+    }
+
+    Ok(value(written))
 }
 
 /// The item a path flag writes.
@@ -801,6 +1007,106 @@ mod tests {
         ));
         assert_eq!(condition.exit_code(), 64);
         assert!(harness.written().contains("host = \"db\""));
+    }
+
+    #[test]
+    fn fr_conf_057_a_flag_value_holding_a_nul_is_refused_with_64_and_nothing_is_written() {
+        // FR-CONF-057, item 1: --dsn, --host, --user, --schema and --path, the
+        // value of --dsn once each part is read. The cause names the flag, the
+        // entry and the part before the NUL, and never a password.
+        use crate::error::NulField;
+
+        for (flags, parameter, field, in_dsn, before) in [
+            (
+                Flags {
+                    host: Some("db\0x"),
+                    ..Flags::default()
+                },
+                "--host",
+                NulField::Host,
+                false,
+                Some("db"),
+            ),
+            (
+                Flags {
+                    host: Some("db"),
+                    user: Some("rea\0der"),
+                    ..Flags::default()
+                },
+                "--user",
+                NulField::User,
+                false,
+                Some("rea"),
+            ),
+            (
+                Flags {
+                    host: Some("db"),
+                    schema: Some("freight\0x"),
+                    ..Flags::default()
+                },
+                "--schema",
+                NulField::Database,
+                false,
+                Some("freight"),
+            ),
+            (
+                Flags {
+                    dsn: Some("mysql://alice:pw\0x@db.example.com/freight"),
+                    ..Flags::default()
+                },
+                "--dsn",
+                NulField::Password,
+                true,
+                None,
+            ),
+            (
+                Flags {
+                    dsn: Some("mysql://alice@db.example.com/fre\0ight"),
+                    ..Flags::default()
+                },
+                "--dsn",
+                NulField::Database,
+                true,
+                Some("fre"),
+            ),
+            (
+                Flags {
+                    provider: Some(crate::model::database::Provider::Sqlite),
+                    path: Some(std::path::Path::new("data/led\0ger.sqlite")),
+                    ..Flags::default()
+                },
+                "--path",
+                NulField::Path,
+                false,
+                Some("data/led"),
+            ),
+        ] {
+            let harness = Harness::new("");
+            let condition = harness
+                .add("shop", flags)
+                .expect_err("a value holding a NUL is refused");
+
+            assert_eq!(condition.exit_code(), 64, "{condition:?}");
+            match condition {
+                Error::NulValueGiven {
+                    parameter: ref given,
+                    ref command,
+                    ref entry,
+                    field: refused,
+                    in_dsn: part,
+                    before: ref kept,
+                } => {
+                    assert_eq!(given, parameter);
+                    assert_eq!(command, "cfg database add");
+                    assert_eq!(entry, "shop");
+                    assert_eq!(refused, field, "{parameter}");
+                    assert_eq!(part, in_dsn, "{parameter}");
+                    assert_eq!(kept.as_deref(), before, "{parameter}");
+                }
+                ref other => panic!("{parameter}: {other:?}"),
+            }
+            assert_eq!(harness.written(), "", "{parameter}");
+        }
     }
 
     #[test]

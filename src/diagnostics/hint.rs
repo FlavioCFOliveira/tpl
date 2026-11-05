@@ -37,10 +37,11 @@ use std::path::Path;
 use super::restate::{self, Edit, Replacement};
 use super::suggest;
 use crate::error::{
-    CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair, Error,
-    LookupKind, Missing, NetworkPhase, ReadOnlyFault, RenderReason, TlsFault, TplDirFault,
-    Unresolved,
+    AccountRefusal, CatalogueObjectKind, ContextFault, DeadlineBound, DsnFault, EntryNameGiven,
+    EntryRepair, Error, LoginFault, LoginRefusal, LookupKind, Missing, NetworkPhase, NulField,
+    NulPlace, ReadOnlyFault, RenderReason, SqliteEnd, TlsFault, TplDirFault, Unresolved,
 };
+use crate::model::database::Provider;
 use crate::project::config::keys::ValueType;
 
 /// The longest a name the character set of `FR-ERR-022` governs may be.
@@ -412,7 +413,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // FR-CFG-020 fixes this line: every flag of FR-CFG-027.
         Error::NothingToUpdate { .. } => Cow::Borrowed(
             "give at least one of --dsn, --host, --port, --user, --schema, --tls, \
-             --password-command, --ca-file, --ca-path",
+             --password-command, --ca-file, --ca-path, --provider, --path",
         ),
         // FR-CFG-007 fixes both halves: the entry's own `show` where the key
         // names an entry the file defines, and the listing otherwise.
@@ -603,6 +604,12 @@ fn bare(error: &Error) -> Cow<'static, str> {
                     )),
                 }
             }
+            // FR-CONF-051 item 1: the form with a placeholder.
+            (parameter, _) if super::cause::is_provider(parameter) && admits_key(parameter) => {
+                Cow::Owned(format!(
+                    "give one of the three: tpl cfg set {parameter} <provider>"
+                ))
+            }
             (_, "cfg set") => {
                 Cow::Borrowed("show every key and the value it takes with: tpl help cfg set")
             }
@@ -695,6 +702,40 @@ fn bare(error: &Error) -> Cow<'static, str> {
         Error::InvalidReference { parameter, .. } => invalid_reference(parameter),
         // FR-CONF-050: the flag or the key with a placeholder.
         Error::EmptyValue { parameter, .. } => empty_value(parameter),
+        // FR-CONF-057, item 1: the flag or the key again, with a placeholder
+        // for the value.
+        Error::NulValueGiven {
+            parameter,
+            command,
+            entry,
+            field,
+            in_dsn,
+            ..
+        } => Cow::Owned({
+            let placeholder = if *in_dsn {
+                "<url>"
+            } else {
+                nul_placeholder(*field)
+            };
+            let given = if command == "cfg set" && admits_key(parameter) {
+                format!("tpl cfg set {parameter} {placeholder}")
+            } else if admits_flag(parameter) && !command.is_empty() {
+                format!(
+                    "tpl {command} {} {parameter} {placeholder}",
+                    entry_or_placeholder(entry)
+                )
+            } else {
+                format!("the value again, with {placeholder}")
+            };
+            if *in_dsn {
+                format!(
+                    "write the {field} without it: {given}, where <url> is the whole connection \
+                     URL with the {field} written without it"
+                )
+            } else {
+                format!("write the {field} without it: {given}")
+            }
+        }),
         // ------------------------------------------------------------ 65 ---
         // The template is the one the parser stopped in, and `tpl template
         // check` is syntax analysis alone, so it is the command that confirms
@@ -1091,6 +1132,18 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // a certificate that is not trusted is either vouched for or not
         // checked; `tpl cfg set` reaches the key because the file is valid by
         // the time a connection is attempted.
+        //
+        // FR-MYSQL-021: for a `mysql` entry a handshake refused before any
+        // certificate names no mode that does not encrypt, because under such
+        // a mode the uncached login ends in FR-MYSQL-045's 78; what makes the
+        // read succeed is TLS on the server, which no command gives it.
+        Error::TlsHandshakeFailed {
+            provider: Provider::Mysql,
+            fault: TlsFault::Refused,
+            ..
+        } => Cow::Borrowed(
+            "check that the server offers TLS, and enable TLS on the server where it does not",
+        ),
         Error::TlsHandshakeFailed { entry, fault, .. } => {
             let entry = entry_or_placeholder(entry);
 
@@ -1135,6 +1188,66 @@ fn bare(error: &Error) -> Cow<'static, str> {
                                            <seconds>",
             }
         )),
+        // FR-ERR-049: outcomes 2 to 4 share the second outcome's hint, which
+        // refers to the host the error and cause lines name — never writes it,
+        // per FR-ERR-022 — and carries the command that repoints the entry.
+        Error::TcpConnectFailed { entry, by_dsn, .. } => Cow::Owned(format!(
+            "check that the host named above is reachable from here — its address, a route, a \
+             VPN or a firewall — or change the address {}",
+            repoint_address(entry, *by_dsn)
+        )),
+        // FR-ERR-047, outcomes 1 and 2: the address must be that of a
+        // (running) server of the entry's provider. The hint refers to the
+        // host and port the error and cause lines name, per FR-ERR-022.
+        Error::LoginNotCompleted {
+            entry,
+            provider,
+            fault,
+            by_dsn,
+            ..
+        } => {
+            let server = super::cause::server_name(*provider);
+            Cow::Owned(match fault {
+                LoginFault::ConnectionClosed => format!(
+                    "check that the host and port named above are the address of a running \
+                     {server} server, then run the command again, or change the address {}",
+                    repoint_address(entry, *by_dsn)
+                ),
+                LoginFault::NotAccepted => format!(
+                    "check that the host and port named above are the address of a {server} \
+                     server, or change it {}",
+                    repoint_address(entry, *by_dsn)
+                ),
+            })
+        }
+        // FR-ERR-048: the step the reason calls for, then the command that
+        // checks the connection.
+        Error::LoginRefused { entry, reason, .. } => {
+            let test = format!("tpl cfg database test {}", entry_or_placeholder(entry));
+            Cow::Owned(match reason {
+                LoginRefusal::ServerConnectionLimit
+                | LoginRefusal::UserConnectionLimit
+                | LoginRefusal::ResourceLimit => format!(
+                    "the operation is read-only and can be run again once the server has a \
+                     connection free; check the connection with: {test}"
+                ),
+                LoginRefusal::HostBlocked => format!(
+                    "ask the server's administrator to unblock this client's host, then check the \
+                     connection with: {test}"
+                ),
+                LoginRefusal::Unclassified => format!(
+                    "the operation is read-only and can be run again; check the connection with: \
+                     {test}"
+                ),
+            })
+        }
+        // FR-ERR-036: read-only, so repeatable, and the command that checks the
+        // connection and reads nothing into the model (FR-CACHE-010).
+        Error::StatementFailed { entry, .. } => Cow::Owned(format!(
+            "the operation is read-only and can be run again; check the connection with: tpl cfg \
+             database test {}",
+            entry_or_placeholder(entry)
+        )),
         Error::NetworkDeadlineExceeded { phase, bound, .. } => match bound {
             DeadlineBound::Phase => Cow::Owned(format!(
                 "raise the deadline with: tpl cfg set {} <seconds>",
@@ -1174,6 +1287,12 @@ fn bare(error: &Error) -> Cow<'static, str> {
             "free space on the filesystem, or make .tpl writable by the invoking user, then run \
              the command again",
         ),
+        // FR-CFG-041, the eighty-third edition: the change is in the file, and
+        // `tpl cfg list` shows the file as it stands.
+        Error::ProjectFileNotDurable { .. } => Cow::Borrowed(
+            "the change is in the file and may not survive a crash of this machine; check the \
+             filesystem, and see the file with: tpl cfg list",
+        ),
         Error::StdoutUnwritable { .. } => Cow::Borrowed(
             "free space on the destination, or send the output elsewhere, then run the command \
              again",
@@ -1192,6 +1311,40 @@ fn bare(error: &Error) -> Cow<'static, str> {
              password inside dsn), then test it with: tpl cfg database test {}",
             entry_or_placeholder(entry)
         )),
+        // FR-ERR-048: the step the reason calls for, then the test.
+        Error::AccountRefused {
+            entry,
+            reason,
+            by_dsn,
+            ..
+        } => {
+            let name = entry_or_placeholder(entry);
+            Cow::Owned(match reason {
+                AccountRefusal::HostNotPrivileged => format!(
+                    "ask the server's administrator to let the user connect from this client's \
+                     host, or name another user {}; then test it with: tpl cfg database test \
+                     {name}",
+                    if *by_dsn {
+                        format!("inside the dsn: {}", inside_dsn(entry, "user"))
+                    } else {
+                        format!("with: tpl cfg database update {name} --user <user>")
+                    }
+                ),
+                AccountRefusal::PasswordExpired => format!(
+                    "change the password with a client that supports expired passwords, which tpl \
+                     is not, and update the entry's password source, then test it with: tpl cfg \
+                     database test {name}"
+                ),
+                AccountRefusal::Locked => format!(
+                    "ask the server's administrator to unlock the account, then test it with: tpl \
+                     cfg database test {name}"
+                ),
+                AccountRefusal::Blocked => format!(
+                    "ask the server's administrator to unblock the account, then test it with: \
+                     tpl cfg database test {name}"
+                ),
+            })
+        }
         Error::PropertyNotReadable { kind, property, .. } => match (kind, *property) {
             (CatalogueObjectKind::Database, _) => Cow::Borrowed(
                 "check the database the entry names, or grant the connecting user access to it, \
@@ -1606,6 +1759,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
             entry,
             fault,
             by_dsn,
+            ..
         } => {
             let remedy = match fault {
                 ReadOnlyFault::NotApplied => "accepts a read-only session",
@@ -1665,6 +1819,224 @@ fn bare(error: &Error) -> Cow<'static, str> {
             "repoint the entry at a supported server: {}",
             repoint(entry, *by_dsn)
         )),
+        // FR-MYSQL-008 and FR-MYSQL-009 carry the command of FR-SRV-030, and
+        // FR-ERR-045 its --dsn for a dsn entry; neither changes the provider,
+        // per BR-ERR-005.
+        Error::ServerNotMysql { entry, by_dsn, .. } => Cow::Owned(format!(
+            "repoint the entry at a MySQL server: {}",
+            repoint(entry, *by_dsn)
+        )),
+        Error::MysqlSeriesNotSupported { entry, by_dsn, .. } => Cow::Owned(format!(
+            "repoint the entry at a supported server: {}",
+            repoint(entry, *by_dsn)
+        )),
+        // FR-MYSQL-045: the mode that encrypts the session, with the entry name
+        // filled in, and, where the server offered no TLS, that it must offer it
+        // first. `tls` is not a field FR-ERR-045 reroutes for a dsn entry.
+        Error::PublicKeyRequestRefused {
+            entry,
+            no_tls_offered,
+            ..
+        } => Cow::Owned(format!(
+            "encrypt the session: tpl cfg database update {} --tls verify-identity{}",
+            entry_or_placeholder(entry),
+            if *no_tls_offered {
+                "; the server offered no TLS, and must offer it before that mode can connect"
+            } else {
+                ""
+            }
+        )),
+        // FR-ERR-048, error 1102: the command that corrects the entry's
+        // database name, in the form the entry is defined by, and never that
+        // the operation can be run again.
+        Error::DatabaseNameRefused { entry, by_dsn, .. } => Cow::Owned(if *by_dsn {
+            format!(
+                "correct the database name: {}",
+                inside_dsn(entry, "database")
+            )
+        } else {
+            format!(
+                "correct the database name: tpl cfg database update {} --schema <database>",
+                entry_or_placeholder(entry)
+            )
+        }),
+        // FR-CONF-057, items 2 and 3: the key or the flag with a placeholder,
+        // or that the command must print the password alone.
+        Error::ValueHoldsNul {
+            entry,
+            field,
+            place,
+            ..
+        } => Cow::Owned(match place {
+            NulPlace::Helper { .. } => format!(
+                "make the password_command print the password alone, with no NUL character, then \
+                 test it with: tpl cfg database test {}",
+                entry_or_placeholder(entry)
+            ),
+            NulPlace::DsnPart { .. } => format!(
+                "write the {field} without it: {}",
+                inside_dsn(entry, &field.to_string())
+            ),
+            NulPlace::Key { .. } => format!(
+                "write the {field} without it: {}",
+                nul_repair(entry, *field)
+            ),
+        }),
+        // FR-ERR-048, error 3159: the mode that encrypts the session.
+        Error::SecureTransportRequired { entry, .. } => Cow::Owned(format!(
+            "encrypt the session: tpl cfg database update {} --tls verify-identity",
+            entry_or_placeholder(entry)
+        )),
+
+        // ---------------------------------------------- the provider ---
+        // FR-CFG-055: the invocation with the flags of one provider only, with
+        // placeholders where the values are the caller's.
+        Error::FlagRefusedByProvider {
+            command,
+            entry,
+            provider: Provider::Sqlite,
+            ..
+        } => Cow::Owned(format!(
+            "give the database file: tpl {command} {} --provider sqlite --path <path>",
+            entry_or_placeholder(entry)
+        )),
+        Error::FlagRefusedByProvider {
+            command,
+            entry,
+            provider: Provider::Mariadb,
+            ..
+        } => Cow::Owned(format!(
+            "describe the server: tpl {command} {} --host <host> --user <user> --schema \
+             <database>; or register a database file: tpl {command} {} --provider sqlite --path \
+             <path>",
+            entry_or_placeholder(entry),
+            entry_or_placeholder(entry)
+        )),
+        // FR-CFG-055 item 2 for `--provider mysql`, which takes the flags of a
+        // `mariadb` entry (FR-CONF-052): the same two ways out, the server one
+        // keeping the provider the invocation named.
+        Error::FlagRefusedByProvider {
+            command,
+            entry,
+            provider: Provider::Mysql,
+            ..
+        } => Cow::Owned(format!(
+            "describe the server: tpl {command} {} --provider mysql --host <host> --user <user> \
+             --schema <database>; or register a database file: tpl {command} {} --provider sqlite \
+             --path <path>",
+            entry_or_placeholder(entry),
+            entry_or_placeholder(entry)
+        )),
+        Error::PathRequired { entry } => Cow::Owned(format!(
+            "give the database file: tpl cfg database add {} --provider sqlite --path <path>",
+            entry_or_placeholder(entry)
+        )),
+        // FR-CFG-048 as amended: a new entry, with a placeholder for its name,
+        // carrying the provider and the value asked for, and no command that
+        // removes a key (BR-ERR-005).
+        Error::ProviderIncoherentWrite {
+            provider,
+            written,
+            value,
+            ..
+        } => {
+            let leaf = written.rsplit('.').next().unwrap_or(written);
+            let (flag, placeholder) = flag_of(leaf);
+            let given = value.as_deref().filter(|value| admits(value));
+            match (provider, leaf) {
+                (Provider::Sqlite, _) => Cow::Borrowed(
+                    "register the database file as a new entry: tpl cfg database add <name> \
+                     --provider sqlite --path <path>",
+                ),
+                (Provider::Mariadb | Provider::Mysql, "provider") => Cow::Owned(format!(
+                    "register the server as a new entry: tpl cfg database add <name> --provider \
+                     {provider} --host <host> --user <user> --schema <database>"
+                )),
+                (Provider::Mariadb | Provider::Mysql, _) => Cow::Owned(format!(
+                    "register the server as a new entry: tpl cfg database add <name> {flag} {}",
+                    given.unwrap_or(placeholder)
+                )),
+            }
+        }
+        // FR-CONF-052: show the entry, and nothing that removes a key or
+        // changes the provider (BR-ERR-005).
+        Error::ProviderRefusesKeys { entry, .. } => Cow::Owned(format!(
+            "show the entry and the keys it carries with: tpl cfg database show {}",
+            entry_or_placeholder(entry)
+        )),
+
+        // ------------------------------------------------ the SQLite file ---
+        // FR-LITE-005, FR-LITE-007: the command that repoints the entry.
+        Error::SqliteNotRegularFile { entry, .. }
+        | Error::SqliteFileRefused { entry, .. }
+        | Error::SqliteSchemaRefused { entry, .. } => Cow::Owned(format!(
+            "point the entry at a SQLite database file: {}",
+            repoint_file(entry)
+        )),
+        // FR-LITE-043: the remedy is the file's, so the entry is repointed.
+        Error::SqliteNamesAlike { entry, .. } => Cow::Owned(format!(
+            "point the entry at another file: {}",
+            repoint_file(entry)
+        )),
+        Error::SqliteFileLookup { entry, .. } | Error::SqliteFileUnreadable { entry, .. } => {
+            Cow::Owned(format!(
+                "check that the file and its directory are readable, and that the host has free \
+                 space and memory, then run the command again; or point the entry at another \
+                 file: {}",
+                repoint_file(entry)
+            ))
+        }
+        Error::SqliteUnavailable { ended, .. } => match ended {
+            SqliteEnd::Locked {
+                waited: Some((DeadlineBound::Overall, _)),
+                ..
+            }
+            | SqliteEnd::Deadline {
+                bound: DeadlineBound::Overall,
+                ..
+            } => Cow::Borrowed(OVERALL_BUDGET),
+            SqliteEnd::Locked { .. } | SqliteEnd::Deadline { .. } => Cow::Borrowed(
+                "the read is read-only and can be repeated: run the command again once nothing \
+                 holds the database, or wait longer with: tpl cfg set core.query_timeout \
+                 <seconds>",
+            ),
+            SqliteEnd::Contended { .. } => Cow::Borrowed(
+                "the read is read-only and can be repeated: run the command again once nothing \
+                 else is writing the database",
+            ),
+        },
+        // FR-ERR-032: a 70 is a defect in tpl and is not correctable by the
+        // caller.
+        Error::SqliteControlNotInEffect { .. } | Error::SqliteDefect { .. } => {
+            Cow::Borrowed(SOFTWARE_DEFECT)
+        }
+    }
+}
+
+/// The command of `FR-LITE-005`, `FR-LITE-007` and `FR-CONF-053` that points
+/// a `sqlite` entry at another file, per the note on `FR-ERR-045`.
+fn repoint_file(entry: &str) -> String {
+    format!(
+        "tpl cfg database update {} --path <path>",
+        entry_or_placeholder(entry)
+    )
+}
+
+/// The flag of `FR-CFG-027` that writes the key `leaf`, and its placeholder.
+///
+/// `password` has no flag (`FR-CFG-030`), so the host's stands for a new
+/// server entry.
+const fn flag_of(leaf: &str) -> (&'static str, &'static str) {
+    match leaf.as_bytes() {
+        b"dsn" => ("--dsn", "<url>"),
+        b"port" => ("--port", "<port>"),
+        b"user" => ("--user", "<user>"),
+        b"database" => ("--schema", "<database>"),
+        b"tls" => ("--tls", "<mode>"),
+        b"password_command" => ("--password-command", "<command>"),
+        b"ca_file" => ("--ca-file", "<path>"),
+        b"ca_path" => ("--ca-path", "<path>"),
+        _ => ("--host", "<host>"),
     }
 }
 
@@ -1858,12 +2230,20 @@ fn invalid_reference(parameter: &str) -> Cow<'static, str> {
     }
 }
 
-/// The hint of an empty host or database given on the command line
-/// (`FR-CONF-050`): the flag or the key with a placeholder.
+/// The hint of an empty host, database or database file given on the command
+/// line (`FR-CONF-050`, `FR-CONF-053`): the flag or the key with a placeholder.
 fn empty_value(parameter: &str) -> Cow<'static, str> {
     let (what, placeholder, meaning, ids): (&str, &str, &str, &[&str]) =
         if parameter.ends_with("host") {
             ("host", "<host>", "the host of the server", &["host"])
+        } else if super::cause::names_database_path(parameter) {
+            // FR-CONF-053: the empty path is refused as an empty host is.
+            (
+                "database file",
+                "<path>",
+                "the path of the database file",
+                &["path"],
+            )
         } else {
             (
                 "database",
@@ -1905,13 +2285,19 @@ fn path_itself(parameter: &str) -> Cow<'static, str> {
     let ids: &[&str] = match parameter {
         "--ca-file" => &["ca_file"],
         "--ca-path" => &["ca_path"],
+        "--path" => &["path"],
         _ => &["value"],
+    };
+    let meaning = if parameter == "--path" || parameter.ends_with(".path") {
+        "the path of the database file itself"
+    } else {
+        "the path of the trust material itself"
     };
     let edit = Edit::Value {
         ids,
         to: Replacement::Placeholder {
             text: "<path>",
-            meaning: "the path of the trust material itself",
+            meaning,
         },
     };
 
@@ -2562,6 +2948,20 @@ fn repoint(entry: &str, by_dsn: bool) -> Cow<'static, str> {
 ///
 /// `field` names the field that changes, as the words say it. The stored dsn
 /// is never reproduced, per `BR-ERR-003`: `<url>` is a placeholder.
+/// How an entry's address is changed, in the form the entry is defined by:
+/// `--host` and `--port` for the discrete fields, `--dsn` for a dsn
+/// (`FR-ERR-045`, `FR-ERR-047`, `FR-ERR-049`).
+fn repoint_address(entry: &str, by_dsn: bool) -> String {
+    if by_dsn {
+        format!("inside the dsn: {}", inside_dsn(entry, "host or port"))
+    } else {
+        format!(
+            "with: tpl cfg database update {} --host <host> --port <port>",
+            entry_or_placeholder(entry)
+        )
+    }
+}
+
 fn inside_dsn(entry: &str, field: &str) -> String {
     format!(
         "tpl cfg database update {} --dsn <url>, where <url> is the whole connection URL with \
@@ -2783,10 +3183,40 @@ const fn listing(kind: CatalogueObjectKind) -> Option<&'static str> {
 /// to check their configuration.
 const fn deadline_key(phase: NetworkPhase) -> &'static str {
     match phase {
-        NetworkPhase::DnsResolution | NetworkPhase::TcpConnect | NetworkPhase::TlsHandshake => {
-            "core.connect_timeout"
-        }
-        NetworkPhase::CatalogueQuery => "core.query_timeout",
+        NetworkPhase::DnsResolution
+        | NetworkPhase::TcpConnect
+        | NetworkPhase::TlsHandshake
+        | NetworkPhase::Login => "core.connect_timeout",
+        NetworkPhase::ReadOnlyStatement
+        | NetworkPhase::ReadOnlyReadBack
+        | NetworkPhase::VersionProbe
+        | NetworkPhase::CatalogueQuery => "core.query_timeout",
+    }
+}
+
+/// The placeholder `FR-CONF-057` puts after the key or the flag of `field`.
+const fn nul_placeholder(field: NulField) -> &'static str {
+    match field {
+        NulField::Host => "<host>",
+        NulField::User => "<user>",
+        NulField::Password => "<password>",
+        NulField::Database => "<database>",
+        NulField::Path => "<path>",
+    }
+}
+
+/// The command that rewrites the key of `entry` that holds `field`
+/// (`FR-CONF-057`): its flag of `FR-CFG-027`, or `tpl cfg set` for the
+/// password, which no flag writes.
+fn nul_repair(entry: &str, field: NulField) -> String {
+    let entry = entry_or_placeholder(entry);
+    let placeholder = nul_placeholder(field);
+    match field {
+        NulField::Host => format!("tpl cfg database update {entry} --host {placeholder}"),
+        NulField::User => format!("tpl cfg database update {entry} --user {placeholder}"),
+        NulField::Database => format!("tpl cfg database update {entry} --schema {placeholder}"),
+        NulField::Path => format!("tpl cfg database update {entry} --path {placeholder}"),
+        NulField::Password => format!("tpl cfg set database.{entry}.password {placeholder}"),
     }
 }
 

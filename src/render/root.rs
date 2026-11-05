@@ -518,12 +518,19 @@ impl Root {
     /// that carry it, so `t/oj.jinja` and `t/oj` are both one edit from
     /// `t/ok.jinja`. A walk that fails suggests nothing, as the nearest
     /// matches of `FR-TMPL-027` do.
-    pub(crate) fn nearest_included(&self, named: &str) -> Vec<String> {
+    ///
+    /// `holder` is the template that wrote the name, which `FR-TMPL-009`
+    /// keeps out of the population: a template that includes itself recurses
+    /// and never renders, so it is never what the name meant.
+    pub(crate) fn nearest_included(&self, named: &str, holder: &str) -> Vec<String> {
         let population = self.templates().unwrap_or_default();
         let completed = complete(named);
         let nearest = suggest::suggestions(
             &completed,
-            population.iter().map(Template::name),
+            population
+                .iter()
+                .map(Template::name)
+                .filter(|candidate| *candidate != holder),
             Population::Templates,
         );
 

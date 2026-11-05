@@ -471,7 +471,7 @@ mod refusals {
             auto_increment: false,
             invisible: false,
             generated: Some(Generated {
-                expression: Cow::Borrowed("upper(`reference`)"),
+                expression: Some(Cow::Borrowed("upper(`reference`)")),
                 storage: GeneratedStorage::Stored,
             }),
             on_update: Some(Cow::Borrowed("on update current_timestamp()")),
@@ -491,7 +491,7 @@ mod refusals {
             name: Cow::Borrowed(PRIMARY_KEY_NAME),
             unique: true,
             columns: vec![index_column()],
-            index_type: Cow::Borrowed("BTREE"),
+            index_type: Some(Cow::Borrowed("BTREE")),
             comment: Cow::Borrowed("the natural key"),
             ignored: false,
         }
@@ -506,7 +506,7 @@ mod refusals {
 
     fn foreign_key() -> ForeignKey<'static> {
         ForeignKey {
-            name: Cow::Borrowed("fk_leg_consignment"),
+            name: Some(Cow::Borrowed("fk_leg_consignment")),
             columns: vec![foreign_key_column()],
             referenced_table: Some(Cow::Borrowed("consignment")),
             referenced_key: Some(Cow::Borrowed(PRIMARY_KEY_NAME)),
@@ -526,7 +526,7 @@ mod refusals {
     fn check_constraint() -> CheckConstraint<'static> {
         CheckConstraint {
             name: Cow::Borrowed("ck_consignment_reference"),
-            level: ConstraintLevel::Table,
+            level: Some(ConstraintLevel::Table),
             clause: Cow::Borrowed("char_length(`reference`) > 0"),
         }
     }
@@ -536,18 +536,18 @@ mod refusals {
             name: Cow::Borrowed("trg_consignment_stamp"),
             event: TriggerEvent::Insert,
             timing: TriggerTiming::Before,
-            action_order: 1,
+            action_order: Some(1),
             statement: Some(Cow::Borrowed(
                 "BEGIN SET NEW.reference = upper(NEW.reference); END",
             )),
             orientation: Cow::Borrowed("ROW"),
             old_row_alias: Cow::Borrowed("OLD"),
             new_row_alias: Cow::Borrowed("NEW"),
-            sql_mode: Cow::Borrowed("STRICT_TRANS_TABLES"),
+            sql_mode: Some(Cow::Borrowed("STRICT_TRANS_TABLES")),
             definer: Some(Cow::Borrowed("root@localhost")),
-            character_set_client: Cow::Borrowed("utf8mb4"),
-            collation_connection: Cow::Borrowed("utf8mb4_uca1400_ai_ci"),
-            database_collation: Cow::Borrowed("utf8mb4_unicode_520_ci"),
+            character_set_client: Some(Cow::Borrowed("utf8mb4")),
+            collation_connection: Some(Cow::Borrowed("utf8mb4_uca1400_ai_ci")),
+            database_collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
         }
     }
 
@@ -555,13 +555,13 @@ mod refusals {
         View {
             name: Cow::Borrowed("v_consignment_manifest"),
             definition: Cow::Borrowed("select `freight`.`consignment`.`reference` AS `reference`"),
-            check_option: Cow::Borrowed("CASCADED"),
-            is_updatable: true,
-            definer: Cow::Borrowed("root@localhost"),
-            security_type: Cow::Borrowed("INVOKER"),
-            character_set_client: Cow::Borrowed("utf8mb4"),
-            collation_connection: Cow::Borrowed("utf8mb4_uca1400_ai_ci"),
-            algorithm: Cow::Borrowed("UNDEFINED"),
+            check_option: Some(Cow::Borrowed("CASCADED")),
+            is_updatable: Some(true),
+            definer: Some(Cow::Borrowed("root@localhost")),
+            security_type: Some(Cow::Borrowed("INVOKER")),
+            character_set_client: Some(Cow::Borrowed("utf8mb4")),
+            collation_connection: Some(Cow::Borrowed("utf8mb4_uca1400_ai_ci")),
+            algorithm: Some(Cow::Borrowed("UNDEFINED")),
             restricted: Restricted::new(vec![Cow::Borrowed("definition")]),
         }
     }
@@ -604,13 +604,16 @@ mod refusals {
     /// exactly the confusion `FR-CAT-027` guards against for the one name the
     /// two kinds share.
     fn table() -> Table<'static> {
-        Table::assemble(TableParts {
-            engine: Some(Cow::Borrowed("InnoDB")),
-            collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
-            comment: Cow::Borrowed("one consignment per row"),
-            restricted: Restricted::new(vec![Cow::Borrowed("columns")]),
-            ..TableParts::new(Cow::Borrowed("consignment"), TableType::SystemVersioned)
-        })
+        Table::assemble(
+            TableParts {
+                engine: Some(Cow::Borrowed("InnoDB")),
+                collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
+                comment: Cow::Borrowed("one consignment per row"),
+                restricted: Restricted::new(vec![Cow::Borrowed("columns")]),
+                ..TableParts::new(Cow::Borrowed("consignment"), TableType::SystemVersioned)
+            }
+            .with_primary_index(),
+        )
         .expect("a table with no keys satisfies FR-CAT-044 vacuously")
     }
 
@@ -619,15 +622,18 @@ mod refusals {
     /// It is what proves the members are reachable at all, so that the sweep
     /// over the shallow value is not a sweep over a type nothing uses.
     fn populated_table() -> Table<'static> {
-        Table::assemble(TableParts {
-            columns: vec![column()],
-            indexes: vec![index()],
-            foreign_keys: vec![foreign_key()],
-            referenced_by: vec![incoming_foreign_key()],
-            triggers: vec![trigger()],
-            check_constraints: vec![check_constraint()],
-            ..TableParts::new(Cow::Borrowed("consignment"), TableType::SystemVersioned)
-        })
+        Table::assemble(
+            TableParts {
+                columns: vec![column()],
+                indexes: vec![index()],
+                foreign_keys: vec![foreign_key()],
+                referenced_by: vec![incoming_foreign_key()],
+                triggers: vec![trigger()],
+                check_constraints: vec![check_constraint()],
+                ..TableParts::new(Cow::Borrowed("consignment"), TableType::SystemVersioned)
+            }
+            .with_primary_index(),
+        )
         .expect("every key of the fixture names the one column it carries")
     }
 
@@ -635,7 +641,8 @@ mod refusals {
         Database {
             name: Cow::Borrowed("freight"),
             charset: Cow::Borrowed("utf8mb4"),
-            collation: Cow::Borrowed("utf8mb4_unicode_520_ci"),
+            collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
+            provider: super::database::Provider::Mariadb,
             server: Server::probed(
                 Cow::Borrowed("11.4.13-MariaDB-ubu2404"),
                 Standing::Supported,

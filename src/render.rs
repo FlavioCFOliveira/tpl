@@ -65,6 +65,13 @@ mod predicate;
 mod root;
 mod surface;
 
+/// Installs the registered surface of `FR-ENV-005` on `engine`, for a test
+/// outside this module that renders over a document of its own.
+#[cfg(test)]
+pub(crate) fn register_surface(engine: &mut minijinja::Environment<'static>) {
+    surface::register(engine);
+}
+
 #[cfg(test)]
 mod fixture;
 
@@ -282,28 +289,34 @@ impl Environment {
                         .map(Box::new);
                 }
                 if let Error::RenderFailed {
+                    template: holder,
                     reason: reason @ None,
                     ..
                 } = &mut condition
                     && let Some(name) = fault::missing_include(&reported)
                 {
+                    // FR-TMPL-033 item 3: an entry of that name that is a
+                    // FIFO, a socket or a device is named for what it is, and
+                    // the name is the entry's own, so no other is suggested.
+                    let not_regular = self.root.special_entry(&name);
                     // FR-TMPL-009 resolves an include literally, and the
                     // root's own resolution completes the extension: the
                     // second finding what the first did not is exactly the
                     // name that lacks it.
-                    let lacks_extension =
-                        !name.ends_with(".jinja") && self.root.resolve(&name).is_ok();
+                    let lacks_extension = not_regular.is_none()
+                        && !name.ends_with(".jinja")
+                        && self.root.resolve(&name).is_ok();
                     // Z-03: the nearest templates whether or not the include
                     // wrote the extension; the name that only lacks it is
-                    // itself the one suggestion.
-                    let nearest = if lacks_extension {
+                    // itself the one suggestion. FR-TMPL-009: the template
+                    // that holds the name is never among them.
+                    let nearest = if not_regular.is_some() {
+                        Vec::new()
+                    } else if lacks_extension {
                         vec![format!("{name}.jinja")]
                     } else {
-                        self.root.nearest_included(&name)
+                        self.root.nearest_included(&name, holder)
                     };
-                    // FR-TMPL-033 item 3: an entry of that name that is a
-                    // FIFO, a socket or a device is named for what it is.
-                    let not_regular = self.root.special_entry(&name);
                     *reason = Some(Box::new(crate::error::RenderReason::IncludeNotFound {
                         name,
                         lacks_extension,

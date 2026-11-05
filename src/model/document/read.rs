@@ -19,7 +19,7 @@
 //! | `series` against the supported window of `FR-SRV-015` | `FR-CTX-033` forbids it. `FR-RND-022` opens no connection on this path, so there is no server to vouch for; validating the window would make every committed dump expire on a calendar date as the window moved |
 //! | `standing` against `series` | `FR-CTX-033` forbids it in as many words |
 //! | The value of `schema_version` | `FR-OUT-014` fixes what moves it and names no rule for refusing one, and refusing a number this binary has not seen would be a check the corpus does not ask for |
-//! | `primary_key` against `indexes` | `FR-CAT-043` makes the index collection the authoritative source, so the model takes the primary key from there and this key is not read back at all |
+//! | `primary_key` against `indexes` | `FR-CAT-043` makes the index collection the authoritative source, so the model of a `mariadb` document takes the primary key from there and this key is not read back at all; a `sqlite` document's key is read from `primary_key`, the one place a rowid alias is written (`FR-LITE-029`, `OD-35`) |
 //! | A column's `table_name` against `tables` | `FR-CTX-042` excludes it by name: `FR-SEM-017`, `FR-SEM-018` and `FR-ENV-017` make a column naming an absent table reachable on purpose, and the test that resolves it fails the render when it is applied |
 //! | The embedded tables of `FR-CTX-006` and `FR-CTX-010` against the members they copy | `FR-CTX-042` does not check them apart; only the name each carries is read back, and that name is what the rule above checks |
 //!
@@ -31,7 +31,7 @@
 use super::order;
 use super::shape::{DatabaseDocument, TableDocument, TableShape};
 use crate::error::ContextFault;
-use crate::model::database::Database;
+use crate::model::database::{Database, Provider};
 use crate::model::foreign_key::{ForeignKey, IncomingForeignKey};
 use crate::model::table::{Table, TableParts};
 
@@ -47,9 +47,10 @@ const KEYS_NAME_CARRIED_COLUMNS: &str = "breaks a rule: every column an index or
 /// fails. The caller adds the path, which is the other half of what
 /// `FR-ERR-034` obliges.
 pub(super) fn database(document: DatabaseDocument<'_>) -> Result<Database<'_>, ContextFault> {
+    let provider = document.provider;
     let mut tables = Vec::with_capacity(document.tables.len());
     for (index, table) in document.tables.into_iter().enumerate() {
-        tables.push(self::table(table, index)?);
+        tables.push(self::table(table, index, provider)?);
     }
 
     references_are_carried(&tables)?;
@@ -58,6 +59,7 @@ pub(super) fn database(document: DatabaseDocument<'_>) -> Result<Database<'_>, C
         name: document.name,
         charset: document.charset,
         collation: document.collation,
+        provider,
         server: document.server,
         tables,
         views: document.views.into_owned(),
@@ -72,7 +74,11 @@ pub(super) fn database(document: DatabaseDocument<'_>) -> Result<Database<'_>, C
 /// a referenced table, so each embedded object contributes exactly the name it
 /// was built from and nothing else of it is read. The embedded table itself is
 /// present in `tables` in its own right, per `FR-CTX-023`.
-fn table(document: TableDocument<'_>, index: usize) -> Result<Table<'_>, ContextFault> {
+fn table(
+    document: TableDocument<'_>,
+    index: usize,
+    provider: Provider,
+) -> Result<Table<'_>, ContextFault> {
     let TableShape {
         name,
         table_type,
@@ -81,7 +87,7 @@ fn table(document: TableDocument<'_>, index: usize) -> Result<Table<'_>, Context
         comment,
         columns,
         indexes,
-        primary_key: _,
+        primary_key,
         foreign_keys,
         referenced_by,
         triggers,
@@ -89,7 +95,7 @@ fn table(document: TableDocument<'_>, index: usize) -> Result<Table<'_>, Context
         restricted,
     } = document;
 
-    Table::assemble(TableParts {
+    let parts = TableParts {
         name,
         table_type,
         engine,
@@ -97,6 +103,7 @@ fn table(document: TableDocument<'_>, index: usize) -> Result<Table<'_>, Context
         comment,
         columns: columns.into_owned(),
         indexes: indexes.into_owned(),
+        primary_key: None,
         foreign_keys: foreign_keys
             .into_iter()
             .map(|key| ForeignKey {
@@ -131,8 +138,22 @@ fn table(document: TableDocument<'_>, index: usize) -> Result<Table<'_>, Context
         triggers: triggers.into_owned(),
         check_constraints: check_constraints.into_owned(),
         restricted,
-    })
-    .map_err(|_| ContextFault::Structure {
+    };
+
+    // OD-35: a `mariadb` document's key is taken from its index collection and
+    // its `primary_key` not read (`FR-CAT-043`); a `sqlite` document's is read
+    // from `primary_key`, the one place a rowid alias is written
+    // (`FR-LITE-029`).
+    let parts = match provider {
+        // FR-MYSQL-032: a `mysql` key is the index named PRIMARY too.
+        Provider::Mariadb | Provider::Mysql => parts.with_primary_index(),
+        Provider::Sqlite => TableParts {
+            primary_key,
+            ..parts
+        },
+    };
+
+    Table::assemble(parts).map_err(|_| ContextFault::Structure {
         at: format!("data.database.tables[{index}]"),
         expected: KEYS_NAME_CARRIED_COLUMNS.to_owned(),
     })
@@ -181,7 +202,7 @@ fn references_are_carried(tables: &[Table<'_>]) -> Result<(), ContextFault> {
                 return Err(ContextFault::DanglingReference {
                     table: table.name().to_owned(),
                     collection: FOREIGN_KEYS,
-                    key: outgoing.name.as_ref().to_owned(),
+                    key: described(outgoing.name.as_deref()),
                     names: named.to_owned(),
                 });
             }
@@ -192,7 +213,7 @@ fn references_are_carried(tables: &[Table<'_>]) -> Result<(), ContextFault> {
                 return Err(ContextFault::DanglingReference {
                     table: table.name().to_owned(),
                     collection: REFERENCED_BY,
-                    key: incoming.key.name.as_ref().to_owned(),
+                    key: described(incoming.key.name.as_deref()),
                     names: incoming.table.as_ref().to_owned(),
                 });
             }
@@ -200,4 +221,11 @@ fn references_are_carried(tables: &[Table<'_>]) -> Result<(), ContextFault> {
     }
 
     Ok(())
+}
+
+/// How a key is named in a [`ContextFault::DanglingReference`]: by its name,
+/// or as unnamed where it has none, which is every key of a `sqlite` document
+/// (`FR-LITE-031`).
+fn described(name: Option<&str>) -> String {
+    name.map_or_else(|| "(unnamed)".to_owned(), str::to_owned)
 }

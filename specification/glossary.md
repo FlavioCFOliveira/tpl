@@ -1,8 +1,8 @@
 ---
 title: Glossary
 status: approved
-last-reviewed: 2026-09-24
-related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md]
+last-reviewed: 2026-11-05
+related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Glossary
@@ -72,6 +72,14 @@ passage.** Three shapes are not definitions and stay where they are:
   family: it is one of the three ways an open question leaves the index, and
   [open-questions.md](open-questions.md) is where it had been defined.
 
+  *Amended in the seventy-third edition: a second member is a term.*
+  *Pending observation* is a note shape of the same family, and is used away
+  from it — in the maintenance debt of the [README](README.md#maintenance-debt)
+  and in [open-questions.md](open-questions.md), to say what is owed and what
+  is not an open question — so it has an entry here as *a stated limit* has,
+  and its shape stays the writing conventions'. The sentence above, which
+  called *a stated limit* the one such member, was true when it was written.
+
 *Rejected: no boundary, and the rule read at its widest.* It was the live
 alternative, because the widest reading is the easiest to check. It is
 rejected because it is not checkable at all in practice: applied literally it
@@ -95,6 +103,23 @@ One of the three read-only capabilities `tpl` provides: exploring the database
 (`tpl schema …`), exploring the templates (`tpl template …`), and rendering
 (`tpl render …`). Command groups that are not arms — `tpl cache …`,
 `tpl cfg …`, `tpl init`, `tpl help`, and `tpl version` — are auxiliary.
+
+## bidirectional formatting character
+
+One of the twelve code points to which the Unicode Character Database gives
+the property `Bidi_Control`: U+061C ARABIC LETTER MARK, U+200E LEFT-TO-RIGHT
+MARK, U+200F RIGHT-TO-LEFT MARK, U+202A to U+202E, the embeddings and
+overrides and the character that ends them, and U+2066 to U+2069, the
+isolates and the character that ends them. Each changes the order in which a
+reader sees the characters around it, and none changes the characters.
+`FR-ERR-024` escapes them in a diagnostic message, and `FR-OUT-018` in the
+output of a read command. The set is the one `PropList.txt` of Unicode
+18.0.0, dated 2026-08-07, lists at
+`https://www.unicode.org/Public/UCD/latest/ucd/PropList.txt`, checked
+2026-11-03; a Unicode version that changes the property is what obliges a
+re-check.
+
+*Added in the sixty-ninth edition.*
 
 ## measurement point
 
@@ -165,6 +190,15 @@ The database structure `tpl` reads: database metadata, tables, columns, indexes,
 keys, views, routines, and triggers. How the catalogue is read is outside the
 scope of this edition.
 
+For a `mariadb` entry the catalogue is MariaDB's `INFORMATION_SCHEMA`; for a
+`sqlite` entry it is SQLite's schema table, `sqlite_schema`, and the pragma
+table-valued functions `FR-LITE-015` names. *Amended in the sixty-fifth
+edition.*
+
+For a `mysql` entry it is MySQL's `INFORMATION_SCHEMA`, of which a read draws
+on the twelve tables `FR-MYSQL-015` names. *Amended in the seventy-third
+edition.*
+
 ## closed / dissolved / closed on a stated limit
 
 The three ways an open question leaves the index of
@@ -194,6 +228,16 @@ A read is complete when it returns, for every object it presents, every property
 otherwise it is incomplete. Completeness is a property of a read, not of a
 server: the same database read by two users can be complete for one and
 incomplete for the other. See `FR-PRIV-001`.
+
+## connection
+
+One connection of `tpl` to the database an entry names: to a MariaDB server
+for a `mariadb` entry, to a MySQL server for a `mysql` entry, or of the SQLite
+library to the database file for a `sqlite` entry, per `FR-LITE-037`. An
+invocation opens at most one, per `NFR-PERF-004`.
+
+*Added in the sixty-fifth edition. Amended in the seventy-third edition*: the
+`mysql` entry is new.
 
 ## context
 
@@ -227,6 +271,28 @@ The three-key outer shape every JSON document `tpl` writes to stdout carries:
 `schema_version`, `source`, and `data`. Only `data` differs between commands,
 and the module that owns a command owns the shape of its `data`. Fixed by
 `FR-OUT-024`; the seventeen documents are indexed by `BR-OUT-002`.
+
+## hardening control
+
+A setting of the SQLite library that `tpl` applies on every connection to a
+database file, or a property the carried library is built with, which `tpl`
+confirms by reading it back on every connection, so that a file treated as
+untrusted is read under the checks SQLite offers for one. The controls are
+`FR-LITE-010`, the limits `FR-LITE-011`.
+
+*Added in the sixty-fifth edition.*
+
+*Amended in the sixty-sixth edition.* A property of the build is a hardening
+control too: extension loading is absent from the carried library, and its
+read-back is `PRAGMA compile_options`.
+
+## official driver
+
+A Rust driver of the SQLite library published by the SQLite project itself —
+the SQLite developers, at sqlite.org. A community driver is not one, whatever
+its name and whatever source it carries. Step 0 of `FR-LITE-004` turns on it.
+
+*Added in the sixty-fifth edition.*
 
 ## in flight
 
@@ -265,12 +331,16 @@ not the model accommodates it, is recorded separately under `FR-SRV-038`.
 ## database entry
 
 A `[database.<name>]` block in `.tpl/.cfg` describing how to reach one server
-and which database on it to read. The entry name is a label local to the
+and which database on it to read, or, for an entry whose provider is `sqlite`,
+which database file to read. The entry name is a label local to the
 project; it need not match the database name on the server. Selected with
 `-d/--database`. An entry name is one to sixty-four ASCII letters, digits and
 underscores, per `FR-CONF-048`.
 
 *Amended in the forty-ninth edition.* The last sentence is new.
+
+*Amended in the sixty-fifth edition.* The clause on the `sqlite` provider is
+new; see *provider*.
 
 ## discovery
 
@@ -283,6 +353,30 @@ folder is found, within the boundary defined by `FR-PROJ-005`. See
 A single-string connection descriptor stored in the `dsn` key of a database
 entry, in the form `scheme://[user[:password]@]host[:port]/database`. It
 carries no query parameters, per `FR-CONF-011`. See `FR-CONF-009`.
+
+## functional key part
+
+A member of a MySQL index that is an expression rather than a column, written
+in parentheses in the index definition. The index catalogue reports it with no
+column name and with the expression in a field of its own. MariaDB has none,
+per `FR-CAT-042`, and the model has no shape for one, so a `mysql` read does
+not cover an index that holds one, per `FR-MYSQL-024`.
+
+*Added in the seventy-third edition.*
+
+## introducer
+
+The name of a character set, preceded by an underscore, written immediately
+before a string literal to name the literal's character set, as in
+`_utf8mb4'EUR'`; MySQL's manual calls it a character set introducer, at
+`https://dev.mysql.com/doc/refman/8.4/en/string-literals.html`, checked
+2026-11-04. A MySQL server writes one before each string literal of the
+expression text it reports — in a default, a generation expression, a check
+clause and a functional key part — per `FR-MYSQL-029`, and a `mysql` read
+keeps it as written, per `FR-MYSQL-046`. No expression text this corpus
+records of MariaDB carries one.
+
+*Added in the seventy-fifth edition.*
 
 ## group node
 
@@ -300,6 +394,20 @@ A node of the command tree that performs an action. `tpl schema tables`,
 
 A flag declared by one or more specific commands rather than by the whole tree.
 A command rejects any flag it does not declare. Contrast global flag.
+
+## login
+
+The phase of a connection to a MariaDB or a MySQL server, for a `mariadb` or
+a `mysql` entry, from the end of the TCP connect until the session opens: the
+server's greeting, which precedes the TLS handshake where the mode of
+`FR-CONF-013` negotiates one, and the authentication of the user the entry
+names, which follows it. The `69` row of `FR-ERR-034` names it as a phase,
+and `FR-CONF-005` bounds it with the other connection phases. `FR-ERR-048`
+states what the system reports when the server answers it with an error
+packet, and `FR-ERR-047` when it fails for any other reason that is not a
+failure of the TLS handshake or a deadline.
+
+*Added in the seventy-seventh edition.*
 
 ## global flag
 
@@ -340,6 +448,17 @@ the key space, as `FR-CFG-009` already did for `tpl cfg set`.
 *Amended in the forty-sixth edition.* The prefix clause is new: `FR-ERR-042`
 also admits a command of which the supplied token is a proper prefix.
 
+## nested statement
+
+A statement the SQLite library runs while a statement `tpl` issued is running,
+to carry that statement out: the `PRAGMA` a pragma table-valued function runs
+for each invocation, or a statement a virtual-table module runs against its own
+tables. The library's statement trace reports it with the prefix `-- `. It is
+not a statement `tpl` issues: `FR-LITE-018` neither checks it against the
+closed list of `FR-LITE-015` nor counts it.
+
+*Added in the sixty-sixth edition.*
+
 ## normative budget
 
 *Retired in the thirty-sixth edition.* The term named the single budget whose
@@ -377,6 +496,54 @@ Every plumbing document shares the envelope of `FR-OUT-024` and is versioned by
 Output intended to be read by a person. In `tpl`, `--format text`, which is
 explicitly not a contract. See `FR-OUT-004`.
 
+## project directory
+
+The directory that holds the `.tpl` folder of a project, whether the folder
+was discovered or named by `--tpl-dir`; where the folder is reached through a
+symbolic link, the parent of the folder's canonical path. A relative `path` of
+a `sqlite` entry resolves against it, per `FR-CONF-054`.
+
+*Added in the sixty-fifth edition.*
+
+*Amended in the sixty-seventh edition.* The clause on a folder reached
+through a symbolic link is new, per `FR-CONF-054`.
+
+## provider
+
+The kind of database an entry is read through: `mariadb`, `mysql` or
+`sqlite`, named by the entry's `provider` key, and `mariadb` where the entry
+carries none. The provider decides which keys the entry takes and which
+contract reads it — [server-contract.md](server-contract.md),
+[mysql-contract.md](mysql-contract.md) or
+[sqlite-contract.md](sqlite-contract.md). Fixed by `FR-CONF-051` and
+`FR-CONF-052`; a template reads it as `database.provider`, per `FR-CTX-043`.
+
+*Added in the sixty-fifth edition. Amended in the seventy-third edition*: the
+`mysql` provider is new.
+
+## pending observation
+
+The state of a statement of a database's behaviour that rests on that
+database's published documentation, or on prior art, and has not been
+observed against the project's fixture. Such a statement carries a note
+headed *Pending observation.*, which names its source and the date it was
+checked, and names the observation that would confirm it; the
+[README](README.md#writing-conventions) fixes the note's shape. The marker
+qualifies the ground of a fact, never the force of the requirement that
+states it, and it is discharged by an *Observed* note or by the amendment an
+observation makes necessary. Three statements of MySQL behaviour in
+[mysql-contract.md](mysql-contract.md) carry it, each naming why the
+project's fixture cannot observe it and what would.
+
+*Added in the seventy-third edition.* *Amended in the seventy-fifth
+edition*: the last sentence read that every statement of MySQL behaviour in
+[mysql-contract.md](mysql-contract.md) carried the marker, owed to rmp
+`#326`. That observation discharged it from all but six. *Amended in the
+seventy-seventh edition*: the last sentence counted six. The tests of the
+`mysql` provider observed two, and the observation of `FR-CONF-039`
+discharges a third, which was owed to the driver rather than to the
+fixture.
+
 ## project
 
 Any directory containing a `.tpl` folder. The `.tpl` folder is the project root
@@ -394,6 +561,21 @@ and functions occupy distinct namespaces on the server, so one bare name can
 denote two objects; the qualified form says which is meant. Accepted wherever a
 command names one routine, per `FR-SCH-008`. A bare name matching both is `64`,
 per `FR-SCH-010`.
+
+## read transaction
+
+A transaction of the SQLite library in which a connection reads the database
+file and writes nothing. Begun by `BEGIN DEFERRED`, it starts when its first
+statement reads the file, and from then until it ends every statement on the
+connection reads one snapshot of the database: in rollback-journal mode the
+connection holds the shared lock a writer must wait out before it commits,
+and in write-ahead-log mode a write another connection commits stays
+invisible to it, per `https://sqlite.org/lang_transaction.html`,
+`https://sqlite.org/lockingv3.html` and `https://sqlite.org/isolation.html`,
+checked 2026-11-04. `FR-LITE-042` runs the check of `FR-LITE-041` and the
+catalogue statements of a `sqlite` read in one.
+
+*Added in the seventieth edition.*
 
 ## read-through cache
 
@@ -442,14 +624,18 @@ survived, compared against the same invocation made in a state that has
 nothing for that operation to find. It is the fourth instrument of
 `NFR-PERF-007`, available on every target of `NFR-PERF-018` and needing no
 privilege on any of them, and it is what stands in for the syscall trace on the
-two macOS targets, where that instrument does not exist. It observes three
-things and no others: the invocation's exit code, the bytes on stdout, and the
-artefacts it leaves on disk. Stderr is not among them. The arrangements it is
-used in are named by `NFR-PERF-007`.
+two macOS targets, where that instrument does not exist, for the clauses of
+`NFR-PERF-005`. It observes three things and no others: the invocation's exit
+code, the bytes on stdout, and the artefacts it leaves on disk. Stderr is not
+among them. The arrangements it is used in are named by `NFR-PERF-007`.
 
 *Written here in the thirty-second edition*, from
 [performance-requirements.md](performance-requirements.md), where the
 eleventh edition defined it.
+
+*Amended in the sixty-seventh edition.* The clause it stands in for is named:
+for a `sqlite` entry the syscall trace also observes `NFR-PERF-004`, and no
+differential run stands in for it on the macOS targets, per that requirement.
 
 ## restricted
 
@@ -461,11 +647,34 @@ carrying it is refused as a `--context`; and an object carrying it is never
 written to the cache, per `FR-CACHE-037`. See `FR-PRIV-005`, `FR-PRIV-008`, and
 `FR-PRIV-016`.
 
+## result code
+
+The code by which the SQLite library reports the outcome of an operation: a
+**primary** result code, such as `SQLITE_BUSY`, and, where the library gives
+one, an **extended** result code that refines it, such as
+`SQLITE_READONLY_DIRECTORY`. SQLite names and documents them at
+`https://sqlite.org/rescode.html`. A result code is not an exit code: every
+one that reports a failure on a `sqlite` entry is given an exit code of
+`FR-ERR-001` by `FR-LITE-040`, and `FR-GLOB-018` fixes how a `cause` line
+names it.
+
+*Added in the sixty-seventh edition.*
+
 ## routine
 
 A stored procedure or a stored function. MariaDB distinguishes the two in
 `INFORMATION_SCHEMA.ROUTINES.ROUTINE_TYPE`; `tpl` reports both under the single
-term "routine" and states the kind per object.
+term "routine" and states the kind per object. SQLite has none, per
+`FR-LITE-022`.
+
+## rowid alias
+
+The column of a SQLite table that is its only primary-key column, in a table
+that is not `WITHOUT ROWID`, and that has no index of its own: SQLite stores it
+as the rowid and assigns it on an insert that supplies none. `tpl` reports it
+as auto-incremental. Fixed by `FR-LITE-028`.
+
+*Added in the sixty-fifth edition.*
 
 ## series / supported series / major family
 
@@ -480,10 +689,49 @@ corpus that names them, per `BR-SRV-005`.
 A **rolling release** is a series MariaDB does not maintain after GA. No rolling
 release is a supported series, per `FR-SRV-016`.
 
+For a `sqlite` entry the series is that of the SQLite library the binary
+carries, `<major>.<minor>` of its version, and no window applies to it, per
+`FR-LITE-002` and `FR-LITE-003`. *Amended in the sixty-fifth edition.*
+
+For a `mysql` entry a **series** is `<major>.<minor>` of the MySQL version —
+`8.4`, `9.7`, `26.10` — which MySQL's manual calls a release line, and a
+**supported series** is one `FR-MYSQL-002` admits: an
+[LTS release](#lts-release--innovation-release) under Oracle Premier or
+Extended Support, and never an Innovation release. The supported MySQL series
+are named by `FR-MYSQL-003` alone, per `BR-MYSQL-001`. No major family enters
+the MySQL criterion. *Amended in the seventy-third edition*, which gave a
+MySQL major family a reading under calendar versioning and raised `OQ-076` on
+it. *Amended in the seventy-fourth edition*, for rmp `#331`: the user's
+decision on `OQ-076` admits LTS series alone, so the MySQL meaning of *major
+family* is withdrawn, and the term keeps its MariaDB meaning above.
+
 Version comparison in this specification is always by series, never by point
 release: `10.11.14` and `10.11.2` are the same series, per `FR-SRV-021`. A
 series **below** the window is refused, per `FR-SRV-020`; one **above** it is
 read and marked, per `FR-SRV-031` — see *standing* below.
+
+## LTS release / Innovation release
+
+The two tracks of MySQL's release model. An **LTS release** is a series that
+Oracle designates LTS, that receives only necessary fixes, whose later
+releases change only its patch number, and that Oracle supports for five
+years of Premier Support and three of Extended Support from its general
+availability: `8.4`, `9.7`. The user's *LTS line* is an LTS release in this
+sense. An **Innovation release** carries new features and behaviour changes
+and is supported until the next Innovation release is published: `26.7`,
+`26.10`. The version does not say which track a release is on — "A calendar
+version does not determine whether a release is an Innovation or LTS
+release" — and Oracle designates it. MySQL's manual describes both at
+`https://dev.mysql.com/doc/refman/26.10/en/mysql-releases.html`, checked
+2026-11-04. `FR-MYSQL-002` admits an LTS release while it is under Premier or
+Extended Support, and no Innovation release.
+
+*Added in the seventy-third edition.* *Amended in the seventy-fourth
+edition*, for rmp `#331`: the last sentence read that `FR-MYSQL-002` admits
+both tracks while each is supported, which the user's decision on `OQ-076`
+reversed for an Innovation release. The entry also states that an LTS
+release keeps its version base, that the version does not name the track,
+and what the user's *LTS line* means.
 
 ## schema (the word, two meanings)
 
@@ -492,6 +740,32 @@ read and marked, per `FR-SRV-031` — see *standing* below.
    database on the server.
 
 Help text disambiguates the two wherever both could be meant. See `FR-CFG-028`.
+
+## scramble
+
+The value a client of a MariaDB or a MySQL server computes from a password
+and the random data the server sends during the login, and sends in place of
+the password at a step of the authentication; the server compares it with
+what it holds for the account. `FR-CONF-055` forbids computing one from an
+empty password.
+
+*Added in the seventy-seventh edition.*
+
+## session statement
+
+One of the three statements a connection to a MariaDB or a MySQL server
+issues on its session once the [login](#login) has opened it and before any
+catalogue statement: the read-only session statement, its read-back, and the
+version probe, in the order `FR-SRV-042` fixes for a `mariadb` entry and
+`FR-MYSQL-017` for a `mysql` entry. None of the three reads a schema, so none
+is a catalogue query and none counts toward `NFR-PERF-001` and
+`NFR-PERF-002`. `FR-CONF-005` makes the session statement a phase and bounds
+each of the three by `core.query_timeout` on its own; `FR-ERR-027` names the
+one whose deadline expires, and `FR-GLOB-017` reports each on a line of its
+own. A `sqlite` entry has none: its version probe and its controls run under
+`FR-LITE-009`.
+
+*Added in the seventy-ninth edition.*
 
 ## source
 
@@ -506,10 +780,48 @@ by `FR-OUT-026`.
 ## standing
 
 The third key of the `server` object of `FR-CTX-031`, stating where the server
-the read was made against sits relative to the supported window: `supported`, or
-`newer_than_supported`. It is enumerated, always present, and never `null`, per
-`FR-CTX-034`. A series *below* the window has no value because it never reaches
-a document — `FR-SRV-020` refuses it before the catalogue is read.
+the read was made against sits relative to the supported window: `supported`,
+or `newer_than_supported`. It is enumerated, always present, and never `null`,
+per `FR-CTX-034`. For a `sqlite` read it is always `supported`, per
+`FR-LITE-003`. A series *below* the window has no value because it never
+reaches a document — `FR-SRV-020` refuses it before the catalogue is read.
+For a `mysql` read it is set against the supported set of `FR-MYSQL-003`,
+under `FR-MYSQL-010`, and a series below it is refused under `FR-MYSQL-009`.
+*Amended in the seventy-third edition.*
+
+## SQLite table kinds: internal table / virtual table / shadow table
+
+SQLite's own terms, used where a `sqlite` read decides what it covers. An
+**internal table** is one whose name begins with `sqlite_`, in any letter case,
+a prefix SQLite reserves for itself. A **virtual table** is a table a module
+implements rather than SQLite stores; its row of the schema table has a root
+page of `0`. A **shadow table** is an ordinary table in which a virtual table's
+module keeps its data, and only a library that holds the module reports it as
+one. Internal and virtual tables are excluded, per `FR-LITE-021`; a shadow
+table is covered as a table, like any other, per `FR-LITE-020`.
+
+*Added in the sixty-fifth edition.*
+
+*Amended in the sixty-sixth edition.* The clause on a module the carried
+library does not hold is new.
+
+*Amended in the sixty-ninth edition.* A shadow table is no longer excluded,
+by the user's decision recorded under `FR-LITE-020`, and a virtual table is
+recognised by its root page.
+
+## storage class
+
+The class of a value SQLite stores, one of five: `NULL`, `INTEGER`, `REAL`,
+`TEXT` and `BLOB`, per `https://sqlite.org/datatype3.html`, checked
+2026-11-03. It belongs to the value and not to the column: the same page
+states that a column of `TEXT` affinity stores a value as `NULL`, `TEXT` or
+`BLOB`, and that a `BLOB` is stored as a `BLOB` whatever the column's
+affinity, so a column declared `text` can hold one. Not to be confused with
+[type affinity](#type-affinity), the classification of a column by how it
+stores a value. `FR-LITE-041` refuses a schema table that holds a value of a
+class its contract excludes.
+
+*Added in the sixty-ninth edition.*
 
 ## target
 
@@ -518,6 +830,15 @@ statically linked against `musl`, and macOS on amd64 and arm64. Every
 measurement, every recorded figure, and every measurement point is stated
 against one of them, and measurements on different targets are never compared,
 per `NFR-PERF-012`. None is second class.
+
+## type affinity
+
+SQLite's classification of a column by how it stores a value: `INTEGER`,
+`TEXT`, `BLOB`, `REAL` or `NUMERIC`, derived from the declared type by the
+rules of `https://sqlite.org/datatype3.html`. A `sqlite` read carries it, in
+lower case, as a column's `data_type`, per `FR-LITE-026`.
+
+*Added in the sixty-fifth edition.*
 
 ## template
 

@@ -3,7 +3,7 @@ id: ADR-002
 title: The TLS mode mapping onto the database driver
 status: accepted
 decided: 2026-09-10
-last-reviewed: 2026-09-22
+last-reviewed: 2026-11-03
 requirements: [FR-CONF-013, FR-CONF-014, FR-CONF-036, FR-CONF-037, FR-CONF-038, FR-CONF-039, FR-CONF-044]
 supersedes: []
 superseded-by: null
@@ -14,6 +14,13 @@ superseded-by: null
 ## Status
 
 Accepted, 2026-09-10.
+
+**Amended in place on 2026-11-03**, for rmp `#315`: the mapping names its type
+by the path the package now reaches it through, `sqlx_mysql::MySqlSslMode`,
+because `ADR-003` consumes the driver's crates directly rather than through its
+facade. The mapping did not change, so `decided` is unchanged; `last-reviewed`
+carries the amendment, and the claims re-read that day are those of the
+*Sources* rows dated 2026-11-03.
 
 ## Context
 
@@ -76,7 +83,7 @@ shells, against the same project state, cannot read different databases.
 ## Decision
 
 **Each of the five modes maps to exactly one named variant of
-`sqlx::mysql::MySqlSslMode`:**
+`sqlx_mysql::MySqlSslMode`:**
 
 | `tls` mode (`FR-CONF-013`) | Driver variant |
 |---|---|
@@ -90,6 +97,13 @@ The mapping is one-to-one and total in both directions: five modes, five
 variants, no mode collapsed onto another and no variant left unnamed. That is
 what `FR-CONF-036` requires of the driver, and it is why this driver satisfies
 it where the rejected candidate did not.
+
+**The type is reached through the crate `sqlx-mysql`**, which the package
+consumes directly (`ADR-003`). The facade's module `sqlx::mysql` is that crate
+re-exported, so `sqlx::mysql::MySqlSslMode` and `sqlx::mysql::MySqlConnectOptions`
+are the same types as `sqlx_mysql::MySqlSslMode` and
+`sqlx_mysql::MySqlConnectOptions`. The sources below that read them through the
+facade's documentation therefore still describe the types the code names.
 
 **Trust anchors are `webpki-roots`, bundled.** The crate supplies a compiled-in
 copy of the root certificates trusted by Mozilla, embedded in the binary at
@@ -272,6 +286,8 @@ them and holds neither.
 | Claim | Source | Consulted |
 |---|---|---|
 | `MySqlSslMode` has exactly five variants: `Disabled`, `Preferred`, `Required`, `VerifyCa`, `VerifyIdentity` | docs.rs, `sqlx` 0.9.0, `sqlx::mysql::MySqlSslMode` | 2026-09-10 |
+| The package consumes `sqlx-mysql` directly, not through the `sqlx` facade | `ADR-003`, *Decision*, as amended on 2026-11-03 | 2026-11-03 |
+| `sqlx_mysql` exports `MySqlSslMode` and `MySqlConnectOptions` at its root; the facade's `sqlx::mysql` is `sqlx_mysql` itself, re-exported as `pub use sqlx_mysql::{self as mysql, …}`; `MySqlSslMode` declares `Disabled`, `Preferred`, `Required`, `VerifyCa` and `VerifyIdentity`, with `Preferred` its `#[default]` and the default of `MySqlConnectOptions`; `ssl_mode`, `ssl_ca` and `ssl_ca_from_pem` are methods of `MySqlConnectOptions` | The published `.crate` of `sqlx` 0.9.0, sha256 `378620cc…619bfd71`, `src/lib.rs`; and of `sqlx-mysql` 0.9.0, sha256 `90b8020f…acebea27`, `src/lib.rs`, `src/options/mod.rs`, `src/options/ssl_mode.rs` | 2026-11-03 |
 | `Preferred` is the driver default when `ssl_mode` is not specified, and falls back to an unencrypted connection where an encrypted one cannot be established | docs.rs, `sqlx` 0.9.0, `sqlx::mysql::MySqlSslMode` | 2026-09-10 |
 | `VerifyCa` verifies the server CA certificate against the configured CA certificates; `VerifyIdentity` additionally performs host name identity verification | docs.rs, `sqlx` 0.9.0, `sqlx::mysql::MySqlSslMode` | 2026-09-10 |
 | `webpki-roots` supplies a compiled-in copy of the root certificates trusted by Mozilla, embedded at compile time rather than read from the OS trust store | docs.rs, `webpki-roots` 1.0.9, crate documentation | 2026-09-10 |

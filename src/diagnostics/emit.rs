@@ -24,6 +24,7 @@ use std::time::Duration;
 use super::escape;
 use super::verbosity::{Level, emits};
 use crate::deadline::Phase;
+use crate::model::database::Provider;
 
 /// The fixed leading token of the one line per catalogue query.
 ///
@@ -49,10 +50,36 @@ const WARNING_TOKEN: &str = "warning:";
 /// A generous first guess at the size of one emitted line, in bytes.
 const LINE_CAPACITY: usize = 160;
 
+/// What a catalogue query reads, which is the one word its line names
+/// (`FR-GLOB-017`).
+///
+/// A typed argument rather than text, per `OD-17`: the line of a `mariadb`
+/// read stays byte-identical, and a `sqlite` read says what it read instead
+/// of a catalogue it never reached.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CatalogueSource {
+    /// `INFORMATION_SCHEMA` of a MariaDB server.
+    InformationSchema,
+    /// The schema of a SQLite database file (`FR-LITE-015`).
+    SqliteSchema,
+}
+
+impl CatalogueSource {
+    /// What the line says was read.
+    const fn read(self) -> &'static str {
+        match self {
+            Self::InformationSchema => " read INFORMATION_SCHEMA",
+            Self::SqliteSchema => " read the SQLite schema",
+        }
+    }
+}
+
 /// Writes the one line `FR-GLOB-017` requires for a catalogue query.
 ///
-/// Called once per query issued against `INFORMATION_SCHEMA`, so that the
-/// count of lines carrying [`CATALOGUE_QUERY_TOKEN`] is the count of queries.
+/// Called once per catalogue query issued — against `INFORMATION_SCHEMA` for a
+/// `mariadb` entry, and for a `sqlite` entry once per statement of the last
+/// row of `FR-LITE-015` — so that the count of lines carrying
+/// [`CATALOGUE_QUERY_TOKEN`] is the count of queries (`NFR-PERF-008`).
 ///
 /// The line carries the token and no identity of the query. `FR-GLOB-017`
 /// constrains the existence of the line and its distinguishability, not its
@@ -65,14 +92,14 @@ const LINE_CAPACITY: usize = 160;
 /// composed into the line but a literal. The statement text is not carried
 /// either — it would be the one thing a caller could mistake for the contract
 /// `NFR-DET-001` puts outside stderr.
-pub(crate) fn catalogue_query() {
+pub(crate) fn catalogue_query(source: CatalogueSource) {
     if !emits(Level::Info) {
         return;
     }
 
     let mut composed = String::with_capacity(LINE_CAPACITY);
     composed.push_str(CATALOGUE_QUERY_TOKEN);
-    composed.push_str(" read INFORMATION_SCHEMA");
+    composed.push_str(source.read());
 
     write_line(&composed);
 }
@@ -85,7 +112,7 @@ pub(crate) fn catalogue_query() {
 /// report a caller diagnosing a slow invocation is looking for.
 ///
 /// The two arguments are typed, per `OD-17`, and neither can carry anything
-/// `FR-GLOB-018` bars: a [`Phase`] is one of six discriminants this crate
+/// `FR-GLOB-018` bars: a [`Phase`] is one of the discriminants this crate
 /// declares, and a [`Duration`] is a number. There is no host, no user, no
 /// statement and no driver message on this line, and no argument through which
 /// one could be passed.
@@ -142,6 +169,10 @@ pub(crate) enum ServerDatabase<'a> {
     /// clause would advise overwriting the server database with that name
     /// (condition 3 of `FR-CFG-051`, the fifty-third edition).
     NamesEntry,
+    /// The invocation uses or targets a `sqlite` entry: its database file is
+    /// set with `--path` (condition 4 of `FR-CFG-051`, the sixty-fifth
+    /// edition).
+    File,
     /// Neither: the database is set with `--schema`, and the value given to
     /// `-d/--database` is the likely one.
     Schema(&'a str),
@@ -168,6 +199,9 @@ fn database_line(command: &str, server: ServerDatabase<'_>) -> String {
         ServerDatabase::Dsn => "; the database on the server is the path part of --dsn".to_owned(),
         ServerDatabase::SchemaGiven => String::new(),
         ServerDatabase::NamesEntry => "; the name argument already names the entry".to_owned(),
+        ServerDatabase::File => {
+            "; the database file of a sqlite entry is set with --path".to_owned()
+        }
         ServerDatabase::Schema(given) => {
             let schema = if super::hint::admits(given) {
                 given
@@ -256,6 +290,43 @@ fn entry_removed_line(entry: &str, project: Option<Option<&str>>) -> String {
     )
 }
 
+/// What the line of `FR-CFG-053` says an entry may now reach, which is the one
+/// clause of the line that depends on the provider.
+///
+/// A typed argument rather than text, per `OD-17`, as [`CatalogueSource`] is:
+/// the line written for a connection field of a `mariadb` entry stays
+/// byte-identical, and the line written for a database file says what such
+/// an entry reads instead of a server it never reaches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Reach {
+    /// Another server: the invocation wrote or removed a connection field,
+    /// and the entry is a `mariadb` entry after the write.
+    Server,
+    /// Another database: the invocation wrote or removed `provider` or
+    /// `path`, or the entry is a `sqlite` entry after the write (the
+    /// sixty-fifth edition).
+    Database,
+}
+
+impl Reach {
+    /// The reach of a write that names `provider` or `path` where
+    /// `provider_or_path` holds, and leaves the entry with `provider`.
+    pub(crate) const fn of(provider_or_path: bool, provider: Provider) -> Self {
+        match (provider_or_path, provider) {
+            (true, _) | (false, Provider::Sqlite) => Self::Database,
+            (false, Provider::Mariadb | Provider::Mysql) => Self::Server,
+        }
+    }
+
+    /// The clause the line states after "may now".
+    const fn clause(self) -> &'static str {
+        match self {
+            Self::Server => "point at another server",
+            Self::Database => "read another database",
+        }
+    }
+}
+
 /// Warns that `tpl cfg database update`, `tpl cfg set` or `tpl cfg unset`
 /// wrote a field that may repoint an entry, and that any data cached for it is
 /// kept (`FR-CFG-053`).
@@ -263,9 +334,11 @@ fn entry_removed_line(entry: &str, project: Option<Option<&str>>) -> String {
 /// It is written after the rewrite succeeded, and after the line of
 /// `FR-CFG-051` or `FR-CFG-050` where the invocation writes both. Nothing under
 /// `.tpl/.cache/` is read to decide it, and no value is compared, so the line
-/// states neither a repoint nor a cache as fact (item 1). The command it
-/// carries carries the caller's `--tpl-dir`, per item 2.
-pub(crate) fn entry_repointed(entry: &str) {
+/// states neither a repoint nor a cache as fact (item 1). `reach` chooses
+/// whether the entry may now point at another server or read another
+/// database. The command it carries carries the caller's `--tpl-dir`, per
+/// item 2.
+pub(crate) fn entry_repointed(entry: &str, reach: Reach) {
     if !emits(Level::Warnings) {
         return;
     }
@@ -273,17 +346,18 @@ pub(crate) fn entry_repointed(entry: &str) {
     let project = super::restate::tpl_dir();
     write_line(&entry_repointed_line(
         entry,
+        reach,
         project.as_ref().map(Option::as_deref),
     ));
 }
 
 /// Composes the line of [`entry_repointed`], unescaped.
-fn entry_repointed_line(entry: &str, project: Option<Option<&str>>) -> String {
+fn entry_repointed_line(entry: &str, reach: Reach, project: Option<Option<&str>>) -> String {
     let (command, placeholder) = clean_command(entry, project);
+    let clause = reach.clause();
     format!(
-        "{WARNING_TOKEN} entry '{entry}' may now point at another server; any data cached for \
-         it under .tpl/.cache/{entry}/ is kept and still served; clear it with: \
-         {command}{placeholder}"
+        "{WARNING_TOKEN} entry '{entry}' may now {clause}; any data cached for it under \
+         .tpl/.cache/{entry}/ is kept and still served; clear it with: {command}{placeholder}"
     )
 }
 
@@ -349,19 +423,69 @@ fn write_line(composed: &str) {
     let mut out = String::with_capacity(composed.len() + 1);
     escape::push_line(&mut out, composed);
 
+    #[cfg(test)]
+    if capture::keep(&out) {
+        return;
+    }
+
     let mut stderr = std::io::stderr().lock();
     let _ = stderr.write_all(out.as_bytes());
     let _ = stderr.flush();
 }
 
+/// The lines one thread writes, kept for a unit test instead of written
+/// (`NFR-PERF-008`, verification, *The requirements of form, for a `sqlite`
+/// entry*).
+///
+/// The capture is per thread, so a test that drives one invocation on a
+/// thread of its own reads that invocation's lines and no other test's. It is
+/// compiled under the test configuration alone.
+#[cfg(test)]
+pub(crate) mod capture {
+    use std::cell::RefCell;
+
+    thread_local! {
+        /// The lines kept on this thread, while capturing.
+        static KEPT: RefCell<Option<Vec<String>>> = const { RefCell::new(None) };
+    }
+
+    /// Keeps `line` where this thread is capturing, and answers whether it
+    /// did.
+    pub(super) fn keep(line: &str) -> bool {
+        KEPT.with(|kept| match kept.borrow_mut().as_mut() {
+            Some(kept) => {
+                kept.push(line.to_owned());
+                true
+            }
+            None => false,
+        })
+    }
+
+    /// Runs `run` while capturing, and answers what it answered and every line
+    /// this thread wrote meanwhile.
+    pub(crate) fn captured<T>(run: impl FnOnce() -> T) -> (T, Vec<String>) {
+        KEPT.with(|kept| *kept.borrow_mut() = Some(Vec::new()));
+        let answered = run();
+        let lines = KEPT.with(|kept| kept.borrow_mut().take().unwrap_or_default());
+
+        (answered, lines)
+    }
+
+    /// Whether `line` is the one line of a catalogue query (`FR-GLOB-017`).
+    pub(crate) fn is_catalogue_query(line: &str) -> bool {
+        line.starts_with(super::CATALOGUE_QUERY_TOKEN)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        CATALOGUE_QUERY_TOKEN, PHASE_TOKEN, ServerDatabase, WARNING_TOKEN, database_line,
+        CATALOGUE_QUERY_TOKEN, PHASE_TOKEN, Reach, ServerDatabase, WARNING_TOKEN, database_line,
         dsn_unset_line, entry_removed_line, entry_repointed_line, orphan_cache_line, phase_line,
         shadow_line,
     };
     use crate::deadline::Phase;
+    use crate::model::database::Provider;
     use std::path::Path;
     use std::time::Duration;
 
@@ -399,12 +523,18 @@ mod tests {
 
     #[test]
     fn fr_glob_017_every_phase_of_the_closed_set_reports_under_a_name_of_its_own() {
-        // FR-CONF-005 closes the set at six, and a report that named two of
-        // them alike would make the two indistinguishable on the stream.
+        // FR-CONF-005 closes the set, and a report that named two of them
+        // alike would make the two indistinguishable on the stream: the
+        // seventy-ninth edition of FR-GLOB-017 names the login and each
+        // session statement apart.
         let named: Vec<&str> = [
             Phase::DnsResolution,
             Phase::TcpConnect,
             Phase::TlsHandshake,
+            Phase::Login,
+            Phase::ReadOnlyStatement,
+            Phase::ReadOnlyReadBack,
+            Phase::VersionProbe,
             Phase::CatalogueQuery,
             Phase::PasswordCommand,
             Phase::Render,
@@ -477,22 +607,42 @@ mod tests {
     #[test]
     fn fr_cfg_053_the_warning_names_the_entry_its_cache_and_the_clean_that_removes_it() {
         assert_eq!(
-            entry_repointed_line("shop", None),
+            entry_repointed_line("shop", Reach::Server, None),
             "warning: entry 'shop' may now point at another server; any data cached for it under \
              .tpl/.cache/shop/ is kept and still served; clear it with: tpl -d shop cache clean"
         );
         // Item 1: nothing the command cannot know is stated as fact.
-        let line = entry_repointed_line("shop", None);
-        assert!(!line.contains("was repointed"), "{line}");
-        assert!(!line.contains("; data cached"), "{line}");
-        assert!(
-            entry_repointed_line("shop", Some(Some("../w/.tpl")))
-                .ends_with("clear it with: tpl --tpl-dir ../w/.tpl -d shop cache clean")
+        for reach in [Reach::Server, Reach::Database] {
+            let line = entry_repointed_line("shop", reach, None);
+            assert!(!line.contains("was repointed"), "{line}");
+            assert!(!line.contains("; data cached"), "{line}");
+            assert!(
+                entry_repointed_line("shop", reach, Some(Some("../w/.tpl")))
+                    .ends_with("clear it with: tpl --tpl-dir ../w/.tpl -d shop cache clean")
+            );
+            assert!(entry_repointed_line("shop", reach, Some(None)).ends_with(
+                "tpl --tpl-dir <path> -d shop cache clean, where <path> is the --tpl-dir this \
+                     invocation was given"
+            ));
+        }
+    }
+
+    #[test]
+    fn fr_cfg_053_a_database_file_may_read_another_database_rather_than_another_server() {
+        // The sixty-fifth edition: `provider` or `path` written or removed,
+        // or a `sqlite` entry after the write, says "another database"; every
+        // other fact of item 1 is the line of a server.
+        assert_eq!(
+            entry_repointed_line("ledger", Reach::Database, None),
+            "warning: entry 'ledger' may now read another database; any data cached for it \
+             under .tpl/.cache/ledger/ is kept and still served; clear it with: tpl -d ledger \
+             cache clean"
         );
-        assert!(entry_repointed_line("shop", Some(None)).ends_with(
-            "tpl --tpl-dir <path> -d shop cache clean, where <path> is the --tpl-dir this \
-                 invocation was given"
-        ));
+
+        assert_eq!(Reach::of(true, Provider::Mariadb), Reach::Database);
+        assert_eq!(Reach::of(true, Provider::Sqlite), Reach::Database);
+        assert_eq!(Reach::of(false, Provider::Sqlite), Reach::Database);
+        assert_eq!(Reach::of(false, Provider::Mariadb), Reach::Server);
     }
 
     #[test]

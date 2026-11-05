@@ -5,7 +5,7 @@
 //! are the same question — is this dotted name a key — and the way to ask it
 //! once is to make the answer a value: [`Key::parse`] returns [`None`] for
 //! everything the table of `FR-CONF-002` does not list, and every key that
-//! exists is one of the eight variants of [`CoreKey`] or one of the ten of
+//! exists is one of the eight variants of [`CoreKey`] or one of the twelve of
 //! [`EntryKey`].
 //!
 //! The type also carries the **declared type** of each key, through
@@ -20,6 +20,8 @@
 //! `FR-ERR-022`.
 
 use std::fmt;
+
+use crate::model::database::Provider;
 
 /// The section a `[core]` key sits under.
 const CORE: &str = "core";
@@ -60,6 +62,10 @@ pub(crate) enum ValueType {
     ArgumentArray,
     /// A filesystem path to trust material (`FR-CONF-014`).
     Path,
+    /// One of the two providers of `FR-CONF-051`.
+    Provider,
+    /// The path of a SQLite database file, read literally (`FR-CONF-054`).
+    DatabasePath,
 }
 
 impl ValueType {
@@ -77,6 +83,10 @@ impl ValueType {
             Self::Tls => "one of disabled, preferred, required, verify-ca, verify-identity",
             Self::ArgumentArray => "an array of arguments",
             Self::Path => "a filesystem path",
+            Self::Provider => "one of mariadb, mysql, sqlite",
+            Self::DatabasePath => {
+                "the path of a SQLite database file, read literally and never expanded"
+            }
         }
     }
 
@@ -182,8 +192,12 @@ pub(crate) enum EntryKey {
     Password,
     /// `database.<name>.password_command`.
     PasswordCommand,
+    /// `database.<name>.path`, the SQLite database file (`FR-CONF-053`).
+    Path,
     /// `database.<name>.port`.
     Port,
+    /// `database.<name>.provider` (`FR-CONF-051`).
+    Provider,
     /// `database.<name>.tls`.
     Tls,
     /// `database.<name>.user`.
@@ -191,8 +205,8 @@ pub(crate) enum EntryKey {
 }
 
 impl EntryKey {
-    /// The ten, in the order `FR-CONF-002` states them.
-    pub(crate) const ALL: [Self; 10] = [
+    /// The twelve, in the order `FR-CONF-002` states them.
+    pub(crate) const ALL: [Self; 12] = [
         Self::Dsn,
         Self::Host,
         Self::Port,
@@ -203,6 +217,8 @@ impl EntryKey {
         Self::Tls,
         Self::CaFile,
         Self::CaPath,
+        Self::Provider,
+        Self::Path,
     ];
 
     /// The five keys `FR-CONF-006` calls the discrete connection fields.
@@ -228,7 +244,9 @@ impl EntryKey {
             Self::Host => "host",
             Self::Password => "password",
             Self::PasswordCommand => "password_command",
+            Self::Path => "path",
             Self::Port => "port",
+            Self::Provider => "provider",
             Self::Tls => "tls",
             Self::User => "user",
         }
@@ -248,11 +266,35 @@ impl EntryKey {
             Self::PasswordCommand => ValueType::ArgumentArray,
             Self::Port => ValueType::Port,
             Self::Tls => ValueType::Tls,
+            Self::Provider => ValueType::Provider,
+            Self::Path => ValueType::DatabasePath,
+        }
+    }
+
+    /// Whether the provider `provider` takes this key (`FR-CONF-052`).
+    pub(crate) const fn taken_by(self, provider: Provider) -> bool {
+        match (self, provider) {
+            (Self::Provider, Provider::Mariadb | Provider::Mysql | Provider::Sqlite)
+            | (Self::Path, Provider::Sqlite) => true,
+            (Self::Path, Provider::Mariadb | Provider::Mysql) => false,
+            (
+                Self::Dsn
+                | Self::Host
+                | Self::Port
+                | Self::User
+                | Self::Password
+                | Self::PasswordCommand
+                | Self::Database
+                | Self::Tls
+                | Self::CaFile
+                | Self::CaPath,
+                provider,
+            ) => provider.reads_a_server(),
         }
     }
 
     /// Whether writing or removing this key changes where the entry points
-    /// (`FR-CFG-053`): the six keys that hold what the flags of
+    /// (`FR-CFG-053`): the eight keys that hold what the flags of
     /// `FR-CACHE-029` write.
     ///
     /// `password`, `password_command`, `ca_file` and `ca_path` do not: the
@@ -260,7 +302,14 @@ impl EntryKey {
     pub(crate) const fn repoints(self) -> bool {
         matches!(
             self,
-            Self::Host | Self::Port | Self::User | Self::Database | Self::Tls | Self::Dsn
+            Self::Host
+                | Self::Port
+                | Self::User
+                | Self::Database
+                | Self::Tls
+                | Self::Dsn
+                | Self::Provider
+                | Self::Path
         )
     }
 
@@ -381,6 +430,7 @@ impl Key {
             Self::Entry { field, .. } => match field {
                 EntryKey::Port => Some(crate::project::settings::DEFAULT_PORT.to_string()),
                 EntryKey::Tls => Some(super::entry::TlsMode::default().name().to_owned()),
+                EntryKey::Provider => Some(Provider::default().name().to_owned()),
                 EntryKey::Dsn
                 | EntryKey::Host
                 | EntryKey::User
@@ -388,7 +438,8 @@ impl Key {
                 | EntryKey::PasswordCommand
                 | EntryKey::Database
                 | EntryKey::CaFile
-                | EntryKey::CaPath => None,
+                | EntryKey::CaPath
+                | EntryKey::Path => None,
             },
         }
     }
@@ -517,11 +568,11 @@ mod tests {
     use super::{CoreKey, EntryKey, Key, Target, ValueType, candidates, is_blank};
 
     #[test]
-    fn fr_conf_002_the_space_is_exactly_the_eighteen_forms_the_table_declares() {
-        // FR-CONF-002: eight [core] keys and ten keys of an entry, and no
-        // others.
+    fn fr_conf_002_the_space_is_exactly_the_twenty_forms_the_table_declares() {
+        // FR-CONF-002, as the sixty-fifth edition amended it: eight [core] keys
+        // and twelve keys of an entry, and no others.
         assert_eq!(CoreKey::ALL.len(), 8);
-        assert_eq!(EntryKey::ALL.len(), 10);
+        assert_eq!(EntryKey::ALL.len(), 12);
 
         let core: Vec<String> = CoreKey::ALL.iter().map(ToString::to_string).collect();
         assert_eq!(
@@ -552,6 +603,8 @@ mod tests {
                 "tls",
                 "ca_file",
                 "ca_path",
+                "provider",
+                "path",
             ]
         );
     }

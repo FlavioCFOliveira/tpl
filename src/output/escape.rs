@@ -1,24 +1,30 @@
 //! The escaping of `FR-OUT-018`, applied to every cell of a `text` layout.
 //!
-//! `FR-OUT-018` escapes the C0 control characters in the `text` output of the
-//! read commands and excepts **tab**, and `FR-OUT-019` extends the rule to
-//! every value interpolated into that output whatever its source — the
-//! catalogue, a `--context` document, or the argument vector. Two outputs the
-//! same requirement exempts are emitted byte for byte and never reach this
-//! module: the result of `tpl render`, and the template source printed by
-//! `tpl template show`. Neither is a value interpolated into a listing, and
-//! neither is written through [`super::text`].
+//! `FR-OUT-018` escapes the C0 control characters, the C1 control characters
+//! and the bidirectional formatting characters in the `text` output of the
+//! read commands, for a `mariadb` and a `sqlite` entry alike, and excepts
+//! **tab**; `FR-OUT-019` extends the rule to every value interpolated into
+//! that output whatever its source — the catalogue, a `--context` document, or
+//! the argument vector. Two outputs the same requirement exempts are emitted
+//! byte for byte and never reach this module: the result of `tpl render`, and
+//! the template source printed by `tpl template show`. Neither is a value
+//! interpolated into a listing, and neither is written through [`super::text`].
 //!
 //! | Character | Emitted as | Width |
 //! |---|---|---|
 //! | `\n`, `\r` | `\n`, `\r` | 2 |
 //! | Tab | Tab, unchanged | 1 |
 //! | The other twenty-nine C0 controls | `\u{XX}`, two lowercase hexadecimal digits | 6 |
+//! | A C1 control, U+0080 to U+009F | `\u{XX}`, the form of a C0 control: `\u{9b}` | 6 |
+//! | A bidirectional formatting character | `\u{…}`, the code point in lowercase hexadecimal: `\u{61c}`, `\u{202e}` | 7 or 8 |
 //! | Everything else, `U+007F` included | Unchanged | 1 |
 //!
-//! `U+007F` is outside the range the requirement names, which is `U+0000`
-//! through `U+001F`; so is `U+009B`, the single-character CSI, whose exclusion
-//! `NFR-DET-004` read against this corpus and left standing.
+//! The bidirectional formatting characters are the twelve code points of
+//! Unicode's `Bidi_Control` property (the glossary of the specification);
+//! [`escaped_past_c0`] decides membership of the two sets past C0, and the
+//! diagnostic renderer and the JSON formatter call it too, so the three paths
+//! differ in the form they write and never in what they escape (`FR-ERR-024`,
+//! `FR-OUT-018`, as amended in the sixty-ninth edition).
 //!
 //! **This is not `diagnostics::escape`, and the two do not share an
 //! implementation.** They disagree on tab — escaped there, excepted here — and
@@ -49,17 +55,65 @@ const TAB: u8 = b'\t';
 /// The character width of `\n` and `\r`.
 const NAMED: usize = 2;
 
-/// The character width of `\u{XX}`.
-const UNICODE: usize = 6;
+/// The character width of `\u{` and `}` around the digits of a code point.
+const BRACES: usize = 4;
 
-/// Whether `value` carries a control this rule rewrites.
+/// Whether `character` is a C1 control character — U+0080 to U+009F — or one
+/// of the twelve bidirectional formatting characters of Unicode's
+/// `Bidi_Control` property: U+061C, U+200E, U+200F, U+202A to U+202E and
+/// U+2066 to U+2069 (`FR-ERR-024`, `FR-OUT-018`, as amended in the sixty-ninth
+/// edition; the glossary's *bidirectional formatting character*).
+///
+/// It is the one predicate that decides what is escaped past the C0 range:
+/// this module, the diagnostic renderer and the JSON formatter each call it,
+/// and differ only in the form they write.
+#[must_use]
+pub(crate) const fn escaped_past_c0(character: char) -> bool {
+    matches!(
+        character,
+        '\u{80}'..='\u{9f}'
+            | '\u{61c}'
+            | '\u{200e}'
+            | '\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}'
+    )
+}
+
+/// Whether `value` may hold a character [`escaped_past_c0`] admits.
+///
+/// Every one of them is written in UTF-8 with the lead byte `0xC2` (the C1
+/// range), `0xD8` (U+061C) or `0xE2` (the other eleven), so a value holding
+/// none of those bytes holds none of them, and the scan decodes nothing. A
+/// value that holds one of those bytes is decoded to find out.
+#[must_use]
+pub(crate) fn may_hold_past_c0(value: &str) -> bool {
+    value.bytes().any(|byte| matches!(byte, 0xC2 | 0xD8 | 0xE2))
+}
+
+/// The number of lowercase hexadecimal digits a code point is written with in
+/// the form `\u{…}`: as many as it needs, and at least two.
+const fn digits(code: u32) -> usize {
+    let mut needed = 1;
+    let mut rest = code >> 4;
+    while rest > 0 {
+        needed += 1;
+        rest >>= 4;
+    }
+    if needed < 2 { 2 } else { needed }
+}
+
+/// Whether `value` carries a character this rule rewrites.
 ///
 /// A C0 control is a byte below `0x20` in UTF-8 and every continuation byte is
-/// at or above `0x80`, so the scan is exact and decodes nothing. Tab is not one
-/// of them: it is excepted, and a value whose only control is a tab takes the
-/// unescaped path and reaches the writer in a single call.
+/// at or above `0x80`, so that half of the scan is exact and decodes nothing.
+/// Tab is not one of them: it is excepted, and a value whose only control is a
+/// tab takes the unescaped path and reaches the writer in a single call. The
+/// characters past C0 are found by [`may_hold_past_c0`] and confirmed by
+/// decoding.
 fn rewrites(value: &str) -> bool {
     value.bytes().any(|byte| byte < C0_END && byte != TAB)
+        || (may_hold_past_c0(value) && value.chars().any(escaped_past_c0))
 }
 
 /// The width of `character` once escaped, in characters.
@@ -70,7 +124,8 @@ const fn escaped(character: char) -> usize {
         // is what it is, and not what it displays as. [`width`] says what that
         // costs.
         '\t' => 1,
-        '\u{00}'..='\u{1f}' => UNICODE,
+        '\u{00}'..='\u{1f}' => BRACES + digits(character as u32),
+        past if escaped_past_c0(past) => BRACES + digits(past as u32),
         _ => 1,
     }
 }
@@ -106,7 +161,7 @@ pub(super) fn width(value: &str) -> usize {
     }
 }
 
-/// Writes `value` to `writer` with the C0 controls of `FR-OUT-018` escaped.
+/// Writes `value` to `writer` with the characters of `FR-OUT-018` escaped.
 ///
 /// A value carrying nothing to rewrite reaches `writer` in one call, which is
 /// the ordinary case for a catalogue name and keeps the aggregation the project
@@ -126,22 +181,29 @@ pub(super) fn write<W: Write>(writer: &mut W, value: &str) -> io::Result<()> {
             '\n' => writer.write_all(b"\\n")?,
             '\r' => writer.write_all(b"\\r")?,
             '\t' => writer.write_all(b"\t")?,
-            '\u{00}'..='\u{1f}' => {
-                let code = u32::from(character);
-                writer.write_all(&[
-                    b'\\',
-                    b'u',
-                    b'{',
-                    HEX[(code >> 4) as usize],
-                    HEX[(code & 0xf) as usize],
-                    b'}',
-                ])?;
-            }
+            '\u{00}'..='\u{1f}' => unicode(writer, u32::from(character))?,
+            past if escaped_past_c0(past) => unicode(writer, u32::from(past))?,
             plain => writer.write_all(plain.encode_utf8(&mut utf8).as_bytes())?,
         }
     }
 
     Ok(())
+}
+
+/// Writes `\u{…}` for `code`, in lowercase hexadecimal of at least two digits,
+/// in one call.
+fn unicode<W: Write>(writer: &mut W, code: u32) -> io::Result<()> {
+    // `\u{` + at most six digits + `}`: every code point fits.
+    let mut form = [0_u8; 10];
+    let count = digits(code);
+    form[..3].copy_from_slice(b"\\u{");
+    for at in 0..count {
+        let shift = 4 * (count - 1 - at);
+        form[3 + at] = HEX[((code >> shift) & 0xf) as usize];
+    }
+    form[3 + count] = b'}';
+
+    writer.write_all(&form[..4 + count])
 }
 
 #[cfg(test)]
@@ -196,14 +258,45 @@ mod tests {
     }
 
     #[test]
-    fn fr_out_018_a_character_above_the_c0_range_is_left_alone() {
-        // U+007F is outside the range FR-OUT-018 names, and so is U+009B, the
-        // single-character CSI that NFR-DET-004 read against this corpus and
-        // left standing.
+    fn fr_out_018_a_c1_control_and_a_bidirectional_formatting_character_take_the_c0_form() {
+        // FR-OUT-018 as amended in the sixty-ninth edition: the C1 range and
+        // the twelve Bidi_Control code points are escaped in the form a C0
+        // control is — `\u{`, the code point in lowercase hexadecimal of at
+        // least two digits, `}` — for a `mariadb` and a `sqlite` entry alike.
+        for code in 0x80_u32..=0x9f {
+            let control = char::from_u32(code).expect("every C1 code point is a character");
+            assert_eq!(escaped(&control.to_string()), format!("\\u{{{code:02x}}}"));
+        }
+        for (character, form) in [
+            ('\u{61c}', "\\u{61c}"),
+            ('\u{200e}', "\\u{200e}"),
+            ('\u{200f}', "\\u{200f}"),
+            ('\u{202a}', "\\u{202a}"),
+            ('\u{202b}', "\\u{202b}"),
+            ('\u{202c}', "\\u{202c}"),
+            ('\u{202d}', "\\u{202d}"),
+            ('\u{202e}', "\\u{202e}"),
+            ('\u{2066}', "\\u{2066}"),
+            ('\u{2067}', "\\u{2067}"),
+            ('\u{2068}', "\\u{2068}"),
+            ('\u{2069}', "\\u{2069}"),
+        ] {
+            assert_eq!(escaped(&character.to_string()), form);
+        }
         assert_eq!(
-            escaped("caf\u{e9} \u{7f} \u{9b} \u{1f600}"),
-            "caf\u{e9} \u{7f} \u{9b} \u{1f600}"
+            escaped("na\u{9b}31mme\u{202e}gpj.exe"),
+            "na\\u{9b}31mme\\u{202e}gpj.exe"
         );
+    }
+
+    #[test]
+    fn fr_out_018_a_character_outside_the_escaped_set_is_left_alone() {
+        // U+007F is outside the C0 range, and the neighbours of the C1 range
+        // and of every Bidi_Control code point are outside the set too.
+        let outside = "caf\u{e9} \u{7f} \u{a0} \u{61b}\u{61d} \u{200d}\u{2010} \u{2029}\u{202f} \u{2065}\u{206a} \u{4e2d} \u{1f600}";
+
+        assert_eq!(escaped(outside), outside);
+        assert_eq!(width(outside), outside.chars().count());
     }
 
     #[test]
@@ -243,6 +336,9 @@ mod tests {
                 "\u{1f600}",
                 "one\ttwo",
                 "a\u{0}\u{1f}\n\r\tz",
+                "a\u{80}\u{9b}\u{9f}b",
+                "\u{61c}\u{200e}\u{202e}\u{2069}",
+                "mixed\u{1}\u{9b}\u{202e}caf\u{e9}\t",
             ]
             .into_iter()
             .map(str::to_owned),

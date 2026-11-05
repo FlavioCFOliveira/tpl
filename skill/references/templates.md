@@ -21,7 +21,7 @@ jq '.data.context_variables, .data.template_surface' /tmp/h.json
 
 | Variable | Contents |
 |---|---|
-| `database` | Always present: `name`, `charset`, `collation`, `server` (`version`, `series`, `standing`), `tables`, `views`, `routines` |
+| `database` | Always present: `name`, `charset`, `collation`, `provider` (`mariadb`, `mysql` or `sqlite`), `server` (`version`, `series`, `standing`), `tables`, `views`, `routines` |
 | `table` | The object bound by `--table`. Undefined without it |
 | `view` | The object bound by `--view`. Undefined without it |
 | `routine` | The object bound by `--routine`. Undefined without it |
@@ -54,14 +54,32 @@ Use `tpl -d NAME schema table T --format json --pretty` (or a dump) to see real 
 
 A column's `default` is `null` (NOT NULL with no default), `{"kind":"null"}`, `{"kind":"literal","value":…}` or `{"kind":"expression","value":…}`. An absent scalar is `null`, and it prints as an empty string. Test it with `is none`.
 
+### A MySQL read
+
+The fields are the same, and MySQL fills nearly all of them. Branch on `database.provider` where a template depends on the differences.
+
+- A `CHECK` constraint's `level` and a view's `algorithm` are `null`: MySQL records neither.
+- Three `data_type` values appear that a MariaDB read does not produce: `json`, `geomcollection` (MariaDB's `geometrycollection`) and, on `9.7`, `vector`. A type-mapping macro needs a branch for each. `json` satisfies `textual`; the other two satisfy no family test.
+- An expression default, a generated column's expression and a check clause are MySQL's own SQL: one layer of backslash escaping is removed, and the character-set introducers MySQL writes before a string literal, such as `_utf8mb4'…'`, are kept.
+- An index with a functional key part is not carried.
+
+### A SQLite read
+
+The fields are the same; SQLite fills fewer of them. Branch on `database.provider` when a template serves more than one provider.
+
+- `database.name` is `main`, `database.collation` is `null`, `database.server` describes the SQLite library built into `tpl`, and `routines` is `[]`.
+- A column's `data_type` is its SQLite type affinity — `integer`, `text`, `blob`, `real` or `numeric` — and `column_type` is the declared type as written (empty when none was declared). A type mapping for SQLite keys on the affinity, or on `column_type`.
+- A table's `engine` and `collation` are `null`. Its `primary_key` may have a `null` `name` and `type`: a rowid key has no index.
+- A view's `definition` is its whole stored `CREATE VIEW` statement, and every other view field but `name` is `null`.
+
 ## Filters, tests and functions
 
 The functions, and the tests and filters tpl registers, are a contract. The engine filters that are listed are pinned. Anything else the engine offers works, but may change when the engine version changes.
 
 - **Naming filters:** `pascal`, `camel`, `snake`, `upper_snake`, `kebab`.
-- **Code filters:** `quote` (MariaDB backticks), `sql_type` (a column's `data_type`), `json`, `indent(n)`, `comment(prefix)`, `escape("html"|"xml")`.
+- **Code filters:** `quote` (MariaDB and MySQL backticks), `sql_type` (a column's `data_type`), `json`, `indent(n)`, `comment(prefix)`, `escape("html"|"xml")`.
 - **Pinned engine filters:** `default`, `join`, `length`, `map(attribute=…)`, `select`, `reject`, `first`, `last`, `reverse`, `sort(attribute=…, reverse=…, case_sensitive=…)`, `trim`, `upper`, `lower`, `replace`.
-- **Column tests:** `nullable`, `primary_key`, `auto_increment`, `unique`, `numeric`, `temporal`, `textual`. Each fails the render on anything but a column.
+- **Column tests:** `nullable`, `primary_key`, `auto_increment`, `unique`, `numeric`, `temporal`, `textual`. Each fails the render on anything but a column. On a SQLite read, `numeric` is true for the affinities `integer`, `real` and `numeric` (so a column declared `DATETIME` or `BOOLEAN` is numeric), `textual` for `text`, and `temporal` is never true; `primary_key` and `unique` hold for a rowid key too.
 - **Functions:** `table_named(name)`, `view_named(name)`, `routine_named(name)` (the first routine of that name), `column(table, name)` (using the result fails the render when the object is missing), and `fail(message)`, which stops the render with exit 65. The old names `table()`, `view()` and `routine()` no longer exist: calling one is exit 65, "unknown function".
 
 There is no per-language type filter (no `rust_type`). Write a type-mapping macro the project owns, as `rust/_types.jinja` does, and end it with `fail()` so an unmapped `data_type` stops the render instead of producing wrong code.

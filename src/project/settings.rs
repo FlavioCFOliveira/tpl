@@ -29,15 +29,16 @@
 //! belongs to the phase that opens the connection.
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use super::config::entry::{Entry, PortSetting, TlsMode};
+use super::config::entry::{Combination, Entry, PortSetting, TlsMode};
 use super::config::keys::EntryKey;
 use super::config::{Configuration, dsn, expand};
 use super::password;
 use super::secret::Secret;
 use crate::deadline::{Clock, Deadlines, Phase, Seconds};
-use crate::error::Error;
+use crate::error::{Error, KeyAbsence, NulField, NulPlace};
+use crate::model::database::Provider;
 use crate::render::RenderBounds;
 
 /// The default of `database.<name>.port` (`FR-CONF-002`).
@@ -148,6 +149,9 @@ pub(crate) struct Settings {
     ca_path: Option<PathBuf>,
     /// The four phase deadlines of `FR-CONF-004`.
     deadlines: Deadlines,
+    /// The `.tpl/.cfg` the entry was read from, which the `cause` of a refused
+    /// database name names (`FR-ERR-048`, error `1102`).
+    file: PathBuf,
 }
 
 impl Settings {
@@ -216,6 +220,96 @@ impl Settings {
     pub(crate) const fn deadlines(&self) -> Deadlines {
         self.deadlines
     }
+
+    /// The `.tpl/.cfg` the entry was read from.
+    pub(crate) fn file(&self) -> &std::path::Path {
+        &self.file
+    }
+}
+
+/// What a `sqlite` entry resolves to: its database file, as an absolute path
+/// (`FR-CONF-053`, `FR-CONF-054`).
+#[derive(Debug, Clone)]
+pub(crate) struct FileSettings {
+    /// The entry these settings came from.
+    entry: String,
+    /// The database file, resolved against the project directory and
+    /// absolute (`FR-CONF-054`).
+    path: PathBuf,
+    /// The four phase deadlines; a `sqlite` read uses the catalogue-query one
+    /// alone (`FR-LITE-009`).
+    deadlines: Deadlines,
+}
+
+impl FileSettings {
+    /// Settings over `path` directly, for the tests of the reader.
+    #[cfg(test)]
+    pub(crate) fn new(entry: &str, path: &Path, deadlines: Deadlines) -> Self {
+        Self {
+            entry: entry.to_owned(),
+            path: path.to_owned(),
+            deadlines,
+        }
+    }
+
+    /// The entry these settings came from.
+    pub(crate) fn entry(&self) -> &str {
+        &self.entry
+    }
+
+    /// The database file, absolute.
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// The four phase deadlines.
+    pub(crate) const fn deadlines(&self) -> Deadlines {
+        self.deadlines
+    }
+}
+
+/// The settings an entry resolves to, by its provider (`FR-CONF-051`,
+/// `OD-35`).
+///
+/// It is a closed enumeration whose `mariadb` and `mysql` arms hold the server
+/// fields, resolved alike (`FR-MYSQL-020`), and whose `sqlite` arm holds the
+/// absolute path; the entry name and the deadlines are common to all three.
+#[derive(Debug)]
+pub(crate) enum Resolved {
+    /// A `mariadb` entry.
+    Mariadb(Settings),
+    /// A `mysql` entry (`FR-MYSQL-001`).
+    Mysql(Settings),
+    /// A `sqlite` entry.
+    Sqlite(FileSettings),
+}
+
+impl Resolved {
+    /// The entry these settings came from.
+    pub(crate) fn entry(&self) -> &str {
+        match self {
+            Self::Mariadb(settings) | Self::Mysql(settings) => settings.entry(),
+            Self::Sqlite(settings) => settings.entry(),
+        }
+    }
+
+    /// The server settings, where the entry is a `mariadb` entry.
+    #[cfg(test)]
+    pub(crate) fn into_mariadb(self) -> Option<Settings> {
+        match self {
+            Self::Mariadb(settings) => Some(settings),
+            Self::Mysql(_) | Self::Sqlite(_) => None,
+        }
+    }
+
+    /// The server settings, where the entry is a `mysql` entry.
+    #[cfg(test)]
+    pub(crate) fn into_mysql(self) -> Option<Settings> {
+        match self {
+            Self::Mysql(settings) => Some(settings),
+            Self::Mariadb(_) | Self::Sqlite(_) => None,
+        }
+    }
 }
 
 /// The four phase deadlines of `FR-CONF-004`, resolved from `[core]`.
@@ -249,28 +343,395 @@ pub(crate) fn render_bounds(configuration: &Configuration) -> RenderBounds {
     )
 }
 
-/// Resolves the settings of the selected entry.
+/// An entry selected and checked as the file writes it, not yet resolved for
+/// a connection (step 5 of `FR-ERR-006`, `FR-CONF-056`).
+///
+/// It is what an invocation holds between entry resolution and the
+/// cache-or-connection step: the provider's refused keys, a `sqlite` entry's
+/// `path`, a DSN the grammar refuses, a value holding a NUL character and a
+/// port that is not one have each been refused, and **no** field has been
+/// expanded and no `password_command` run. [`Prepared::connect`] does both,
+/// and only an invocation that opens a connection calls it, so a read the
+/// cache serves never reads the environment and never starts the child.
+#[derive(Debug)]
+pub(crate) enum Prepared {
+    /// A `mariadb` entry.
+    Mariadb(Pending),
+    /// A `mysql` entry (`FR-MYSQL-001`).
+    Mysql(Pending),
+    /// A `sqlite` entry, which carries no field `FR-CONF-015` expands.
+    Sqlite(FileSettings),
+}
+
+/// A server entry as the file writes it: what step 5 of `FR-ERR-006` checks
+/// before any expansion.
+#[derive(Debug)]
+pub(crate) struct Pending {
+    /// The entry's name, the file's own spelling.
+    entry: String,
+    /// How that entry was chosen (`FR-GLOB-008`).
+    selection: Selection,
+    /// Whether the entry is defined by `dsn` (`FR-ERR-045`).
+    by_dsn: bool,
+    /// `host` as written, references unexpanded.
+    host: Option<String>,
+    /// `database` as written, references unexpanded.
+    database: Option<String>,
+    /// The four phase deadlines of `FR-CONF-004`.
+    deadlines: Deadlines,
+}
+
+impl Pending {
+    /// The entry this value came from.
+    pub(crate) fn entry(&self) -> &str {
+        &self.entry
+    }
+
+    /// Whether the entry is defined by `dsn` (`FR-ERR-045`).
+    pub(crate) const fn by_dsn(&self) -> bool {
+        self.by_dsn
+    }
+
+    /// `host` as written, before any expansion.
+    pub(crate) fn host(&self) -> Option<&str> {
+        self.host.as_deref()
+    }
+
+    /// `database` as written, before any expansion.
+    pub(crate) fn database(&self) -> Option<&str> {
+        self.database.as_deref()
+    }
+}
+
+impl Prepared {
+    /// The entry this value came from.
+    pub(crate) fn entry(&self) -> &str {
+        match self {
+            Self::Mariadb(pending) | Self::Mysql(pending) => pending.entry(),
+            Self::Sqlite(settings) => settings.entry(),
+        }
+    }
+
+    /// The four phase deadlines.
+    pub(crate) const fn deadlines(&self) -> Deadlines {
+        match self {
+            Self::Mariadb(pending) | Self::Mysql(pending) => pending.deadlines,
+            Self::Sqlite(settings) => settings.deadlines(),
+        }
+    }
+
+    /// The entry resolved for a connection: every field `FR-CONF-015` names
+    /// expanded, and the `password_command` of `FR-CONF-024` run
+    /// (`FR-CONF-056`).
+    ///
+    /// It is called by an invocation that is to open a connection, at the
+    /// cache-or-connection step of `FR-ERR-006` and before the first
+    /// connection phase of `FR-CONF-005`, and by nothing else.
+    ///
+    /// # Errors
+    ///
+    /// Returns what [`expand`] returns for an unclosed or undefined reference,
+    /// [`Error::ConfigurationValueMalformed`] where an expanded port is not
+    /// one, [`Error::ValueHoldsNul`] where an expanded value holds a NUL
+    /// character, and what [`password::obtain`] returns for the child.
+    pub(crate) fn connect<L>(
+        &self,
+        configuration: &Configuration,
+        clock: &Clock,
+        lookup: &L,
+    ) -> Result<Resolved, Error>
+    where
+        L: Fn(&str) -> Option<String>,
+    {
+        let server = |pending: &Pending| {
+            let (name, entry, _) = select(configuration, Some(&pending.entry))?;
+
+            resolve_server(configuration, name, entry, pending.selection, clock, lookup)
+        };
+
+        match self {
+            Self::Mariadb(pending) => server(pending).map(Resolved::Mariadb),
+            Self::Mysql(pending) => server(pending).map(Resolved::Mysql),
+            Self::Sqlite(settings) => Ok(Resolved::Sqlite(settings.clone())),
+        }
+    }
+}
+
+/// Selects the entry and refuses what the file holds as written — step 5 of
+/// `FR-ERR-006` — without expanding any field or running `password_command`
+/// (`FR-CONF-056`).
+///
+/// For every provider it begins with the two checks `FR-CONF-052` and
+/// `FR-CONF-053` place there: a key the provider refuses would otherwise be put
+/// in force for as long as the child runs (`OD-35`). For a server entry it
+/// then refuses a DSN the grammar refuses, a value holding a NUL character
+/// (`FR-CONF-057`, item 2), and a port written as a value that is not one and
+/// carries no reference.
+///
+/// # Errors
+///
+/// Returns what [`select`] returns for the selection;
+/// [`Error::ProviderRefusesKeys`] where the entry carries a key its provider
+/// refuses; [`Error::EntryKeyMissing`] where a `sqlite` entry carries no
+/// `path`, or an empty one; what [`dsn`] returns for a DSN the grammar
+/// refuses; [`Error::ValueHoldsNul`] for a value holding a NUL character; and
+/// [`Error::ConfigurationValueMalformed`] for a port that is not one.
+pub(crate) fn prepare(
+    configuration: &Configuration,
+    requested: Option<&str>,
+) -> Result<Prepared, Error> {
+    let (name, entry, selection) = select(configuration, requested)?;
+    let file = configuration.file();
+
+    // FR-CONF-052: the keys the provider refuses, at entry resolution.
+    let combination = Combination::of(entry);
+    let refused = combination.refused_by_provider();
+    if !refused.is_empty() {
+        return Err(Error::ProviderRefusesKeys {
+            entry: name.to_owned(),
+            file: file.to_owned(),
+            provider: combination.provider(),
+            written: combination.provider_written(),
+            keys: refused.iter().map(|key| key.leaf()).collect(),
+        });
+    }
+
+    match entry.provider() {
+        Provider::Mariadb => {
+            written_server(configuration, name, entry, selection).map(Prepared::Mariadb)
+        }
+        // FR-MYSQL-020: a `mysql` entry is resolved exactly as a `mariadb` one.
+        Provider::Mysql => {
+            written_server(configuration, name, entry, selection).map(Prepared::Mysql)
+        }
+        Provider::Sqlite => resolve_file(configuration, name, entry).map(Prepared::Sqlite),
+    }
+}
+
+/// Resolves the settings of the selected entry, by its provider, for a
+/// connection: [`prepare`] followed by [`Prepared::connect`].
 ///
 /// `lookup` supplies the environment `${VAR}` reads, which is
 /// [`expand::environment`] in the process and a table in a test, for the reason
 /// [`expand`] states.
 ///
+/// It is for an invocation that always opens a connection —
+/// `tpl cfg database test` — and for the tests of the readers; an invocation
+/// that may be served from the cache calls the two halves apart, so that a hit
+/// performs neither the expansion nor the child (`FR-CONF-056`).
+///
 /// # Errors
 ///
-/// Returns what [`select`] returns for the selection, what [`expand`] returns
-/// for an unclosed or undefined reference, what [`dsn`] returns for a DSN the
-/// grammar refuses, [`Error::ConfigurationValueMalformed`] where an expanded
-/// port is not one, and what [`password::obtain`] returns for the child.
+/// Returns what [`prepare`] and [`Prepared::connect`] return.
 pub(crate) fn resolve<L>(
     configuration: &Configuration,
     requested: Option<&str>,
+    clock: &Clock,
+    lookup: &L,
+) -> Result<Resolved, Error>
+where
+    L: Fn(&str) -> Option<String>,
+{
+    prepare(configuration, requested)?.connect(configuration, clock, lookup)
+}
+
+/// The checks step 5 of `FR-ERR-006` makes of a server entry as the file
+/// writes it, before any expansion (`FR-CONF-056`).
+///
+/// # Errors
+///
+/// Returns what [`dsn`] returns for a DSN the grammar refuses,
+/// [`Error::ValueHoldsNul`] for a value holding a NUL character, and
+/// [`Error::ConfigurationValueMalformed`] for a port written without a
+/// reference that is not one.
+fn written_server(
+    configuration: &Configuration,
+    name: &str,
+    entry: &Entry,
+    selection: Selection,
+) -> Result<Pending, Error> {
+    let file = configuration.file();
+    let qualified = |field: EntryKey| format!("database.{name}.{field}");
+    let by_dsn = entry.dsn.is_some();
+
+    let (host, user, password, database) = if let Some(written) = entry.dsn.as_ref() {
+        let key = qualified(EntryKey::Dsn);
+        let parsed = dsn::parse(&written.value, &key, file)?;
+
+        // A port with no reference is a fault of the file as written, and is
+        // refused here; one with a reference waits for its expansion.
+        if let Some(port) = parsed.port().map(dsn::Field::raw)
+            && !port.contains("${")
+        {
+            number(port, port, &key, written.position, file)?;
+        }
+
+        (
+            Some(parsed.host().raw().to_owned()),
+            parsed.user().map(|user| user.raw().to_owned()),
+            parsed.password().map(|password| password.raw().to_owned()),
+            Some(parsed.database().raw().to_owned()),
+        )
+    } else {
+        if let Some(port) = entry.port.as_ref()
+            && let PortSetting::Written(written) = &port.value
+            && !written.contains("${")
+        {
+            number(
+                written,
+                written,
+                &qualified(EntryKey::Port),
+                port.position,
+                file,
+            )?;
+        }
+
+        (
+            entry.host.clone(),
+            entry.user.clone(),
+            entry.password.clone(),
+            entry.database.clone(),
+        )
+    };
+
+    // FR-CONF-057, item 2: a value the file holds with a NUL character is
+    // refused at entry resolution, before any connection is opened.
+    nul_free(
+        name,
+        file,
+        by_dsn,
+        [
+            (NulField::Host, host.as_deref(), EntryKey::Host),
+            (NulField::User, user.as_deref(), EntryKey::User),
+            (NulField::Password, password.as_deref(), EntryKey::Password),
+            (NulField::Database, database.as_deref(), EntryKey::Database),
+        ],
+    )?;
+
+    Ok(Pending {
+        entry: name.to_owned(),
+        selection,
+        by_dsn,
+        host,
+        database,
+        deadlines: deadlines(configuration),
+    })
+}
+
+/// Refuses the first of `values` that holds a NUL character (`FR-CONF-057`,
+/// item 2).
+///
+/// The parts of a dsn are read as `tpl` carries them to the driver, and the
+/// `cause` names the dsn rather than a discrete key.
+///
+/// # Errors
+///
+/// Returns [`Error::ValueHoldsNul`] for the first value holding a NUL.
+fn nul_free(
+    name: &str,
+    file: &Path,
+    by_dsn: bool,
+    values: [(NulField, Option<&str>, EntryKey); 4],
+) -> Result<(), Error> {
+    for (field, value, key) in values {
+        if let Some(before) = value.and_then(before_nul) {
+            let key = if by_dsn { EntryKey::Dsn } else { key };
+            let key = format!("database.{name}.{key}");
+            let file = file.to_owned();
+            let place = if by_dsn {
+                NulPlace::DsnPart { key, file }
+            } else {
+                NulPlace::Key { key, file }
+            };
+            return Err(nul_refused(name, field, place, before));
+        }
+    }
+
+    Ok(())
+}
+
+/// The settings of a `sqlite` entry: its database file, resolved against the
+/// project directory (`FR-CONF-053`, `FR-CONF-054`).
+///
+/// # Errors
+///
+/// Returns [`Error::EntryKeyMissing`] where the entry carries no `path`, or one
+/// that is empty under the definition of `FR-CONF-050`.
+fn resolve_file(
+    configuration: &Configuration,
+    name: &str,
+    entry: &Entry,
+) -> Result<FileSettings, Error> {
+    let file = configuration.file();
+    let missing = |absence| Error::EntryKeyMissing {
+        entry: name.to_owned(),
+        key: format!("database.{name}.{}", EntryKey::Path),
+        file: file.to_owned(),
+        flag: PATH_FLAG,
+        placeholder: PATH_PLACEHOLDER,
+        absence,
+    };
+
+    let Some(written) = entry.path.as_deref() else {
+        return Err(missing(KeyAbsence::Absent));
+    };
+    if written.to_str().is_none_or(super::config::keys::is_blank) {
+        return Err(missing(KeyAbsence::Empty));
+    }
+
+    // FR-CONF-057, item 2: before the file the path names is opened.
+    if let Some(before) = written.to_str().and_then(before_nul) {
+        return Err(nul_refused(
+            name,
+            NulField::Path,
+            NulPlace::Key {
+                key: format!("database.{name}.{}", EntryKey::Path),
+                file: file.to_owned(),
+            },
+            before,
+        ));
+    }
+
+    Ok(FileSettings {
+        entry: name.to_owned(),
+        path: project_directory(file).join(written),
+        deadlines: deadlines(configuration),
+    })
+}
+
+/// The flag of `FR-CFG-027` that writes `database.<name>.path`.
+const PATH_FLAG: &str = "--path";
+
+/// The placeholder the hint of `FR-CONF-053` writes after it.
+const PATH_PLACEHOLDER: &str = "<path>";
+
+/// The project directory of `FR-CONF-054`: the parent of the canonical `.tpl`
+/// folder that holds `file`.
+///
+/// `file` is `.tpl/.cfg` below the folder [`crate::project::Project`]
+/// canonicalised per `FR-PROJ-009`, so where the folder was reached through a
+/// symbolic link this is the parent of its target, not of the link. A path
+/// joined to it that is already absolute stays as written, which is how
+/// [`Path::join`] treats an absolute operand.
+fn project_directory(file: &Path) -> &Path {
+    file.parent()
+        .and_then(Path::parent)
+        .unwrap_or_else(|| Path::new("/"))
+}
+
+/// The settings of a server entry, resolved for a connection: every field
+/// `FR-CONF-015` names expanded and `password_command` run (`FR-CONF-056`).
+fn resolve_server<L>(
+    configuration: &Configuration,
+    name: &str,
+    entry: &Entry,
+    selection: Selection,
     clock: &Clock,
     lookup: &L,
 ) -> Result<Settings, Error>
 where
     L: Fn(&str) -> Option<String>,
 {
-    let (name, entry, selection) = select(configuration, requested)?;
     let file = configuration.file();
     let deadlines = deadlines(configuration);
 
@@ -289,6 +750,7 @@ where
         ca_file: entry.ca_file.clone(),
         ca_path: entry.ca_path.clone(),
         deadlines,
+        file: file.to_owned(),
     };
 
     let mut from_dsn: Option<String> = None;
@@ -354,6 +816,25 @@ where
         )?;
     }
 
+    // FR-CONF-057, item 2: [`written_server`] has refused a value the file
+    // holds with a NUL character; an expansion is checked again here, still
+    // before any connection is opened.
+    nul_free(
+        name,
+        file,
+        settings.by_dsn,
+        [
+            (NulField::Host, settings.host.as_deref(), EntryKey::Host),
+            (NulField::User, settings.user.as_deref(), EntryKey::User),
+            (NulField::Password, from_dsn.as_deref(), EntryKey::Password),
+            (
+                NulField::Database,
+                settings.database.as_deref(),
+                EntryKey::Database,
+            ),
+        ],
+    )?;
+
     settings.password = match entry.password_command.as_ref() {
         // FR-CONF-007 has already refused an entry carrying two password
         // sources, so the child is reached only where it is the one source.
@@ -366,6 +847,25 @@ where
     };
 
     Ok(settings)
+}
+
+/// The part of `value` before its first NUL character, where it holds one
+/// (`FR-CONF-057`).
+pub(crate) fn before_nul(value: &str) -> Option<&str> {
+    value.split_once('\0').map(|(before, _)| before)
+}
+
+/// The refusal of `FR-CONF-057`, items 2 and 3, for `field` of entry `name`.
+///
+/// The part before the NUL is carried for every field but the password, which
+/// no message reproduces any part of (`FR-ERR-013`).
+pub(crate) fn nul_refused(name: &str, field: NulField, place: NulPlace, before: &str) -> Error {
+    Error::ValueHoldsNul {
+        entry: name.to_owned(),
+        field,
+        place,
+        before: (field != NulField::Password).then(|| before.to_owned()),
+    }
 }
 
 /// `value` expanded, where `FR-CONF-015` expands the field it belongs to.
@@ -525,7 +1025,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the entry resolves");
+            .expect("the entry resolves")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert_eq!(settings.host(), Some("db.example.com"));
         assert_eq!(settings.port(), 3306);
@@ -548,7 +1050,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the entry resolves");
+            .expect("the entry resolves")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert_eq!(settings.host(), Some("db.example.com"));
         assert_eq!(settings.port(), 3307);
@@ -573,7 +1077,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the entry resolves");
+            .expect("the entry resolves")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert_eq!(settings.host(), Some("db.example.com"));
         assert_eq!(settings.database(), Some("shop"));
@@ -632,7 +1138,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the child produced a password");
+            .expect("the child produced a password")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert_eq!(
             settings
@@ -653,7 +1161,9 @@ mod tests {
         );
 
         let settings = resolve(&configuration, Some("shop"), &clock(None), &table)
-            .expect("the entry resolves");
+            .expect("the entry resolves")
+            .into_mariadb()
+            .expect("the entry is a mariadb entry");
 
         assert!(!format!("{settings:?}").contains("hunter2"));
         assert!(!format!("{settings:#?}").contains("hunter2"));
@@ -675,9 +1185,136 @@ mod tests {
                 other => table(other),
             },
         )
-        .expect("the entry resolves");
+        .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry");
 
         assert_eq!(settings.host(), Some("db.example.com"));
         assert_eq!(settings.entry(), "shop");
+    }
+
+    /// What resolving entry `shop` of `text` refused.
+    fn refused(scratch: &Scratch, text: &str) -> Error {
+        let configuration = document(scratch, text);
+
+        resolve(&configuration, Some("shop"), &clock(None), &table)
+            .expect_err("the entry is refused")
+    }
+
+    #[test]
+    fn fr_conf_057_a_value_in_the_file_holding_a_nul_is_refused_at_entry_resolution() {
+        // FR-CONF-057, item 2: host, user, password and database of a server
+        // entry, each part of its dsn, and the path of a sqlite entry; 78,
+        // naming the key or the part and the file, and the part before the NUL
+        // for every field but the password.
+        use crate::error::{NulField, NulPlace};
+
+        let scratch = Scratch::new();
+        for (text, field, part, before) in [
+            (
+                "[database.shop]\nhost = \"db\\u0000x\"\n",
+                NulField::Host,
+                false,
+                Some("db"),
+            ),
+            (
+                "[database.shop]\nhost = \"db\"\nuser = \"rea\\u0000der\"\n",
+                NulField::User,
+                false,
+                Some("rea"),
+            ),
+            (
+                "[database.shop]\nhost = \"db\"\npassword = \"hun\\u0000ter2\"\n",
+                NulField::Password,
+                false,
+                None,
+            ),
+            (
+                "[database.shop]\nhost = \"db\"\ndatabase = \"freight\\u0000x\"\n",
+                NulField::Database,
+                false,
+                Some("freight"),
+            ),
+            (
+                "[database.shop]\ndsn = \"mysql://alice:hun\\u0000ter2@db/freight\"\n",
+                NulField::Password,
+                true,
+                None,
+            ),
+            (
+                "[database.shop]\ndsn = \"mysql://alice@db/freight\\u0000x\"\n",
+                NulField::Database,
+                true,
+                Some("freight"),
+            ),
+            (
+                "[database.shop]\nprovider = \"sqlite\"\npath = \"data/led\\u0000ger.sqlite\"\n",
+                NulField::Path,
+                false,
+                Some("data/led"),
+            ),
+        ] {
+            let condition = refused(&scratch, text);
+
+            assert_eq!(condition.exit_code(), 78, "{text}");
+            match condition {
+                Error::ValueHoldsNul {
+                    ref entry,
+                    field: found,
+                    ref place,
+                    before: ref kept,
+                } => {
+                    assert_eq!(entry, "shop");
+                    assert_eq!(found, field, "{text}");
+                    assert_eq!(kept.as_deref(), before, "{text}");
+                    match place {
+                        NulPlace::DsnPart { key, .. } => {
+                            assert!(part, "{text}");
+                            assert_eq!(key, "database.shop.dsn");
+                        }
+                        NulPlace::Key { key, file } => {
+                            assert!(!part, "{text}");
+                            assert_eq!(key, &format!("database.shop.{field}"));
+                            assert!(file.ends_with(".cfg"), "{}", file.display());
+                        }
+                        NulPlace::Helper { .. } => panic!("{text}: {place:?}"),
+                    }
+                }
+                ref other => panic!("{text}: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn fr_conf_057_a_password_command_that_prints_a_nul_is_refused_and_not_reproduced() {
+        // FR-CONF-057, item 3: 78, naming the command as stored and nothing of
+        // what it printed.
+        use crate::error::{NulField, NulPlace};
+
+        let printf = ["/usr/bin/printf", "/bin/printf"]
+            .into_iter()
+            .find(|path| PathBuf::from(path).exists())
+            .expect("the system has printf");
+        let scratch = Scratch::new();
+        let condition = refused(
+            &scratch,
+            &format!(
+                "[database.shop]\nhost = \"db\"\npassword_command = [\"{printf}\", \"hun\\\\000ter2\"]\n"
+            ),
+        );
+
+        assert_eq!(condition.exit_code(), 78);
+        assert!(
+            matches!(
+                condition,
+                Error::ValueHoldsNul {
+                    field: NulField::Password,
+                    place: NulPlace::Helper { ref command },
+                    before: None,
+                    ..
+                } if command.first().map(String::as_str) == Some(printf)
+            ),
+            "{condition:?}"
+        );
     }
 }

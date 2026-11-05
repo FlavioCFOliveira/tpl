@@ -111,9 +111,10 @@ use serde::{Deserialize, Serialize};
 use crate::at::{self, Fault};
 use crate::error::Error;
 use crate::model::ToStatic as _;
+use crate::model::database::Provider;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::order::{self, Named};
-use crate::model::document::shape::TableDocument;
+use crate::model::document::shape::{IncomingKey, OutgoingKey, TableDocument, TableShape};
 use crate::model::routine::{Routine, RoutineKind};
 use crate::model::server::Server;
 use crate::model::view::View;
@@ -143,9 +144,14 @@ const TEMPORARY: &str = ".tpl-cache";
 /// The database's own metadata, as the cache holds it.
 ///
 /// It is the part of the `database` object of `FR-CTX-036` that belongs to no
-/// collection: the three metadata fields and the `server` object of
+/// collection: the four metadata fields and the `server` object of
 /// `FR-CTX-031`. The key order is the field order, per `OD-18`, and it is the
 /// order that requirement writes them in.
+///
+/// `provider` is the record of `FR-CDOC-018`: the provider of the read that
+/// wrote the record, served whatever the entry's provider is when the record
+/// is read. A record without it was written before the sixty-fifth edition by
+/// a `mariadb` read, and decodes as one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Metadata<'a> {
     /// The schema's name.
@@ -154,9 +160,12 @@ struct Metadata<'a> {
     /// The schema's default character set.
     #[serde(borrow)]
     charset: Cow<'a, str>,
-    /// The schema's default collation.
+    /// The schema's default collation, `null` for a `sqlite` read.
     #[serde(borrow)]
-    collation: Cow<'a, str>,
+    collation: Option<Cow<'a, str>>,
+    /// The provider of the read that wrote the record (`FR-CDOC-018`).
+    #[serde(default)]
+    provider: Provider,
     /// The server the read was made against.
     #[serde(borrow)]
     server: Server<'a>,
@@ -255,6 +264,7 @@ impl Loaded {
             name: metadata.name,
             charset: metadata.charset,
             collation: metadata.collation,
+            provider: metadata.provider,
             server: metadata.server,
             tables: decode(&self.tables)?,
             views: Cow::Owned(decode(&self.views)?),
@@ -332,6 +342,7 @@ impl Shelved {
             name: metadata.name,
             charset: metadata.charset,
             collation: metadata.collation,
+            provider: metadata.provider,
             server: metadata.server,
             tables: Vec::new(),
             views: Cow::Owned(Vec::new()),
@@ -363,10 +374,21 @@ pub(crate) struct Shelf {
     name: String,
     /// The kind the path holds, for a routine; [`None`] for a table or a view.
     kind: Option<RoutineKind<'static>>,
-    /// The object file.
-    file: PathBuf,
-    /// The `.tpl` folder the file is reached from, one component at a time.
-    anchor: Arc<Path>,
+    /// The object file's name in its collection's folder.
+    file: OsString,
+    /// The collection's folder, opened once by [`shelve`] and shared by every
+    /// member of the collection.
+    ///
+    /// *Why the descriptor is held across the render.* `FR-CACHE-044` tests
+    /// every component of the path once, at step 6 of `FR-ERR-006`, and
+    /// [`at::directory`] opened this folder then, following no link; every
+    /// read here is relative to the folder that test passed. A component
+    /// swapped for a link afterwards redirects nothing, as it redirected
+    /// nothing when each read walked `.tpl/.cache/<entry>/<collection>` again,
+    /// which then failed the walk instead. A file removed since the listing
+    /// is absent from the folder the descriptor holds, so it is still the
+    /// miss `FR-CACHE-039` names, per `FR-CACHE-033`.
+    folder: Arc<OwnedFd>,
 }
 
 impl Shelf {
@@ -380,18 +402,29 @@ impl Shelf {
     /// (`FR-CACHE-033`): absent — removed since the listing was read, which
     /// `FR-CACHE-039` names — a symbolic link, unreadable, or not UTF-8.
     pub(crate) fn read(&self) -> Option<String> {
-        at::read(&self.anchor, &self.file, None)
+        // PERF: walking `.tpl/.cache/<entry>/<collection>` again for each
+        // member cost four `openat` per file, 72 ms of a cached
+        // `render go/schema` over 2 000 tables (rmp `#347`, `BENCHMARKS.md`).
+        at::read_in(&self.folder, &self.file, None)
     }
 
-    /// The table `bytes` hold, or [`None`] on a miss.
+    /// The table `bytes` hold, its two deferred parts kept as the bytes of
+    /// their members, or [`None`] on a miss (`FR-CACHE-038`).
     ///
-    /// The decode is [`Loaded::document`]'s, so a file is refused here exactly
-    /// where an up-front read would have refused it. A file that decodes and
-    /// names another table than its path is refused as well: the collection was
-    /// ordered and counted by the path, so serving it would present a member
-    /// out of the order and under a name the rest of the render has already
-    /// seen. No write of this binary produces one.
-    pub(crate) fn table<'a>(&self, bytes: &'a str) -> Option<TableDocument<'a>> {
+    /// The decode is [`Loaded::document`]'s for every other part, so a file is
+    /// refused here exactly where an up-front read would have refused it for a
+    /// fault outside the two parts. The two parts are each read as a sequence,
+    /// and each member as one JSON value whose bytes are kept, so a file whose
+    /// syntax does not delimit them is refused here as well: the part has no
+    /// bytes to keep until it is reached. [`decode_outgoing`] and
+    /// [`decode_incoming`] validate the members when the template reaches the
+    /// part, as the up-front read validates them.
+    ///
+    /// A file that decodes and names another table than its path is refused
+    /// as well: the collection was ordered and counted by the path, so serving
+    /// it would present a member out of the order and under a name the rest of
+    /// the render has already seen. No write of this binary produces one.
+    pub(crate) fn table<'a>(&self, bytes: &'a str) -> Option<ShelvedTable<'a>> {
         self.decoded(bytes)
     }
 
@@ -422,6 +455,95 @@ impl Named for Shelf {
     fn name(&self) -> &str {
         &self.name
     }
+}
+
+/// A table as a render served from the cache decodes it (`FR-CACHE-038`):
+/// every part decoded but `foreign_keys` and `referenced_by`, whose members are
+/// kept as the bytes the file holds until the template first reaches the part.
+///
+/// The two parts are the ones that embed the tables one hop away, per
+/// `FR-CTX-006`, so decoding them for every table a render reaches decoded
+/// about four times the columns of the database. *Rejected: deferring every
+/// part.* `FR-CACHE-038` defers these two and no other.
+pub(crate) type ShelvedTable<'a> = TableShape<'a, Deferred<'a>, Deferred<'a>>;
+
+/// One member of a deferred part, as the bytes of its JSON value
+/// (`FR-CACHE-038`).
+///
+/// It borrows the file's bytes where they outlive the render, and is copied
+/// out of them otherwise ([`ToStatic`](crate::model::ToStatic)).
+#[derive(Debug, Clone)]
+pub(crate) struct Deferred<'a>(Cow<'a, str>);
+
+impl<'de: 'a, 'a> Deserialize<'de> for Deferred<'a> {
+    /// Reads one JSON value and keeps its bytes. The syntax of the value is
+    /// checked, so the member is delimited; its content is not decoded.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        <&'de serde_json::value::RawValue>::deserialize(deserializer)
+            .map(|raw| Self(Cow::Borrowed(raw.get())))
+    }
+}
+
+/// A copy that borrows nothing.
+impl crate::model::ToStatic for Deferred<'_> {
+    type Static = Deferred<'static>;
+
+    fn to_static(&self) -> Self::Static {
+        Deferred(self.0.to_static())
+    }
+}
+
+/// The outgoing foreign keys a table's deferred `foreign_keys` holds, or
+/// [`None`] where any member fails the validation an up-front read applies to
+/// it, which makes the table's file a miss (`FR-CACHE-038`, `FR-CACHE-033`).
+pub(crate) fn decode_outgoing(members: &[Deferred<'static>]) -> Option<Vec<OutgoingKey<'static>>> {
+    decode_part(
+        members,
+        |bytes| serde_json::from_str::<OutgoingKey<'static>>(bytes).ok(),
+        |bytes| {
+            serde_json::from_str::<OutgoingKey<'_>>(bytes)
+                .ok()
+                .map(|key| key.to_static())
+        },
+    )
+}
+
+/// The incoming foreign keys a table's deferred `referenced_by` holds, on the
+/// terms of [`decode_outgoing`].
+pub(crate) fn decode_incoming(members: &[Deferred<'static>]) -> Option<Vec<IncomingKey<'static>>> {
+    decode_part(
+        members,
+        |bytes| serde_json::from_str::<IncomingKey<'static>>(bytes).ok(),
+        |bytes| {
+            serde_json::from_str::<IncomingKey<'_>>(bytes)
+                .ok()
+                .map(|key| key.to_static())
+        },
+    )
+}
+
+/// Decodes every member of one deferred part, in order, borrowing the bytes
+/// where they are the file's and outlive the render, and copying otherwise.
+///
+/// A sequence decoded up front decodes each member with the member's own type,
+/// in order, and fails where any fails; this is that decode, applied to the
+/// members one by one. Each member's bytes are exactly one JSON value, so the
+/// decode of each sees what the up-front decode saw at that position.
+fn decode_part<S>(
+    members: &[Deferred<'static>],
+    borrowed: impl Fn(&'static str) -> Option<S>,
+    copied: impl Fn(&str) -> Option<S>,
+) -> Option<Vec<S>> {
+    let mut decoded = Vec::with_capacity(members.len());
+
+    for member in members {
+        decoded.push(match &member.0 {
+            Cow::Borrowed(bytes) => borrowed(bytes)?,
+            Cow::Owned(bytes) => copied(bytes)?,
+        });
+    }
+
+    Some(decoded)
 }
 
 impl Loaded {
@@ -540,6 +662,7 @@ impl Summarised {
             name: metadata.name,
             charset: metadata.charset,
             collation: metadata.collation,
+            provider: metadata.provider,
             server: metadata.server,
             tables,
             views,
@@ -564,8 +687,10 @@ pub(crate) struct Summary<'a> {
     pub(crate) name: Cow<'a, str>,
     /// The schema's default character set.
     pub(crate) charset: Cow<'a, str>,
-    /// The schema's default collation.
-    pub(crate) collation: Cow<'a, str>,
+    /// The schema's default collation, `null` for a `sqlite` read.
+    pub(crate) collation: Option<Cow<'a, str>>,
+    /// The provider the read was made through (`FR-CTX-043`, `FR-SCH-031`).
+    pub(crate) provider: Provider,
     /// The server the read was made against.
     pub(crate) server: Server<'a>,
     /// How many tables the database holds.
@@ -582,7 +707,8 @@ impl<'a> Summary<'a> {
         Self {
             name: Cow::Borrowed(&document.name),
             charset: Cow::Borrowed(&document.charset),
-            collation: Cow::Borrowed(&document.collation),
+            collation: document.collation.as_deref().map(Cow::Borrowed),
+            provider: document.provider,
             server: document.server.clone(),
             tables: document.tables.len(),
             views: document.views.len(),
@@ -999,6 +1125,7 @@ impl Cache {
             name: document.name.clone(),
             charset: document.charset.clone(),
             collation: document.collation.clone(),
+            provider: document.provider,
             server: document.server.clone(),
         };
         let mut buffers = Buffers::default();
@@ -1500,21 +1627,22 @@ fn members(layout: &Layout, directory: &Path) -> Option<Vec<String>> {
 fn shelve(layout: &Layout, collection: Collection) -> Option<Vec<Shelf>> {
     let directory = layout.collection(collection);
     let descriptor = at::directory(layout.tpl(), &directory).ok()?;
-    let anchor: Arc<Path> = Arc::from(layout.tpl());
-    let mut held = Vec::new();
+    let listed = at::list(&directory, &descriptor)?;
+    let folder = Arc::new(descriptor);
+    let mut held = Vec::with_capacity(listed.len());
 
-    for (name, _) in at::list(&directory, &descriptor)? {
-        let file = directory.join(&name);
+    for (file, _) in listed {
+        let path = directory.join(&file);
 
-        if paths::is_object(&file) {
-            let (kind, name) = paths::member_of(collection, &file)?;
+        if paths::is_object(&path) {
+            let (kind, name) = paths::member_of(collection, &path)?;
             let name = name.to_owned();
 
             held.push(Shelf {
                 name,
                 kind,
                 file,
-                anchor: Arc::clone(&anchor),
+                folder: Arc::clone(&folder),
             });
         }
     }
@@ -1792,8 +1920,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::{
-        Buffers, Cache, Collection, Layout, Listed, MODE, Meta, Summary, TEMPORARY, count, store,
-        store_object,
+        Buffers, Cache, Collection, Covered, Layout, Listed, MODE, Meta, Metadata, Provider,
+        Summary, TEMPORARY, count, read_metadata, store, store_object,
     };
     use crate::project::scratch::Scratch;
     use std::path::Path;
@@ -2539,5 +2667,46 @@ mod tests {
             .clean_one(Collection::Tables, cache.table_file("carrier"))
             .expect("removable");
         assert!(cache.shelved().is_none(), "a collection not recorded whole");
+    }
+
+    #[test]
+    fn fr_cdoc_018_a_record_without_a_provider_is_served_as_a_mariadb_record() {
+        // FR-CDOC-018: a record written before the sixty-fifth edition carries
+        // no provider and was written by a `mariadb` read.
+        let scratch = Scratch::new();
+        let layout = layout(&scratch);
+        std::fs::create_dir_all(layout.folder()).expect("the scratch directory is writable");
+        std::fs::write(
+            layout.database(),
+            r#"{"name":"freight","charset":"utf8mb4","collation":"utf8mb4_unicode_520_ci","server":{"version":"11.4.13-MariaDB","series":"11.4","standing":"supported"}}"#,
+        )
+        .expect("writable");
+        let held = read_metadata(&layout).expect("the record is readable");
+        let metadata: Metadata<'_> = serde_json::from_str(&held).expect("the record decodes");
+
+        assert_eq!(metadata.provider, Provider::Mariadb);
+    }
+
+    #[test]
+    fn fr_cdoc_018_a_served_read_carries_the_provider_of_the_read_that_wrote_it() {
+        // FR-CDOC-018 and FR-CACHE-029: the record names the provider of the
+        // read that filled it, whatever the entry's provider is now — the
+        // store is keyed by entry name alone, so a changed entry is served the
+        // record as it was written.
+        let scratch = Scratch::new();
+        let tpl = scratch.directory(".tpl");
+        let mut database = crate::model::document::fixture::whole();
+        database.provider = Provider::Sqlite;
+        database.collation = None;
+        let document = crate::model::document::context(&database).expect("the document builds");
+
+        Cache::of(&tpl, "ledger").write(&document, Covered::Everything);
+
+        let served = Cache::of(&tpl, "ledger")
+            .summary()
+            .expect("the record is there");
+        let summary = served.summary().expect("the record decodes");
+        assert_eq!(summary.provider, Provider::Sqlite);
+        assert_eq!(summary.collation, None);
     }
 }

@@ -323,12 +323,15 @@ impl Binding<'_> {
             Self::Table(name) => {
                 let (index, _) =
                     named::member(shelved.tables(), CatalogueObjectKind::Table, name, at)?;
-                let Some(table) = store.table(index) else {
+                // FR-CACHE-038: the bound table is reached whole before the
+                // render starts, its two deferred parts with it, so a fault in
+                // either is decided here, as a fault in the file is.
+                let Some(table) = store.table(index).and_then(|reached| reached.whole()) else {
                     return Ok(Chosen::Missed);
                 };
                 completeness::of_table(&table)?;
 
-                Chosen::Bound(Some((TABLE, Value::from_serialize(&*table))))
+                Chosen::Bound(Some((TABLE, Value::from_serialize(&table))))
             }
             Self::View(name) => {
                 let (index, _) =
@@ -621,6 +624,7 @@ fn from_catalogue<W: std::io::Write>(
             Sought::Catalogue {
                 entry,
                 database: &served.name,
+                provider: served.provider,
             },
             now,
         )
@@ -682,6 +686,7 @@ fn attempt<W: std::io::Write>(
     let at = Sought::Catalogue {
         entry,
         database: store.name(),
+        provider: store.provider(),
     };
     let bound = match assembly.binding.bind_shelved(store, at)? {
         Chosen::Bound(bound) => bound,
@@ -1033,7 +1038,7 @@ fn bounded<T>(
     render: impl FnOnce() -> Result<T, Error>,
 ) -> Result<T, Error> {
     crate::error::ensure_invariant(
-        crate::mariadb::quiescent(),
+        crate::provider::quiescent(),
         "no connection is open and no runtime of the database driver is alive while a template \
          is evaluated",
     )?;
@@ -1954,6 +1959,7 @@ mod tests {
             let sought = Sought::Catalogue {
                 entry: ENTRY,
                 database: &up_front.name,
+                provider: crate::model::database::Provider::Mariadb,
             };
             let context = super::context::assemble(
                 Served::borrowed(&up_front),

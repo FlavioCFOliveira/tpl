@@ -256,7 +256,7 @@ A method in an inherent or trait `impl`.
 
 | Property | Type | Meaning |
 |---|---|---|
-| **`key`** | string | **Identity.** `Type::method`, fully qualified on the type. |
+| **`key`** | string | **Identity.** `Type::method`, fully qualified on the type. Where more than one `impl` block of one type path declares a method of that name, each such method is keyed by its qualified path instead: `<Type<Args> as Trait<Args>>::method` for a trait `impl`, and `<Type<Args>>::method` for an inherent `impl` unless it is the only inherent one, which keeps `Type::method`. `Type` and `Trait` are fully qualified keys, and `<Args>` are the generic arguments the `impl` header writes, lifetimes removed and whitespace normalised. |
 | `name` | string | The bare name. |
 | `owner` | string | `key` of the owning `Type`. |
 | `traitKey` | string | `key` of the `Trait` being implemented. **Absent** for an inherent `impl`. |

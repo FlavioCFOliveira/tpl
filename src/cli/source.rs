@@ -17,8 +17,8 @@
 //! |---|---|---|
 //! | 2 | Project discovery and the two trust checks | `FR-PROJ-004` … `FR-PROJ-011` |
 //! | 3 | `.tpl/.cfg` is read and validated | `FR-CONF-001` … `FR-CONF-022` |
-//! | 5 | The entry is selected and resolved, and the two keys a read needs are checked | `FR-GLOB-004` … `FR-GLOB-008`, `FR-CONF-040`, `FR-CONF-041` |
-//! | 6 | The cache is consulted, and the server read only where it misses | `FR-CACHE-006`, `FR-CACHE-007` |
+//! | 5 | The entry is selected and checked as written, and the two keys a read needs are checked | `FR-GLOB-004` … `FR-GLOB-008`, `FR-CONF-040`, `FR-CONF-041` |
+//! | 6 | The cache is consulted, and only where it misses is the entry resolved for a connection and the server read | `FR-CACHE-006`, `FR-CACHE-007`, `FR-CONF-056` |
 //!
 //! **Step 4 is missing from that table because it is not this module's.** It is
 //! template resolution, which `FR-ERR-006` evaluates immediately after `.tpl/.cfg`
@@ -31,6 +31,15 @@
 //! composing either refusal where the connection is assembled, because the `78`
 //! row of `FR-ERR-034` obliges the `cause` to name the file and the key, and
 //! neither is a thing that layer holds.
+//!
+//! **Step 5 expands nothing.** `FR-CONF-056` places the `${VAR}` expansion of
+//! `FR-CONF-015` and the `password_command` of `FR-CONF-024` on the connection
+//! branch of step 6: [`Reader::open_from`] holds the entry as written, and
+//! [`Reader::fetch`] — which only an invocation that opens a connection
+//! reaches — resolves it for one. A hit therefore reads no variable and starts
+//! no child, and the two keys are checked twice: as written at step 5, and
+//! after expansion in [`Reader::fetch`], for a reference that expands to the
+//! empty string (`FR-CONF-050`).
 //!
 //! # One read shape, and why
 //!
@@ -79,14 +88,15 @@ use crate::cache::paths::Collection;
 use crate::cache::{Cache, Covered, Listed, Look, Summary};
 use crate::deadline::{Clock, Deadlines, Seconds};
 use crate::error::{Error, KeyAbsence};
-use crate::mariadb::{self, Target, catalogue};
+use crate::mariadb::Target;
 use crate::model::document::{self, DatabaseDocument};
 use crate::output::Source;
 use crate::project::Project;
 use crate::project::config::Configuration;
 use crate::project::config::expand;
 use crate::project::config::keys::{EntryKey, is_blank};
-use crate::project::settings::{self, Settings};
+use crate::project::settings::{self, Pending, Prepared, Resolved, Settings};
+use crate::provider::{self, Read};
 
 use super::Ending;
 use super::globals::Globals;
@@ -232,8 +242,9 @@ pub(super) struct Opened {
     /// the file the `78` row of `FR-ERR-034` obliges.
     configuration: Configuration,
 
-    /// Everything the connection will need, already resolved.
-    settings: Settings,
+    /// The entry as the file writes it, by provider; [`Reader::fetch`]
+    /// resolves it for a connection (`FR-CONF-056`).
+    settings: Prepared,
 }
 
 impl Opened {
@@ -311,14 +322,13 @@ impl<'a> Reader<'a> {
     ///
     /// It is separate from [`Reader::open`] because `FR-ERR-006` evaluates
     /// template resolution at step 4, between the configuration and the entry,
-    /// and `tpl render` is the one command that reaches both sides of it. The
-    /// entry is where the `${VAR}` expansion of `FR-CONF-015` happens and where
-    /// the `password_command` child of `FR-CONF-024` runs, so an invocation
-    /// whose template does not resolve must never arrive here.
+    /// and `tpl render` is the one command that reaches both sides of it. No
+    /// field is expanded and no `password_command` run here: `FR-CONF-056`
+    /// leaves both to [`Reader::fetch`].
     ///
     /// # Errors
     ///
-    /// Returns what [`settings::resolve`] returns,
+    /// Returns what [`settings::prepare`] returns,
     /// [`Error::EntryKeyMissing`] where the entry names no host or no
     /// database, per `FR-CONF-040` and `FR-CONF-041`, and
     /// [`Error::CachePathLinked`] where `.tpl/.cache`, the entry's folder or
@@ -329,14 +339,19 @@ impl<'a> Reader<'a> {
         configuration: Configuration,
         touched: &[Collection],
     ) -> Result<Opened, Error> {
-        let settings = settings::resolve(
-            &configuration,
-            self.requested,
-            &self.clock(),
-            &expand::environment,
-        )?;
+        let settings = settings::prepare(&configuration, self.requested)?;
 
-        connection_keys(&settings, &configuration)?;
+        // FR-CONF-040 and FR-CONF-041 reach the two server arms alone: a
+        // `sqlite` entry carries neither key (FR-CONF-052), and a `mysql` entry
+        // must name both as a `mariadb` entry must (FR-MYSQL-020). Here they
+        // see the values as written; an expansion to the empty string is
+        // refused by `fetch`, on the connection branch (FR-CONF-050).
+        match &settings {
+            Prepared::Mariadb(server) | Prepared::Mysql(server) => {
+                written_keys(server, &configuration)?;
+            }
+            Prepared::Sqlite(_) => {}
+        }
 
         let cache = Cache::of(project.root(), settings.entry());
 
@@ -354,8 +369,14 @@ impl<'a> Reader<'a> {
         })
     }
 
-    /// Opens the one connection of `NFR-PERF-004`, reads the whole catalogue,
-    /// and closes it.
+    /// Resolves the entry for a connection, opens the one connection of
+    /// `NFR-PERF-004`, reads the whole catalogue, and closes it.
+    ///
+    /// The `${VAR}` expansion of `FR-CONF-015` and the `password_command` of
+    /// `FR-CONF-024` happen here and nowhere earlier, before the first
+    /// connection phase (`FR-CONF-056`): every caller is an invocation that
+    /// opens a connection — a miss, `--direct`, the read a render returns to,
+    /// and `tpl cache load`.
     ///
     /// The session is closed as soon as the read ends, which is what lets the
     /// answer outlive it: a [`catalogue::Catalogue`] owns its rows. The close
@@ -366,12 +387,24 @@ impl<'a> Reader<'a> {
     ///
     /// # Errors
     ///
-    /// Returns [`Error::EntryKeyMissing`] where the resolved settings name no
-    /// host or no database — which [`Reader::open`] has already refused, so
-    /// each arm is the type's own totality rather than a reachable condition —
-    /// and what [`mariadb::open`] and [`catalogue::read`] return.
-    pub(super) fn fetch(&self, opened: &Opened) -> Result<catalogue::Catalogue, Error> {
-        let settings = &opened.settings;
+    /// Returns what [`settings::Prepared::connect`] returns;
+    /// [`Error::EntryKeyMissing`] where a host or a database expands to the
+    /// empty string (`FR-CONF-050`); and what [`provider::read`] returns for the
+    /// entry's provider.
+    pub(super) fn fetch(&self, opened: &Opened) -> Result<Read, Error> {
+        let clock = self.clock();
+        let resolved =
+            opened
+                .settings
+                .connect(&opened.configuration, &clock, &expand::environment)?;
+        let settings = match &resolved {
+            Resolved::Mariadb(settings) | Resolved::Mysql(settings) => settings,
+            Resolved::Sqlite(file) => {
+                return provider::read(provider::Source::File(file), &clock);
+            }
+        };
+        // FR-CONF-050: a host or a database that expands to the empty string.
+        connection_keys(settings, &opened.configuration)?;
         let file = opened.configuration.file();
         let missing = |key: &str, flag, placeholder| Error::EntryKeyMissing {
             entry: settings.entry().to_owned(),
@@ -390,19 +423,15 @@ impl<'a> Reader<'a> {
             return Err(missing("database", SCHEMA_FLAG, SCHEMA_PLACEHOLDER));
         };
 
-        let clock = self.clock();
-        let mut session = mariadb::open(&target, &clock)?;
-        let read = catalogue::read(
-            &mut session,
-            &target,
-            &clock,
-            database,
-            &catalogue::Scope::Everything,
-        );
+        // FR-CONF-051: the provider decides the contract; FR-MYSQL-020 has
+        // already resolved and composed a `mysql` entry as a `mariadb` one.
+        let source = if matches!(resolved, Resolved::Mysql(_)) {
+            provider::Source::Mysql { target, database }
+        } else {
+            provider::Source::Mariadb { target, database }
+        };
 
-        session.close();
-
-        read
+        provider::read(source, &clock)
     }
 
     /// Reads the catalogue and hands the `database` object to `present`.
@@ -583,7 +612,7 @@ impl<'a> Reader<'a> {
     where
         P: FnOnce(Served<'_, '_>, Source, &str) -> Result<T, Error>,
     {
-        let catalogue = self.fetch(opened)?;
+        let read = self.fetch(opened)?;
         let hand = |served: Served<'_, '_>| {
             if !self.no_cache {
                 opened.cache.write(&served, Covered::Everything);
@@ -597,12 +626,12 @@ impl<'a> Reader<'a> {
         // freed or copied (this module's documentation).
         match self.ending {
             Ending::Process => {
-                let model = leak(leak(catalogue).model()?);
+                let model = leak(leak(read).model()?);
 
                 hand(Served::leaked(leak(document::context(model)?)))
             }
             Ending::Caller => {
-                let model = catalogue.model()?;
+                let model = read.model()?;
 
                 hand(Served::borrowed(&document::context(&model)?))
             }
@@ -668,7 +697,45 @@ pub(super) fn connection_keys(
     settings: &Settings,
     configuration: &Configuration,
 ) -> Result<(), Error> {
-    let raw = configuration.entry(settings.entry());
+    keys_of(
+        settings.entry(),
+        settings.by_dsn(),
+        settings.host(),
+        settings.database(),
+        configuration,
+    )
+}
+
+/// [`connection_keys`] over the entry as the file writes it, at step 5 of
+/// `FR-ERR-006`, before any expansion (`FR-CONF-056`).
+///
+/// An absent key, and one empty as written, are refused here, on a hit as on a
+/// miss; a value that carries a reference is not empty as written, and waits
+/// for its expansion.
+///
+/// # Errors
+///
+/// Returns [`Error::EntryKeyMissing`] naming whichever of the two keys the
+/// entry does not carry.
+fn written_keys(pending: &Pending, configuration: &Configuration) -> Result<(), Error> {
+    keys_of(
+        pending.entry(),
+        pending.by_dsn(),
+        pending.host(),
+        pending.database(),
+        configuration,
+    )
+}
+
+/// The refusal [`connection_keys`] and [`written_keys`] share.
+fn keys_of(
+    entry: &str,
+    by_dsn: bool,
+    host: Option<&str>,
+    database: Option<&str>,
+    configuration: &Configuration,
+) -> Result<(), Error> {
+    let raw = configuration.entry(entry);
     let missing = |key: EntryKey, value: Option<&str>| {
         // FR-CONF-050: an empty value, as written or after expansion, is an
         // absent key, and the cause says which of the three it is.
@@ -683,15 +750,15 @@ pub(super) fn connection_keys(
             (Some(_), _) => KeyAbsence::Empty,
         };
         // FR-ERR-045: an entry defined by dsn is completed inside its dsn.
-        let (flag, placeholder) = match (settings.by_dsn(), key) {
+        let (flag, placeholder) = match (by_dsn, key) {
             (true, _) => (DSN_FLAG, DSN_PLACEHOLDER),
             (false, EntryKey::Host) => (HOST_FLAG, HOST_PLACEHOLDER),
             (false, _) => (SCHEMA_FLAG, SCHEMA_PLACEHOLDER),
         };
 
         Error::EntryKeyMissing {
-            entry: settings.entry().to_owned(),
-            key: format!("database.{}.{key}", settings.entry()),
+            entry: entry.to_owned(),
+            key: format!("database.{entry}.{key}"),
             file: configuration.file().to_owned(),
             flag,
             placeholder,
@@ -699,12 +766,12 @@ pub(super) fn connection_keys(
         }
     };
 
-    match settings.host() {
+    match host {
         None => return Err(missing(EntryKey::Host, None)),
         Some(host) if is_blank(host) => return Err(missing(EntryKey::Host, Some(host))),
         Some(_) => {}
     }
-    match settings.database() {
+    match database {
         None => Err(missing(EntryKey::Database, None)),
         Some(database) if is_blank(database) => Err(missing(EntryKey::Database, Some(database))),
         Some(_) => Ok(()),

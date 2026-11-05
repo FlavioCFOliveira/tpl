@@ -1,10 +1,12 @@
-# `python-data-layer` — a Python data layer, built from three schemas through the command line
+# `python-data-layer` — a Python data layer, built from five reads through the command line
 
 This is the Python member of the four worked examples `FR-EX-001` requires. It
-reads `sakila`, `world` and `freight` from one MariaDB server and renders one
-Python subpackage per schema: a dataclass row, its primary key, the columns an
+reads `sakila`, `world` and `freight` from one MariaDB server, `freight` from
+one MySQL server and the SQLite fixture's main database, and renders one
+Python subpackage per read: a dataclass row, its primary key, the columns an
 ordering may name, a `typing.Protocol` and a PyMySQL implementation of that
-protocol, for every one of the 36 tables.
+protocol, for every one of the 82
+tables; a table with no primary key gets its row types alone.
 
 Its acceptance signal is not that `tpl` exited `0`. It is that
 `python -m compileall` and `mypy --strict` accept every file it rendered, per
@@ -19,13 +21,13 @@ python3 examples/python-data-layer/run.py
 
 | Path | Rendered from | Count |
 |---|---|---|
-| `datalayer/<schema>/_core.py` | `python/core` | 3, one per schema |
-| `datalayer/<schema>/__init__.py` | `python/package` | 3 |
-| `datalayer/<schema>/<table>.py` | `python/dataclass` | 36, one per table |
-| `datalayer/<schema>/<table>_repository.py` | `python/repository` | 36 |
-| `datalayer/<schema>/<table>_pymysql.py` | `python/pymysql` | 36 |
+| `datalayer/<entry>/_core.py` | `python/core` | 5, one per read |
+| `datalayer/<entry>/__init__.py` | `python/package` | 5 |
+| `datalayer/<entry>/<table>.py` | `python/dataclass` | 82, one per table |
+| `datalayer/<entry>/<table>_repository.py` | `python/repository` | 80, one per table with a primary key |
+| `datalayer/<entry>/<table>_pymysql.py` | `python/pymysql` | 80, one per table with a primary key |
 
-114 files and 26,132 lines, from 114 invocations of `tpl render`. One file is one
+252 files and 56,739 lines, from 252 invocations of `tpl render`, and five more of `python/_modules`, which writes no file and names the files of each read. One file is one
 invocation, because `tpl render` writes to standard output and nowhere else —
 `FR-RND-028`, and `FR-EX-005` is the consequence.
 
@@ -148,8 +150,8 @@ begins from nothing: `tpl init` writes a starter macro for Rust, per
 exists for.
 
 It is obliged to cover every value of `data_type` the model reports for a column
-of the three schemas, per `FR-EX-008`. That is **39 values over 362 columns**,
-and all 39 are branched on. Nothing falls through: the final branch calls
+of every read, per `FR-EX-008`. That is **44 values over 755 columns**, and all
+44 are branched on. Nothing falls through: the final branch calls
 `fail()`, so a type the macro has never met ends the render with `65` and names
 the column. Removing the `uuid` branch and re-rendering `freight.customer`
 produces exactly that —
@@ -209,7 +211,12 @@ from a driver's documentation.
 | `timestamp` | `datetime.datetime` | |
 | `time` | `datetime.timedelta` | • |
 
-**25 of the 39 are carried by `freight` alone**, which is why `FR-EX-006` puts a
+The five values the MySQL and the SQLite reads add — `json` and `geomcollection`
+from `FR-MYSQL-028`, and the affinities `integer`, `real` and `numeric` from
+`FR-LITE-026` — are mapped to `str`, `bytes`, `int`, `float`, `decimal.Decimal` in that order, and are not rows of the table above: the compile gate
+accepted them, and no value of them was read back through the driver.
+
+**25 of the 39 MariaDB values are carried by `freight` alone**, which is why `FR-EX-006` puts a
 third schema beside the two published ones. A mapping written against `sakila`
 and `world` would have been complete over 14 types and would never have met a
 spatial column, a `BIT`, an `INET6`, a `UUID`, a `TIME`, a generated column or a
@@ -322,7 +329,7 @@ Three of those rows are Python-specific:
   snake case is one of Python's 35 hard keywords takes a trailing underscore,
   which is the convention PEP 8 states for exactly this case. The soft keywords
   `match`, `case`, `type` and `_` are legal identifiers and are left alone. No
-  column of these three schemas needs the escape, so it is a guard rather than a
+  column of the five reads needs the escape, so it is a guard rather than a
   demonstration, and the compile gate is what would report its absence.
 
 An enum member name is upper case and can therefore never be a Python keyword —
@@ -373,7 +380,7 @@ because the remedy differs:
   answered `--version`.
 - **`mypy` cannot resolve PyMySQL.** A one-line module importing PyMySQL is
   checked first, so an incomplete environment is reported as an incomplete
-  environment rather than as 36 defects in the rendered code. PyMySQL ships no
+  environment rather than as one defect per rendered implementation module. PyMySQL ships no
   `py.typed`, so its stubs are a package of their own.
 
 Neither tool writes into the tree. The bytecode cache goes to a temporary
@@ -386,7 +393,7 @@ rerun cannot read anything the last run left behind.
 | | |
 |---|---|
 | The binary | `cargo build --release` |
-| The server | `./scripts/mariadb/up.sh`, then `./scripts/mariadb/seed-datasets.sh 12.3` |
+| The servers | `./scripts/mariadb/up.sh`, then `./scripts/mariadb/seed-datasets.sh 12.3`; and `./scripts/mysql/up.sh 9.7`. The SQLite database is built by the driver |
 | The password | `export FIXTURE_PW=tpl-root` |
 | Python | 3.11 or newer, which is the floor the gate pins. Verified on CPython 3.14.7 |
 
@@ -407,7 +414,7 @@ three above are needed by the *rendered* package and by the gate that reads it,
 and `run.py` prefers `python -m mypy` over a `mypy` on `PATH` precisely so that
 the `mypy` it runs is the one sharing an environment with the stubs.
 
-The server, the three schemas and the entries are the driver's, not this
+The servers, the SQLite database, the reads and the entries are the driver's, not this
 example's: [`_driver/README.md`](../_driver/README.md) documents them, and
 `FR-EX-007` is why all four examples read them the same way.
 
@@ -441,13 +448,15 @@ because the compile gate is what would report it:
   That is what `FR-ENV-033`'s `pascal` does, and its own *accepted cost* clause
   records it; buying it back would need an initialism list, which is a second
   opinion to maintain and another way for two columns to collide.
-- **A module's file name is the table's name unchanged.** `run.py` writes
-  `datalayer/<schema>/<table>.py` while the import statement names the table in
-  snake case, so a table whose name is not already snake case would render an
-  import with no module behind it. All 36 are, and `mypy` is what would report
-  the absence.
-- **A table with no primary key is refused.** All 36 have one. A table without
-  one ends the render with `65` and says why, because read, update and delete
+- **A module's file is named by the macro that names the import.** `run.py`
+  renders `python/_modules` once per read and writes each table's files under
+  the stem it gives, so a file and the import that names it are derived by one
+  macro: SQLite's `customs entry` is written as `customs_entry.py`, the module
+  its package imports.
+- **A table with no primary key has no repository.** Two of the 82 have none,
+  MySQL's `currency` and `edi_message_staging`: each gets its row types alone,
+  and the repository templates, given one, end the render with `65` and say why,
+  because read, update and delete
   would have no key to address a row by. So is a table whose every column is
   generated or part of the key, which would leave an `UPDATE` with an empty
   `SET`.

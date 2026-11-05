@@ -98,13 +98,13 @@ use std::sync::{Arc, OnceLock};
 use minijinja::value::{Enumerator, Object, ObjectRepr};
 use minijinja::{ErrorKind, Value};
 
-use crate::cache::Shelved;
+use crate::cache::{self, Shelved, ShelvedTable};
 use crate::cli::Ending;
 use crate::cli::source::Served;
 use crate::model::ToStatic;
 use crate::model::document::DatabaseDocument;
 use crate::model::document::order::Named as _;
-use crate::model::document::shape::TableDocument;
+use crate::model::document::shape::{IncomingKey, OutgoingKey, TableDocument, TableShape};
 use crate::model::routine::Routine;
 use crate::model::view::View;
 use crate::render::Query;
@@ -112,10 +112,11 @@ use crate::render::Query;
 /// The keys of the `database` object, in the declaration order of
 /// [`DatabaseDocument`], which is the order `FR-CTX-036` writes them in and the
 /// order a template iterates them in.
-const DATABASE_KEYS: [&str; 7] = [
+const DATABASE_KEYS: [&str; 8] = [
     "name",
     "charset",
     "collation",
+    "provider",
     "server",
     "tables",
     "views",
@@ -143,6 +144,10 @@ const TABLE_KEYS: [&str; 13] = [
 
 /// The position of `restricted` in [`TABLE_KEYS`].
 const RESTRICTED: usize = 12;
+
+/// The position of `foreign_keys` in [`TABLE_KEYS`]; `referenced_by` follows
+/// it.
+const FOREIGN_KEYS: usize = 8;
 
 /// What a member that is a miss reads as, once [`Store`] has recorded it.
 ///
@@ -250,7 +255,7 @@ pub(in crate::cli::render) struct Store {
     /// What was read before the render started.
     shelved: Shelved,
     /// Each table's read, by position in the listing.
-    tables: Box<[OnceLock<Option<Arc<TableDocument<'static>>>>]>,
+    tables: Box<[OnceLock<Option<Arc<Reached>>>]>,
     /// Each view's read.
     views: Box<[OnceLock<Option<Arc<View<'static>>>>]>,
     /// Each routine's read.
@@ -288,6 +293,11 @@ impl Store {
         &self.head.name
     }
 
+    /// The provider of the read the cache files record (`FR-CDOC-018`).
+    pub(in crate::cli::render) fn provider(&self) -> crate::model::database::Provider {
+        self.head.provider
+    }
+
     /// What was read before the render started.
     pub(in crate::cli::render) const fn shelved(&self) -> &Shelved {
         &self.shelved
@@ -295,10 +305,10 @@ impl Store {
 
     /// The table at `index` of the listing, read on the first call, or
     /// [`None`] where its file is a miss (`FR-CACHE-033`).
-    pub(in crate::cli::render) fn table(
-        &self,
-        index: usize,
-    ) -> Option<Arc<TableDocument<'static>>> {
+    ///
+    /// Its `foreign_keys` and `referenced_by` are not decoded here: each is
+    /// decoded when first reached, through [`Reached`] (`FR-CACHE-038`).
+    pub(in crate::cli::render) fn table(&self, index: usize) -> Option<Arc<Reached>> {
         let shelf = self.shelved.tables().get(index)?;
 
         self.tables
@@ -316,6 +326,7 @@ impl Store {
                     |bytes| shelf.table(bytes),
                     |bytes| shelf.table(bytes).map(|table| table.to_static()),
                 )
+                .map(Reached::new)
                 .map(Arc::new)
             })
             .clone()
@@ -404,6 +415,75 @@ fn slots<T>(len: usize) -> Box<[OnceLock<T>]> {
     (0..len).map(|_| OnceLock::new()).collect()
 }
 
+/// A table read from its cache file, with its two deferred parts decoded the
+/// first time each is reached (`FR-CACHE-038`).
+///
+/// A part is decoded once: the slot keeps what the decode answered, so a part
+/// reached twice is the same value both times, and a part that failed is a
+/// miss at every reach. A part never reached is never decoded, so a fault in
+/// it is no miss of this invocation.
+pub(in crate::cli::render) struct Reached {
+    /// Every part but the two deferred ones, decoded.
+    table: ShelvedTable<'static>,
+    /// `foreign_keys`, once reached; [`None`] inside where it failed.
+    foreign_keys: OnceLock<Option<Vec<OutgoingKey<'static>>>>,
+    /// `referenced_by`, once reached; [`None`] inside where it failed.
+    referenced_by: OnceLock<Option<Vec<IncomingKey<'static>>>>,
+}
+
+impl Reached {
+    /// The table `table` holds, neither deferred part reached.
+    const fn new(table: ShelvedTable<'static>) -> Self {
+        Self {
+            table,
+            foreign_keys: OnceLock::new(),
+            referenced_by: OnceLock::new(),
+        }
+    }
+
+    /// The outgoing foreign keys, decoded on the first call, or [`None`] where
+    /// the part fails the validation of `FR-CACHE-033`.
+    fn foreign_keys(&self) -> Option<&[OutgoingKey<'static>]> {
+        self.foreign_keys
+            .get_or_init(|| cache::decode_outgoing(&self.table.foreign_keys))
+            .as_deref()
+    }
+
+    /// The incoming foreign keys, on the terms of [`Reached::foreign_keys`].
+    fn referenced_by(&self) -> Option<&[IncomingKey<'static>]> {
+        self.referenced_by
+            .get_or_init(|| cache::decode_incoming(&self.table.referenced_by))
+            .as_deref()
+    }
+
+    /// The whole table, both deferred parts reached, or [`None`] where either
+    /// fails.
+    ///
+    /// It is the bound object's value, which a render reaches whole before it
+    /// starts, so a fault in either part of the bound table is decided at the
+    /// cache-or-connection step, as `FR-CACHE-038` decides a miss on the bound
+    /// object's file.
+    pub(in crate::cli::render) fn whole(&self) -> Option<TableDocument<'static>> {
+        let table = &self.table;
+
+        Some(TableShape {
+            name: table.name.clone(),
+            table_type: table.table_type,
+            engine: table.engine.clone(),
+            collation: table.collation.clone(),
+            comment: table.comment.clone(),
+            columns: table.columns.clone(),
+            indexes: table.indexes.clone(),
+            primary_key: table.primary_key.clone(),
+            foreign_keys: self.foreign_keys()?.to_vec(),
+            referenced_by: self.referenced_by()?.to_vec(),
+            triggers: table.triggers.clone(),
+            check_constraints: table.check_constraints.clone(),
+            restricted: table.restricted.clone(),
+        })
+    }
+}
+
 /// The member `bytes` hold, with the lifetime the render needs.
 ///
 /// Under [`Ending::Process`] the bytes are leaked and the member borrows them
@@ -422,7 +502,7 @@ fn settled<S>(
     }
 }
 
-/// The `database` object: seven members, each converted when first read.
+/// The `database` object: eight members, each converted when first read.
 struct Database {
     /// Where the members are read from.
     contents: Contents,
@@ -440,9 +520,10 @@ impl Database {
             0 => Value::from_serialize(&head.name),
             1 => Value::from_serialize(&head.charset),
             2 => Value::from_serialize(&head.collation),
-            3 => Value::from_serialize(&head.server),
-            4 => Members::value(&self.contents, Collection::Tables),
-            5 => Members::value(&self.contents, Collection::Views),
+            3 => Value::from_serialize(head.provider),
+            4 => Value::from_serialize(&head.server),
+            5 => Members::value(&self.contents, Collection::Tables),
+            6 => Members::value(&self.contents, Collection::Views),
             _ => Members::value(&self.contents, Collection::Routines),
         }
     }
@@ -527,9 +608,10 @@ impl Members {
             // FR-CACHE-038: the member's file is read here, the first time the
             // template reaches it, and a miss is FR-CACHE-039's.
             Contents::Shelved(store) => match self.collection {
-                Collection::Tables => store
-                    .table(index)
-                    .map_or_else(|| store.miss(), |table| Table::value(Row::Alone(table))),
+                Collection::Tables => store.table(index).map_or_else(
+                    || store.miss(),
+                    |table| Table::value(Row::Shelved(table, Arc::clone(store))),
+                ),
                 Collection::Views => store
                     .view(index)
                     .map_or_else(|| store.miss(), |view| Value::from_serialize(&*view)),
@@ -609,23 +691,50 @@ impl fmt::Debug for Members {
 }
 
 /// Where one [`Table`] is read from.
-#[derive(Debug, Clone)]
 enum Row {
     /// The member at this position of a whole document's tables.
     Document(Held, usize),
-    /// A table read on its own, from its cache file.
-    Alone(Arc<TableDocument<'static>>),
+    /// A table read on its own, from its cache file, and the store a miss in
+    /// one of its deferred parts is recorded in (`FR-CACHE-038`).
+    Shelved(Arc<Reached>, Arc<Store>),
 }
 
-impl Deref for Row {
-    type Target = TableDocument<'static>;
-
-    fn deref(&self) -> &Self::Target {
+impl Row {
+    /// The table's name.
+    fn name(&self) -> &str {
         match self {
-            Self::Document(document, index) => &document.tables[*index],
-            Self::Alone(table) => table,
+            Self::Document(document, index) => &document.tables[*index].name,
+            Self::Shelved(reached, _) => &reached.table.name,
         }
     }
+
+    /// Whether the table carries the marking of `FR-PRIV-016`.
+    fn restricted(&self) -> bool {
+        match self {
+            Self::Document(document, index) => document.tables[*index].restricted.is_some(),
+            Self::Shelved(reached, _) => reached.table.restricted.is_some(),
+        }
+    }
+}
+
+/// The field at `position` of [`TABLE_KEYS`], converted, for every field but
+/// the two reference collections, which answer [`None`] here: those are the
+/// two parts whose source differs between a whole document and a cache file.
+fn own_field<F, I>(table: &TableShape<'_, F, I>, position: usize) -> Option<Value> {
+    Some(match position {
+        0 => Value::from_serialize(&table.name),
+        1 => Value::from_serialize(table.table_type),
+        2 => Value::from_serialize(&table.engine),
+        3 => Value::from_serialize(&table.collation),
+        4 => Value::from_serialize(&table.comment),
+        5 => Value::from_serialize(&table.columns),
+        6 => Value::from_serialize(&table.indexes),
+        7 => Value::from_serialize(&table.primary_key),
+        8 | 9 => return None,
+        10 => Value::from_serialize(&table.triggers),
+        11 => Value::from_serialize(&table.check_constraints),
+        _ => Value::from_serialize(&table.restricted),
+    })
 }
 
 /// One member of `database.tables`: the table's fields, each converted when
@@ -650,7 +759,7 @@ impl Table {
     /// How many of [`TABLE_KEYS`] this table carries: all of them where it
     /// carries the `restricted` marking, and all but that one otherwise.
     fn carried(&self) -> usize {
-        if self.row.restricted.is_some() {
+        if self.row.restricted() {
             TABLE_KEYS.len()
         } else {
             RESTRICTED
@@ -658,23 +767,37 @@ impl Table {
     }
 
     /// The field at `position` of [`TABLE_KEYS`], converted.
+    ///
+    /// Over a cache file the two reference collections are decoded here, the
+    /// first time the template reaches either, and a part that fails is
+    /// recorded as a miss and reads as an invalid value (`FR-CACHE-038`,
+    /// `FR-CACHE-039`). The value either converts to is the one a whole
+    /// document's collection converts to: the same members, decoded by the
+    /// same types.
     fn convert(&self, position: usize) -> Value {
-        let table = &*self.row;
+        match &self.row {
+            Row::Document(document, index) => {
+                let table = &document.tables[*index];
 
-        match position {
-            0 => Value::from_serialize(&table.name),
-            1 => Value::from_serialize(table.table_type),
-            2 => Value::from_serialize(&table.engine),
-            3 => Value::from_serialize(&table.collation),
-            4 => Value::from_serialize(&table.comment),
-            5 => Value::from_serialize(&table.columns),
-            6 => Value::from_serialize(&table.indexes),
-            7 => Value::from_serialize(&table.primary_key),
-            8 => Value::from_serialize(&table.foreign_keys),
-            9 => Value::from_serialize(&table.referenced_by),
-            10 => Value::from_serialize(&table.triggers),
-            11 => Value::from_serialize(&table.check_constraints),
-            _ => Value::from_serialize(&table.restricted),
+                own_field(table, position).unwrap_or_else(|| {
+                    if position == FOREIGN_KEYS {
+                        Value::from_serialize(&table.foreign_keys)
+                    } else {
+                        Value::from_serialize(&table.referenced_by)
+                    }
+                })
+            }
+            Row::Shelved(reached, store) => {
+                own_field(&reached.table, position).unwrap_or_else(|| {
+                    let part = if position == FOREIGN_KEYS {
+                        reached.foreign_keys().map(Value::from_serialize)
+                    } else {
+                        reached.referenced_by().map(Value::from_serialize)
+                    };
+
+                    part.unwrap_or_else(|| store.miss())
+                })
+            }
         }
     }
 }
@@ -714,7 +837,7 @@ impl Object for Table {
 impl fmt::Debug for Table {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Table")
-            .field("name", &self.row.name)
+            .field("name", &self.row.name())
             .finish_non_exhaustive()
     }
 }

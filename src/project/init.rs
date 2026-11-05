@@ -113,7 +113,9 @@ const CONFIGURATION_TEMPLATE: &str = "\
 /// The generated `.tpl/templates/example.jinja` (`FR-PROJ-017`,
 /// `FR-PROJ-021`).
 ///
-/// It renders against any table of any supported MariaDB database, walks the
+/// It renders against any table of any supported MariaDB or MySQL database,
+/// which `tests/mysql_provider.rs` shows on every table of the MySQL fixture on
+/// both supported series (`FR-PROJ-021`), walks the
 /// columns of that table, uses the `snake` and `pascal` filters of
 /// `FR-ENV-006`, the `length` filter of `FR-ENV-018` and the `nullable` test of
 /// `FR-ENV-014`, and carries in its header the command that runs it.

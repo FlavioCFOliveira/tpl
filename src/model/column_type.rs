@@ -79,7 +79,7 @@ const CLOSE: char = ')';
 /// reports `longtext`, per `FR-CAT-038`, and one declared `NUMERIC` reports
 /// `decimal`.
 ///
-/// The array is sorted, which [`recognised`] relies on and a test enforces.
+/// The array is sorted, and a test holds [`recognised`] to it.
 const RECOGNISED_DATA_TYPES: [&str; 39] = [
     "bigint",
     "binary",
@@ -121,6 +121,14 @@ const RECOGNISED_DATA_TYPES: [&str; 39] = [
     "varchar",
     "year",
 ];
+
+/// The `data_type` values a `mysql` read produces and no series of
+/// `FR-SRV-015` was observed to produce (`FR-MYSQL-028`), sorted.
+///
+/// `json` is a native type there, `geomcollection` is MySQL's spelling of the
+/// type MariaDB reports as `geometrycollection`, and `vector` is a type of
+/// `9.7` alone, whose length is its size in bytes.
+const MYSQL_DATA_TYPES: [&str; 3] = ["geomcollection", "json", "vector"];
 
 /// The catalogue's statement of one column's type.
 ///
@@ -278,6 +286,30 @@ impl<'a> ColumnType<'a> {
             return Self::unrecognised(catalogue.column_type);
         }
 
+        Self::read(catalogue)
+    }
+
+    /// The type of a column, a parameter or a return value of a `mysql` read
+    /// (`FR-MYSQL-028`).
+    ///
+    /// It is [`ColumnType::decompose`] with three more `data_type` values
+    /// recognised — `geomcollection`, `json` and `vector`, the three a `mysql`
+    /// read produces and no series of `FR-SRV-015` was observed to produce —
+    /// whose parts are read from the fields `FR-CTX-040` names, as every other
+    /// recognised type's are, and which `FR-ENV-049` places in a family. The
+    /// set of a `mariadb` read is unchanged: this constructor is the `mysql`
+    /// reader's alone.
+    #[must_use]
+    pub(crate) fn decompose_mysql(catalogue: &CatalogueType<'a>) -> Self {
+        if MYSQL_DATA_TYPES.binary_search(&catalogue.data_type).is_ok() {
+            return Self::read(catalogue);
+        }
+
+        Self::decompose(catalogue)
+    }
+
+    /// The parts of a recognised type, read as `FR-CTX-040` fixes.
+    fn read(catalogue: &CatalogueType<'a>) -> Self {
         Self {
             column_type: Cow::Borrowed(catalogue.column_type),
             data_type: Some(Cow::Borrowed(catalogue.data_type)),
@@ -288,6 +320,31 @@ impl<'a> ColumnType<'a> {
             charset: catalogue.charset.map(Cow::Borrowed),
             collation: catalogue.collation.map(Cow::Borrowed),
             values: members(catalogue.data_type, catalogue.column_type),
+        }
+    }
+
+    /// The type of a column of a `sqlite` read (`FR-LITE-026`): the declared
+    /// type exactly as stored, and its type affinity as `data_type`.
+    ///
+    /// Every other part is `null`: SQLite ignores the numbers after a type
+    /// name and enforces no length, precision or scale, has no `unsigned`, no
+    /// column character set, and reports no `COLLATE` clause through the
+    /// statements it is read with, and it has no member list. The affinity is
+    /// one of the five SQLite names, which [`ColumnType::decompose`] does not
+    /// recognise and would send to `FR-CTX-018`; this is the constructor that
+    /// carries it.
+    #[must_use]
+    pub(crate) fn affinity(declared: Cow<'a, str>, affinity: &'static str) -> Self {
+        Self {
+            column_type: declared,
+            data_type: Some(Cow::Borrowed(affinity)),
+            precision: None,
+            scale: None,
+            length: None,
+            unsigned: None,
+            charset: None,
+            collation: None,
+            values: None,
         }
     }
 
@@ -384,9 +441,51 @@ impl<'a> ColumnType<'a> {
     }
 }
 
-/// Whether a `data_type` is one the system recognises, per `FR-CTX-018`.
+/// Whether a `data_type` is one the system recognises, per `FR-CTX-018`: a
+/// member of [`RECOGNISED_DATA_TYPES`].
+///
+/// PERF: the binary search compared up to six whole strings per column, on
+/// every column of every read (rmp `#356`). The length selects the few
+/// candidates of that length first, so a value is compared with at most eight
+/// strings of its own length; a test holds this match to the list, member for
+/// member.
 fn recognised(data_type: &str) -> bool {
-    RECOGNISED_DATA_TYPES.binary_search(&data_type).is_ok()
+    let answer = match data_type.len() {
+        3 => matches!(data_type, "bit" | "int" | "set"),
+        4 => matches!(
+            data_type,
+            "blob" | "char" | "date" | "enum" | "text" | "time" | "uuid" | "year"
+        ),
+        5 => matches!(data_type, "float" | "inet4" | "inet6" | "point"),
+        6 => matches!(data_type, "bigint" | "binary" | "double"),
+        7 => matches!(data_type, "decimal" | "polygon" | "tinyint" | "varchar"),
+        8 => matches!(
+            data_type,
+            "datetime"
+                | "geometry"
+                | "longblob"
+                | "longtext"
+                | "smallint"
+                | "tinyblob"
+                | "tinytext"
+        ),
+        9 => matches!(data_type, "mediumint" | "timestamp" | "varbinary"),
+        10 => matches!(
+            data_type,
+            "linestring" | "mediumblob" | "mediumtext" | "multipoint"
+        ),
+        12 => data_type == "multipolygon",
+        15 => data_type == "multilinestring",
+        18 => data_type == "geometrycollection",
+        _ => false,
+    };
+    debug_assert_eq!(
+        answer,
+        RECOGNISED_DATA_TYPES.binary_search(&data_type).is_ok(),
+        "the match answers as the list for {data_type:?}"
+    );
+
+    answer
 }
 
 /// Whether a raw type string carries the unsigned attribute, per `FR-CTX-038`.
@@ -795,6 +894,24 @@ mod tests {
 
         for data_type in ["bigint", "decimal", "datetime", "longtext", "uuid"] {
             assert!(super::recognised(data_type), "{data_type}");
+        }
+
+        // rmp #356: `recognised` matches by length, and answers exactly the
+        // list — every member, and no string one byte away from a member.
+        for data_type in RECOGNISED_DATA_TYPES {
+            assert!(super::recognised(data_type), "{data_type}");
+            for near in [
+                format!("{data_type}s"),
+                data_type[..data_type.len() - 1].to_owned(),
+                data_type.to_uppercase(),
+                format!(" {data_type}"),
+            ] {
+                assert_eq!(
+                    super::recognised(&near),
+                    RECOGNISED_DATA_TYPES.binary_search(&near.as_str()).is_ok(),
+                    "{near:?}"
+                );
+            }
         }
 
         // Neither of the first two is a value the catalogue reports: a JSON

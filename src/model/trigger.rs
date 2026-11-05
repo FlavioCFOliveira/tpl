@@ -80,8 +80,9 @@ pub struct Trigger<'a> {
     /// When it fires relative to that statement.
     pub timing: TriggerTiming<'a>,
 
-    /// The action order, which read `1` on all six triggers of the fixture.
-    pub action_order: u64,
+    /// The action order, which read `1` on all six triggers of the fixture,
+    /// or [`None`] for a `sqlite` read, which reports none (`FR-LITE-032`).
+    pub action_order: Option<u64>,
 
     /// The body **as written**, with newlines and identifier case preserved —
     /// unlike a view definition, which the server rewrites — or [`None`] where
@@ -104,8 +105,9 @@ pub struct Trigger<'a> {
     /// The new-row alias, which read `NEW` on every row, under the same limit.
     pub new_row_alias: Cow<'a, str>,
 
-    /// The session SQL mode in force when the trigger was created.
-    pub sql_mode: Cow<'a, str>,
+    /// The session SQL mode in force when the trigger was created, or
+    /// [`None`] for a `sqlite` read (`FR-LITE-032`).
+    pub sql_mode: Option<Cow<'a, str>>,
 
     /// The definer, or [`None`] where the catalogue returned SQL `NULL`
     /// (`FR-CAT-056`).
@@ -114,18 +116,21 @@ pub struct Trigger<'a> {
     /// read one user on all six triggers of the fixture.
     pub definer: Option<Cow<'a, str>>,
 
-    /// The session character set, passed through verbatim per `FR-SRV-039`.
-    pub character_set_client: Cow<'a, str>,
+    /// The session character set, passed through verbatim per `FR-SRV-039`,
+    /// or [`None`] for a `sqlite` read (`FR-LITE-032`).
+    pub character_set_client: Option<Cow<'a, str>>,
 
     /// The session collation, passed through verbatim per `FR-SRV-039`.
     ///
     /// This is one of the two fields the divergence register of `FR-SRV-036`
     /// holds: it reads `utf8mb4_general_ci` on `10.11` and
-    /// `utf8mb4_uca1400_ai_ci` on the other three, from identical DDL.
-    pub collation_connection: Cow<'a, str>,
+    /// `utf8mb4_uca1400_ai_ci` on the other three, from identical DDL. It is
+    /// [`None`] for a `sqlite` read (`FR-LITE-032`).
+    pub collation_connection: Option<Cow<'a, str>>,
 
-    /// The schema's collation, passed through verbatim per `FR-SRV-039`.
-    pub database_collation: Cow<'a, str>,
+    /// The schema's collation, passed through verbatim per `FR-SRV-039`, or
+    /// [`None`] for a `sqlite` read (`FR-LITE-032`).
+    pub database_collation: Option<Cow<'a, str>>,
 }
 
 /// A copy that borrows nothing, for the render context of `FR-RND-023`.
@@ -161,16 +166,16 @@ mod tests {
             name: Cow::Borrowed("trg_consignment_audit"),
             event,
             timing,
-            action_order: 1,
+            action_order: Some(1),
             statement: Some(Cow::Borrowed("BEGIN\n  SET NEW.updated_at = NOW();\nEND")),
             orientation: Cow::Borrowed("ROW"),
             old_row_alias: Cow::Borrowed("OLD"),
             new_row_alias: Cow::Borrowed("NEW"),
-            sql_mode: Cow::Borrowed("STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"),
+            sql_mode: Some(Cow::Borrowed("STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION")),
             definer: Some(Cow::Borrowed("root@localhost")),
-            character_set_client: Cow::Borrowed("utf8mb4"),
-            collation_connection: Cow::Borrowed("utf8mb4_general_ci"),
-            database_collation: Cow::Borrowed("utf8mb4_unicode_520_ci"),
+            character_set_client: Some(Cow::Borrowed("utf8mb4")),
+            collation_connection: Some(Cow::Borrowed("utf8mb4_general_ci")),
+            database_collation: Some(Cow::Borrowed("utf8mb4_unicode_520_ci")),
         }
     }
 

@@ -115,9 +115,15 @@ pub(crate) fn emits(at: Level) -> bool {
     level() >= at
 }
 
+/// The lock every unit test that sets the process-wide level holds for as
+/// long as it depends on that level, so that two such tests never interleave
+/// (verification, *The requirements of form, for a `sqlite` entry*).
+#[cfg(test)]
+pub(crate) static LEVEL_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[cfg(test)]
 mod tests {
-    use super::{Level, emits, level, set_level};
+    use super::{LEVEL_LOCK, Level, emits, level, set_level};
 
     #[test]
     fn fr_glob_014_one_v_is_info_two_is_debug_three_is_trace() {
@@ -174,10 +180,13 @@ mod tests {
         }
     }
 
-    /// The one test that touches the shared value. No other test reads it, so
-    /// running in parallel with them observes nothing.
+    /// A test that touches the shared value, under the lock every such test
+    /// holds.
     #[test]
     fn fr_glob_014_the_gate_opens_at_the_level_that_was_set() {
+        let _held = LEVEL_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let restore = level();
 
         set_level(Level::Errors);

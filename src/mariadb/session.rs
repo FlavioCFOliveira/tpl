@@ -45,17 +45,17 @@ use std::borrow::Cow;
 use std::future::Future;
 use std::time::Instant;
 
-use sqlx::mysql::MySqlConnection;
-use sqlx::{Row as _, mysql::MySqlRow};
+use sqlx_core::row::Row as _;
+use sqlx_mysql::{MySqlConnection, MySqlRow};
 use tokio::runtime::Runtime;
 use tokio::time::timeout;
 
 use super::connect::Target;
 use super::fault;
 use super::window::{self, Series};
-use crate::deadline::{Bound, Clock, Phase};
+use crate::deadline::{Clock, Phase};
 use crate::diagnostics::emit;
-use crate::error::{Error, NetworkPhase, ReadOnlyFault};
+use crate::error::{Error, NetworkPhase, ReadOnlyFault, SessionStatement};
 use crate::model::server::{Server, series_of};
 
 /// The read-only session statement of `FR-SRV-008`.
@@ -64,6 +64,9 @@ const READ_ONLY: &str = "SET SESSION TRANSACTION READ ONLY";
 /// The read-back of `FR-SRV-009`, naming the one spelling every series of
 /// `FR-SRV-015` carries.
 const READ_BACK: &str = "SELECT @@session.tx_read_only";
+
+/// The variable [`READ_BACK`] reads, as the `cause` of `FR-SRV-010` names it.
+const READ_BACK_VARIABLE: &str = "@@session.tx_read_only";
 
 /// The server version probe of `FR-SRV-002`.
 const PROBE: &str = "SELECT VERSION()";
@@ -78,7 +81,7 @@ const ENFORCED: i64 = 1;
 /// `FR-SRV-008` and not applied it — the condition `FR-SRV-009` exists to
 /// catch, and the one no supported MariaDB produces.
 #[cfg(test)]
-const NOT_ENFORCED: i64 = 0;
+pub(crate) const NOT_ENFORCED: i64 = 0;
 
 /// The product marker `FR-SRV-041` tests the version string for.
 const MARKER: &str = "MariaDB";
@@ -89,40 +92,82 @@ const MARKER: &str = "MariaDB";
 /// means and the deadline decides itself: a `SET` the server refused is
 /// `FR-SRV-010`'s `78`, and a `SET` that outlived its bound is `FR-ERR-027`'s
 /// `69`, and one statement can end either way.
-enum Attempt {
+///
+/// It is `pub(crate)`, with [`run`], because `crate::mysql` issues its three
+/// connection-start statements under the same bound and the same report.
+pub(crate) enum Attempt {
     /// The bound of `FR-GLOB-012` expired, already classified.
     Expired(Error),
     /// The driver reported a failure, not yet classified.
-    Driver(sqlx::Error),
+    Driver(sqlx_core::Error),
 }
 
-/// Runs one statement under the bound of `FR-GLOB-012`.
+/// One of the three session statements of `FR-CONF-005`.
+///
+/// Each takes its own deadline of `core.query_timeout`, measured from its own
+/// start (`FR-CONF-005`), is named as `FR-ERR-027` names it where that
+/// deadline expires, and has a line of its own at `INFO` (`FR-GLOB-017`).
+/// `crate::mysql` issues the same three.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Statement {
+    /// The read-only session statement.
+    ReadOnly,
+    /// Its read-back.
+    ReadBack,
+    /// The version probe.
+    VersionProbe,
+}
+
+impl Statement {
+    /// The phase the statement is bounded and reported by.
+    pub(crate) const fn phase(self) -> Phase {
+        match self {
+            Self::ReadOnly => Phase::ReadOnlyStatement,
+            Self::ReadBack => Phase::ReadOnlyReadBack,
+            Self::VersionProbe => Phase::VersionProbe,
+        }
+    }
+
+    /// The phase an expiry of the statement's deadline names.
+    const fn reported(self) -> NetworkPhase {
+        match self {
+            Self::ReadOnly => NetworkPhase::ReadOnlyStatement,
+            Self::ReadBack => NetworkPhase::ReadOnlyReadBack,
+            Self::VersionProbe => NetworkPhase::VersionProbe,
+        }
+    }
+}
+
+/// Runs one session statement under its own deadline, composed with the
+/// overall budget under `FR-GLOB-012`.
 ///
 /// The three statements of this module are statements on an open session, so
-/// they take the statement deadline of `FR-CONF-005` — `core.query_timeout` —
-/// and report under the phase `FR-ERR-034` gives a statement. None of them
-/// reads a schema, so none of them is a catalogue query for the counts of
-/// `NFR-PERF-001` and `NFR-PERF-002`, which `FR-SRV-006` states of the
-/// read-back in its own words.
+/// each takes the statement deadline of `FR-CONF-005` — `core.query_timeout`
+/// — measured from its own start, and an expiry names the statement, per
+/// `FR-ERR-027`. None of them reads a schema, so none of them is a catalogue
+/// query for the counts of `NFR-PERF-001` and `NFR-PERF-002`, which
+/// `FR-SRV-006` states of the read-back in its own words.
 ///
-/// **Each run is timed and reported**, per `FR-GLOB-017`: this is where the
-/// session start spends its time, and the three statements are three runs of
-/// the phase `FR-CONF-005` bounds them by. The line carries that phase and a
-/// duration and nothing else — no statement text, which `NFR-DET-001` would
-/// make a caller mistake for contract, and which `FR-GLOB-018` keeps off this
-/// stream with everything else it bars. The count of these lines is not the
-/// catalogue-query count of `NFR-PERF-008`: that count is the lines
-/// [`emit::catalogue_query`] writes, under a token of its own.
-fn run<T>(
+/// **Each run is timed and reported**, per `FR-GLOB-017`, on a line naming
+/// the statement, written once it has ended, whichever way. The line carries
+/// that name and a duration and nothing else — no statement text, which
+/// `NFR-DET-001` would make a caller mistake for contract, and which
+/// `FR-GLOB-018` keeps off this stream with everything else it bars. The count
+/// of these lines is not the catalogue-query count of `NFR-PERF-008`: that
+/// count is the lines [`emit::catalogue_query`] writes, under a token of its
+/// own.
+pub(crate) fn run<T>(
     runtime: &Runtime,
-    bound: Bound,
+    clock: &Clock,
     target: &Target<'_>,
-    work: impl Future<Output = Result<T, sqlx::Error>>,
+    statement: Statement,
+    work: impl Future<Output = Result<T, sqlx_core::Error>>,
 ) -> Result<T, Attempt> {
+    let bound = clock.bound(target.deadlines().of(statement.phase()));
     let expired = || {
         Attempt::Expired(fault::expired(
             target.entry(),
-            NetworkPhase::CatalogueQuery,
+            statement.reported(),
             target.host(),
             target.port(),
             bound,
@@ -136,7 +181,7 @@ fn run<T>(
     runtime.block_on(async {
         let started = Instant::now();
         let outcome = timeout(bound.remaining(), work).await;
-        emit::phase_ran(Phase::CatalogueQuery, started.elapsed());
+        emit::phase_ran(statement.phase(), started.elapsed());
 
         match outcome {
             Err(_) => Err(expired()),
@@ -159,6 +204,7 @@ fn unenforced(attempt: Attempt, entry: &str, fault: ReadOnlyFault) -> Error {
             by_dsn: false,
             entry: entry.to_owned(),
             fault,
+            read_back: READ_BACK_VARIABLE,
         },
     }
 }
@@ -167,9 +213,13 @@ fn unenforced(attempt: Attempt, entry: &str, fault: ReadOnlyFault) -> Error {
 fn unprobed(attempt: Attempt, target: &Target<'_>) -> Error {
     match attempt {
         Attempt::Expired(expired) => expired,
-        Attempt::Driver(driver) => {
-            fault::speaking(target.entry(), &driver, target.host(), target.port())
-        }
+        Attempt::Driver(driver) => fault::speaking(
+            target.entry(),
+            &driver,
+            target.host(),
+            target.port(),
+            SessionStatement::VersionProbe,
+        ),
     }
 }
 
@@ -189,13 +239,13 @@ fn enforce(
     clock: &Clock,
 ) -> Result<(), Error> {
     let entry = target.entry();
-    let bound = || clock.bound(target.deadlines().of(Phase::CatalogueQuery));
 
     run(
         runtime,
-        bound(),
+        clock,
         target,
-        sqlx::raw_sql(READ_ONLY).execute(&mut *connection),
+        Statement::ReadOnly,
+        sqlx_core::raw_sql::raw_sql(READ_ONLY).execute(&mut *connection),
     )
     .map_err(|attempt| unenforced(attempt, entry, ReadOnlyFault::NotApplied))?;
 
@@ -203,13 +253,15 @@ fn enforce(
         by_dsn: false,
         entry: entry.to_owned(),
         fault: ReadOnlyFault::ReadBackDisagreed,
+        read_back: READ_BACK_VARIABLE,
     };
 
     let answer: Option<MySqlRow> = run(
         runtime,
-        bound(),
+        clock,
         target,
-        sqlx::raw_sql(READ_BACK).fetch_optional(&mut *connection),
+        Statement::ReadBack,
+        sqlx_core::raw_sql::raw_sql(READ_BACK).fetch_optional(&mut *connection),
     )
     .map_err(|attempt| unenforced(attempt, entry, ReadOnlyFault::ReadBackDisagreed))?;
 
@@ -260,13 +312,12 @@ fn probe(
     target: &Target<'_>,
     clock: &Clock,
 ) -> Result<Server<'static>, Error> {
-    let bound = clock.bound(target.deadlines().of(Phase::CatalogueQuery));
-
     let answer: Option<MySqlRow> = run(
         runtime,
-        bound,
+        clock,
         target,
-        sqlx::raw_sql(PROBE).fetch_optional(&mut *connection),
+        Statement::VersionProbe,
+        sqlx_core::raw_sql::raw_sql(PROBE).fetch_optional(&mut *connection),
     )
     .map_err(|attempt| unprobed(attempt, target))?;
 
@@ -367,8 +418,12 @@ pub(super) fn start(
 
 /// Whether this thread's read-back is presented with an answer that does not
 /// confirm the setting.
+///
+/// `crate::mysql` consults the same seam for its own read-back, which
+/// `FR-MYSQL-043` verifies in its failing outcome through it, as `FR-SRV-013`
+/// does here.
 #[cfg(test)]
-fn misreporting() -> bool {
+pub(crate) fn misreporting() -> bool {
     MISREPORTED.with(std::cell::Cell::get)
 }
 
@@ -419,7 +474,7 @@ thread_local! {
 /// body that asked for it.
 #[cfg(test)]
 #[must_use]
-fn misreport_read_back() -> Misreport {
+pub(crate) fn misreport_read_back() -> Misreport {
     Misreport {
         restore: MISREPORTED.with(|misreported| misreported.replace(true)),
     }
@@ -429,7 +484,7 @@ fn misreport_read_back() -> Misreport {
 /// this is dropped.
 #[cfg(test)]
 #[derive(Debug)]
-struct Misreport {
+pub(crate) struct Misreport {
     /// What the thread's state was before.
     restore: bool,
 }
@@ -476,6 +531,8 @@ mod tests {
             &nothing,
         )
         .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry")
     }
 
     /// The verdict `version` earns.
@@ -682,6 +739,8 @@ mod tests {
             &nothing,
         )
         .expect("the entry resolves")
+        .into_mariadb()
+        .expect("the entry is a mariadb entry")
     }
 
     /// The statement text of each row the server's record holds for the account

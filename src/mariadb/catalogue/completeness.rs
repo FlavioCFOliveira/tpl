@@ -97,7 +97,7 @@ const MARKED_PROPERTY: &str =
 /// property names of the model itself, so each variant carries the name the
 /// document already presents that property under and invents none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Property {
+pub(crate) enum Property {
     /// A routine's body, absent as SQL `NULL` (`FR-PRIV-017`).
     Body,
 
@@ -159,7 +159,7 @@ impl Property {
 /// object is complete, and a value built for every view and every routine of
 /// every read may not cost one allocation each.
 #[derive(Debug, Default)]
-pub(super) struct Marking {
+pub(crate) struct Marking {
     /// The properties recorded so far, without repetition.
     properties: Vec<Property>,
 }
@@ -171,7 +171,7 @@ impl Marking {
     /// The repetition is real and not defensive: the fifteen foreign keys of
     /// one shortfall are seventeen key columns, and several of them name the
     /// same pair of tables.
-    pub(super) fn record(&mut self, property: Property) {
+    pub(crate) fn record(&mut self, property: Property) {
         if !self.properties.contains(&property) {
             self.properties.push(property);
         }
@@ -190,7 +190,7 @@ impl Marking {
     /// [`None`] is `FR-PRIV-007`: a complete object carries no marking, and
     /// [`Restricted::new`] is what refuses the empty array `FR-PRIV-016`
     /// forbids.
-    pub(super) fn sealed(self) -> Option<Restricted<'static>> {
+    pub(crate) fn sealed(self) -> Option<Restricted<'static>> {
         let mut properties: Vec<Cow<'static, str>> = self
             .properties
             .into_iter()
@@ -209,7 +209,7 @@ impl Marking {
 /// A view's definition is the view, and the empty string is not a value a view
 /// can legitimately carry, so the observation admits one explanation: the
 /// reader can see that the view exists and cannot read it.
-pub(super) fn empty_string(definition: &str) -> bool {
+pub(crate) fn empty_string(definition: &str) -> bool {
     definition.is_empty()
 }
 
@@ -221,7 +221,7 @@ pub(super) fn empty_string(definition: &str) -> bool {
 /// string for a `NULL` the model has no shape for, and a body that is genuinely
 /// empty is the empty string too — so a check made over the folded model would
 /// answer the same for the two cases this requirement exists to separate.
-pub(super) fn sql_null(body: Option<&str>) -> bool {
+pub(crate) fn sql_null(body: Option<&str>) -> bool {
     body.is_none()
 }
 
@@ -357,13 +357,13 @@ mod tests {
         View {
             name: Cow::Borrowed("v_consignment_manifest"),
             definition: Cow::Borrowed(definition),
-            check_option: Cow::Borrowed("NONE"),
-            is_updatable: false,
-            definer: Cow::Borrowed("root@localhost"),
-            security_type: Cow::Borrowed("DEFINER"),
-            character_set_client: Cow::Borrowed("utf8mb4"),
-            collation_connection: Cow::Borrowed("utf8mb4_uca1400_ai_ci"),
-            algorithm: Cow::Borrowed("UNDEFINED"),
+            check_option: Some(Cow::Borrowed("NONE")),
+            is_updatable: Some(false),
+            definer: Some(Cow::Borrowed("root@localhost")),
+            security_type: Some(Cow::Borrowed("DEFINER")),
+            character_set_client: Some(Cow::Borrowed("utf8mb4")),
+            collation_connection: Some(Cow::Borrowed("utf8mb4_uca1400_ai_ci")),
+            algorithm: Some(Cow::Borrowed("UNDEFINED")),
             restricted,
         }
     }

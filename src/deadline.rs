@@ -108,11 +108,14 @@ impl From<Seconds> for Duration {
     }
 }
 
-/// One of the six blocking phases of `FR-CONF-005`.
+/// One of the blocking phases of `FR-CONF-005`, each session statement named
+/// on its own.
 ///
 /// The set is closed by that requirement, and each variant names the `[core]`
-/// key its deadline is resolved from. Three of the six share one budget, which
-/// is [`Budget`]'s subject rather than this type's.
+/// key its deadline is resolved from. The four connection phases share one
+/// budget, which is [`Budget`]'s subject rather than this type's; the three
+/// session statements each take the deadline of `core.query_timeout`, and are
+/// three variants because `FR-GLOB-017` writes a line naming each.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Phase {
     /// Resolving the host name, bounded by `core.connect_timeout`.
@@ -121,21 +124,21 @@ pub(crate) enum Phase {
     TcpConnect,
     /// Negotiating TLS, bounded by `core.connect_timeout`.
     ///
-    /// It is never constructed, and `FR-CONF-005` is why it exists all the
-    /// same: that requirement closes the set at six and this is one of them.
-    /// The handshake is **inside** the driver's connect call and the driver
-    /// affords no method that takes an already-connected socket, so nothing can
-    /// bound it, time it or report it apart from the TCP connect it runs
-    /// within — `mariadb::connect` says so where the two are run, and `OD-12`
-    /// records that the report separates them by the driver's own discriminant
-    /// rather than by a clock.
-    #[allow(
-        dead_code,
-        reason = "FR-CONF-005 closes the set of phases at six and the TLS handshake is one of \
-                  them; it is never constructed because the driver runs it inside the connect \
-                  call, which is what mariadb::connect documents and what OD-12 records"
-    )]
+    /// The handshake is inside the driver's connect call, so it is bounded
+    /// with the call; its time is told apart from the TCP connect's and the
+    /// login's by the phase the driver records (`ADR-014`, point 6), which
+    /// `crate::mariadb::connect` reads as the call is polled.
     TlsHandshake,
+    /// The login — the greeting and the authentication — bounded by
+    /// `core.connect_timeout`.
+    Login,
+    /// The read-only session statement, bounded by `core.query_timeout`.
+    ReadOnlyStatement,
+    /// The read-back of the read-only session, bounded by
+    /// `core.query_timeout`.
+    ReadOnlyReadBack,
+    /// The version probe, bounded by `core.query_timeout`.
+    VersionProbe,
     /// One catalogue query, bounded by `core.query_timeout`.
     CatalogueQuery,
     /// The `password_command` child, bounded by `core.password_timeout`.
@@ -157,6 +160,10 @@ impl Phase {
             Self::DnsResolution => "dns resolution",
             Self::TcpConnect => "tcp connect",
             Self::TlsHandshake => "tls handshake",
+            Self::Login => "login",
+            Self::ReadOnlyStatement => "read-only session statement",
+            Self::ReadOnlyReadBack => "read-back of the read-only session",
+            Self::VersionProbe => "version probe",
             Self::CatalogueQuery => "server query",
             Self::PasswordCommand => "password command",
             Self::Render => "render",
@@ -175,8 +182,13 @@ impl Phase {
     )]
     pub(crate) const fn key(self) -> &'static str {
         match self {
-            Self::DnsResolution | Self::TcpConnect | Self::TlsHandshake => "core.connect_timeout",
-            Self::CatalogueQuery => "core.query_timeout",
+            Self::DnsResolution | Self::TcpConnect | Self::TlsHandshake | Self::Login => {
+                "core.connect_timeout"
+            }
+            Self::ReadOnlyStatement
+            | Self::ReadOnlyReadBack
+            | Self::VersionProbe
+            | Self::CatalogueQuery => "core.query_timeout",
             Self::PasswordCommand => "core.password_timeout",
             Self::Render => "core.render_timeout",
         }
@@ -194,7 +206,7 @@ impl Phase {
     pub(crate) const fn shares_the_connection_budget(self) -> bool {
         matches!(
             self,
-            Self::DnsResolution | Self::TcpConnect | Self::TlsHandshake
+            Self::DnsResolution | Self::TcpConnect | Self::TlsHandshake | Self::Login
         )
     }
 }
@@ -263,8 +275,13 @@ impl Deadlines {
     /// The deadline `phase` takes, per the table of `FR-CONF-005`.
     pub(crate) const fn of(self, phase: Phase) -> Seconds {
         match phase {
-            Phase::DnsResolution | Phase::TcpConnect | Phase::TlsHandshake => self.connect,
-            Phase::CatalogueQuery => self.query,
+            Phase::DnsResolution | Phase::TcpConnect | Phase::TlsHandshake | Phase::Login => {
+                self.connect
+            }
+            Phase::ReadOnlyStatement
+            | Phase::ReadOnlyReadBack
+            | Phase::VersionProbe
+            | Phase::CatalogueQuery => self.query,
             Phase::PasswordCommand => self.password,
             Phase::Render => self.render,
         }
@@ -304,6 +321,20 @@ impl Clock {
         Self {
             started: process_start(),
             budget,
+        }
+    }
+
+    /// A clock whose overall budget is already spent, so that every bound it
+    /// composes has nothing left (`FR-GLOB-012`).
+    #[cfg(test)]
+    pub(crate) fn spent() -> Self {
+        let started = Instant::now()
+            .checked_sub(Duration::from_secs(2))
+            .unwrap_or_else(Instant::now);
+
+        Self {
+            started,
+            budget: Some(Seconds::new(std::num::NonZeroU64::MIN)),
         }
     }
 
@@ -466,6 +497,23 @@ mod tests {
     }
 
     #[test]
+    fn fr_conf_005_each_session_statement_takes_the_statement_deadline_on_its_own() {
+        // FR-CONF-005, amended in the seventy-ninth edition: each of the three
+        // session statements has a deadline of core.query_timeout, and none
+        // draws on the connection budget.
+        let resolved = Deadlines::resolve(Some(seconds(3)), Some(seconds(11)), None, None);
+
+        for phase in [
+            Phase::ReadOnlyStatement,
+            Phase::ReadOnlyReadBack,
+            Phase::VersionProbe,
+        ] {
+            assert_eq!(resolved.of(phase).get(), 11, "{phase:?}");
+        }
+        assert_eq!(resolved.of(Phase::Login).get(), 3);
+    }
+
+    #[test]
     fn fr_conf_002_the_built_in_defaults_are_the_four_the_key_space_declares() {
         // FR-CONF-002: the defaults of the four [core] timeout keys.
         let resolved = Deadlines::default();
@@ -478,22 +526,30 @@ mod tests {
 
     #[test]
     fn fr_conf_004_every_phase_resolves_from_the_key_the_requirement_names() {
-        // FR-CONF-004, FR-CONF-005: the six phases map onto the four keys.
+        // FR-CONF-004, FR-CONF-005: every phase maps onto one of the four keys.
         assert_eq!(Phase::DnsResolution.key(), "core.connect_timeout");
         assert_eq!(Phase::TcpConnect.key(), "core.connect_timeout");
         assert_eq!(Phase::TlsHandshake.key(), "core.connect_timeout");
+        assert_eq!(Phase::Login.key(), "core.connect_timeout");
+        assert_eq!(Phase::ReadOnlyStatement.key(), "core.query_timeout");
+        assert_eq!(Phase::ReadOnlyReadBack.key(), "core.query_timeout");
+        assert_eq!(Phase::VersionProbe.key(), "core.query_timeout");
         assert_eq!(Phase::CatalogueQuery.key(), "core.query_timeout");
         assert_eq!(Phase::PasswordCommand.key(), "core.password_timeout");
         assert_eq!(Phase::Render.key(), "core.render_timeout");
     }
 
     #[test]
-    fn fr_conf_005_the_three_connection_phases_share_one_budget_and_the_other_three_do_not() {
-        // FR-CONF-005: the system SHALL NOT give each of the three a budget of
+    fn fr_conf_005_the_four_connection_phases_share_one_budget_and_the_others_do_not() {
+        // FR-CONF-005: the system SHALL NOT give each of the four a budget of
         // the configured value.
         assert!(Phase::DnsResolution.shares_the_connection_budget());
         assert!(Phase::TcpConnect.shares_the_connection_budget());
         assert!(Phase::TlsHandshake.shares_the_connection_budget());
+        assert!(Phase::Login.shares_the_connection_budget());
+        assert!(!Phase::ReadOnlyStatement.shares_the_connection_budget());
+        assert!(!Phase::ReadOnlyReadBack.shares_the_connection_budget());
+        assert!(!Phase::VersionProbe.shares_the_connection_budget());
         assert!(!Phase::CatalogueQuery.shares_the_connection_budget());
         assert!(!Phase::PasswordCommand.shares_the_connection_budget());
         assert!(!Phase::Render.shares_the_connection_budget());

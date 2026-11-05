@@ -1,8 +1,8 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-09-25
-related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md]
+last-reviewed: 2026-11-05
+related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Configuration Model
@@ -12,18 +12,22 @@ related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.m
 `.tpl/.cfg` is the only configuration `tpl` reads. It is a TOML file in the
 project's `.tpl` folder, holding project options and the database entries
 available to the project. This file defines its key space, the type and default
-of each key, how `${VAR}` expands, how a DSN is parsed, and how a password is
-obtained without being written to disk.
+of each key, the provider each entry names and the keys each provider takes,
+how `${VAR}` expands, how a DSN is parsed, how a SQLite database file is named,
+and how a password is obtained without being written to disk.
 
 ## Scope
 
 In scope: the `.cfg` key space, value types and defaults, the strictness with
-which the file is read, entry shape, what an entry must describe for a
+which the file is read, entry shape, the provider of an entry and the keys
+each provider takes, the path of a SQLite database file and how it resolves,
+what an entry must describe for a
 connection and a read to be possible, DSN grammar, the five TLS modes and the
 behaviour by which they are distinguished, the trust material the two
 verifying modes read and how the directory holding it is resolved, timeouts,
-the keys that set the render bounds, `${VAR}` expansion, and `password_command`
-execution and its failure modes.
+the keys that set the render bounds, `${VAR}` expansion, `password_command`
+execution and its failure modes, and how an empty password is presented to
+the server.
 
 Out of scope: the commands that read and write the file, which belong to
 [cfg-commands.md](cfg-commands.md); and the ownership and permission checks
@@ -81,9 +85,23 @@ tls      = "verify-identity"
   | `database.<name>.tls` | TLS mode, see `FR-CONF-013` | `verify-identity` |
   | `database.<name>.ca_file` | path to a certificate file | none |
   | `database.<name>.ca_path` | path to a certificate directory | none |
+  | `database.<name>.provider` | provider, `mariadb`, `mysql` or `sqlite`, see `FR-CONF-051` | `mariadb` |
+  | `database.<name>.path` | path to a SQLite database file, see `FR-CONF-054` | none |
 
   *Provenance.* The default port `3306` comes from the root `README.md` and is
   contradicted by no decision.
+
+  *Amended in the sixty-fifth edition,* for rmp `#314`. The rows
+  `database.<name>.provider` and `database.<name>.path` are new. The key space
+  grows from eighteen key forms to twenty, twelve of them per entry and eight
+  under `[core]`. Which keys an entry may carry depends on its provider, per
+  `FR-CONF-052`: the defaults of `port` and `tls` are defaults of a `mariadb`
+  entry, and a `sqlite` entry carries neither key.
+
+  *Amended in the seventy-third edition,* for rmp `#324`. The provider row
+  names the third value, `mysql`. The key space is unchanged at twenty key
+  forms, and the defaults of `port` and `tls` are defaults of a `mysql` entry
+  as they are of a `mariadb` entry, per `FR-CONF-052`.
 
   *Amended in the forty-second edition.* The three rows `core.render_fuel`,
   `core.render_output_limit` and `core.render_memory_limit` are new, as
@@ -113,26 +131,41 @@ tls      = "verify-identity"
   points at it rather than implying a key per phase.
 
 - **FR-CONF-005**: The system SHALL apply a deadline to every blocking phase:
-  DNS resolution, TCP connect, TLS handshake, catalogue query,
-  `password_command`, and render. Each phase SHALL take its deadline from the
-  key named beside it:
+  DNS resolution, TCP connect, TLS handshake, the login, session statement,
+  catalogue query, `password_command`, and render. Each phase SHALL take its
+  deadline from the key named beside it:
 
   | Phase | Key of `FR-CONF-002` |
   |---|---|
   | DNS resolution | `core.connect_timeout` |
   | TCP connect | `core.connect_timeout` |
   | TLS handshake | `core.connect_timeout` |
+  | The [login](glossary.md#login) | `core.connect_timeout` |
+  | A [session statement](glossary.md#session-statement) | `core.query_timeout` |
   | Catalogue query | `core.query_timeout` |
   | `password_command` | `core.password_timeout` |
   | Render | `core.render_timeout` |
 
-  The three connection phases SHALL share **one** budget of the resolved value
+  The four connection phases SHALL share **one** budget of the resolved value
   of `core.connect_timeout`, measured from the start of the first of them that
   runs and consumed by them in the order they run. The system SHALL NOT give
-  each of the three a budget of that value. The other three phases each have a
-  budget of their own. IF the shared budget expires, THEN the system SHALL
-  report the failure against the phase that was in progress when it expired,
-  per `FR-ERR-034`.
+  each of the four a budget of that value. The other phases each have a budget
+  of their own, and each session statement and each catalogue query SHALL
+  have a deadline of the resolved value of `core.query_timeout`, measured from
+  its own start: the session statements do not share one deadline, and none
+  of them shares the budget of the connection phases. IF the shared budget
+  expires, THEN the system SHALL report the failure against the phase that was
+  in progress when it expired, per `FR-ERR-034` and `FR-ERR-027`.
+
+  The connection phases run in this order: DNS resolution, the TCP connect,
+  the server's greeting, the TLS handshake where the mode of `FR-CONF-013`
+  negotiates one, and the authentication. The greeting and the
+  authentication are the login, which is therefore in progress both before
+  and after a TLS handshake. The phase in progress SHALL be decided by what
+  the connection had completed when the budget expired or the failure
+  arrived, and SHALL NOT be decided by the call that was running: a
+  connection opened and logged in by one call to a driver is reported by the
+  phase it had reached, exactly as one opened phase by phase.
 
   *Note added in the fortieth edition.* Under `FR-CACHE-038` the files a render
   reads lazily are read within the render phase and under its deadline. A
@@ -140,6 +173,11 @@ tls      = "verify-identity"
   have the whole budget of `core.render_timeout`. The server read between them
   runs under the connection and catalogue-query deadlines above. The overall
   budget of `FR-GLOB-011` still bounds the whole invocation.
+
+  *Note added in the sixty-fifth edition.* For a `sqlite` entry, DNS
+  resolution, TCP connect, TLS handshake and `password_command` do not run,
+  and every statement on the connection to the file runs under the
+  catalogue-query deadline, per `FR-LITE-009`.
 
   *Note added in the fifth edition.* The DNS phase is the one phase whose
   behaviour depends on how the binary was linked. The Linux targets of
@@ -165,6 +203,55 @@ tls      = "verify-identity"
   which code a failure produces changes, and the obligation that no phase run
   unbounded held under either reading. `FR-GLOB-012` composes the shared budget
   with `--timeout` exactly as it composes the other three.
+
+  *Amended in the seventy-seventh edition,* for rmp `#336`: the login is a
+  fourth connection phase, its order among the others is stated, and so is
+  how the phase in progress is decided. The login has always run inside the
+  connection, under the shared budget, which bounded it without naming it,
+  and the implementation reported every expiry inside the one driver call
+  that opens the connection as an expiry of the TCP connect, a stalled TLS
+  handshake and a stalled login included, against the requirement's sentence
+  on the phase in progress. That sentence is unchanged save the citation of
+  `FR-ERR-027`; what is new is that it reaches the login, and that the call
+  running is not the measure of the phase. The budget, its key and its value
+  are unchanged, and so is what the ninth edition settled: one budget, of the
+  value the caller set, for everything connecting takes.
+
+  *Rejected: a budget of its own for the login.* A caller who writes
+  `connect_timeout = 10` states how long connecting may take, as the ninth
+  edition reasoned, and a login is part of connecting; a second budget would
+  let connecting take longer than the value written.
+
+  *Amended in the seventy-ninth edition,* for rmp `#339`: the session
+  statement is a phase, and each of the three takes the deadline of
+  `core.query_timeout` on its own. The read-only session statement, its
+  read-back and the version probe, which `FR-SRV-042` orders for a `mariadb`
+  entry and `FR-MYSQL-017` for a `mysql` entry, are issued on a session that
+  has opened, after the four connection phases, and the requirement named no
+  deadline for them. The implementation bounded each by `core.query_timeout`,
+  as it bounds a catalogue query, and reported an expiry of the version
+  probe as an expiry of a query reading the database structure. The
+  deadline is the one the implementation applies; what is new is that this
+  requirement states it, and that `FR-ERR-027` names the statement whose
+  deadline expired.
+
+  *Why `core.query_timeout`, and not the connection budget.* The connection
+  phases end when the session opens, as the
+  [login](glossary.md#login) is defined, and a session statement is a
+  statement on that session: it fails as a catalogue query fails, under
+  `FR-ERR-036`, and is repeated as one is, the operation being read-only. A
+  server slow to answer a statement is the condition `core.query_timeout`
+  describes, and it is the key a caller raises for it. *Rejected: the
+  connection budget.* It would spend on a statement the time the caller set
+  for reaching the server, and report a slow statement as a slow
+  connection. *Rejected: a key of its own.* It would grow the key space of
+  `FR-CONF-002` for three statements whose bound the existing key already
+  describes.
+
+  For a `sqlite` entry neither the login nor a session statement of this
+  requirement runs, and the note of the sixty-fifth edition above stands:
+  every statement on the file, its version probe included, runs under the
+  catalogue-query deadline, per `FR-LITE-009`.
 
 - **FR-CONF-045**: The system SHALL resolve the render fuel of `FR-RND-036`
   from `core.render_fuel`, the render output limit of `FR-RND-037` from
@@ -305,6 +392,14 @@ tls      = "verify-identity"
   fields are `host`, `port`, `user`, `password`, and `database`.
   `password_command` SHALL NOT be one of them.
 
+  *Note added in the sixty-fifth edition.* This requirement and `FR-CONF-007`
+  describe a `mariadb` entry. A `sqlite` entry carries none of these keys and
+  is described by `path`, per `FR-CONF-052` and `FR-CONF-053`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. A `mysql` entry
+  is described as a `mariadb` entry is, and this requirement and
+  `FR-CONF-007` govern it unchanged, per `FR-MYSQL-020`.
+
   *Amended in the third edition.* The list of discrete connection fields, and
   the exclusion of `password_command` from it, are new. The first edition said
   "the discrete fields" without enumerating them, which left it unstated
@@ -410,6 +505,230 @@ tls      = "verify-identity"
 
   *Added in the forty-ninth edition,* for rmp `#281`.
 
+## The provider of an entry
+
+```toml
+[database.shop]
+dsn = "mysql://alice:${SHOP_DB_PASSWORD}@db.example.com:3306/shop"
+
+[database.ledger]
+provider = "sqlite"
+path     = "data/ledger.sqlite"
+```
+
+- **FR-CONF-051**: Every database entry SHALL have a **provider**, named by its
+  `provider` key, which SHALL take exactly one of the three values `mariadb`,
+  `mysql` and `sqlite`. An entry that carries no `provider` key SHALL be a
+  `mariadb` entry. The provider SHALL decide how the entry is read: a
+  `mariadb` entry through the server contract of
+  [server-contract.md](server-contract.md), a `mysql` entry through the
+  contract of [mysql-contract.md](mysql-contract.md), and a `sqlite` entry
+  through the contract of [sqlite-contract.md](sqlite-contract.md).
+
+  1. **On the command line.** IF the value given to `--provider` under
+     `FR-CFG-027`, or to `tpl cfg set database.<name>.provider`, is not one of
+     the three values, THEN the system SHALL exit `64` (`EX_USAGE`) and SHALL
+     write nothing to `.tpl/.cfg`.
+  2. **In the file.** IF `.tpl/.cfg` declares a `provider` that is not one of
+     the three values, in any entry, THEN the system SHALL exit `78`
+     (`EX_CONFIG`) at step 3 of `FR-ERR-006`.
+
+  In both cases the `cause` SHALL name the key or the flag and SHALL state the
+  three values the key takes. The value found enters the `cause` only under the
+  set of `FR-ERR-022`; a value outside it is described, not reproduced. On the
+  command line the `hint` SHALL show the form with a placeholder, as in
+  `--provider <provider>`; in the file it SHALL name the file, the entry and
+  the edit to make, per `BR-ERR-004`. The comparison is exact: `SQLite` is not
+  `sqlite`.
+
+  ```
+  tpl cfg set database.ledger.provider postgres
+  error: invalid value for database.ledger.provider
+  cause: database.ledger.provider takes mariadb, mysql or sqlite; the value given is postgres
+  hint:  give one of the three: tpl cfg set database.ledger.provider <provider>
+  exit:  64 (EX_USAGE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named and the code.
+
+  *Rationale.* The user's requirement is that each database engine is a
+  distinct provider, abstracted through the configuration, and that the
+  provider set in the configuration decides how `tpl` behaves. An absent key
+  means `mariadb` because every `.tpl/.cfg` written before this edition
+  describes a MariaDB server and carries no such key: each keeps its meaning,
+  and no project needs an edit. The two codes are those `FR-CONF-048` gives a
+  name outside its grammar, on the command line and in the file, and for the
+  same reasons.
+
+  *Rejected: requiring the key on every entry.* It refuses with `78` every
+  project written before this edition, at step 3, in every command. *Rejected:
+  inferring the provider from the keys the entry carries.* `BR-CONF-004`
+  refuses a reader that guesses, and an entry carrying `path` and `host`
+  together would have no answer.
+
+  *Accepted cost.* `FR-CONF-034` refuses a key it does not know, so a project
+  whose `.tpl/.cfg` names a provider cannot be read by a binary released
+  before this edition. A project that must be read by both keeps its MariaDB
+  entries free of the key, which reads the same in both.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventy-third edition,* for rmp `#324`. The key takes a
+  third value, `mysql`, which selects the contract of
+  [mysql-contract.md](mysql-contract.md), by the user's requirement that MySQL
+  be a provider of its own selected by this key, through the mechanism that
+  distinguishes `mariadb` from `sqlite`. An absent key still means `mariadb`,
+  and every entry, written or absent, keeps the provider it had: the meaning
+  of `mariadb` and of `sqlite` is unchanged, and so are the two codes and the
+  step at which each is decided. The `cause` names three values where it
+  named two. The accepted cost above extends to the value: a binary released
+  before this edition refuses `provider = "mysql"` with `78` at step 3, as a
+  value outside the two it knows.
+
+- **FR-CONF-052**: Each provider SHALL take only its own keys among the keys of
+  an entry:
+
+  | Provider | Keys it takes | Keys it refuses |
+  |---|---|---|
+  | `mariadb` | `provider`, `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` | `path` |
+  | `mysql` | `provider`, `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` | `path` |
+  | `sqlite` | `provider`, `path` | `dsn`, `host`, `port`, `user`, `password`, `password_command`, `database`, `tls`, `ca_file`, `ca_path` |
+
+  IF the entry an invocation selects carries a key its provider refuses, THEN
+  the system SHALL exit `78` (`EX_CONFIG`) at entry resolution, step 5 of
+  `FR-ERR-006`, and SHALL NOT open a connection or a file. The `cause` SHALL
+  name `.tpl/.cfg`, the entry, its provider — stating whether it is written or
+  taken from an absent key — and every key the provider refuses that the entry
+  carries. The `hint` SHALL carry `tpl cfg database show <entry>`, and SHALL
+  NOT carry a command that removes a key or changes the provider, per
+  `BR-ERR-005`. The `cfg` commands that write an entry refuse to produce such
+  an entry, with `64`, per `FR-CFG-048`.
+
+  *Rationale.* Each refused key describes a connection to a server — its
+  address, its credentials, its database or its transport — and a `sqlite`
+  entry reaches no server; `path` names a file, and a `mariadb` entry reads
+  none. A refused key left in an entry would look in force, which is the
+  ground `FR-CONF-007` gives for refusing two password sources: the file is
+  strict for the reason `BR-CONF-004` states.
+
+  *Why entry resolution and not step 3.* `FR-CONF-040` rejects refusing a
+  file at step 3 for an entry no invocation selected, because the `cfg`
+  command that repairs the entry would itself be refused. The commonest way to
+  reach this condition is a hand-written entry with `path` and no `provider`,
+  and `tpl cfg set database.<entry>.provider sqlite` is its repair.
+
+  *Why the `hint` shows and does not repair.* The two repairs are removing the
+  refused keys and changing the provider, and each deletes or overwrites a
+  value of `.tpl/.cfg` the invocation did not name, which `BR-ERR-005`
+  forbids a `hint` to carry. `tpl cfg database show` succeeds in the state the
+  invocation found, per `BR-ERR-004`, and shows the caller both.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Amended in the seventy-third edition,* for rmp `#324`. The `mysql` row is
+  new: a `mysql` entry describes a connection to a server as a `mariadb` entry
+  does, so it takes and refuses the same keys, per `FR-MYSQL-020`. The rows of
+  `mariadb` and `sqlite` are unchanged. Changing an entry's provider between
+  `mariadb` and `mysql` therefore leaves no key the new provider refuses.
+
+- **FR-CONF-053**: A `sqlite` entry SHALL name a database file in `path`. IF
+  the entry an invocation selects is a `sqlite` entry and carries no `path`,
+  or a `path` that is empty under the definition of `FR-CONF-050`, THEN the
+  system SHALL exit `78` (`EX_CONFIG`) at entry resolution, step 5 of
+  `FR-ERR-006`, and SHALL NOT open a file. The `cause` SHALL name `.tpl/.cfg`,
+  the entry, and `database.<name>.path` as the key the entry does not carry, or
+  state that it is empty. The `hint` SHALL carry
+  `tpl cfg database update <entry> --path <path>`. On the command line, an
+  empty value given to `--path` or to `tpl cfg set database.<name>.path` SHALL
+  be refused with `64` (`EX_USAGE`), writing nothing, as item 1 of
+  `FR-CONF-050` refuses an empty host.
+
+  *Rationale.* It is `FR-CONF-040` for the one fact a `sqlite` entry must
+  supply, decided at the same step for the same reason, and an empty value
+  takes the path of an absent one for the reason `FR-CONF-050` gives.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+- **FR-CONF-054**: `path` SHALL be read as a literal filesystem path. The
+  system SHALL NOT expand `${VAR}` in it, SHALL NOT expand a leading `~`, and
+  SHALL refuse a value that contains `${`, as `FR-CONF-047` refuses one in
+  `ca_file` or `ca_path`: with `64` on the command line, writing nothing, and
+  with `78` at step 3 of `FR-ERR-006` in the file. A relative `path` SHALL be
+  resolved against the [project directory](glossary.md#project-directory) —
+  the directory that holds the `.tpl` folder of the project the invocation
+  uses, whether discovered or named by `--tpl-dir` — and never against the
+  working directory of the invocation. WHERE the `.tpl` folder is reached
+  through a symbolic link, the project directory SHALL be the parent of the
+  folder's canonical path, per `FR-PROJ-009`, and not the directory that holds
+  the link. The system SHALL store the value as written, and SHALL NOT
+  resolve it when a `cfg` command writes it.
+
+  ```
+  /home/ana/freight/.tpl/.cfg       path = "data/ledger.sqlite"
+  /home/ana/freight/data/ledger.sqlite      the file read, from any directory under /home/ana/freight
+  ```
+
+  *Rationale for the project directory.* Discovery walks up from wherever the
+  caller stands, per `FR-PROJ-004`, so one project is used from many working
+  directories; a path resolved against the working directory would read a
+  different file from each. The file a project reads is the project's, and the
+  directory that holds `.tpl` is the root of the files the caller keeps beside
+  it, which is where a database the project generates from is kept. A
+  template name resolves against `.tpl/templates/` for the same reason, per
+  `FR-TMPL-006`: a relative name in the project resolves within the project.
+
+  *Rejected: resolving against the working directory.* It makes the database a
+  read covers depend on where the caller stands, which is a choice made on no
+  line of the file or the command, the defect `BR-CLI-002` names. *Rejected:
+  resolving against the `.tpl` folder itself.* A database kept beside `.tpl`
+  — the common case — would need `../` in every entry, and the folder holds
+  configuration and templates, not data.
+
+  *Why no expansion.* `BR-CONF-003` admits `${VAR}` so that a secret need not
+  be written to disk, and a path is not a secret. `.tpl/.cfg` is local to a
+  machine, per `FR-CONF-001`, so a path that differs between machines is
+  written on each, and an injected variable would choose the file a read
+  covers, the ground `FR-CONF-047` gives for `ca_file`. A leading `~` is
+  expanded by the shell, on a command line it parses, before `tpl` sees it.
+
+  *Accepted cost.* A path whose name contains `${` cannot be named; the caller
+  names it through a link. A path relative to the working directory, given as
+  `--path` from a subdirectory, is stored as written and resolved against the
+  project directory; the help of the flag states the rule, per `FR-CFG-033`.
+
+  *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Note added in the eightieth edition,* for rmp `#357`. A `path` that holds
+  a NUL character is refused, on the command line with `64` and in the file
+  with `78`, per `FR-CONF-057`.
+
+  *Amended in the sixty-seventh edition,* for rmp `#314`: the sentence on a
+  `.tpl` folder reached through a symbolic link is new. "The directory that
+  holds the `.tpl` folder" has two readings there — the directory holding the
+  link, and the parent of its target — and they name different directories.
+  The parent of the canonical folder is chosen because it is the one path the
+  project holds once `FR-PROJ-009` has canonicalised it, and every other file
+  of the project already resolves under that folder: its configuration, which
+  the trust checks verify at the real target, its template root, per
+  `FR-TMPL-023`, and its cache, per `FR-CACHE-001`. A project reached through
+  two links then reads one database, as it reads one `.tpl/.cfg`, whichever
+  link the invocation came through. The technical specification recorded this
+  reading and asked for it to be settled.
+
+  *Rejected: the directory that holds the link.* Two links to one `.tpl`
+  folder would read two databases from one `.tpl/.cfg`, chosen by which link
+  the walk or `--tpl-dir` reached and by no line of the file, which is the
+  ground this requirement gives for refusing the working directory. A
+  `--tpl-dir` naming a link whose own name is not `.tpl`, which `FR-PROJ-027`
+  accepts for its canonical form, would also resolve against a directory that
+  is not the project's.
+
+  *Accepted cost.* A caller who keeps the database beside a link to a `.tpl`
+  folder kept elsewhere, and writes a relative `path`, reads the file beside
+  the folder's real location instead. The caller writes an absolute `path`,
+  or keeps the database beside the real folder.
+
 ## What an entry must describe
 
 An entry must supply two facts that have no default: the host to connect to,
@@ -421,6 +740,15 @@ absences are reachable from a legal invocation. Both are decided at the
 entry-resolution step of `FR-ERR-006`, before any connection is opened, and
 neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 *invalid entry*.
+
+*Note added in the sixty-fifth edition.* This section describes a `mariadb`
+entry. A `sqlite` entry has no host and no server-side database; the one fact
+it must supply is the file, per `FR-CONF-053`, and `FR-CONF-040` and
+`FR-CONF-041` do not reach it.
+
+*Note added in the seventy-third edition,* for rmp `#324`. This section
+describes a `mysql` entry as it describes a `mariadb` one, per
+`FR-MYSQL-020`.
 
 - **FR-CONF-040**: An entry SHALL name a host. IF the entry an invocation
   selects carries neither `dsn` nor `host`, THEN the system SHALL exit `78`
@@ -585,6 +913,13 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 
   *Added in the forty-ninth edition,* for rmp `#281`.
 
+  *Amended in the seventy-ninth edition,* for rmp `#310`. The refusal of a
+  value that is empty after expansion is made where the field is expanded,
+  which `FR-CONF-056` places at the resolution of the entry for a connection,
+  and still before any connection is opened; a value empty as written is
+  refused at entry resolution, as the second item states. A read served from
+  the cache expands neither key, and an empty expansion does not refuse it.
+
   *Amended in the fiftieth edition,* for rmp `#282`. `--host '   '` was
   stored with exit `0`, and the next read exited `69` with "host '   ' could
   not be resolved", per finding X-08 of the seventh re-audit of rmp `#263`.
@@ -607,6 +942,13 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 
 - **FR-CONF-010**: The system SHALL accept the schemes `mysql://` and
   `mariadb://`, treating them as equivalent.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The scheme does
+  not select the provider. An entry whose `dsn` begins `mysql://` and which
+  carries no `provider` key is a `mariadb` entry, per `FR-CONF-051`, as it
+  was before this edition, and a `mysql` entry accepts either scheme, per
+  `FR-MYSQL-020`. `FR-MYSQL-001` records why the scheme was rejected as the
+  selector.
 
 - **FR-CONF-011**: A DSN SHALL carry no query parameters. IF a DSN carries a
   `?`, THEN the system SHALL exit `78` (`EX_CONFIG`), whatever follows it.
@@ -935,6 +1277,18 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   first is what an acceptance test for the default mode of `FR-CONF-013`
   requires; the second is the right-hand column of the table above.
 
+  *Note added in the sixty-fifth edition.* The fixture the tests of a
+  `sqlite` entry read is `FR-LITE-038`, in
+  [sqlite-contract.md](sqlite-contract.md). TLS does not reach a `sqlite`
+  entry, which carries no `tls` key, per `FR-CONF-052`.
+
+  *Note added in the seventy-third edition,* for rmp `#324`. The five modes
+  reach a `mysql` entry, and `FR-MYSQL-021` fixes their behaviour against a
+  MySQL server in this table's terms. The fixture whose servers make its
+  cells demonstrable for a `mysql` entry is that of `scripts/mysql/`, which
+  `FR-MYSQL-044` obliges as this requirement obliges `scripts/mariadb/`. The
+  obligation on `scripts/mariadb/` is unchanged.
+
   *Amended in the eighth edition: the fixture obligation is a requirement
   rather than a consequence.* The *Observed* note below records that `tpl`
   with default configuration could not reach the fixture over TCP on any
@@ -1062,11 +1416,72 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   expanded. For `ca_file` and `ca_path` a reference is also refused, per
   `FR-CONF-047`.
 
+  *Note added in the sixty-fifth edition.* `provider` and `path` are not
+  expanded. In `path` a reference is also refused, per `FR-CONF-054`.
+
   *Note added in the forty-ninth edition.* The six are fields of a database
   entry: `database` here is `database.<name>.database`. No key under `[core]`
   is expanded. In `core.database` a reference is also refused, per
   `FR-CONF-048`, and `FR-CONF-049` fixes the form of a reference in the six
   fields.
+
+- **FR-CONF-056**: The system SHALL expand the fields `FR-CONF-015` names,
+  and SHALL run the `password_command` of `FR-CONF-024`, only WHEN it
+  resolves the selected entry for a connection — that is, once the
+  invocation is to open one: a read of `FR-CACHE-009` that misses the cache
+  or carries `--direct`, a read that a render returns to under
+  `FR-CACHE-039`, `tpl cache load`, and `tpl cfg database test` — and before
+  the first connection phase of `FR-CONF-005`. WHERE an invocation opens no
+  connection — a read served wholly from the cache under `FR-CACHE-006`, a
+  render with `--context`, and every command that contacts no database — the
+  system SHALL expand no field and SHALL run no `password_command`.
+
+  The conditions that expansion and the helper raise are therefore raised
+  only by an invocation that opens a connection, at the cache-or-connection
+  step of `FR-ERR-006`, and never by one served from the cache: the
+  undefined variable of `FR-CONF-022`, the unclosed reference of
+  `FR-CONF-021`, the invalid name of the second item of `FR-CONF-049`, the
+  value that expands to the empty string of the second item of
+  `FR-CONF-050`, and the failures of the helper of `FR-CONF-028`,
+  `FR-CONF-031`, `FR-CONF-033`, `FR-CONF-042` and `FR-CONF-043`. A
+  condition of the file as written — a key the provider refuses, an absent
+  host or database, `password` beside `password_command` — is not one of
+  them, and stays where its own requirement places it.
+
+  *Demonstrable.* With the cache of an entry filled and the variable its
+  `password` references unset, `tpl -d <entry> schema dump` exits `0` and its
+  document carries the `source` of a cached read, per `FR-CDOC-009`;
+  `tpl -d <entry> schema dump --direct` and `tpl cfg database test <entry>`
+  exit `78` under `FR-CONF-022`, naming the variable.
+
+  *Rationale.* A read served from the cache opens no connection, per
+  `FR-CACHE-006`, and the cache is keyed by the entry's name and by nothing
+  else, per `FR-CACHE-002`, so nothing a hit does reads the value of any of
+  the six fields. The implementation expanded them when it resolved the entry,
+  before it consulted the cache, so `tpl -d world schema dump` exited `78`
+  from a warm cache when the entry's password was `"${FIXTURE_PW}"` and the
+  variable was unset: a caller was refused a read that needed no credential.
+  This is rmp `#310`, of sprint 29, and the user chose, among the options it
+  recorded, that a reference be expanded only when the entry is resolved for
+  a connection.
+
+  *Why every field, and not the password alone.* The user's choice names a
+  credential, and the ground it rests on — that a hit reads no value of the
+  entry — holds of all six fields alike: a `user` or a `database` written as
+  `${…}` with its variable unset would refuse a hit exactly as the password
+  did. *Rejected: deferring the password alone*, or the two credentials, which
+  would leave the same refusal on the other fields. *Why the helper with
+  them.* `FR-GLOB-026` already runs `password_command` on a miss alone, and
+  the two ways of keeping a password off disk take effect at one moment, so
+  that a caller learns one rule for both.
+
+  *Accepted cost.* A reference that is malformed, or names a variable never
+  defined, is not reported while every read is served from the cache; it is
+  reported by the first read that opens a connection, and by
+  `tpl cfg database test`, which always does. The fault is met where the
+  field is expanded, which is where `FR-CONF-049` already places it.
+
+  *Added in the seventy-ninth edition,* for rmp `#310`.
 
 - **FR-CONF-016**: The system SHALL NOT expand `${VAR}` in `tls`.
 
@@ -1226,6 +1641,11 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
 
 - **FR-CONF-022**: IF a referenced environment variable is undefined, THEN the
   system SHALL exit `78`.
+
+  *Note added in the seventy-ninth edition,* for rmp `#310`. The condition is
+  raised only where the field is expanded, which `FR-CONF-056` places at the
+  resolution of the entry for a connection. A read served from the cache
+  expands nothing, and an undefined variable does not refuse it.
 
 - **BR-CONF-002**: An undefined variable is never a silent empty substitution.
 
@@ -1596,6 +2016,240 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   requirement confirms, and it names no signal, which this requirement now
   obliges it to.
 
+## An empty password
+
+- **FR-CONF-055**: WHERE the password the configuration supplies for a
+  `mariadb` or a `mysql` entry is the empty string, or the configuration
+  supplies no password for it, the system SHALL present the entry to the
+  server as the server's own clients present an empty password: at every
+  step of the authentication that carries the password — the first response
+  of the login, and the response to every request of the server to switch
+  the authentication method — the system SHALL send the following response,
+  and SHALL NOT send a [scramble](glossary.md#scramble) computed from the
+  empty string, nor request the server's RSA public key:
+
+  | Authentication method | Response for an empty password |
+  |---|---|
+  | `mysql_native_password` | An empty response |
+  | `caching_sha2_password` | A single zero byte |
+  | `sha256_password` | A single zero byte |
+  | `mysql_clear_password` | A single zero byte |
+
+  WHERE the server names no method at the first response, that response
+  SHALL be empty.
+
+  The configuration supplies the empty string in three ways, each read under
+  the requirement that governs its source; the first two hold it as written
+  or after the expansion of `FR-CONF-015`:
+
+  | Source | Example | Read under |
+  |---|---|---|
+  | `password`, holding the empty string | `password = ""` | `FR-CONF-006` |
+  | A `dsn` whose password part is present and empty | `mysql://reader:@db.example.com/shop` | `FR-CONF-009` |
+  | A `password_command` whose trimmed standard output is empty | a helper that prints nothing and exits `0` | `FR-CONF-027` |
+
+  An entry supplies no password where it has no `password` key, a `dsn` with
+  no password part, and no `password_command`.
+
+  *Prior art: what the server's own clients send.* MySQL's client library,
+  at the public source of `mysql/mysql-server`, branch `8.4`, commit
+  `8a180268`, read on 2026-11-04: `native_password_auth_client`, in
+  `sql-common/mysql_native_authentication_client.cc`, sends a scramble only
+  `if (mysql->passwd[0])`, and otherwise an empty packet, commented
+  `/* no password */`; `caching_sha2_password_auth_client` and
+  `sha256_password_auth_client`, in `sql-common/client_authentication.cc`,
+  test `mysql->passwd[0] != 0` and, where it is false, send a single zero
+  byte, commented `/* We're not using a password */`. MariaDB Connector/C,
+  which the `mariadb` command-line client is built on, at the public source
+  of `mariadb-corporation/mariadb-connector-c`, branch `3.4`, commit
+  `6a1cd082`, read on the same date: `native_password_auth_client`, in
+  `plugins/auth/my_auth.c`, sends a scramble only
+  `if (mysql && mysql->passwd[0])`, and otherwise an empty packet,
+  `/* no password */`; and the `caching_sha2_password` client, in
+  `plugins/auth/caching_sha2_pw.c`, sends an empty packet,
+  `/* send empty packet if no password was provided */`. Both libraries turn
+  a password not given into the empty string before the login, in
+  `mysql_real_connect` (`sql-common/client.cc` and
+  `libmariadb/mariadb_lib.c`), so to a server an empty password and no
+  password are one login.
+
+  *Why a zero byte for `caching_sha2_password`.* The two libraries differ
+  for that method alone: MySQL's sends a single zero byte, and Connector/C
+  an empty packet. The user chose MySQL's on 2026-11-04, as the project's
+  decision records hold, for `caching_sha2_password` and for
+  `sha256_password`, the two methods MySQL's library answers that way; the
+  libraries agree on an empty response for `mysql_native_password`; and
+  `mysql_clear_password` sends the password as text ended by a zero byte,
+  which for the empty string is the zero byte alone.
+
+  *Rationale.* The server's own clients are the reference for what a server
+  is built to receive, and none of them sends a scramble of the empty string.
+  A scramble is a password presented, which a server compares with the
+  account's; an empty password is what a caller writes for an account that
+  has none, and a server refuses the login of such an account when the empty
+  string reaches it as a scramble, as observed below. Presenting it as those
+  clients do sends what they send.
+
+  *Observed, through `tpl`, on 2026-11-04.* Both fixtures carry an account,
+  `tpl_nopass`, created with no password — on MariaDB with no `IDENTIFIED`
+  clause, so the server's default method, and on MySQL `IDENTIFIED BY ''`,
+  so `caching_sha2_password` with an empty credential. The tests
+  `fr_conf_055_an_account_with_no_password_logs_in_on_every_mariadb_series`
+  and `fr_conf_055_an_account_with_no_password_logs_in_on_every_mysql_server`,
+  in `tests/login_faults.rs`, ran `tpl schema info --direct --no-cache` as
+  that account, once with `password = ""` and once with no `password` key,
+  and every run exited `0`: on every MariaDB server of the fixture — the
+  four series of `FR-SRV-015` and the server offering no TLS — under
+  `disabled`; and on the MySQL servers of `8.4` and `9.7` under
+  `verify-identity` and `disabled`, and on the two offering no TLS under
+  `disabled`, with the server's authentication cache emptied before each
+  run, which shows that the login needs no RSA public key. Before the
+  change, the same login with `password = ""` exited `77` on MariaDB, the
+  server refusing the scramble, and `78` on MySQL over a session TLS does not
+  protect, per `FR-MYSQL-045`.
+
+  *What it does not settle.* Whether a server accepts the empty string for
+  an account that has a password is the server's answer, and a refusal is an
+  authentication refused, `77` (`EX_NOPERM`), per `FR-ERR-048`. That
+  answer is not observed. The configuration is unchanged: each of the three
+  sources is a password source under `FR-CONF-007`, beside which a second one
+  is refused.
+
+  *Rejected: presenting the empty string through the exchange of the
+  authentication method exactly as a password of any other value*, which
+  `FR-MYSQL-047` required of a `mysql` entry in the seventy-sixth edition and
+  the implementation did for both providers. The exchange computes a
+  scramble from the password, and from the empty string it computes one the
+  server's own clients never send. *Rejected, with it: telling an empty
+  password from no password at the server*, which the same requirement did
+  in requiring that the entry never be presented as one that supplies no
+  password. The server's own clients make the two one login, as above, and
+  so does this requirement: an entry that supplies no password is presented
+  as one whose password is the empty string, at every step. The
+  implementation had sent an empty first response for such an entry and a
+  scramble of the empty string in response to a switch of the method, which
+  is the same divergence on a second path.
+
+  *Provenance.* rmp `#334`, of sprint 28, which the user decided on
+  2026-11-04 to fix in that sprint, for both providers; the prior art above
+  settles what is sent.
+
+  *Added in the seventy-seventh edition,* for rmp `#334`.
+
+## A NUL character
+
+- **FR-CONF-057**: The following values SHALL NOT hold a NUL character
+  (U+0000): the `host`, `user`, `password` and `database` of a `mariadb` or a
+  `mysql` entry; each of the four parts of a `dsn` that carries one of them,
+  as the `dsn` holds it; the `path` of a `sqlite` entry; and the password a
+  `password_command` prints. No requirement of this corpus decodes a part of
+  a `dsn`, so a `%00` in one is the three characters it is written as, and
+  not a NUL character.
+
+  The argument vector of a Unix process ends each argument at its first NUL
+  character, so no value given on the command line can hold one. The
+  refusal of the first item below is a guard on the validation every value
+  of these keys passes, which no invocation of the binary can reach, and it
+  is verified in process; a NUL character reaches `tpl` only through
+  `.tpl/.cfg`, whose TOML string escape writes one, and through the output of
+  a `password_command`.
+
+  1. **On the command line.** IF a value given to `tpl cfg set` for one of
+     those keys, or to `--dsn`, `--host`, `--user`, `--schema` or `--path`
+     under `FR-CFG-027`, holds a NUL character, THEN the system SHALL exit
+     `64` (`EX_USAGE`), as `FR-CFG-010` does for a value that does not
+     conform to its type, and SHALL write nothing to `.tpl/.cfg`.
+  2. **In the file.** IF the entry an invocation selects holds such a value,
+     THEN the system SHALL exit `78` (`EX_CONFIG`) at entry resolution, step
+     5 of `FR-ERR-006`, before any connection is opened and before the file
+     a `path` names is opened.
+  3. **From `password_command`.** IF the password the helper prints holds a
+     NUL character, THEN the system SHALL exit `78` where `FR-CONF-056`
+     runs the helper, before the first connection phase.
+
+  The `cause` SHALL name the key, the flag or the part of `dsn`, and the
+  entry, state that the value holds a NUL character, and state that `tpl`
+  refuses it because the value would be cut at it. For `host`, `user`,
+  `database` and `path` it SHALL name the part of the value before the NUL
+  character, escaped under `FR-ERR-024`, which is the value the cut would
+  have used; it SHALL NOT reproduce any part of a password or of the
+  helper's output, per `FR-ERR-013`, and for the third item it SHALL name
+  the command as stored, under the exception `FR-CONF-033` states. The
+  `hint` SHALL show the key or the flag with a placeholder for the value, as
+  in `--schema <database>`, or for the third item state that the command
+  must print the password alone.
+  `${VAR}` cannot introduce a NUL character: every target of `NFR-PERF-018`
+  is a Unix, whose environment strings end at their first NUL, so the rule
+  reaches the value as written, the parts of a `dsn` as written, and the
+  helper's output.
+
+  ```
+  tpl -d shop schema tables
+  error: database.shop.database holds a NUL character, for database entry 'shop'
+  cause: database.shop.database in /home/ana/shop/.tpl/.cfg holds a NUL character (U+0000) after 'freight'; tpl refuses it, because the login ends a database name at its first NUL and the session would select 'freight', not the name written
+  hint:  write the name without it: tpl cfg database update shop --schema <database>
+  exit:  78 (EX_CONFIG)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  *Rationale.* Each of these values reaches an interface that ends a string
+  at its first NUL. The login of the client-server protocol carries the user
+  name and the database as `string<NUL>`, per *Protocol::HandshakeResponse41*
+  at
+  `https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_handshake_response.html`;
+  the C interface through which the servers' own clients connect takes the
+  host, the user, the password and the database as `const char *`, per
+  `mysql_real_connect` at
+  `https://dev.mysql.com/doc/c-api/8.4/en/mysql-real-connect.html`, so no
+  such client presents a password that holds one; and SQLite's
+  `sqlite3_open_v2` takes the file name as `const char *filename`, at
+  `https://sqlite.org/c3ref/open.html`. MariaDB's and MySQL's identifier
+  pages state that a name holds no NUL: "Identifiers are not permitted to
+  contain the ASCII NUL character (U+0000)", at
+  `https://mariadb.com/docs/server/reference/sql-structure/sql-language-structure/identifier-names`,
+  and "ASCII NUL (U+0000) and supplementary characters (U+10000 and higher)
+  are not permitted in quoted or unquoted identifiers", at
+  `https://dev.mysql.com/doc/refman/8.4/en/identifiers.html`. All five were
+  read on 2026-11-05. A value that holds a NUL is therefore a value no
+  server accepts whole, and where an interface does not refuse it, it cuts
+  it: rmp `#357`, from the security review of the `mysql` provider on `8.4`
+  and `9.7`, records that a `database` of `freight`, a NUL and `x` selected
+  `freight` at the login, while the catalogue statements compared the whole
+  value, read no row, and exited `77` naming a fault the caller did not
+  make. A refusal names the fault where it is.
+
+  *Why at entry resolution, and not at step 3.* The fault is in one entry,
+  and a refusal at step 3 would refuse the `cfg` command that repairs it,
+  the ground `FR-CONF-040` and `FR-CONF-049` give. *Why the password and the
+  helper's output too.* A password reaches the login through methods of
+  authentication that do not all carry it alike, and one value that one
+  method reads whole and another cuts is two passwords; the servers' own
+  clients cannot present it at all. *Why `path`.* A `path` that holds a NUL
+  names no file the library can open whole, and the file it would open is
+  another than the one written.
+
+  *Rejected: leaving the value to the server or the library.* Neither
+  refuses it where it is cut: the login selected the prefix, and the refusal
+  that followed was a `77` that named the wrong fault. *Rejected: stripping
+  the character.* It changes a value the caller wrote, which `FR-CONF-050`
+  declines for whitespace on the same ground.
+
+  *Added in the eightieth edition,* for rmp `#357`.
+
+  *Amended in the eighty-first edition,* for rmp `#357`. The requirement
+  read a part of a `dsn` "after the percent-decoding through which the URL
+  carries it", and refused a NUL character in `--dsn` "once each part is
+  decoded". No requirement decodes a part — `FR-CONF-009` fixes the grammar
+  and `FR-CONF-018` the order of parsing, expansion and encoding, and
+  neither decodes — and the implementation passes each part to the driver
+  as written, so the wording presupposed a step that does not exist. It now
+  reads each part as the `dsn` holds it. The paragraph on the argument
+  vector is new: the first item read as an outcome of an invocation, and an
+  invocation cannot carry a NUL character to it.
+
 ## Precedence
 
 - **FR-CONF-029**: The system SHALL resolve every setting through exactly two
@@ -1636,6 +2290,11 @@ neither adds a code: the `78` row of `FR-ERR-001` carries the condition as
   weighed against.
 - [schema-commands.md](schema-commands.md) — the arm `FR-CONF-041` supplies
   with the database every one of its subcommands reads.
+- [sqlite-contract.md](sqlite-contract.md) — how a `sqlite` entry is read,
+  which `FR-CONF-051` selects by its provider, and the file `FR-CONF-054`
+  names.
+- [mysql-contract.md](mysql-contract.md) — `FR-MYSQL-047`, which holds
+  `FR-CONF-055` for a `mysql` entry.
 
 ## Open questions
 
