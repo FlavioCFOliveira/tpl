@@ -2224,7 +2224,13 @@ mod tests {
         // FR-CFG-041 as amended in the eighty-third edition, its example word
         // for word but for the filesystem's answer, which is the system's own
         // text for EIO: the file holds the new content, and nothing says the
-        // previous one stands.
+        // previous one stands. The text is taken from the platform rather than
+        // written here, because the C libraries differ: `Input/output error`
+        // on macOS and glibc, `I/O error` on musl.
+        let eio = io::Error::from_raw_os_error(5).to_string();
+        let eio = eio
+            .strip_suffix(" (os error 5)")
+            .expect("std appends ` (os error 5)` to the system's text for EIO");
         let rendered = render(&Error::ProjectFileNotDurable {
             path: PathBuf::from("/home/ana/shop/.tpl/.cfg"),
             returned: io::Error::from_raw_os_error(5),
@@ -2234,8 +2240,10 @@ mod tests {
             rendered,
             example([
                 "error: .tpl/.cfg was written, and its durability could not be confirmed",
-                "cause: /home/ana/shop/.tpl/.cfg holds the new content; making the rename durable \
-                 failed: the filesystem returned Input/output error",
+                &format!(
+                    "cause: /home/ana/shop/.tpl/.cfg holds the new content; making the rename \
+                     durable failed: the filesystem returned {eio}"
+                ),
                 "hint:  the change is in the file and may not survive a crash of this machine; \
                  check the filesystem, and see the file with: tpl cfg list",
                 "exit:  74 (EX_IOERR)",
