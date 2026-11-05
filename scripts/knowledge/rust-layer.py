@@ -28,8 +28,9 @@ Usage:
 record at the ``file:line`` it claims and confirms that the source there
 declares that symbol, with that name, that kind and that visibility. It uses a
 single-line matcher that shares no code with the scan, so a record the scan
-misattributed fails it. The exit code is ``0`` when every record matched and
-``1`` when any did not.
+misattributed fails it. It also fails when two records share one identity
+``(label, key)``, which the graph would load as one node. The exit code is
+``0`` when every record matched and ``1`` when any did not.
 
 Standard library only, and no configuration: the tree is the input.
 """
@@ -122,6 +123,12 @@ class Node:
     label: str
     key: str
     properties: dict[str, object]
+    #: For a `Method`, the `impl` it sits in as `(self type, trait)`, each the
+    #: fully qualified key followed by the arguments the header writes — see
+    #: `impl_target` and `type_arguments`. The trait is empty for an inherent
+    #: `impl`. Never emitted: it exists only so that `disambiguate_methods` can
+    #: tell apart two methods that share a key.
+    impl_path: tuple[str, str] | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass
@@ -134,6 +141,12 @@ class Edge:
     target_label: str
     target_key: str
     properties: dict[str, object] = field(default_factory=dict)
+    #: The nodes the endpoint keys were read from, where a node's key may still
+    #: change: `disambiguate_methods` re-keys a colliding `Method` after its
+    #: edges were made, and this is how each edge follows its own node. Never
+    #: emitted.
+    source_node: Node | None = field(default=None, compare=False, repr=False)
+    target_node: Node | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass
@@ -162,6 +175,7 @@ class Frame:
     module: str = ""
     owner: str = ""
     trait_key: str = ""
+    impl_path: tuple[str, str] | None = None
 
 
 # ------------------------------------------------------------ the stripping ---
@@ -552,7 +566,12 @@ class Scan:
         owner = self.resolve(type_name, scope) if type_name else ""
         trait_key = self.resolve(trait_name, scope) if trait_name else ""
 
-        return Frame(kind="impl", depth=0, module=scope, owner=owner, trait_key=trait_key)
+        raw_trait, raw_type = impl_target(header)
+        self_path = owner + type_arguments(raw_type)
+        trait_path = trait_key + type_arguments(raw_trait) if trait_key else ""
+
+        return Frame(kind="impl", depth=0, module=scope, owner=owner, trait_key=trait_key,
+                     impl_path=(self_path, trait_path))
 
     def item(
         self,
@@ -634,8 +653,10 @@ class Scan:
                 }
                 if frame.trait_key:
                     properties["traitKey"] = frame.trait_key
-                self.nodes.append(Node("Method", key, properties))
-                self.edges.append(Edge("MEMBER_OF", "Method", key, "Type", frame.owner))
+                method = Node("Method", key, properties, impl_path=frame.impl_path)
+                self.nodes.append(method)
+                self.edges.append(Edge("MEMBER_OF", "Method", key, "Type", frame.owner,
+                                       source_node=method))
             else:
                 key = f"{frame.module}::{name}"
                 self.nodes.append(Node("Function", key, {
@@ -697,6 +718,113 @@ def strip_generics(text: str) -> str:
     return "".join(out)
 
 
+def impl_target(header: str) -> tuple[str, str]:
+    """The trait and the self type an `impl` header names, as written.
+
+    The header's own generic parameters (`impl<T: Bound>`) and its `where`
+    clause are dropped; the arguments of the trait and of the self type are
+    kept, because they are what tells two `impl` blocks of one type apart. The
+    trait is empty for an inherent `impl`.
+    """
+    body = header.split("{", 1)[0]
+    body = re.sub(r"\bwhere\b.*$", "", body)
+    body = re.sub(r"^impl\s*", "", body).strip()
+    if body.startswith("<"):
+        depth = 0
+        for index, character in enumerate(body):
+            if character == "<":
+                depth += 1
+            elif character == ">":
+                depth -= 1
+                if depth == 0:
+                    body = body[index + 1:].strip()
+                    break
+
+    depth = 0
+    for match in re.finditer(r"[<>]|\bfor\b", body):
+        token = match.group(0)
+        if token == "<":
+            depth += 1
+        elif token == ">":
+            depth = max(0, depth - 1)
+        elif depth == 0:
+            return body[: match.start()].strip(), body[match.end():].strip()
+    return "", body
+
+
+def type_arguments(path: str) -> str:
+    """The generic arguments a type path ends with, in one canonical spelling.
+
+    `Cow<'_, [T]>` gives `<[T]>`, and `Table<'_>` gives the empty string.
+    Lifetimes are dropped, because they never tell two `impl` blocks apart and
+    renaming one must not change a key; whitespace is normalised for the same
+    reason. A path that ends with no argument list gives the empty string.
+    """
+    path = path.strip()
+    if not path.endswith(">"):
+        return ""
+    depth = 0
+    start = -1
+    for index in range(len(path) - 1, -1, -1):
+        if path[index] == ">":
+            depth += 1
+        elif path[index] == "<":
+            depth -= 1
+            if depth == 0:
+                start = index
+                break
+    if start < 0:
+        return ""
+
+    arguments = path[start:]
+    arguments = re.sub(rf"'{IDENTIFIER}\s*,?", "", arguments)
+    arguments = re.sub(r"\s+", " ", arguments)
+    arguments = re.sub(r"\s*([<>\[\]();,&])\s*", r"\1", arguments)
+    arguments = re.sub(r",(?=[>\])\]])", "", arguments)
+    return arguments.replace(",", ", ").replace("<>", "")
+
+
+def disambiguate_methods(nodes: list[Node]) -> None:
+    """Re-keys every `Method` whose `owner::name` key another method also holds.
+
+    `owner::name` is unique for almost every method, and a key that is unique
+    is left exactly as it is. It collides only where one type path carries the
+    same method name in more than one `impl` block: an inherent `impl` and a
+    trait `impl`, or two `impl` blocks of one generic type with different
+    trait or type arguments. Each colliding method then takes the qualified
+    path Rust itself writes for it:
+
+    - a trait method becomes `<Self as Trait>::name`;
+    - an inherent method keeps `owner::name` when it is the only inherent one
+      in the collision, since that is the method the plain path resolves to,
+      and otherwise becomes `<Self>::name`.
+
+    `Self` and `Trait` are the fully qualified keys followed by the arguments
+    the `impl` header writes, lifetimes dropped (`type_arguments`). The result
+    depends only on the source, so the same tree yields the same keys on every
+    run. Two methods that still share a key after this are left as they are,
+    and `verify` reports every repeated key.
+    """
+    groups: dict[str, list[Node]] = {}
+    for node in nodes:
+        if node.label == "Method":
+            groups.setdefault(node.key, []).append(node)
+
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        inherent = [node for node in members if node.impl_path and not node.impl_path[1]]
+        for node in members:
+            if node.impl_path is None:
+                continue
+            self_path, trait_path = node.impl_path
+            name = str(node.properties["name"])
+            if trait_path:
+                node.key = f"<{self_path} as {trait_path}>::{name}"
+            elif len(inherent) > 1:
+                node.key = f"<{self_path}>::{name}"
+
+
 def last_segment(text: str) -> str:
     """The bare type name a path denotes, or the empty string."""
     cleaned = text.replace("&", " ").replace("dyn ", " ").replace("mut ", " ").strip()
@@ -736,7 +864,7 @@ def scan_tree(root: Path) -> tuple[Layer, list[str]]:
             layer.nodes.append(node)
             layer.edges.append(Edge(
                 "DECLARES", "File", relative, node.label, node.key,
-                {"line": node.properties["line"]},
+                {"line": node.properties["line"]}, target_node=node,
             ))
             if node.label == "Type":
                 types.add(node.key)
@@ -746,6 +874,15 @@ def scan_tree(root: Path) -> tuple[Layer, list[str]]:
                 impls.append((str(node.properties["owner"]), str(node.properties["traitKey"])))
 
         layer.edges.extend(scan.edges)
+
+    # A method key is final only once every file has been read: two `impl`
+    # blocks that share one may sit in different files.
+    disambiguate_methods(layer.nodes)
+    for edge in layer.edges:
+        if edge.source_node is not None:
+            edge.source_key = edge.source_node.key
+        if edge.target_node is not None:
+            edge.target_key = edge.target_node.key
 
     # An edge is written only where this crate declares both endpoints. A
     # `MEMBER_OF` to a foreign type and an `IMPLEMENTS` of a foreign trait name
@@ -939,6 +1076,20 @@ def verify(
     checked = 0
 
     keys = {(node.label, node.key) for node in layer.nodes}
+
+    # Identity is `(label, key)`, and the graph loads one node per identity:
+    # a repeated pair is two declarations collapsed into one node, with their
+    # edges. This reads the whole layer even under a sample, because a
+    # collision is a property of the layer and not of any one record.
+    seen: dict[tuple[str, str], list[str]] = {}
+    for node in layer.nodes:
+        site = f"{node.properties.get('file', node.properties.get('path'))}" \
+               f":{node.properties.get('line', '')}".rstrip(":")
+        seen.setdefault((node.label, node.key), []).append(site)
+    for (label, key), sites in sorted(seen.items()):
+        if len(sites) > 1:
+            mismatches.append(f"{label} {key}: one key for {len(sites)} declarations — "
+                              + ", ".join(sites))
 
     population = sorted(layer.nodes, key=lambda node: (node.label, node.key))
     available = len(population)
