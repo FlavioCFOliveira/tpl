@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -49,14 +49,18 @@ over the seam `FR-ERR-031` requires, and it asserts what that row asserts: the
 guard produces the condition of `FR-ERR-030` carrying the message `FR-ERR-032`
 requires. Rows 3 to 6 were written with the command surface, at commit
 `f8f335d` of 2026-09-15, and [Help](#help-snapshots-at-every-depth) names each.
-**Seven rows are not whole**, and each is named where it falls short rather
+Row 10 is whole since `b61661d` of 2026-09-20: the failing outcome is asserted
+in process through the seam `FR-SRV-013` authorises,
+`fr_srv_013_a_read_back_that_does_not_confirm_is_refused_before_the_catalogue`
+in `src/mariadb/session.rs`, against one fixture server and bound to no series,
+because the answer under test is the seam's and not the server's.
+**Six rows are not whole**, and each is named where it falls short rather
 than counted as answered:
 
 | Row | What is reached | What is not |
 |---|---|---|
 | 1 | Eight of the nine codes, by integration test | `73`. `tpl init` is written and exercised, and no test in `tests/` drives it against a destination that already carries a `.tpl`; `src/error.rs` asserts the code inside the library instead, which is not what `BR-ERR-001` asks for |
 | 8 | Nothing at all | `BR-SEC-003`'s sentinel is named in no test of the tree. Searching `src/` and `tests/` for the word and for the identifier returns nothing (2026-09-21) |
-| 10 | The confirming outcome, on every series | The failing outcome, which no real MariaDB produces — see [what is not established](#what-is-not-established) |
 | 13 | The refusal, as a **unit** test in `src/mariadb/catalogue.rs` | The integration test against a container outside the window, which the fixture does not provision |
 | 22 | The shipped example's text, as a **unit** test in `src/project/init.rs` | The render against a table of a supported series, which the row makes a server test |
 | 23 | The key invariant, as **unit** tests in `src/model/table.rs` | The server form the row names |
@@ -71,48 +75,65 @@ trace, and, where the test exists, where it lives — never an outcome.
 
 ## The suite as it stands
 
-Read at commit `c360c80` on 2026-09-25, by `cargo test --all-features -- --list`
-and again with `--ignored`, and recorded with its point in history because it
-is a count that moves: **1 403 tests**, made of 1 055 unit tests inside the
-library, 346 integration tests over the binary, and 2 doc-tests. The binary's
-own test target carries none. **Thirteen are measurement tests** carrying
+Read at commit `9d2538e` on 2026-11-05, from the source and not from a run:
+each count is of `#[test]` attributes, and the ignored count of `#[ignore]`
+attributes, in each file. The method gives the counts the listing gave at
+`c360c80` for every target that has not changed since. Recorded with its point
+in history because it is a count that moves: **1 689 test functions**, made of
+1 252 unit tests inside the library and 437 integration tests over the binary;
+doc-tests were not re-counted, and were two at `c360c80`. The binary's own
+test target carries none. **Thirteen are measurement tests** carrying
 `#[ignore]` under [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md),
-Decision 10 — six unit tests and seven integration tests — so
-`cargo test --all-features` runs 1 390.
+Decision 10 — six unit tests and seven integration tests.
 
-| Integration target | Tests | Ignored | Gated on the fixture |
+| Integration target | Tests | Ignored | Gated on a fixture |
 |---|---|---|---|
 | `tests/project_and_configuration.rs` | 121 | 0 | 1 |
-| `tests/schema_and_cache.rs` | 52 | 0 | 47 |
+| `tests/schema_and_cache.rs` | 55 | 0 | 50 |
 | `tests/render_command.rs` | 49 | 6 | 11 |
+| `tests/sqlite_provider.rs` | 39 | 0 | 0 |
 | `tests/help_surface.rs` | 30 | 0 | 0 |
+| `tests/mysql_provider.rs` | 21 | 0 | 18 |
 | `tests/cache_containment.rs` | 17 | 0 | 0 |
 | `tests/template_commands.rs` | 17 | 0 | 0 |
 | `tests/outside_the_process.rs` | 15 | 1 | 11 |
 | `tests/invocation_surface.rs` | 13 | 0 | 0 |
 | `tests/cfg_validation.rs` | 10 | 0 | 0 |
+| `tests/login_faults.rs` | 9 | 0 | 4 |
+| `tests/non_regular_files.rs` | 9 | 0 | 0 |
 | `tests/connectivity_command.rs` | 8 | 0 | 6 |
-| `tests/non_regular_files.rs` | 7 | 0 | 0 |
+| `tests/session_statements.rs` | 7 | 0 | 0 |
+| `tests/truncated_greeting.rs` | 7 | 0 | 0 |
 | `tests/help_environment.rs` | 4 | 0 | 0 |
+| `tests/sqlite_library.rs` | 3 | 0 | 0 |
 | `tests/run_from.rs` | 2 | 0 | 0 |
 | `tests/timeout_without_phase.rs` | 1 | 0 | 0 |
-| **Total** | **346** | **7** | **76** |
+| **Total** | **437** | **7** | **101** |
 
-It was 1 010 at commit `243c4d6` of 2026-09-21, 621 at commit `fd51ca2`, 504 in
-the working tree of 2026-09-17 and 272 at commit `f8f335d` of 2026-09-15.
+It was 1 403, by `cargo test --all-features -- --list`, at commit `c360c80` of
+2026-09-25, 1 010 at commit `243c4d6` of 2026-09-21, 621 at commit `fd51ca2`,
+504 in the working tree of 2026-09-17 and 272 at commit `f8f335d` of
+2026-09-15.
 
-`tests/support/` holds three modules and no test target: `fixture.rs`, which is
-the gate and the three server-side instruments; `differential.rs`, which is the
-fourth; and `sandbox.rs`, which is the temporary directory and cleared
-environment every launch of the binary runs under. All three are reached by
-`#[path]` from the files that use them — `sandbox.rs` by eleven targets,
-`fixture.rs` by five, `differential.rs` by one.
+`tests/support/` holds five modules and no test target, each reached by
+`#[path]` from the files that use it:
 
-**Seventy-six tests need a server**, in five targets — the fourth column above —
-and every one is gated on the fixture: it runs where the fixture is up and is
-skipped, with a printed reason, where it is not. The count is of tests whose
-body calls `fixture::series` or `fixture::exclusive`, directly or through a
-helper of its own file.
+| Module | What it is | Reached by |
+|---|---|---|
+| `sandbox.rs` | The temporary directory and cleared environment every launch of the binary runs under | Sixteen targets |
+| `fixture.rs` | The gate of `scripts/mariadb/` and its three server-side instruments | Eight targets |
+| `mysql.rs` | The same for `scripts/mysql/`: the gate, the inventory by role, the two server-side instruments and the authentication cache | `tests/login_faults.rs`, `tests/mysql_provider.rs` |
+| `sqlite.rs` | The databases of `FR-LITE-038`, built from `scripts/sqlite/` into a test's own directory | `tests/sqlite_provider.rs` |
+| `differential.rs` | The fourth instrument of `NFR-PERF-007` | One target |
+
+**A hundred and one tests need a server**, in seven targets — the fourth column
+above — and every one is gated on its fixture: it runs where the fixture is up
+and is skipped, with a printed reason, where it is not. The count is of tests
+whose body calls `series`, `servers` or `exclusive` of `fixture.rs` or
+`mysql.rs`, directly or through a helper of its own file. Three targets reach a
+peer of the test's own instead of a fixture: `tests/session_statements.rs` and
+`tests/truncated_greeting.rs` a scripted server on the loopback interface, and
+`tests/login_faults.rs` a closed port or a listener for five of its tests.
 `tests/template_commands.rs` reaches no server **by design**: `FR-TMPL-003`
 makes the absence of a connection the property under test, and that target
 establishes it with a control run instead of a fixture, which its own header
@@ -342,7 +363,7 @@ re-measured** and remain the count at `243c4d6`.
 | `FR-RND-039` | Through the binary, where the counter is installed: a doubling render past a 16 MiB limit is `65` and writes nothing; the default stops it; raising the limit lets a large render pass | `tests/render_command.rs` |
 | `FR-RND-038` | Under the defaults, endless output reaches the output limit before the memory limit | `tests/render_command.rs` |
 | `FR-CACHE-039` with `FR-RND-038` | An abandoned render keeps evaluating after a miss reached through a lookup function; crossing each of the four bounds after the miss is `65`, writes nothing and opens no connection, with a control that reads the server | `src/cli/render.rs`; `tests/render_command.rs`, gated on the fixture |
-| `FR-CONF-045`, `FR-CONF-002` | The eighteen key forms; each range at its extremes and one past them, `78` from the file with key, value and range named, `64` from `tpl cfg set`; the memory floor through the binary | `src/project/config/keys.rs`, `src/project/config.rs`, `src/project/edit.rs`, `tests/render_command.rs` |
+| `FR-CONF-045`, `FR-CONF-002` | The key forms — eighteen at that edition, twenty since the sixty-fifth; each range at its extremes and one past them, `78` from the file with key, value and range named, `64` from `tpl cfg set`; the memory floor through the binary | `src/project/config/keys.rs`, `src/project/config.rs`, `src/project/edit.rs`, `tests/render_command.rs` |
 | `FR-ERR-034` row `65` | The `cause` and `hint` of each bound name the bound, the value and the key | `src/diagnostics/render.rs` |
 | `FR-CTX-042` | A dangling `foreign_keys` and a dangling `referenced_by` are `ContextFault::DanglingReference`; a column's absent `table_name` is not; the `cause` names all four values and escapes them; the render is `65`, not `70` | `src/model/document.rs`, `src/diagnostics/render.rs`, `src/cli/render.rs` |
 | `FR-CACHE-033`, `FR-CDOC-008` | A named table, view or routine read whose file holds another name or kind is a miss; an object file that is a symbolic link is a miss for a named read, a collection, the whole store and a render | `src/cache.rs` |
@@ -352,6 +373,29 @@ re-measured** and remain the count at `243c4d6`.
 asserted the behaviour `FR-RND-038` now forbids. **No test plants a FIFO** at an
 object file; `read_object()` refuses any non-regular file, and the case is
 reasoned from the `lstat` check rather than exercised.
+
+### The tests of the seventy-ninth to eighty-fourth editions
+
+Read from the tree at `9d2538e` on 2026-11-05, by name.
+
+| Requirement | What is asserted | Where |
+|---|---|---|
+| `FR-CONF-056` | A read the cache serves expands no variable and runs no child; the first invocation that connects raises the `78` | `tests/schema_and_cache.rs` |
+| `FR-CONF-057` | A NUL character in the file is `78` at entry resolution; in a flag value or a `tpl cfg set`, `64` and nothing written; a helper's output holding one is `78`, and neither a password nor that output is reproduced | `src/project/settings.rs`, `src/project/edit.rs`, `src/cli/cfg/entries.rs`, `src/diagnostics/render.rs` |
+| `FR-CONF-005`, `FR-ERR-027` | Each session statement takes the statement deadline on its own; a version probe that does not answer is reported as the version probe, at `69` | `src/deadline.rs`; `tests/session_statements.rs`, against a scripted server; `src/diagnostics/render.rs` |
+| `FR-GLOB-017` | One line per connection phase and session statement, naming it; a failed or expired phase keeps its line; a handshake under a mode that refuses plaintext has its line where no reading saw it, and a phase not reached has none | `tests/session_statements.rs`, `tests/login_faults.rs` on every series of both server fixtures, `tests/outside_the_process.rs`; `src/mariadb/connect.rs`, `src/diagnostics/emit.rs` |
+| `FR-CFG-044`, `FR-ERR-036` | A privilege error is the probe's `false` at `0`; another error packet is `69` naming its number | `tests/session_statements.rs`; `src/mariadb/fault.rs` |
+| `FR-ERR-047`, `FR-ERR-048` | A greeting, an error packet and a `caching_sha2_password` packet cut short are the second outcome, `69`, never `70`; a greeting cut by the connection is the first | `tests/truncated_greeting.rs`, against a scripted listener |
+| `FR-ERR-048`, error `1102` | A database name the server refuses is `78` and names the entry, on every MySQL server; the row for each provider | `tests/login_faults.rs`; `src/mariadb/fault.rs` |
+| `FR-SRV-043`, `FR-MYSQL-048` | The target database of item 17 of `FR-MYSQL-044` is read whole and no decoy with it, by both accounts, on `8.4` and `9.7`; each statement reaches the server with the literal in its placeholder; the read is unchanged under sessions that change how text is read | `tests/mysql_provider.rs`; `src/mysql/catalogue/tests.rs` |
+| `FR-LITE-043` | Two names of one set that convert alike are `78`, with no model and no cache, whatever order their rows come in; names of different sets that convert alike are read | `tests/sqlite_provider.rs`; `src/sqlite/catalogue.rs`, `src/sqlite/catalogue/fold.rs` |
+| `FR-CFG-041` | Every step of the rewrite acts through the held folder, a link or a swapped ancestor redirecting nothing; the file is synced before the rename and the folder after it; a failed folder sync is `74` and the new content stands | `src/at.rs`, `src/project/edit.rs`, `src/project.rs`, `src/diagnostics/render.rs`; `tests/project_and_configuration.rs` |
+| `FR-TMPL-009`, `FR-TMPL-033` | An include suggestion never names the including template; a FIFO named anywhere carries no suggestion | `tests/non_regular_files.rs`; `src/render/root.rs` |
+| `FR-CACHE-038` | No object file is read before the template reaches it; a malformed deferred part a render never reaches is no miss, and one it reaches is a miss answered from the database; `schema dump` decodes every part first | `src/cli/render/context/lazy.rs`, `src/cache.rs`, `src/cli/render.rs`; `tests/sqlite_provider.rs` |
+
+`FR-EX-011` and `FR-EX-012` are verified by the compile gates of the worked
+examples, which no test target runs
+([operations.md](operations.md#the-fixture-as-an-operational-asset)).
 
 ### Owed, and discharged
 
@@ -953,7 +997,7 @@ obligation each part discharges, and what a test suite still has to decide.
 
 | Obligation | Source | Discharged by |
 |---|---|---|
-| Every validation that needs a database uses the containers of `scripts/mariadb/` — never a mock, never a stub, never an external instance | `CLAUDE.md`, *Testes contra MariaDB* | The fixture is the only database; nothing else is provisioned |
+| Every validation that needs a database uses the containers of `scripts/mariadb/` — never a mock, never a stub, never an external instance | `CLAUDE.md`, *Testing against MariaDB* | The fixture is the only database; nothing else is provisioned |
 | Containers are launched before a run and stopped after it; **no container is left running** | `scripts/mariadb/README.md` | `up.sh` and `down.sh`, the latter asking the daemon what is left rather than asserting it |
 | All four series run **side by side**, each with its own image, container and published port, so that a cross-series comparison is one run rather than four | `FR-SRV-029`, `FR-SRV-015` | Four images, four containers, four ports — **and a fifth container that is not a fifth series**: the `--skip-ssl` server `FR-CONF-038` obliges, on a fifth port |
 | A container is confirmed to have initialised cleanly before any test runs against it, because a failure inside the init directory leaves the schema incomplete while the container still reports itself up | `scripts/mariadb/README.md` | `up.sh` checks each server twice — the published port answering, and the log and object count — and removes a server it cannot make healthy |
@@ -1024,13 +1068,14 @@ two outcomes establishes nothing until the arrangement is shown to be potent.
 
 Two rows of this table were discharged at commit `a6d1fed` and are recorded
 above rather than deleted: the fourth instrument, and what the suite does with
-each value of the gate.
+each value of the gate. A third, the failing outcome of `FR-SRV-013`, was
+discharged at `b61661d` by the seam that requirement authorises (row 10 of
+the register).
 
 | Open | Why it is not answered here |
 |---|---|
 | **The file-open instrument does not exist on either Darwin target.** On a host with no `strace` the harness traces a Linux build inside a container and says so; `NFR-PERF-005` forbids crediting that observation to macOS | The limit is the platform's, recorded by `NFR-PERF-005` with the three commands that established it. What would lift it is named there, and is not this folder's to take |
 | **What the refusal test of `FR-SRV-029` runs against** | The contradiction is recorded under [cross-series equivalence](#cross-series-equivalence-across-four-series) and is the functional owner's; the fixture provisions no container outside the window |
-| **One observation the fixture cannot produce**: the failing outcome of `FR-SRV-013` | It needs a server that accepts the read-only statement and does not apply it, which no real MariaDB does — a fault-injection seam in `tpl`, not a container, and no such seam is decided |
 | **The sentinel of `BR-SEC-003`** | Row 8 of the register carries no test at all. The fixture supplies what it needs; the whole-surface sweep over every command at maximum verbosity is the suite's, and it is not written |
 
 ## The SQLite provider
@@ -1154,9 +1199,9 @@ apply them.
 ## The MySQL provider
 
 What the tests of the `mysql` provider and of the classification of a failed
-server connection assert, and what each needs. **At `cc511e2` a test exists for
-every row below**: the integration tests in `tests/mysql_provider.rs`, eighteen,
-and `tests/login_faults.rs`, six; the unit tests beside each part of `mysql/`
+server connection assert, and what each needs. **At `9d2538e` a test exists for
+every row below**: the integration tests in `tests/mysql_provider.rs`,
+twenty-one, and `tests/login_faults.rs`, nine; the unit tests beside each part of `mysql/`
 and in `src/mysql/catalogue/tests.rs`; and the classification's own tests in
 `src/mariadb/fault.rs`.
 
@@ -1175,9 +1220,9 @@ outcome depends on it. No `docker` command is issued from Rust. A body runs on
 every server of its role, and holds the fixture's lock while it does.
 
 Three bodies of `tests/mysql_provider.rs` need no server, and one needs the
-MariaDB fixture beside the MySQL one. In `tests/login_faults.rs`, three bodies
+MariaDB fixture beside the MySQL one. In `tests/login_faults.rs`, five bodies
 need no server — what answers at the address is a closed port or a listener
-of the test's own — and three reach a fixture.
+of the test's own — and four reach a fixture.
 
 ### What each part of the contract is verified by
 
@@ -1204,6 +1249,7 @@ of the test's own — and three reach a fixture.
 | `FR-ERR-048` | Every row of the table, for each provider; a second login beyond the account's limit is `69` on every series of both fixtures | Unit; Server | `src/mariadb/fault.rs`; `src/mysql/catalogue/tests.rs` |
 | `FR-ERR-036`, `FR-ERR-050` | A statement fails in one of three ways; every failure while the TLS handshake runs is that phase | Unit | `src/mariadb/fault.rs` |
 | [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 4 | A configuration error of another origin is not the refusal | Unit | `src/mysql/fault.rs` |
+| `FR-MYSQL-048`, with item 17 of `FR-MYSQL-044` | A database named with a quotation mark, a backslash and a backtick is read alone, its decoys unread, by the root account and the reduced reader; a missing name of the same characters is `77` | Server | `tests/mysql_provider.rs` |
 
 ### The verifications `FR-MYSQL-043` reapplies
 

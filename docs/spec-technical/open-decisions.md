@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md]
 ---
 
@@ -9,8 +9,17 @@ related: [README.md, traceability.md]
 
 ## What this is
 
-Thirty-eight entries, each a decision the repository could not settle on its
-own. **Thirty-seven are settled. One, `OD-33`, is open.**
+Thirty-nine entries, each a decision the repository could not settle on its
+own. **Thirty-seven are settled. Two, `OD-33` and `OD-39`, are open.**
+
+**One entry was added on 2026-11-05**, against the eighty-fourth edition of
+`/specification` and the code at `9d2538e`: `OD-39`, a `dsn` value whose
+percent-encoding `FR-CONF-018` requires and no code performs. It is open, and
+its owner is not this folder. `OD-05` names the completeness verdict's module
+as the code holds it, and `OD-12` records the session statements as phases of
+their own and the per-poll reading of the driver's record. The section names
+this register cites from `CLAUDE.md` are the English file's, read at
+`9d2538e`; the re-read is recorded below.
 
 **Four entries were added on 2026-11-03**, for rmp `#316`, when the sixty-fifth
 and sixty-sixth editions of `/specification` gave `tpl` a second provider and
@@ -64,9 +73,9 @@ applied that correction on 2026-09-22. `OD-20` was narrowed the same day:
 distance is computed.
 
 **One entry was added on 2026-09-22**, when sprint 18 delivered `examples/`:
-`OD-33`, whether `UC-013` joins the twelve-flow acceptance skeleton. It is the
-**one entry carrying `Open` today**, and it is open because the choice is not
-this folder's alone. `OD-04` was corrected the same day: the
+`OD-33`, whether `UC-013` joins the twelve-flow acceptance skeleton. It
+carries `Open`, beside `OD-39` since 2026-11-05, and it is open because the
+choice is not this folder's alone. `OD-04` was corrected the same day: the
 `[workspace]` table now carries a second exclusion, and the entry said it
 carried one.
 
@@ -156,9 +165,9 @@ the working tree.
 | `OD-09` | The stack table's configuration row splits into `toml` and `toml_edit` | Applied. Task #20, commit `ee7363d` |
 | `OD-17` | The logging row loses `tracing` and `tracing-subscriber` | Applied. Task #20, commit `ee7363d` |
 | `OD-24` | The stack table gains a row for `rustix` | Applied. Task #20, commit `ee7363d` |
-| `OD-26` | *Fontes de Verdade* gains this folder as a fourth source | Applied. Task #46, commit `c6356df` |
+| `OD-26` | *Sources of Truth* gains this folder as a fourth source | Applied. Task #46, commit `c6356df` |
 | `OD-24`, amended 2026-09-24 | The *Stack* table's `rustix` row reads `features = ["fs", "process"]`, and its note names the directory-relative calls beside `getuid`, `kill_process_group` and `waitid` | **Applied 2026-09-24**, at line 475: the row reads `features = ["fs", "process"]` and names `openat`, `unlinkat`, `renameat` and `mkdirat` and the `O_NOFOLLOW`/`O_NONBLOCK` opens. Uncommitted in the working tree when this was read |
-| `OD-32` | The *Stack* table's error row loses `anyhow`, and the *Tipos e erros* convention that repeats that row loses it with it | **Applied 2026-09-22, by the user**, at both lines. The table's row now states the positive choice — `thiserror` in the library, no error type of the binary's own — and cites this entry by name; the convention states the same. Uncommitted in the working tree when this was read |
+| `OD-32` | The *Stack* table's error row loses `anyhow`, and the *Types and errors* convention that repeats that row loses it with it | **Applied 2026-09-22, by the user**, at both lines. The table's row now states the positive choice — `thiserror` in the library, no error type of the binary's own — and cites this entry by name; the convention states the same. Uncommitted in the working tree when this was read |
 | `OD-35`, for [`ADR-013`](../adr/adr-013-sqlite-driver.md) and [`ADR-003`](../adr/adr-003-database-driver.md) as amended | The *Stack* table gains a row for SQLite access citing `ADR-013` for the driver, its features and the library it carries, and its MariaDB-access row names the driver in the form `ADR-003` now records. `CLAUDE.md` states that a change to that table is an architecture decision recorded before it is implemented; `ADR-013` records it and names the root coordination document among the places that cite it (*Consequences*, under R3) | **Applied** at `60bf9df`, re-read 2026-11-04 at `cc511e2`: the table carries a *SQLite access* row citing `ADR-013`, and its MariaDB-access row names `sqlx-core` and `sqlx-mysql` taken directly, not through the facade |
 | `OD-35`, amended 2026-11-04, for [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) | The *Stack* table's MariaDB-access row also serves MySQL, is relabelled for both server providers, and cites `ADR-014` beside `ADR-003` and `ADR-005`, as that record's *Consequences* asks of the root coordination document; no crate is adopted, so no row is added. The *Project Structure* tree gains `src/mysql/` and `scripts/mysql/` | **Applied 2026-11-04**, by the coordinator on the user's decision, **uncommitted in the working tree** over `cc511e2`; the commit of rmp `#330` records it. Re-read the same day against `git diff -- CLAUDE.md`: the row is relabelled *MariaDB and MySQL access*, names both server providers and cites `ADR-014` beside `ADR-003` and `ADR-005`, and the tree carries `src/mysql/` and `scripts/mysql/`. The same edit carries the corrections `DIV-060` asks of the file, whose state is `specification/upstream-divergences.md`'s to record |
 
@@ -167,15 +176,16 @@ the working tree.
 `c6356df` on 2026-09-11, and four commits have touched the file since —
 `b066cfa` (2026-09-15), `cd6ce7e` (2026-09-17), `6a0cce5` (2026-09-18) and
 `8f936d4` (2026-09-21), read from `git log -- CLAUDE.md`. **No ground this
-register takes from that file moved.** The four sections every entry draws on —
-*Stack*, *Orçamento de dependências*, *Plataformas Suportadas* and
-*Desenvolvimento* — are untouched by all four commits, as are *Fontes de
-Verdade*, *Invariantes de Implementação*, *Testes contra MariaDB*, *Tipos e
-erros* and *Desempenho e Eficiência*, and each section name this register cites
-still resolves. What the four commits added is coordination: a Regra Zero block,
-the sections *Sinergia e Convergência do Esforço*, *Linguagem*, *Proactividade*
-and *Completude*, the launch gate for subagents, and the split of `rmp` between
-two skills. None of it grounds a technical decision, and none of it is cited
+register takes from that file moved.** The file was then written in
+Portuguese; its sections are named here by the English headings that carry
+them at `9d2538e`. The four sections every entry draws on — *Stack*, the
+dependency budget of *Performance and Efficiency*, *Supported Platforms* and
+*Development* — are untouched by all four commits, as are *Sources of Truth*,
+*Implementation Invariants*, *Testing against MariaDB*, *Types and errors* and
+*Performance and Efficiency*. What the four commits added is coordination: the
+block now titled *RULE ZERO*, the sections now titled *Synergy and Convergence
+of Effort*, *Language*, *Initiative* and *Completeness*, the launch gate for
+subagents, and the split of `rmp` between two skills. None of it grounds a technical decision, and none of it is cited
 here.
 
 **`OD-32`'s correction was applied on 2026-09-22, and no entry now claims one
@@ -214,8 +224,10 @@ Portuguese fragment attributed to a root document was tested against
 quotation**, and is corrected in its own entry. **The sweep was run again on
 2026-09-21 against `CLAUDE.md` at `8f936d4`, and nothing had gone stale**: this
 register quotes that file twice — *"Onde e **como**"*, marked in `OD-26` as the
-text `c6356df` replaced, and *"o erro previsível"*, which the file still carries
-in *Fontes de Verdade* — and both hold. The one quotation of
+text `c6356df` replaced, and *"o erro previsível"*, which the file then carried
+in the section now titled *Sources of Truth* — and both held on that date. The
+English text `6203216` carries neither, and both are quotations of a past
+text, not anchors. The one quotation of
 `scripts/mariadb/README.md`, in `OD-22`, was tested the same way and still
 resolves. Two passages quote the graph's former row —
 [`OD-26`](#od-26--the-boundary-against-the-knowledge-graph) and
@@ -272,12 +284,16 @@ the rows of `ADR-002` and `ADR-007` dated that day below.
 | [`ADR-013`](../adr/adr-013-sqlite-driver.md) | `f8e2e34` | 2026-11-03 | `trace` moved from the dependency the binary is built from to a `[dev-dependencies]` entry. [technology-stack.md](technology-stack.md#the-sqlite-driver-and-the-library-it-carries) recorded the feature as compiled into the shipped graph and the question as the record's; both passages now cite the amendment, as `OD-37` does. The record's account of the eighth control moved nothing this folder states beyond what the sixty-seventh edition moved |
 | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | `f8e2e34` | 2026-11-03 | The record now states that the runtime is MariaDB's alone and which deadlines may use its timers. [architecture.md](architecture.md#the-synchronous-process-and-the-runtime-boundary) restated its decision and that sentence, against rule R3; the section now cites the record. `OD-11`'s amendment cites it directly. `OD-12` and `OD-36`, which the record cites, did not move |
 | [`ADR-002`](../adr/adr-002-tls-mode-mapping.md) | `f8e2e34` | 2026-11-03 | Nothing this folder states moved. The record names its type `sqlx_mysql::MySqlSslMode`; the one path of that module this folder names, `sqlx::mysql::MySqlConnectOptions` in `OD-12`, is a dated source citation of a type the record states is the same |
-| `CLAUDE.md` | `cc511e2`; last edited at `60bf9df` | 2026-11-04 | `OD-35`'s correction of 2026-11-03 is applied, and its row records it. The section names this register and other files of this folder cite — *Fontes de Verdade*, *Testes contra MariaDB*, *Desempenho e Eficiência* among them — are those of the Portuguese text `6203216` translated, and none resolves by name in the English one, although each subject is still there under an English heading. Renaming them is outside rmp `#328`; it is reported, not done |
+| `CLAUDE.md` | `cc511e2`; last edited at `60bf9df` | 2026-11-04 | `OD-35`'s correction of 2026-11-03 is applied, and its row records it. The section names this register and other files of this folder cited were those of the Portuguese text that `6203216` translated, and none resolved by name in the English one, although each subject was still there under an English heading. Renaming them was outside rmp `#328`; it was reported, not done |
 | `CLAUDE.md` | Working tree over `cc511e2`; the edit is **not yet committed** | 2026-11-04 | The eighth correction is applied, and its row records it. No ground this register takes from the file moved: the edit adds the third provider to the *Overview*, the *Where to look* table, the read-only rule and invariant, the *Stack* row, the project tree and the testing section, and changes nothing else |
 | [`ADR-003`](../adr/adr-003-database-driver.md) | `cc511e2` | 2026-11-04 | The record now names `ADR-014` among what it does not decide and adds a fourth obligation to a move of its pin. [technology-stack.md](technology-stack.md) cites both records for the driver; nothing it states of the pin or the form moved |
 | [`ADR-005`](../adr/adr-005-async-runtime-scope.md) | `cc511e2` | 2026-11-04 | The runtime's boundary now covers `mariadb/` and `mysql/`. [architecture.md](architecture.md#the-synchronous-process-and-the-runtime-boundary) said the runtime served a `mariadb` entry alone, and now cites the record for both; `OD-11` records the amendment |
 | [`ADR-010`](../adr/adr-010-driver-tls-connect-stall.md) | `cc511e2` | 2026-11-04 | One sentence names the `sqlx-core` entry of the patch table and no longer counts `ADR-003`'s obligations. Nothing this folder states moved |
 | [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) | `cc511e2`, the record as amended in place for points 4 to 7 | 2026-11-04 | New. Cited by [technology-stack.md](technology-stack.md#the-database-driver-and-the-five-tls-modes), [architecture.md](architecture.md#the-mysql-reader), [interfaces.md](interfaces.md#a-server-connection-that-fails), [security.md](security.md#transport) and `OD-12`; none of them restates a part of the patch beyond naming it |
+| `CLAUDE.md` | `9d2538e`; last edited at `9468588` | 2026-11-05 | No ground moved. The eighth correction, uncommitted when the row of 2026-11-04 read it, is committed at `9468588`. Every section name this folder cites from the file is renamed to the English heading that carries the same subject — *Sources of Truth*, *Non-Negotiable Rules*, *Rust Code Conventions*, *Types and errors*, *Implementation Invariants*, *Supported Platforms*, *Project Structure*, *Workflow*, *Development*, *Test execution policy*, *Performance and Efficiency*, *Measurement discipline* and *Testing against MariaDB* — and each resolves. Two passages that read the validation pipeline as binding every change now read it as the file states it: a validation tier per moment, the full battery at sprint close, before `git push` and before a release |
+| [`ADR-013`](../adr/adr-013-sqlite-driver.md) | `9d2538e` | 2026-11-05 | The carried library is also built with `SQLITE_DEFAULT_MEMSTATUS=0` (point 2). [technology-stack.md](technology-stack.md#the-sqlite-driver-and-the-library-it-carries) and [operations.md](operations.md#msrv-the-development-toolchain-and-the-cross-build-path) named the build option as the omission of extension loading alone; both now name the second option and cite the record for it |
+| [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) | `9d2538e`, points 6, 7 and 8 as amended in place | 2026-11-05 | Point 8 carries upstream pull request `#4458` whole, and point 6 reads the phase record after every poll as well as at the end. [technology-stack.md](technology-stack.md#the-database-driver-and-the-five-tls-modes), [architecture.md](architecture.md#the-phase-deadlines) and [interfaces.md](interfaces.md#a-server-connection-that-fails) cite both points; `OD-12` records the second |
+| [`ADR-015`](../adr/adr-015-mysql-catalogue-name-conveyance.md) | `9d2538e` | 2026-11-05 | New. It discharges the recorded gap [security.md](security.md#the-injection-surfaces) carried, and its *Consequences* name three passages of this folder that said a MySQL statement binds the database name; [architecture.md](architecture.md#the-mysql-reader), [interfaces.md](interfaces.md#the-mysql-reader) and [security.md](security.md#for-a-mysql-entry-the-same-two-parts) now cite the record. The MariaDB reader still binds |
 
 ## Status legend
 
@@ -288,7 +304,7 @@ the rows of `ADR-002` and `ADR-007` dated that day below.
 | **Settled, with an observation owed** | Decided. One statement the entry rests on is unverified, or one wording of the corpus is imprecise; the entry names it, names its owner, and states what changes if it does not hold |
 | **Settled, with an amendment owed** | Decided. The decision obliges `/specification` to move before any code is written against it. The entry names the requirement and the order. **No entry carries this status today**: `OD-28`'s amendment landed in the ninth edition |
 | **Settled, interim** | Decided, and decided to be temporary. The entry states the arrangement, what a caller observes while it stands, and what removes it. **No entry carries this status today**: `OD-30`'s arrangement was discharged on 2026-09-22 |
-| **Open** | Not decided. The entry names the options and the owner. **`OD-33` is the one entry carrying it**, since 2026-09-22; `OD-38` carried it on 2026-11-03 until the sixty-seventh edition answered it |
+| **Open** | Not decided. The entry names the options and the owner. **`OD-33` carries it**, since 2026-09-22, and **`OD-39`**, since 2026-11-05; `OD-38` carried it on 2026-11-03 until the sixty-seventh edition answered it |
 | **Conflict** | Two requirements, or a requirement and a mandated constraint, cannot both be honoured. Not a choice: a defect owed to `specification-manager`, and the documents it blocks wait for the correction rather than being written around it. **No entry carries this status today** |
 
 ## Index
@@ -333,10 +349,11 @@ the rows of `ADR-002` and `ADR-007` dated that day below.
 | [OD-36](#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) | The deadline of a statement on a SQLite connection | Settled | — |
 | [OD-37](#od-37--the-sqlite-fixture-and-the-statement-record) | The SQLite fixture, and the statement record | Settled | — |
 | [OD-38](#od-38--a-sqlite-result-code-the-contract-does-not-classify) | A SQLite result code the contract does not classify | Settled | — |
+| [OD-39](#od-39--a-dsn-value-percent-encoded-by-nothing) | A `dsn` value percent-encoded by nothing | Open | user, with `specification-manager` |
 
 Thirty-six entries are settled outright; `OD-19` alone carries an observation
-owed, and `OD-33` is open. Thirty-six, one and one are the whole of the
-thirty-eight. `OD-30` was settled and **interim** until 2026-09-22, when
+owed, and `OD-33` and `OD-39` are open. Thirty-six, one and two are the whole
+of the thirty-nine. `OD-30` was settled and **interim** until 2026-09-22, when
 its last arm was removed; it is now settled outright.
 
 Two editorial defects were reported at the end as `ED-01` and `ED-02`. Both
@@ -369,8 +386,10 @@ behind them; and **2026-11-04** for the reading of `src/` and
 `tests/support/sqlite.rs` at `19abb1f` behind the discharge in `OD-36` and the
 amendment of `OD-37`, and again for the reading of `src/`, `Cargo.toml` and
 `tests/` at `cc511e2` behind the amendments of `OD-05`, `OD-06`, `OD-11`,
-`OD-12` and `OD-35`. Anything not verified says so
-in its own text. No claim rests on recollection.
+`OD-12` and `OD-35`; and **2026-11-05** for the reading of `src/`, `tests/`,
+`.cargo/config.toml` and `vendor/` at `9d2538e` behind the amendments of
+`OD-05` and `OD-12` and behind `OD-39`. Anything not verified says so in its
+own text. No claim rests on recollection.
 
 The engine behaviour `OD-14` records has a source of a different kind, and it is
 named here because the difference matters: it is a **test of this repository**, not a page of
@@ -497,7 +516,7 @@ repository; that record states that it adds no second package and leaves
 `examples/rust-data-layer` — the crate the Rust worked example of `FR-EX-001`
 renders. It is generated rather than maintained, and it turns on a `sqlx`
 feature this package does not. Excluding it keeps it out of the workspace, so
-the mandated validation pipeline of `CLAUDE.md` *Desenvolvimento* neither
+the full battery of `CLAUDE.md` *Test execution policy* neither
 compiles it nor resolves and fetches what it needs; its own acceptance signal is
 the compile gate `FR-EX-009` obliges the example to carry, run by the example's
 script and outside that pipeline.
@@ -544,7 +563,7 @@ src/
 | The catalogue cache | `cache/` | It sits **between** the reader and every consumer, and owns a subject neither neighbour owns: an on-disk arrangement with its own version, `cache_format`, which `FR-CDOC-005` makes independent of the model's | Under `mariadb/`, which would make a module named after the server own a filesystem format and a version the server knows nothing about; under `project/`, which would make the project module own catalogue semantics and per-collection completeness |
 | Output formatting, the envelope, `text` layout, escaping | `output/` | One envelope governs all seventeen documents, per `FR-OUT-032`, and `FR-OUT-018` escapes on the way out of four command groups. A single owner is what makes "the envelope is the same everywhere" a property of the code rather than of review | Under `cli/`, which would put the envelope in as many places as there are commands that emit; under `model/`, which would make the model own its own presentation and put an escaping rule inside the type `FR-SCH-022` requires to round-trip unchanged |
 | Help text and the typed examples and exit-codes table | `cli/help.rs` | `FR-HELP-021` derives the JSON command tree by introspecting the parser's tree, which lives here, and `FR-HELP-022`'s table is indexed by command path — `cli/`'s own vocabulary. It emits through `output/` for `help --format json` | A top-level `help/`, which would have to reach into `cli/` for the tree and the paths that are its only inputs, inverting the dependency for no gain |
-| The privilege cross-checks | `mariadb/privileges.rs` | The three checks read the **shape of the rows the server returned** — an empty `VIEW_DEFINITION` (`FR-PRIV-011`), a `NULL` `ROUTINE_DEFINITION` (`FR-PRIV-017`), zero rows from three catalogue tables (`FR-PRIV-019`). None is a property of the model; each is a property of a read | Under `model/`, which would make the published model type know about grants, and would put a check on a shape the model no longer carries by the time it is built |
+| The privilege cross-checks | `mariadb/catalogue/completeness.rs` | The three checks read the **shape of the rows the server returned** — an empty `VIEW_DEFINITION` (`FR-PRIV-011`), a `NULL` `ROUTINE_DEFINITION` (`FR-PRIV-017`), zero rows from three catalogue tables (`FR-PRIV-019`). None is a property of the model; each is a property of a read | Under `model/`, which would make the published model type know about grants, and would put a check on a shape the model no longer carries by the time it is built |
 | The configuration reader and writer | `project/config.rs` | `FR-PROJ-010` and `FR-PROJ-011` make the ownership and mode of `.tpl/.cfg` a precondition of reading it, so the file and the folder that holds it are one subject. One module owns both paths over one key space, which is what keeps the key space of `FR-CONF-002` in one place | A top-level `config/`, which separates the file from the discovery that found it and the trust checks that gate it, and puts the key space one module away from the rule that decides whether it may be read at all |
 | The diagnostic renderer and the suggestion machinery | `diagnostics/` | It holds transformations, not a taxonomy: the escaping of `FR-ERR-024`, the character set of `FR-ERR-022` and `FR-ERR-023`, the candidate selection of `FR-ERR-019`, and the four-line layout of `FR-ERR-008`. It also owns the verbosity gate of `FR-GLOB-014` and the typed diagnostic sinks of `OD-17` | Inside `error.rs`, which would put presentation beside the taxonomy and make the error type depend on an edit-distance implementation. `OD-06` separates the two for the same reason |
 | The phase clock, and the threads two phases are bounded with | `deadline.rs` | `OD-12` gives one construct three users — the runtime inside `mariadb/`, the child process, and the render — and `FR-GLOB-012` composes every phase deadline with one budget measured from process start. A budget shared by three modules belongs to none of them | Inside `project/` beside the four `[core]` keys, which resolves the values but cannot hold the construct that applies them; and inside each of the three users, which is the same rule written three times |
@@ -561,8 +580,9 @@ different parsers over two opposite obligations — reading validates and refuse
 writing preserves and must not reformat — and a module holding both would import
 both parsers and hold two representations of the same document. The key space
 they share is a third module, `project/config/keys.rs`, which is what keeps the
-eighteen key forms in one place as the row requires — fifteen when this was
-written, eighteen since the forty-second edition added three `[core]` keys. Three further modules sit beside
+key forms in one place as the row requires — fifteen when this was written,
+eighteen since the forty-second edition added three `[core]` keys, and twenty
+since the sixty-fifth added `provider` and `path` (`FR-CONF-002`). Three further modules sit beside
 them for reasons stated in
 [architecture.md](architecture.md#inside-project): `settings.rs`, because
 `FR-CFG-014` forbids the reader to resolve; `password.rs`, because the child
@@ -1390,6 +1410,21 @@ rather than here*: a solution without a patch, the deadline moved into the
 driver, a patch of `sqlx-core`, and a thread-local cell. The pre-flight TCP
 connect this entry rejected stays rejected, on the same ground.
 
+**Amended on 2026-11-05, against the seventy-ninth and eighty-fourth editions
+and the code at `9d2538e` — the session statements, and the record read per
+poll.** `FR-CONF-005` names the session statement as a phase of its own, and
+each of the three — the read-only statement, its read-back and the version
+probe — takes the deadline of `core.query_timeout` from its own start, shared
+with nothing. Each runs under the runtime's timer, through the function every
+statement of `mariadb/session.rs` and `mysql/session.rs` runs through, and an
+expiry is reported against the statement it ended (`FR-ERR-027`). The three
+mechanisms and the shared connection budget do not move. For `FR-GLOB-017`,
+`mariadb/connect.rs` reads the driver's record after every poll of the connect
+call as well as once it ends, charging the time between two readings to the
+phase the first saw ([`ADR-014`](../adr/adr-014-mysql-provider-driver.md)
+point 6, as amended in place); a phase entered and left within one poll is not
+seen, which is the limit the eighty-fourth edition states in that requirement.
+
 **Unblocks.** `architecture`, `interfaces`, `quality-attributes`.
 
 ---
@@ -1889,7 +1924,7 @@ rows**.
 
 | Question | Answer | Why |
 |---|---|---|
-| Whose code | The crate's own | `CLAUDE.md` *Orçamento de dependências* prefers `std` and refuses a crate used for one function; and `BR-PERF-004` makes this a measured path — 200 comparisons for a `66` over `WL-001` — so the implementation has to be ours to measure |
+| Whose code | The crate's own | `CLAUDE.md` *Performance and Efficiency*, under its dependency budget, prefers `std` and refuses a crate used for one function; and `BR-PERF-004` makes this a measured path — 200 comparisons for a `66` over `WL-001` — so the implementation has to be ours to measure |
 | How much state is held | Three rows of the comparison, rolled, and the supplied name decoded once per run | The transposition rule reaches back one row further than a plain substitution does, so rows `i`, `i - 1` and `i - 2` are the whole of what the recurrence reads (`src/diagnostics/suggest.rs`, `Matrix`, read 2026-09-21). A window bounded at all is what `FR-ERR-039` buys: it refuses the unrestricted form on the ground that it "reaches back to an arbitrary earlier position" and holds the whole comparison. Three rows also let the scratch be allocated once per population rather than once per candidate, which is what a path traversed against 200 names for one refusal is worth doing (`BR-PERF-004`) |
 
 **Rejected.** A distance crate, for the dependency budget. The measure's own
@@ -2287,7 +2322,7 @@ not in the coordination table is a source of truth agents will not consult.
 folder's scope, so the third row narrowed as the fourth was added.
 
 **What was applied.** Task #46, under the user's authorisation of that day:
-`CLAUDE.md` now opens *Fontes de Verdade* with four sources and carries the two
+`CLAUDE.md` now opens *Sources of Truth* with four sources and carries the two
 rows below verbatim. The same task added the governance this entry does **not**
 cover — `docs/adr/`, which `OD-26` never mentions: who writes the records and
 when one is required, citing [`docs/adr/README.md`](../adr/README.md) for their
@@ -2626,7 +2661,7 @@ was applied by the user; nothing in it is outstanding.
 replaces it: the one error the binary handles is already handled without it.
 
 **The ground: the crate was declared and used by nothing.** `CLAUDE.md`
-*Desempenho e Eficiência* admits a crate for what it does and refuses one used
+*Performance and Efficiency* admits a crate for what it does and refuses one used
 for a trivial function; this one was used for no function at all. Four readings
 established it, all at commit `243c4d6` on 2026-09-21, before the removal.
 
@@ -2665,7 +2700,7 @@ this entry restates none of it.
 
 **The correction prepared for `CLAUDE.md` was applied on 2026-09-22, by the
 user.** That file named the crate twice — in the *Stack* table's error row and
-in the *Tipos e erros* convention that repeats it, at lines 465 and 539 — and
+in the convention now titled *Types and errors* that repeats it, at lines 465 and 539 — and
 both named it as the binary's error type. Both now state the positive choice:
 `thiserror` in the library, and no error type of the binary's own. The table's
 row cites this entry for the reason, so the coordination document points here
@@ -2695,8 +2730,8 @@ is cited above, not restated.
 ## OD-33 — `UC-013` and the twelve-flow acceptance skeleton
 
 **Status: open.** Owner: the user, because one of the two options reaches the
-mandated validation pipeline, which `CLAUDE.md` *Desenvolvimento* fixes and this
-folder does not own.
+validation the project runs, which `CLAUDE.md` *Test execution policy* fixes
+and this folder does not own.
 
 **The question.** `specification/use-cases.md` now holds thirteen flows.
 [verification.md](verification.md#the-twelve-end-to-end-flows) names twelve as
@@ -3176,6 +3211,56 @@ calls `error_with_offset` when `sqlite3_prepare_v3` fails.
 
 ---
 
+## OD-39 — A `dsn` value percent-encoded by nothing
+
+**Status: open.** Owner: the user, because each option changes what a caller
+may write in `.tpl/.cfg`; and `specification-manager`, because two of them
+amend a requirement. Raised on 2026-11-05 against the eighty-fourth edition
+and the code at `9d2538e`. This folder records the question and takes none of
+the options.
+
+**The two readings.**
+
+| Source | What it states |
+|---|---|
+| `FR-CONF-018`, and `FR-SEC-009` citing it | Inside a `dsn`, the URL is parsed first, a `${VAR}` expanded within the delimited field, and the result **percent-encoded** |
+| The code at `9d2538e` | `project/config/dsn.rs` parses the `dsn` into fields and `project/settings.rs` expands within each; no URL is composed again, and `mariadb/connect.rs` hands the driver host, port, user, password and database as separate values. `Field::encode`, the encoder of `FR-CONF-018`'s third step, carries `#[allow(dead_code)]` and has no caller outside its own unit tests |
+
+**What the code's reading closes, and what it costs.** The threat
+`FR-SEC-009` names — an expanded value moving the host, the port or the
+database — is closed by the shape: the fields exist before expansion and are
+never joined into a string again
+([architecture.md](architecture.md#configuration-resolution)). Encoding an
+expanded value and then handing it to the driver as a field would send the
+encoded text as the value, so the third step cannot be applied as written
+without a URL to apply it to. The cost is on the literal text: the grammar of
+`FR-CONF-009` delimits on `@` and `/`, and no requirement decodes a part — the
+eighty-first edition's amendment of `FR-CONF-057` states that each part is read
+as the `dsn` holds it and that "neither decodes". A password written literally
+in a `dsn` therefore cannot hold `@` or `/`, and a `%40` written for one is
+sent as three characters. A password reached through `${VAR}` is expanded after
+parsing and may hold either, as may one given by `password` or
+`password_command`.
+
+**Why it is a question and not a harvest.** The requirement states a step the
+implementation does not perform, and the implementation's reading is the one
+that satisfies the requirement's own rationale. Choosing between them changes
+either the corpus or the accepted values of a key, and neither choice is this
+folder's.
+
+| Option | What it would cost |
+|---|---|
+| **A — amend `FR-CONF-018` to the code's reading.** The third step is struck; the requirement states that expansion within a delimited field, with no URL composed again, is what keeps a value from moving the host, the port or the database | A `dsn` keeps refusing a literal `@` or `/` in its password, which the amendment should state as an accepted cost. `Field::encode` and its tests leave the crate. No behaviour changes |
+| **B — decode each part of a `dsn` after parsing.** `FR-CONF-009` gains a percent-decoding of each part, so `%40` carries `@` | A value that holds `%` followed by two hexadecimal digits changes meaning for an existing file. `FR-CONF-057` reads each part as written and would be amended again, since a `%00` would then decode to a NUL character. `FR-CONF-018`'s third step stays without a URL to apply to, so option A is still owed |
+| **C — compose a URL for the driver, and encode into it.** The driver is handed one string and parses it again | A second parser of the same text, the driver's, whose grammar is not `FR-CONF-009`'s; the guarantee then rests on two parsers agreeing. Rejected in substance by [architecture.md](architecture.md#configuration-resolution), which builds the driver's options field by field, but recorded because it is the reading the requirement's wording assumes |
+
+**Neither option is taken here.** [architecture.md](architecture.md#configuration-resolution),
+[security.md](security.md#the-environment) and
+[interfaces.md](interfaces.md#the-configuration-reader-and-the-writer) state
+what the code does and cite this entry where they reach the third step.
+
+---
+
 ## Editorial defects, reported and corrected
 
 Two statements in `specification/` were stale when this register was written.
@@ -3193,16 +3278,18 @@ left hunting for an open defect.
 
 ## What remains
 
-One entry is open and one obligation stands. Each blocks one statement, and
-neither blocks the other.
+Two entries are open and one obligation stands. Each blocks one statement, and
+none blocks another.
 
 | Order | What | Owner | Blocks |
 |---|---|---|---|
 | 1 | `OD-19`'s owed observation — `ADR-009`'s *owned copy* against a value whose members are borrowed, and the peak-memory consequence the record draws from that word | `adr-guardian` | No document of this folder may read *owned copy* as settling how an embedded value holds its members |
 | 2 | `OD-33`'s question — whether `UC-013` joins the acceptance skeleton, on the two options that entry states | user | No document of this folder may present its flow count as closed against the corpus; the twelve stand as written and `UC-013` is neither added to them nor named as excluded until this is answered |
+| 3 | `OD-39`'s question — whether `FR-CONF-018`'s percent-encoding is amended away, a `dsn` part decoded, or a URL composed, on the three options that entry states | user, with `specification-manager` | No document of this folder may state that an expanded `dsn` value is percent-encoded, or that a literal `dsn` password may hold `@` or `/` |
 
-The correction to `CLAUDE.md` for `ADR-014`, which stood third in this table,
-was applied on 2026-11-04, uncommitted in the working tree over `cc511e2`.
+The correction to `CLAUDE.md` for `ADR-014`, which stood third in this table
+before `OD-39` took the place, was applied on 2026-11-04 and committed at
+`9468588`.
 
 `OD-38`'s question, which stood third in this table before it, was answered by the
 sixty-seventh edition on 2026-11-03 (`FR-LITE-040`); the entry records how

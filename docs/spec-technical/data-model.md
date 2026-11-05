@@ -1,7 +1,7 @@
 ---
 title: Data Model
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md, overview.md, quality-attributes.md]
 ---
 
@@ -288,6 +288,7 @@ column's type, a member's prefix length, `referenced_key` and a trigger's
 | The rowid alias | `pragma_index_info` returns no row for the table's name, one `pk` column, and no index of origin `pk`; the keyword is never read | `sqlite/catalogue/fold.rs` (`FR-LITE-028`) |
 | A trigger's timing and event | The tokens between its name and `ON`, each keyword recognised ignoring ASCII letter case and carried in upper case | `sqlite/catalogue/trigger.rs` (`FR-LITE-032`) |
 | The table a trigger is on; a foreign key's referenced table and columns | The `tbl_name` of the trigger's row, and the `table` and `to` fields of the key, each matched under `BR-LITE-003` — equal once the 26 ASCII letters are folded, over the whole name — and the object found carried under its own name, never the spelling that found it. A trigger matching a view is excluded; an incoming key is listed under the table its parent matched. A key's own columns and an index's members are carried as reported, unmatched | `sqlite/catalogue/fold.rs` (`BR-LITE-003`, `FR-LITE-021`, `FR-LITE-030` … `FR-LITE-032`) |
+| Which object a row belongs to, and every match of `BR-LITE-003` | The bytes the file holds for each name, never the converted text; two names of one set — the tables and views, or a table's columns, indexes or triggers — that differ in bytes and convert alike refuse the read with `78` before anything is folded | `sqlite/catalogue/fold.rs`, `alike` (`FR-LITE-043`) |
 | A foreign key's referenced columns where `to` is `NULL` | The referenced table's primary key, in the order of `FR-LITE-029`; the foreign key is excluded where that primary key has another number of columns than it has | `sqlite/catalogue/fold.rs` (`FR-LITE-031`, `FR-LITE-021`), after every table's key is known |
 
 **The primary key is held by the table, not derived from an index name.** A
@@ -406,16 +407,19 @@ removes it. The wording is the functional owner's to settle.
 | `provider` and `path` | `provider` is one of `mariadb`, `mysql` and `sqlite`, the type the model also carries, and an absent key is `mariadb`, so every file written before the sixty-fifth edition keeps its meaning; nothing writes `provider = "mariadb"` on an entry that did not carry it. `path` is a literal path, stored as written, never expanded, refused with `${` in it | `FR-CONF-051`, `FR-CFG-055`, `FR-CONF-054` |
 | The three render-bound keys | Integers within the range `FR-CONF-002` declares for each; none admits `0` or a value meaning "no bound". A value outside it is `78` from the file and `64` from `tpl cfg set`. Each range is a type in `render/bounds.rs`, so an out-of-range value cannot be held once read | `FR-CONF-045`, `FR-CFG-010` |
 | Mode | Created `0600`; refused at any looser mode and when not owned by the current user; retained at `0600` across every rewrite, including the temporary file | `FR-PROJ-019`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CFG-034`, `FR-CFG-041` |
-| Rewrite | Temporary file in `.tpl/`, renamed over the target; a failure part-way leaves the previous file unchanged and removes the temporary; **no lock**, so two writers yield one whole file or the other | `FR-CFG-041`, `FR-CFG-042` |
+| Rewrite | Temporary file in `.tpl/`, written, given its mode and `fsync`ed, renamed over the target, and the folder `fsync`ed — every step relative to the `.tpl` descriptor the trust checks held (`at::replace_in` in `src/at.rs`). A failure up to and including the rename leaves the previous file unchanged and removes the temporary; a failure of the folder's `fsync` after it leaves the new file in place and is `74`, its durability unconfirmed. **No lock**, so two writers yield one whole file or the other | `FR-CFG-041`, `FR-CFG-042` |
 | Read path and write path | Separate: a span-carrying document tree to read the typed key space, a format-preserving editor to write | [`OD-09`](open-decisions.md#od-09--toml-the-read-path-and-the-write-path) |
 | Opening the file | Opened once, relative to `.tpl`, with `O_NOFOLLOW` and `O_NONBLOCK`, in `src/project/trust.rs`. Its type is tested on the descriptor: anything but a regular file — a symbolic link and a socket among them — is `78`, and a FIFO does not block. The ownership and mode checks run on the same descriptor's metadata, and the text is read through the same descriptor, so the file judged is the file read | `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-SEC-027`, [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
 
 **The temporary file is created at `0600` by the open itself, not chmod'd into
 it afterwards.** There is otherwise an instant at which a new file holding the
 credentials of the old one exists at whatever the process umask allows. The
-mode is then set again on the path before the rename, because a temporary file
-left by an earlier run keeps the mode it already had and `FR-CFG-034` requires
-`0600` whatever the previous run left behind. The rename is the whole of the
+umask can only narrow the open's mode, so the mode is then set again with
+`fchmod` on the same descriptor before the rename, which sets it exactly; a
+temporary file left by an earlier run is removed first, as itself where it is a
+link, and the new one created exclusively (`FR-CFG-034`, `FR-CFG-041`). On
+macOS `fsync` hands the data to the device without asking it to flush its own
+cache, which `F_FULLFSYNC` would; `src/at.rs` records that limit of the means. The rename is the whole of the
 concurrency story `FR-CFG-042` admits: two processes yield one whole file or the
 other, and a killed process leaves nothing locked and nothing half-written
 (`FR-PROJ-019`, `FR-CFG-034`, `FR-CFG-041`, `FR-CFG-042`).
@@ -482,6 +486,8 @@ Credential handling, `${VAR}` expansion and the child process are
 | A link on the path to the cache | `.tpl` is canonicalised first; every component below it is examined without being followed. A symbolic link at `.tpl/.cache`, at the selected entry's folder, or at a collection folder the invocation would read, write or clean beneath it is refused with `78` before anything is read, written, removed or connected. A link that is itself the thing a clean removes, or that lies beneath a folder it removes, is removed as a link and never followed | `FR-CACHE-042`, `FR-CACHE-044`, `FR-SEC-026` |
 | Read of an object file | Opened relative to its directory's descriptor with `O_NOFOLLOW` and `O_NONBLOCK`, and its type read from that descriptor: anything but a regular file — a symbolic link or a FIFO among them — is a miss, and a FIFO does not block the open. What is judged is what is then read | `FR-CACHE-033`, `FR-SEC-026` |
 | Read of `meta.json` or `database.json` | The object-file guard above, plus a size bound of **1 MiB** (`RECORD_CAP` in `src/cache.rs`), checked on the inspected length and again on the bytes read, so a file that grows after inspection is refused rather than read short. A record that is a link, is not a regular file, or exceeds the bound is unusable: a miss for a read, and not written by a clean given an object flag | `FR-CDOC-017`, `FR-SEC-026`, `FR-CACHE-043` |
+| Read of a collection's members | Relative to the collection's folder, opened once at step 6 — the folder `FR-CACHE-044`'s test passed, no link followed — and its descriptor shared by every member and held across a render, so no member's read walks the path again | `FR-CACHE-044`, `FR-CACHE-033`, `FR-SEC-026` |
+| A cached render's two key lists | Under `tpl render`, a table's `foreign_keys` and `referenced_by` are kept as the bytes of each member's JSON value — the syntax checked so each member is delimited — and decoded, with the validation of an up-front read, when the template first reaches the list. A list that fails then makes the file a miss found during the render (`FR-CACHE-039`). Every other reader decodes the whole file before its first byte of output | `FR-CACHE-038`, `FR-CACHE-039` |
 | Read of one named object | A hit only where the file holds exactly that object: the same name byte for byte and, for a routine, the same kind. Checked over the member already decoded, so it costs a comparison and no second parse | `FR-CACHE-033`, `FR-CDOC-008` |
 | Never written | Any object marked `restricted`; a collection holding one is never recorded whole | `FR-CACHE-037` |
 | How every row above resolves a path | **Directory-relative**, in `src/at.rs`. Each component below the canonical `.tpl` is opened relative to its parent's descriptor with `O_DIRECTORY` and `O_NOFOLLOW`. A file is read through `openat` with `O_NOFOLLOW` and `O_NONBLOCK` and typed on the descriptor; a temporary is created with `O_CREAT`, `O_EXCL` and `O_NOFOLLOW` and renamed over its target with `renameat`; removal is `unlinkat`, each child of a removed folder reached without following it; creation is `mkdirat`. A component swapped for a link between two operations fails the next one instead of redirecting it | `FR-SEC-026`, `FR-PROJ-024`, [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
@@ -627,7 +633,7 @@ whose rationale and rejected options are not restated here.
 | Binary version | `0.0.1` | A release. Full semantic versioning; while below 1.0 a breaking change is a **minor** bump | `OD-03`; the value is the user's choice of first release, and the `0.1.0` of `FR-HELP-005` and `FR-CTX-027` is illustrative |
 | `schema_version` | `1` | A change on one of the three breaking rows of `FR-OUT-014` — removing a field, renaming one, changing a field's type. Adding a field or an enumerated value does **not** move it | `FR-OUT-011`, `FR-OUT-014`, `FR-CDOC-003` |
 | `cache_format` | `1` | A change to the on-disk arrangement alone: which files exist, where they sit, how they are named | `FR-CDOC-002`, `FR-CDOC-005` |
-| Changelog | `CHANGELOG.md`, Keep a Changelog format | A release, and every change `FR-ENV-029` requires to be recorded there — renaming or removing a guaranteed template name | `FR-ENV-029`; `CLAUDE.md` *Fluxo de Trabalho* names a changelog in the workflow |
+| Changelog | `CHANGELOG.md`, Keep a Changelog format | A release, and every change `FR-ENV-029` requires to be recorded there — renaming or removing a guaranteed template name | `FR-ENV-029`; `CLAUDE.md` *Workflow* names a changelog in the workflow |
 
 Three properties bind the built system:
 

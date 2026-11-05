@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -35,7 +35,7 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 3 | Bytes to text: the lossy conversion | `mariadb/`, `mysql/`, `sqlite/` | `model/` | [The catalogue reader](#the-catalogue-reader) |
 | 4 | The resolved series and the `server` object | `mariadb/`; `mysql/`; `sqlite/`, from the library's probe | the reader itself, `model/` | [The catalogue reader](#the-catalogue-reader), [The MySQL reader](#the-mysql-reader), [The SQLite reader](#the-sqlite-reader) |
 | 5 | The key-to-column invariant over an assembled table | `mariadb/`, `mysql/`, `sqlite/`, `cache/`, `cli/` | `model/` | [The catalogue reader](#the-catalogue-reader) |
-| 6 | A short read: the completeness verdict | `mariadb/privileges.rs` | `error.rs` for a named object, `model/` for a listing | [The three privilege detections](#the-three-privilege-detections) |
+| 6 | A short read: the completeness verdict | `mariadb/catalogue/completeness.rs` | `error.rs` for a named object, `model/` for a listing | [The three privilege detections](#the-three-privilege-detections) |
 | 7 | The `source` discriminant | `cache/` | `output/` | [The document emitter](#the-document-emitter) |
 | 8 | The error value | every module | `error.rs` | [The error type and the exit code](#the-error-type-and-the-exit-code) |
 | 9 | The exit status | `error.rs` | `main.rs` | [The error type and the exit code](#the-error-type-and-the-exit-code) |
@@ -70,6 +70,8 @@ in, which is `architecture.md`, nor any version or crate rationale, which is
 | 38 | A statement bound on a SQLite connection | `deadline.rs` | `sqlite/watch.rs` | [The SQLite reader](#the-sqlite-reader) |
 | 39 | The phase a server connection reached | the vendored driver, through the handle of [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 6 | `mariadb/connect.rs` | [A server connection that fails](#a-server-connection-that-fails) |
 | 40 | A failed server connection, classified | `mariadb/fault.rs`, called with the entry's provider by `mariadb/` and by `mysql/fault.rs` | `error.rs` | [A server connection that fails](#a-server-connection-that-fails) |
+| 41 | A cached table whose two key lists are kept undecoded until the template reaches them | `cache.rs` | `cli/render/context/lazy.rs` | [Context access from a filter or a test](#context-access-from-a-filter-or-a-test) |
+| 42 | An entry checked as written, and its resolution for a connection | `project/settings.rs` — `prepare`, then `Prepared::connect` | `cli/source.rs`, `cli/cfg/connectivity.rs` | [The configuration reader and the writer](#the-configuration-reader-and-the-writer) |
 
 ## The catalogue reader
 
@@ -147,7 +149,7 @@ path.
 
 ## The three privilege detections
 
-`mariadb/privileges.rs` reads the **shape of the rows the server returned** and
+`mariadb/catalogue/completeness.rs` reads the **shape of the rows the server returned** and
 produces a completeness verdict. None of the three is a property of the model,
 so none is placed in `model/`: each is a property of a read (`BR-PRIV-003`).
 
@@ -181,8 +183,8 @@ settle.
 
 | Outcome | Boundary | Forced by |
 |---|---|---|
-| A **named** object that is incomplete: `77`, and no partial object is returned | `mariadb/privileges.rs` → `error.rs`, before `model/` presents anything | `FR-PRIV-003`, `FR-PRIV-004`, `BR-PRIV-001` |
-| A listing or a dump: success, with the object marked | `mariadb/privileges.rs` → `model/`, per object | `FR-PRIV-005`, `FR-PRIV-006`, `FR-PRIV-007` |
+| A **named** object that is incomplete: `77`, and no partial object is returned | `mariadb/catalogue/completeness.rs` → `error.rs`, before `model/` presents anything | `FR-PRIV-003`, `FR-PRIV-004`, `BR-PRIV-001` |
+| A listing or a dump: success, with the object marked | `mariadb/catalogue/completeness.rs` → `model/`, per object | `FR-PRIV-005`, `FR-PRIV-006`, `FR-PRIV-007` |
 | The `cause` line names which property of which object could not be read | `error.rs` → `diagnostics/` | `FR-PRIV-013`, `FR-ERR-034`, and `FR-PRIV-014` for what it may not carry |
 | A marked object is never written to the cache, and a collection holding one is never recorded whole | `model/` → `cache/` | `FR-CACHE-037` |
 | A marked document supplied as a context is refused before the render begins, whatever the render selects | `cli/` → `error.rs` | `FR-PRIV-008`, `FR-PRIV-009`, `FR-RND-020` |
@@ -211,7 +213,7 @@ holds as written.
 
 | Obligation on the surface | Forced by |
 |---|---|
-| Every statement is drawn from the closed list of `FR-MYSQL-015`: the three connection-start statements and a `SELECT` against one of its twelve tables, each statement a constant of the crate with the database name bound as a parameter | `FR-MYSQL-015`, `FR-MYSQL-016`, `BR-MYSQL-002` |
+| Every statement is drawn from the closed list of `FR-MYSQL-015`: the three connection-start statements, constants of the crate, and a `SELECT` against one of its twelve tables, whose constant text receives the database name — the one value a caller supplies — by the rule of [`ADR-015`](../adr/adr-015-mysql-catalogue-name-conveyance.md) and is sent over the text protocol; the name changes no part of the statement but the value its rows are compared with | `FR-MYSQL-015`, `FR-MYSQL-016`, `FR-MYSQL-048`, `BR-MYSQL-002` |
 | The read-only statement, the read-back of `@@session.transaction_read_only` and the version probe, in that order and behind no condition, before any catalogue statement; the read-back confirms the setting where it returns the integer `1` and by no other value, and a failure of either half is `78` | `FR-MYSQL-017` … `FR-MYSQL-019` |
 | The product check of `FR-MYSQL-007` is a necessary condition only: a version string carrying `MariaDB`, or not beginning with three dot-separated integers, is `78`; a series older than the newest of `FR-MYSQL-003` and outside it is `78`; a newer one is read and marked `newer_than_supported` | `FR-MYSQL-006` … `FR-MYSQL-011` |
 | Twelve statements per read, a named read included; no statement per object | `FR-MYSQL-042`, `NFR-PERF-001`, `NFR-PERF-002` |
@@ -227,7 +229,9 @@ version string and the series of `FR-MYSQL-003`, so its `cause` can name both.
 **`tpl cfg database test` for a `mysql` entry** reports the four steps of
 `FR-CFG-024` in the fields of `FR-CFG-039`, in the shape a `mariadb` entry's
 report takes (`FR-OUT-027`); its probe is the `SCHEMATA` statement every read issues
-first, restricted to the database the entry names (`FR-CFG-044`).
+first, restricted to the database the entry names (`FR-CFG-044`), and is read
+as `false` only for the four privilege errors of that requirement
+([The configuration reader and the writer](#the-configuration-reader-and-the-writer)).
 
 ## A server connection that fails
 
@@ -241,7 +245,7 @@ variant of `error.rs`, and the driver's value is then dropped
 | What the driver returned | Phase reached | Condition | Forced by |
 |---|---|---|---|
 | The typed refusal of [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 3, recognised by its type and never by its text | the login | The RSA key was not requested: `78` for a `mysql` entry, `69` for a `mariadb` entry | `FR-MYSQL-045`; `FR-ERR-047`, outcome 3 |
-| An error packet | any | Classified by its number, read for the entry's provider | `FR-ERR-048`, `FR-PRIV-021` |
+| An error packet | any | Classified by its number, read for the entry's provider; on a connection naming a database, `1102` is the `78` of a database name the server refuses, naming the key or the part of `dsn` that gives it | `FR-ERR-048`, `FR-PRIV-021` |
 | The driver's TLS error | any | The TLS handshake, refused before a certificate was accepted | `FR-ERR-050` |
 | An I/O error | the TCP connect | By the operating system's error number, or its kind where it gave none: a refusal, an unreachable host or network, no answer, or any other | `FR-ERR-049` |
 | An I/O error of kind `InvalidData` | the TLS handshake | The TLS handshake, a certificate not accepted | `FR-ERR-050` |
@@ -249,6 +253,16 @@ variant of `error.rs`, and the driver's value is then dropped
 | An I/O error | the login | The login did not complete: the connection failed | `FR-ERR-047`, outcome 1 |
 | Any other error | the login | The login did not complete: an answer `tpl` does not accept | `FR-ERR-047`, outcome 2 |
 | Any other error | the TCP connect | The fourth outcome of the TCP connect, with no number | `FR-ERR-049` |
+
+**A short or malformed packet is never a panic.** The vendored driver carries
+upstream pull request `#4458` whole
+([`ADR-014`](../adr/adr-014-mysql-provider-driver.md) point 8): every
+fixed-width and length-encoded read of the greeting, of an error, EOF or row
+packet, and of a `caching_sha2_password` packet is checked against the bytes
+remaining, and a continuation-packet join stops at 1 GiB. Each check returns
+the driver's protocol error, which in the login is the second outcome of
+`FR-ERR-047`, `69`, and never the `70` of `FR-ERR-030`; an error packet cut
+before its number is the same outcome (`FR-ERR-048`).
 
 **An error packet's number is read through the driver's MySQL error type**, the
 same for both providers; the table of `FR-ERR-048` is applied with the
@@ -311,6 +325,7 @@ The table's rows follow the order of `FR-LITE-040`; the stages are
 | `BEGIN DEFERRED` or `COMMIT` of the read transaction — stage `Transaction` | Any result code | The code steps 2 and 3 give it, as for any statement, and never step 1's; a failed `BEGIN DEFERRED` ends the read before the check, and a failed `COMMIT` ends it after the last catalogue statement | `FR-LITE-042`, `FR-LITE-040`; the note on `FR-ERR-006` of the seventieth edition |
 | The check: statement 1 of the plan, or step 4 of `tpl cfg database test` | A row of a kind the check refuses | `78`; on a read, no statement follows, `COMMIT` included | `FR-LITE-041`, the seven rows of `FR-LITE-007` that name it; `FR-LITE-042` |
 | Statements 3 to 7 | A value of the schema table of a class the check refuses. They read the snapshot the check read, so no writer that takes SQLite's locks produces one; only a process writing the file's bytes without them could | `78`, as the check's | `FR-LITE-040`, its paragraph on values; `FR-LITE-041`; `FR-LITE-042`, *What the transaction does not reach* |
+| The fold, before any object is folded | Two names of one set — the tables and views, or the columns, indexes or triggers of one table — whose bytes differ and whose converted texts are equal | `78`, naming the set, the two names as values of the file and their table; nothing is presented and nothing cached | `FR-LITE-043`, its row of `FR-LITE-007` |
 | The fold | A trigger header without one timing and one event | `70` | `FR-LITE-032` |
 | Anywhere | A driver error carrying no result code — a value of a pragma function of a class the library does not document for it among them — or a version without two dot-separated parts | `70` | `FR-ERR-030` |
 
@@ -415,7 +430,12 @@ are recorded; the wording is the functional owner's to settle.
 **Suggestion selection.** At most three candidates within an edit distance of
 two, ordered by distance and then by name, over eight populations; where no
 candidate qualifies the suggestion is omitted rather than weakened
-(`FR-ERR-019`, `FR-ERR-020`, `FR-ERR-021`). The distance is the one
+(`FR-ERR-019`, `FR-ERR-020`, `FR-ERR-021`). A name an `{% include %}`,
+`{% import %}` or `{% extends %}` writes is never answered with the template
+that holds it, which `Root::nearest_included` in `render/root.rs` removes from
+the population (`FR-TMPL-009`); a name that is an entry other than a regular
+file is answered with no suggestion at all, on the command line and in a
+template (`FR-TMPL-033`, items 2 and 3). The distance is the one
 `FR-ERR-039` fixes, implemented in the crate
 ([`OD-20`](open-decisions.md#od-20--edit-distance-and-the-other-small-algorithms));
 its cost as a measured path is
@@ -970,10 +990,18 @@ reports unique (`FR-ENV-041`, as amended in the sixty-seventh edition). A
 index where it is the rowid alias (`FR-LITE-029`), so a name cannot find it;
 `primary_key` is the one place the model holds every table's key
 ([data-model.md](data-model.md#a-sqlite-read)). On a `mariadb` document that
-value is the index `PRIMARY`, so neither test changes an answer there. As built
-at `f8e2e34`, `src/render/predicate.rs` reads `indexes` alone and matches the
-name `PRIMARY` for `primary_key`, which holds for a `mariadb` document and is
-what the second provider changes.
+value is the index `PRIMARY`, so neither test changes an answer there.
+`src/render/predicate.rs` reads `primary_key` for both tests, read at
+`9d2538e`.
+
+**A cached render reaches a table's two key lists lazily** (`FR-CACHE-038`).
+`cache.rs` hands the render a table whose `foreign_keys` and `referenced_by`
+are kept as the bytes of each member, and `cli/render/context/lazy.rs`
+presents the table to the engine and decodes a list, with the validation an
+up-front read applies, the first time the template reaches it. A list that
+fails then is reported as a miss found during the render, which `FR-CACHE-039`
+answers; a list never reached is never decoded. The document the template sees
+is the one an up-front read would have produced.
 
 The engine supplies the access: "A read only reference is passed to filter
 functions and similar objects to allow limited interfacing with the engine", and
@@ -1008,9 +1036,9 @@ division, and why the two paths are two modules, are
 | An entry selected on the command line is **distinguishable** from one resolved through the configured default, because two render rules depend on the distinction | `FR-GLOB-008`, `FR-RND-018`, `FR-RND-019` |
 | Nothing selected is `78`; a named entry that does not exist is `66` with a suggestion | `FR-GLOB-006`, `FR-GLOB-007`, `FR-ERR-004`, `FR-ERR-005` |
 | The five admitted and refused combinations of connection and password keys are decided **before** any connection is opened; a DSN carries no query parameters | `FR-CONF-006`, `FR-CONF-007`, `FR-CONF-011`, `FR-CONF-012` |
-| Expansion reaches six fields only, is a single pass, and inside a DSN parses the URL **first**, expands within the delimited field, then percent-encodes; an unclosed form and an undefined variable are both `78` | `FR-CONF-015` … `FR-CONF-022` |
+| Expansion reaches six fields only, is a single pass, and inside a DSN parses the URL **first** and expands within the delimited field; an unclosed form and an undefined variable are both `78`. It runs, with the child, only when the entry is resolved for a connection, so a read the cache serves raises neither. The percent-encoding `FR-CONF-018` names last is performed by nothing, which [`OD-39`](open-decisions.md#od-39--a-dsn-value-percent-encoded-by-nothing) holds open | `FR-CONF-015` … `FR-CONF-022`, `FR-CONF-056` |
 | `provider` takes one of three values, an absent key meaning `mariadb`, and any other value in any entry is `78` at step 3; a `path` holding `${` is `78` at step 3; `path` is never expanded, and is held as written | `FR-CONF-051`, `FR-CONF-054`, `FR-CONF-015` |
-| For the selected entry alone, at entry resolution: a key its provider refuses, then a missing or empty `path`, is `78`, decided before any expansion and before the child; the `cause` states whether the provider was written or taken from an absent key | `FR-CONF-052`, `FR-CONF-053` |
+| For the selected entry alone, at entry resolution: a key its provider refuses, then a missing or empty `path`, then a `host`, `user`, `password`, `database`, part of a `dsn` or `path` holding a NUL character, is `78`, decided on the value as written, with nothing expanded and no child run; the `cause` states whether the provider was written or taken from an absent key, and a NUL's `cause` names the key or the `dsn` part, the file and the text before the character — never any part of a password. A value an expansion or the child produces is held to the same refusal where it is produced | `FR-CONF-052`, `FR-CONF-053`, `FR-CONF-057`, `FR-CONF-056` |
 | A relative `path` resolves against the project directory — the parent of the canonical `.tpl` folder where that folder is reached through a link — and never against the working directory, and the result handed to `sqlite/` is absolute | `FR-CONF-054`, `FR-PROJ-009` |
 
 **Three read paths over one file produce three different outputs**, and they are
@@ -1020,7 +1048,7 @@ three code paths rather than one with a flag:
 |---|---|---|---|---|
 | The directed key read | No | No | No | `FR-CFG-006`, `FR-CFG-007`, `FR-CFG-036` |
 | The whole-file listing and one entry shown | No | Yes | No | `FR-CFG-013`, `FR-CFG-014`, `FR-CFG-019`, `FR-CFG-021`, `FR-CFG-037`, `FR-CFG-038` |
-| The resolution a connection uses | Yes | — | Yes | `FR-CONF-004`, `FR-CONF-029` |
+| The resolution a connection uses — `Prepared::connect`, reached only by an invocation that opens one | Yes | — | Yes | `FR-CONF-004`, `FR-CONF-029`, `FR-CONF-056` |
 
 The third never reaches stdout. Credentials, the sentinel property and what may
 be printed are `security.md`'s.
@@ -1039,11 +1067,13 @@ and the relative order of items, which six requirements make a functional need
 | A write that would leave a database entry in a refused combination is refused **before** the file is touched: `64`, the file unchanged, the `cause` naming both keys of the pair and the `hint` carrying a runnable repair. The entry judged is the entry as it would stand after the write, and nothing the invocation did not name is removed to make it coherent | `FR-CFG-048`, `FR-CONF-007`, `FR-CFG-020`, `BR-CFG-001`, `FR-ERR-009`, `FR-ERR-034` |
 | Every key of an entry has a flag, each mapping to exactly one key, and one flag's name deliberately differs from the key it writes | `FR-CFG-027`, `FR-CFG-028`, `FR-CFG-029` |
 | The connection-string flag admits exactly what the file admits — the grammar, the two schemes, no query parameter — validated before the write, stored verbatim when admitted, `64` and nothing written when not; a variable reference stays opaque and unexpanded | `FR-CFG-031`, `FR-CONF-009`, `FR-CONF-010`, `FR-CONF-011`, `FR-CONF-018` |
+| A NUL character in a value given to `tpl cfg set`, or to `--dsn`, `--host`, `--user`, `--schema` or `--path`, is `64` and nothing is written. A Unix argument vector cannot carry one, so the refusal is a guard verified in process | `FR-CONF-057` |
 | The password-command flag accepts a single string, stores the array it splits into, accepts no array on the command line and is not repeatable | `FR-CFG-046`, `FR-CONF-023`, `FR-CONF-025` |
 | No `cfg` subcommand writes anywhere but the configuration file, and only one of them contacts a server | `FR-CFG-004`, `FR-CFG-005` |
 | `--provider` and `--path` write `provider` and `path`. A provider outside the two values is `64`; a `--path` that is empty or holds `${` is `64`; `path` is stored as written and never resolved by the write | `FR-CFG-027`, `FR-CONF-051`, `FR-CFG-055` item 4, `FR-CONF-054` |
 | The combinations of flags and provider decidable from the command line alone are refused at argument parsing, `64`, before the file is read | `FR-CFG-055` items 1 and 2, `FR-CFG-016` |
 | `tpl cfg database update` given `--provider` or `--path` writes the cache warning the other repointing flags write | `FR-CACHE-029`, `FR-CFG-053` |
+| The rewrite starts from the `.cfg` text the trust checks read, and creates, writes, `fchmod`s and `fsync`s the temporary file, renames it over `.cfg` and `fsync`s the folder, each relative to the `.tpl` descriptor those checks opened and held, following no link (`at::replace_in`). A failure up to and including the rename is `74` with the previous file in place; a failure of the folder's `fsync` after the rename is `74` as `ProjectFileNotDurable`, the `cause` stating that the file holds the new content and what the filesystem returned, the `hint` carrying `tpl cfg list` | `FR-CFG-041`, `FR-SEC-027`, `FR-ERR-034` row `74` |
 
 **One key space, two callers, two codes.** An unknown key supplied to the write
 path is `64`; the same key found in the file is `78`. The distinction is the
@@ -1081,7 +1111,12 @@ series, run the privilege probe — each separately reportable and separately
 failing (`FR-CFG-024`, `FR-CFG-039`, `FR-SRV-034`, `UC-004`). The probe is
 exactly one statement against the catalogue, restricted to the named database
 and read for two facts only; it is not model content, and a negative answer does
-**not** change the exit code (`FR-CFG-044`, `FR-CFG-045`). An unsupported series
+**not** change the exit code (`FR-CFG-044`, `FR-CFG-045`). A negative answer
+is an empty result or an error packet carrying one of the four privilege
+errors `1044`, `1142`, `1143` and `1227` (`PRIVILEGE_ERRORS` in
+`mariadb/fault.rs`, for both server providers); any other error packet ends the
+command with the `69` of the third way of `FR-ERR-036`, naming the number, and
+no document is written. An unsupported series
 is `78` with the `cause` stating that connection and authentication succeeded
 (`FR-CFG-043`, `FR-SRV-030`); this command reads and writes no cache
 (`FR-CFG-025`, `FR-CACHE-010`). For a `sqlite` entry the four steps are
@@ -1098,8 +1133,9 @@ one (`FR-PROJ-012` … `FR-PROJ-016`, `FR-PROJ-022`). What it ships is
 ## The `password_command` child
 
 `project/password.rs` runs the child and hands `mariadb/` a password;
-`project/settings.rs` is its one caller, because the child belongs to the
-resolution and not to the read; `deadline.rs` bounds it. It is the only child
+`project/settings.rs` is its one caller, from `Prepared::connect` alone,
+because the child belongs to the resolution for a connection and not to the
+read (`FR-CONF-056`); `deadline.rs` bounds it. It is the only child
 process this corpus admits: no other requirement creates one, and `FR-SRV-007`
 forbids an external process for reading structure.
 
@@ -1114,6 +1150,7 @@ forbids an external process for reading structure.
 | The child's standard input is the null device, so a child cannot inherit the caller's and read from it | `FR-SEC-023`, `BR-CLI-003` |
 | The child's standard error goes to the null device: not inherited, not captured, never quoted | `FR-CONF-032`, `FR-SEC-024` |
 | A non-zero exit is `78`, with the `cause` naming the command as stored and the status the child returned | `FR-CONF-033`, `FR-ERR-034` |
+| A password the child prints holding a NUL character is `78`, naming the command and none of the output | `FR-CONF-057` |
 | A child that cannot be **started** is a condition of its own, also `78`: its next step is to correct the file, not to read what the command printed | `FR-CONF-033`, `FR-ERR-002` |
 | The phase ends when the child has exited **and** its standard output has reached end of file. The deadline bounds the whole phase: a reader thread drains the pipe and a polling loop in the parent sends `SIGKILL` to the child's process group and reports the expiry, without waiting on the pipe; exceeding it is `78` | `FR-CONF-028`, `FR-ERR-027`, [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) |
 | The child's exit is observed with `waitid` under `EXITED`, `NOHANG` and `NOWAIT`, which leaves it waitable, and it is reaped only after the group is signalled — or, on success, after the pipe has closed — so its pid, which is the group's id, cannot be reused before the group kill | `FR-CONF-028`, `FR-CONF-031` |
@@ -1157,10 +1194,11 @@ apostrophe unescaping that serves a literal default and a member list alike,
 which is
 [data-model.md](data-model.md#a-column-default-one-discriminant-eight-ordered-rows)'s.
 
-**The phase clock is a shared construct with four users** — the runtime inside
-`mariadb/`, the statement watchdog inside `sqlite/`, the child process, and the
-render — because every phase deadline composes with one budget measured from
-process start, and a budget belonging to four modules belongs to none of them
+**The phase clock is a shared construct with five users** — the runtimes inside
+`mariadb/` and `mysql/`, the statement watchdog inside `sqlite/`, the child
+process, and the render — because every phase deadline composes with one budget
+measured from process start, and a budget belonging to five modules belongs to
+none of them
 (`FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-CONF-005`, `FR-SEC-022`,
 `FR-LITE-009`). The mechanisms and what each phase is bounded by are
 [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and,
@@ -1177,6 +1215,7 @@ than of its callers.
 | What bounds one phase carries three facts, because a `65` and a `69` must name two of them: **which** of the two bounds applies, its resolved value, and how long the phase may actually run. The phase deadline wins a tie, naming the more specific of two equally true answers | `FR-GLOB-012`, `FR-GLOB-013`, `FR-ERR-027`, `FR-ERR-034` |
 | The origin of the overall budget is recorded once, by the crate entry point, before the argument vector is read; a second recording cannot move an origin already being spent | `FR-GLOB-011` |
 | The budget the four connection phases share is an **instant**, not a duration, so the four consume one budget in the order they run and the last of them may find nothing left | `FR-CONF-005` |
+| Each session statement is a phase of its own, so the type names each of the three and a statement's bound is taken from its own start, sharing nothing with the connection budget; the name a phase carries is the name its `-v` line and its expiry write, and a session statement's line is distinct from a catalogue query's | `FR-CONF-005`, `FR-ERR-027`, `FR-GLOB-017` |
 
 The resolution of the four values from `[core]` is `project/`'s and the clock's
 composition of them with `--timeout` is this module's: `--timeout` takes no part

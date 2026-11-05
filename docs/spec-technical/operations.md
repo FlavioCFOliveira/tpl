@@ -1,7 +1,7 @@
 ---
 title: Operations
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, technology-stack.md, data-model.md, quality-attributes.md]
 ---
 
@@ -73,9 +73,13 @@ of a signature. This document does not restate them.
 
 ## The mandatory validation pipeline
 
-`CLAUDE.md` (*Desenvolvimento*) fixes five commands and their order, and makes
-no work complete until all five pass. They are reproduced here in order because
-the order is the contract; their authority is that file's.
+`CLAUDE.md` (*Test execution policy*) fixes a validation tier for each moment:
+during development, the tests that exercise what changed, with `cargo fmt`,
+`cargo clippy` and, where a manifest changed, `cargo audit` for a change to Rust
+code; at sprint close, before `git push` and before a release, *The full
+battery* — five commands in a fixed order, all of which must pass. The battery
+is reproduced here in order because the order is the contract; its authority,
+and that of the tiers, is that file's.
 
 ```sh
 cargo fmt --all -- --check
@@ -97,7 +101,7 @@ cargo audit
 coordination document states that a hot-path change — the catalogue read, the
 context build, the render, process startup — is an **occasion to take a reading
 and record it**, and never a condition for the work being complete
-(`CLAUDE.md`, *Desenvolvimento*, with *Disciplina de medição*). The protocol a
+(`CLAUDE.md`, *Test execution policy*, with *Measurement discipline*). The protocol a
 reading is taken under is
 [quality-attributes.md](quality-attributes.md#the-measurement-protocol)'s, and
 the harness that takes it is [below](#the-measurement-harness). The measurement
@@ -254,9 +258,9 @@ is the path that is installed.
 |---|---|---|---|
 | The Rust toolchain | Compiles the four targets; above the floor | The inventory above | [`ADR-007`](../adr/adr-007-msrv.md) |
 | The zig-based linker driver | The `musl` cross-link from a Darwin host, which the Apple linker cannot perform | `cargo-zigbuild` and `zig`, at the two versions that record names | [`ADR-008`](../adr/adr-008-packaging-and-build-path.md) |
-| `cargo fmt`, `cargo clippy`, `cargo audit` | The validation pipeline above | The first two ship with the toolchain above; `cargo-audit`, on the terms below | `CLAUDE.md`, *Desenvolvimento*; in CI, [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
-| `hyperfine`, `samply` / `cargo flamegraph`, `cargo bloat` | Wall time, CPU attribution and binary size, one tool per question | `hyperfine` 1.20.0; `samply` 0.13.1; `flamegraph` 0.6.14, which provides `cargo flamegraph`; `cargo-bloat` 0.12.1 | `CLAUDE.md`, *Disciplina de medição* |
-| `criterion`, `dhat-rs` | Micro-benchmarks and heap profile | Neither is an installed binary; see below | `CLAUDE.md`, *Disciplina de medição* |
+| `cargo fmt`, `cargo clippy`, `cargo audit` | The validation pipeline above | The first two ship with the toolchain above; `cargo-audit`, on the terms below | `CLAUDE.md`, *Test execution policy*; in CI, [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
+| `hyperfine`, `samply` / `cargo flamegraph`, `cargo bloat` | Wall time, CPU attribution and binary size, one tool per question | `hyperfine` 1.20.0; `samply` 0.13.1; `flamegraph` 0.6.14, which provides `cargo flamegraph`; `cargo-bloat` 0.12.1 | `CLAUDE.md`, *Measurement discipline* |
+| `criterion`, `dhat-rs` | Micro-benchmarks and heap profile | Neither is an installed binary; see below | `CLAUDE.md`, *Measurement discipline* |
 | Docker | Runs the four fixture containers | 29.7.2 | `scripts/mariadb/README.md` |
 
 The third column is `cargo install --list` for the cargo-installed binaries and
@@ -271,7 +275,8 @@ targets, and through the zig toolchain of the cross-build path on the two
 loading on, and with which zig release, are its own and are not restated; the
 first build of each target by the recorded path is the observation it leaves
 open. The omission is a build option in `.cargo/config.toml` at the repository
-root, which Cargo reads only when invoked from inside the repository. A binary
+root, beside a second the same record adds, `SQLITE_DEFAULT_MEMSTATUS=0`, and
+Cargo reads that file only when invoked from inside the repository. A binary
 built otherwise carries the mechanism and ends every `sqlite` read in `70`
 before reading the file: it fails safe, because the read-back of `FR-LITE-010`
 is the guarantee and the file is the means (`ADR-013`, *Consequences*). Both
@@ -356,7 +361,7 @@ seventh fires only when a pin moves.
 
 | Gate | What is checked | Trigger | Forced by |
 |---|---|---|---|
-| The validation pipeline | All five commands pass, in order | Every change, not only a release | `CLAUDE.md`, *Desenvolvimento* |
+| The validation pipeline | The full battery passes, all five commands in order | Sprint close, before `git push`, and every release | `CLAUDE.md`, *Test execution policy* |
 | Every target | The pipeline passes on all four of `NFR-PERF-018`; a failure on one is a failure | Every release | `NFR-PERF-018`; enforced by the workflows of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | Provenance | The four gates of [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md), Decision 3, pass before any validation or publishing. Gate 3 checks that the tag is `v` and a valid Semantic Versioning 2.0.0 version equal to the manifest's; gate 4, that exactly one release-notes file matches the anchored pattern carrying the full tag. The expression and the pattern are that record's. A tag with a pre-release identifier publishes a GitHub pre-release, which `install.sh` never installs | Every release | [`ADR-012`](../adr/adr-012-ci-and-release-distribution.md) |
 | The supported-series table | The table of `FR-SRV-015` is re-verified against its source, and its verification date moved | **Every release**, without exception | `FR-SRV-019`, `BR-SRV-004` |
@@ -461,10 +466,10 @@ picture.
 |---|---|---|
 | Two streams, one contract | stdout alone is contract; stderr is neither deterministic nor contract, and cannot be, because the timings `FR-GLOB-017` requires differ on every run. The extent of the contract is [quality-attributes.md](quality-attributes.md#determinism)'s | `NFR-DET-001`, `FR-GLOB-017`, `DIV-039` |
 | Four levels, selected by two flags | `-v` raises and saturates, `-q` lowers to errors only, and neither alters stdout | `FR-GLOB-014`, `FR-GLOB-015`, `FR-GLOB-016` |
-| What each level reports | Phases and their durations, and one line per catalogue query, at `INFO`; cache hits and misses at `DEBUG`; internal detail permitted at `TRACE` | `FR-GLOB-017` |
+| What each level reports | At `INFO`, one line per phase that ran with its duration — for a server connection, DNS resolution, the TCP connect, the TLS handshake where one was negotiated, the login, and each session statement — and one line per catalogue query; cache hits and misses at `DEBUG`; internal detail permitted at `TRACE`. A connection phase's time is attributed from readings taken while the connection runs, so the set of lines and their sum are what a reader may rely on, not one phase's time ([architecture.md](architecture.md#the-connection-lifecycle)) | `FR-GLOB-017` |
 | One line is structurally load-bearing | The per-query line carries a fixed leading token, which is what makes the query count observable from outside the process and `NFR-PERF-001` and `NFR-PERF-002` checkable at all. `NFR-PERF-008` is verified by counting those lines at `-v` against the server's statement record for the same invocation (sixty-second edition), which needs the fixture | `NFR-PERF-008`, `NFR-PERF-007` |
 | Six categories reach no stream, at any level | Denied a home rather than denied by a rule: the sink is a closed set of typed emission functions, and no subscriber is installed for a dependency's events to reach | `FR-GLOB-018`, `FR-SEC-005` |
-| No colour, no terminal detection | Neither stream carries an ANSI byte, on any path | `NFR-DET-003`, `NFR-DET-004` |
+| No colour, no terminal detection | Nothing the system composes for presentation carries an ANSI byte, on either stream; a carried byte is escaped or passed through as `FR-ERR-024`, `FR-OUT-018` and `FR-OUT-019` decide | `NFR-DET-003`, `NFR-DET-004` |
 
 **There is no logging facade to configure, and no sink to point anywhere.**
 `tracing-subscriber` is not a dependency and `tracing` has no role of its own,
@@ -501,21 +506,23 @@ exists to keep alive past the first `tpl cfg set`
 both server fixtures, so it is re-checked whenever either series set changes,
 under `FR-SRV-019` or `FR-MYSQL-005`, and whenever the example changes. The test is `verification.md`'s.
 
-**Neither shipped template exists at this commit.** `CLAUDE.md` (*Estrutura do
-Projecto*) names a root `templates/` directory for them; the repository has no
-such directory, and no command that would ship their content.
+**Both shipped templates are carried by the binary.** `src/project/init.rs`
+holds each as a string constant, and `tpl init` writes them into the new
+project, where they are thereafter edited and loaded from disk like any other
+template (read at `9d2538e`). The repository has no root `templates/`
+directory, which `CLAUDE.md` *Project Structure* names for them.
 
 **Recorded reading — the runtime-loading invariant and the init payload.**
-`CLAUDE.md` (*Invariantes de Implementação*) and `FR-TMPL-004` put templates on
+`CLAUDE.md` (*Implementation Invariants*) and `FR-TMPL-004` put templates on
 disk, loaded and compiled at render time, never embedded at compile time; and
 `tpl init` must nevertheless produce these two files from a single binary with
 nothing named beside it. Both readings are recorded. This document takes the
 invariant as governing the **render path**: its stated ground is that a template
 change must not oblige a recompilation of `tpl`, and an artefact `tpl init`
 copies into a project is thereafter edited there and loaded from disk like any
-other. **The mechanism that carries the bytes is settled by nothing** — no
-requirement and no record names one — and this document does not settle it
-either; it belongs to the register. The wording of the invariant, if it is to
+other. **No requirement and no record names the mechanism that carries the
+bytes**; the code chose constants compiled into the binary, the reading above
+admits that choice, and no entry of the register records it. The wording of the invariant, if it is to
 exclude the init payload in its own text, is the coordination document owner's.
 
 ## The fixture as an operational asset
@@ -523,7 +530,7 @@ exclude the init payload in its own text, is the coordination document owner's.
 `scripts/mariadb/` and `scripts/mysql/`, below, are the only servers any
 validation may use, and `scripts/sqlite/`, below, the only source of a database
 file: `CLAUDE.md`
-(*Testes contra MariaDB*) admits no mock, no stub and no external instance, and
+(*Testing against MariaDB*) admits no mock, no stub and no external instance, and
 the fixture's own documentation adds that no container is left running after a
 validation run. It is an operational asset because three obligations rest on
 it — `FR-SRV-029`'s cross-series test, `FR-SRV-026`'s byte-identity across the
@@ -602,8 +609,25 @@ There is no container, no harness script and no gate, nothing to start or stop,
 and nothing left behind outside the temporary directory. It answers for a
 database file the obligation `CLAUDE.md` places on `scripts/mariadb/` for a
 server: exhaustive coverage of what the reader reads, in a realistic domain
-(`FR-LITE-038`). At `19abb1f` it holds seventeen SQL files and the
+(`FR-LITE-038`). At `9d2538e` it holds twenty SQL files and the
 `README.md` that states what each builds.
+
+**The worked examples read all three fixtures.** `examples/` holds four
+examples and one driver, `examples/_driver/`, which runs the five-command
+workflow of `FR-EX-004` through the binary alone and redirects each render's
+standard output into a file (`FR-EX-005`, `BR-EX-001`). Each example reads
+`sakila`, `world` and `freight` from the most recent series of the MariaDB
+fixture (`FR-EX-006`), `freight` from the most recent series of the MySQL
+fixture through a `mysql` entry (`FR-EX-011`), and the main database the
+SQLite fixture builds from `scripts/sqlite/freight.sql`, rebuilt on every run
+and never committed, through a `sqlite` entry (`FR-EX-012`); the reads and
+their conditions are `examples/README.md`'s. Each ends in the compile gate of
+`FR-EX-009`, run by the example's own script and by none of the validation
+tiers above. The Rust example is excluded from the Cargo workspace
+([`OD-04`](open-decisions.md#od-04--one-package-or-a-workspace)); whether the
+flow of `UC-013` joins the acceptance skeleton is
+[`OD-33`](open-decisions.md#od-33--uc-013-and-the-twelve-flow-acceptance-skeleton),
+open.
 
 ## Continuous integration and release
 
