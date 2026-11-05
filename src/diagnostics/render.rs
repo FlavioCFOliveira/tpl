@@ -2004,31 +2004,15 @@ mod tests {
 
     #[test]
     fn fr_err_022_no_hint_line_carries_a_value_the_character_set_governs() {
-        // FR-ERR-022 and FR-ERR-023, over every variant at once but two: a
-        // hint is built from literals and from names matching
-        // `[A-Za-z0-9_]{1,64}`, so a value outside the set reaches no hint line
-        // in any form — neither as a runnable command nor as prose.
-        //
-        // The two are the second outcome of FR-ERR-049 and the first two of
-        // FR-ERR-047, whose own examples write the host into the hint's prose
-        // (`check that db.example.com is reachable from here`), a value the
-        // set does not admit. For those two the hint is held to FR-ERR-024
-        // instead: the host reaches it escaped, and no control character
-        // survives.
-        const HOST_IN_PROSE: [&str; 2] = ["TcpConnectFailed", "LoginNotCompleted"];
-
+        // FR-ERR-022 and FR-ERR-023, over every variant at once: a hint is
+        // built from literals and from names matching `[A-Za-z0-9_]{1,64}`, so
+        // a value outside the set reaches no hint line in any form — neither as
+        // a runnable command nor as prose. A host is no exception: a hint that
+        // needs the address refers to the host and port the error and cause
+        // lines name (the eighty-first edition, rmp #344).
         for error in samples_carrying(UNGATED) {
             let rendered = render(&error);
             let hint = line(&rendered, Label::Hint);
-
-            if HOST_IN_PROSE.contains(&crate::error::tests::variant_name(&error)) {
-                assert!(!hint.contains('\u{1b}'), "{hint:?}");
-                assert!(
-                    hint.contains("\\u{1b}"),
-                    "the host was not escaped: {hint:?}"
-                );
-                continue;
-            }
 
             assert!(
                 !hint.contains(NEVER_IN_A_HINT),
@@ -2950,7 +2934,7 @@ mod tests {
             example([
                 "error: cannot reach db.example.com:3306, for database entry 'shop'",
                 "cause: the TCP connect to db.example.com:3306 failed: the network reports the host unreachable",
-                "hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>",
+                "hint:  check that the host named above is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>",
                 "exit:  69 (EX_UNAVAILABLE)",
             ])
         );
@@ -2959,7 +2943,7 @@ mod tests {
             example([
                 "error: cannot reach db.example.com:3306, for database entry 'shop'",
                 "cause: the TCP connect to db.example.com:3306 failed: the operating system reported error 13",
-                "hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>",
+                "hint:  check that the host named above is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>",
                 "exit:  69 (EX_UNAVAILABLE)",
             ])
         );
@@ -3012,7 +2996,7 @@ mod tests {
             example([
                 "error: the login to db.example.com:3306 did not complete, for database entry 'shop'",
                 "cause: the TCP connect to db.example.com:3306 succeeded, and the connection failed before the login completed: the server closed it, it was reset, or the operating system abandoned it",
-                "hint:  check that db.example.com:3306 is the address of a running MariaDB server, then run the command again, or change the address with: tpl cfg database update shop --host <host> --port <port>",
+                "hint:  check that the host and port named above are the address of a running MariaDB server, then run the command again, or change the address with: tpl cfg database update shop --host <host> --port <port>",
                 "exit:  69 (EX_UNAVAILABLE)",
             ])
         );
@@ -3021,7 +3005,7 @@ mod tests {
             example([
                 "error: the login to db.example.com:3306 did not complete, for database entry 'shop'",
                 "cause: what answered the login at db.example.com:3306 did not answer as a MariaDB server does: it does not speak the MariaDB protocol, or it asked for a step tpl does not implement, such as an authentication method",
-                "hint:  check that db.example.com:3306 is the address of a MariaDB server, or change it with: tpl cfg database update shop --host <host> --port <port>",
+                "hint:  check that the host and port named above are the address of a MariaDB server, or change it with: tpl cfg database update shop --host <host> --port <port>",
                 "exit:  69 (EX_UNAVAILABLE)",
             ])
         );

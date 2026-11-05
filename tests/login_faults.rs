@@ -245,9 +245,9 @@ fn fr_err_047_a_connection_closed_in_the_login_is_the_first_outcome() {
                  cause: the TCP connect to 127.0.0.1:{port} succeeded, and the connection failed \
                  before the login completed: the server closed it, it was reset, or the operating \
                  system abandoned it\n\
-                 hint:  check that 127.0.0.1:{port} is the address of a running {} server, then run \
-                 the command again, or change the address with: tpl cfg database update {ENTRY} \
-                 --host <host> --port <port>\n\
+                 hint:  check that the host and port named above are the address of a running {} \
+                 server, then run the command again, or change the address with: tpl cfg database \
+                 update {ENTRY} --host <host> --port <port>\n\
                  exit:  69 (EX_UNAVAILABLE)\n",
                 server_name(provider)
             ),
@@ -277,8 +277,9 @@ fn fr_err_047_an_answer_outside_the_protocol_is_the_second_outcome() {
                  cause: what answered the login at 127.0.0.1:{port} did not answer as a {server} \
                  server does: it does not speak the {server} protocol, or it asked for a step tpl \
                  does not implement, such as an authentication method\n\
-                 hint:  check that 127.0.0.1:{port} is the address of a {server} server, or change \
-                 it with: tpl cfg database update {ENTRY} --host <host> --port <port>\n\
+                 hint:  check that the host and port named above are the address of a {server} \
+                 server, or change it with: tpl cfg database update {ENTRY} --host <host> \
+                 --port <port>\n\
                  exit:  69 (EX_UNAVAILABLE)\n"
             ),
             "{provider}"

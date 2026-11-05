@@ -1189,36 +1189,33 @@ fn bare(error: &Error) -> Cow<'static, str> {
             }
         )),
         // FR-ERR-049: outcomes 2 to 4 share the second outcome's hint, which
-        // names the host and the command that repoints the entry.
-        Error::TcpConnectFailed {
-            entry,
-            host,
-            by_dsn,
-            ..
-        } => Cow::Owned(format!(
-            "check that {host} is reachable from here — its address, a route, a VPN or a \
-             firewall — or change the address {}",
+        // refers to the host the error and cause lines name — never writes it,
+        // per FR-ERR-022 — and carries the command that repoints the entry.
+        Error::TcpConnectFailed { entry, by_dsn, .. } => Cow::Owned(format!(
+            "check that the host named above is reachable from here — its address, a route, a \
+             VPN or a firewall — or change the address {}",
             repoint_address(entry, *by_dsn)
         )),
         // FR-ERR-047, outcomes 1 and 2: the address must be that of a
-        // (running) server of the entry's provider.
+        // (running) server of the entry's provider. The hint refers to the
+        // host and port the error and cause lines name, per FR-ERR-022.
         Error::LoginNotCompleted {
             entry,
-            host,
-            port,
             provider,
             fault,
             by_dsn,
+            ..
         } => {
             let server = super::cause::server_name(*provider);
             Cow::Owned(match fault {
                 LoginFault::ConnectionClosed => format!(
-                    "check that {host}:{port} is the address of a running {server} server, then \
-                     run the command again, or change the address {}",
+                    "check that the host and port named above are the address of a running \
+                     {server} server, then run the command again, or change the address {}",
                     repoint_address(entry, *by_dsn)
                 ),
                 LoginFault::NotAccepted => format!(
-                    "check that {host}:{port} is the address of a {server} server, or change it {}",
+                    "check that the host and port named above are the address of a {server} \
+                     server, or change it {}",
                     repoint_address(entry, *by_dsn)
                 ),
             })

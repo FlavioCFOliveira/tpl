@@ -205,7 +205,8 @@ from the same upstream revision, so those texts carry its notices too.
   password, at the first response and at every switch, the responses point 5
   sends;
 - point 6, at the first whose `sqlx-mysql` lets a caller learn the phase a
-  connection reached;
+  connection reached and observe each change of phase while the call runs,
+  since `tpl` reads both;
 - point 8, at the first whose `sqlx-mysql` contains upstream commit
   `4161768c9c077ea5dff6debcadeb0382d9f027df`, pull request `#4458`.
 

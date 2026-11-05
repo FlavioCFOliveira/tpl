@@ -624,6 +624,12 @@ pub(crate) fn open_classified(
         )
         .await;
         ledger.observe(reached.phase(), Instant::now());
+        // FR-GLOB-017: a mode that requires TLS opens no connection without
+        // negotiating it, so an opened connection under such a mode ran the
+        // handshake even where no reading fell inside it (ADR-014, point 6).
+        if matches!(opened, Ok(Ok(_))) && requires_tls(target.tls) {
+            ledger.negotiated_tls();
+        }
         ledger.report();
 
         // FR-CONF-005: the phase the connection had reached, read from the
@@ -643,6 +649,19 @@ pub(crate) fn open_classified(
     })
 }
 
+/// Whether `mode` refuses a connection that negotiates no TLS, so that a
+/// connection it opened negotiated one (`FR-CONF-013`).
+///
+/// `preferred` is not among them: it opens a connection either way, and
+/// whether its server offered TLS is not something the record of `ADR-014`
+/// point 6 carries.
+const fn requires_tls(mode: TlsMode) -> bool {
+    match mode {
+        TlsMode::Required | TlsMode::VerifyCa | TlsMode::VerifyIdentity => true,
+        TlsMode::Disabled | TlsMode::Preferred => false,
+    }
+}
+
 /// The time the one call that opens a connection spent in each of its three
 /// phases (`FR-GLOB-017`).
 ///
@@ -656,8 +675,12 @@ pub(crate) fn open_classified(
 ///
 /// A phase the record never named did not run and has no line: on a
 /// connection that negotiates no TLS the driver records the handshake and the
-/// login again within one poll, and the handshake is never seen. The record is
-/// read and never written here, and its handle is the driver's unchanged.
+/// login again within one poll, and the handshake is never seen. A handshake
+/// that was negotiated can be left within one poll too, where its replies are
+/// already buffered; the caller that knows it ran says so through
+/// [`Ledger::negotiated_tls`], and its line is written with no time of its
+/// own. The record is read and never written here, and its handle is the
+/// driver's unchanged.
 #[derive(Debug)]
 struct Ledger {
     /// The phase the last reading saw.
@@ -713,6 +736,19 @@ impl Ledger {
         }
     }
 
+    /// Records that the TLS handshake ran, whether or not a reading fell
+    /// inside it, so that it has its line (`FR-GLOB-017`).
+    ///
+    /// A handshake no reading saw was recorded and left between two readings,
+    /// so the ledger's readings measure none of it: its line carries the time
+    /// they charged to it, zero where none was, and the time between those two
+    /// readings stays with the phase the first of them saw — the resolution
+    /// the readings have, as for a handshake refused at once. A handshake that
+    /// was seen keeps its time.
+    fn negotiated_tls(&mut self) {
+        self.tls_handshake.get_or_insert(Duration::ZERO);
+    }
+
     /// The lines of the phases that ran, in the order they first ran.
     fn lines(&self) -> Vec<(Phase, Duration)> {
         let mut lines = Vec::with_capacity(3);
@@ -736,7 +772,7 @@ impl Ledger {
 
 #[cfg(test)]
 mod tests {
-    use super::{Ledger, REDACTED_OPTIONS, Target, options, ssl_mode, trust};
+    use super::{Ledger, REDACTED_OPTIONS, Target, options, requires_tls, ssl_mode, trust};
     use crate::deadline::Phase;
     use crate::error::Error;
     use crate::project::config;
@@ -1296,5 +1332,64 @@ mod tests {
                 (Phase::Login, Duration::from_millis(2)),
             ]
         );
+    }
+
+    #[test]
+    fn fr_glob_017_a_negotiated_handshake_no_reading_saw_still_has_its_line() {
+        // rmp #340: the TLS handshake was recorded and left between two
+        // readings — the phase jumped from the TCP connect straight past it to
+        // the login — and the mode required TLS, so the connection that opened
+        // negotiated it. It has its line, with the time the readings charged
+        // to it, none; the interval stays with the phase the first reading saw.
+        let start = Instant::now();
+        let at = |millis| start + Duration::from_millis(millis);
+        let mut ledger = Ledger::new(start);
+
+        ledger.observe(ConnectPhase::TcpConnect, at(2));
+        ledger.observe(ConnectPhase::Login, at(9)); // past the handshake
+        ledger.observe(ConnectPhase::Login, at(15)); // the login ended
+        ledger.negotiated_tls();
+
+        assert_eq!(
+            ledger.lines(),
+            [
+                (Phase::TcpConnect, Duration::from_millis(9)),
+                (Phase::TlsHandshake, Duration::ZERO),
+                (Phase::Login, Duration::from_millis(6)),
+            ]
+        );
+
+        // A handshake a reading did see keeps the time charged to it.
+        let mut ledger = Ledger::new(start);
+        ledger.observe(ConnectPhase::Login, at(1));
+        ledger.observe(ConnectPhase::TlsHandshake, at(3));
+        ledger.observe(ConnectPhase::Login, at(10));
+        ledger.observe(ConnectPhase::Login, at(12));
+        ledger.negotiated_tls();
+        assert_eq!(
+            ledger.lines(),
+            [
+                (Phase::TcpConnect, Duration::from_millis(1)),
+                (Phase::TlsHandshake, Duration::from_millis(7)),
+                (Phase::Login, Duration::from_millis(4)),
+            ]
+        );
+    }
+
+    #[test]
+    fn fr_glob_017_only_a_mode_that_refuses_plaintext_proves_a_handshake_ran() {
+        // `preferred` opens a connection with or without TLS, and `disabled`
+        // never negotiates one, so neither proves a handshake that no reading
+        // saw; the three modes that refuse a plaintext session do.
+        for mode in TlsMode::ALL {
+            assert_eq!(
+                requires_tls(mode),
+                matches!(
+                    mode,
+                    TlsMode::Required | TlsMode::VerifyCa | TlsMode::VerifyIdentity
+                ),
+                "{mode:?}"
+            );
+        }
     }
 }
