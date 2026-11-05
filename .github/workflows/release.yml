@@ -146,6 +146,11 @@ jobs:
             fi
           }
           cd "$RUNNER_TEMP"
+          # The runner's rustup may not provide $HOME/.cargo/bin, so the tools go
+          # into a directory this step creates and puts on PATH for later steps.
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          echo "$bin" >> "$GITHUB_PATH"
 
           toolchain="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' "$GITHUB_WORKSPACE/Cargo.toml")"
           rustup toolchain install "$toolchain" --profile minimal --component rustfmt,clippy --target "$TARGET"
@@ -156,7 +161,7 @@ jobs:
           sha="CARGO_AUDIT_SHA256_${host//-/_}"
           fetch "https://github.com/rustsec/rustsec/releases/download/cargo-audit%2Fv${CARGO_AUDIT_VERSION}/${audit}.tgz" \
             "${audit}.tgz" "${!sha}"
-          tar -xzf "${audit}.tgz" --strip-components=1 -C "$HOME/.cargo/bin" "${audit}/cargo-audit"
+          tar -xzf "${audit}.tgz" --strip-components=1 -C "$bin" "${audit}/cargo-audit"
 
           if [[ "$TARGET" == *-linux-musl ]]; then
             arch="$(uname -m)"
@@ -170,7 +175,7 @@ jobs:
             sha="CARGO_ZIGBUILD_SHA256_${arch}"
             fetch "https://github.com/rust-cross/cargo-zigbuild/releases/download/v${CARGO_ZIGBUILD_VERSION}/${zigbuild}.tar.xz" \
               "${zigbuild}.tar.xz" "${!sha}"
-            tar -xJf "${zigbuild}.tar.xz" --strip-components=1 -C "$HOME/.cargo/bin" "${zigbuild}/cargo-zigbuild"
+            tar -xJf "${zigbuild}.tar.xz" --strip-components=1 -C "$bin" "${zigbuild}/cargo-zigbuild"
           fi
 
       - run: cargo fmt --all -- --check
