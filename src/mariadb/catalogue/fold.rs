@@ -871,8 +871,10 @@ fn trigger(row: &MySqlRow) -> Result<Trigger<'_>, Error> {
 ///
 /// The five collections ordered here are the ones the **default** rule of
 /// `NFR-DET-002` governs — name, ascending, byte-wise. A table's columns are
-/// not among them: their order is the ordinal position, which the statement's
-/// own `ORDER BY` already produced, and it is one of the six exceptions the
+/// not among them: their order is the ordinal position, which they already
+/// arrive in — produced by the `COLUMNS` statement's own `ORDER BY` for a
+/// `mariadb` read, and by the fold's sort on the value of the position for a
+/// `mysql` read (`FR-MYSQL-027`) — and it is one of the six exceptions the
 /// requirement names. Neither is an index's column list, a foreign key's, or a
 /// routine's parameters.
 pub(crate) fn assemble(tables: Tables<'_>) -> Result<Vec<Table<'_>>, Error> {
