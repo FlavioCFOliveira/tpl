@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty-five editions. All are in force;
+The specification has been written in eighty-six editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6730,6 +6730,31 @@ The fifth validation rule is applied: the corrected sections were read
 against `FR-CONF-005`, `FR-CONF-056`, `FR-EX-006`, `FR-EX-011`, `FR-EX-012`
 and `FR-EX-008`, and agree with them; the rest of the file was not re-read
 for status.
+
+### Eighty-sixth edition — help that names the three providers
+
+rmp `#358`, which the user brought into sprint 29: the help of `tpl` named
+MariaDB alone, and no requirement fixed what it says of a provider.
+**One identifier is assigned**: `FR-HELP-038`, in
+[help-and-version.md](help-and-version.md). None is retired and none is
+renumbered; no open question or divergence entry is raised, and
+[glossary.md](glossary.md) is unchanged.
+
+- **A provider named only where the statement is that provider's** —
+  `FR-HELP-038`: a statement of the help, text or JSON, names a provider only
+  where it holds of that provider alone, names MariaDB and MySQL both, or
+  the server, where it holds of both, and never describes `tpl` as reading
+  MariaDB alone; eight statements are fixed word for word — the first
+  sentence of the description of `tpl`, its row on a database entry, the
+  purposes of `--host`, `--port` and `--schema`, a sentence of
+  `tpl cfg database add`, an answer of `tpl cfg database test`, and the
+  clause of the `78` outcome on the server.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-HELP-030`, `FR-HELP-037`, `BR-HELP-002`, `FR-CFG-033` and `FR-CONF-051`
+were read against the change, and none is amended. The fifth validation rule
+is applied: the root `README.md` quotes no help text, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
 
 ### Still out of scope
 
