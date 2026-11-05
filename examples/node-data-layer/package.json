@@ -3,11 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "A data layer for sakila, world and freight, rendered by tpl from the catalogue.",
+  "description": "A data layer for sakila, world and freight from MariaDB, freight from MySQL and a SQLite database, rendered by tpl from the catalogue.",
   "exports": {
     "./sakila": "./src/sakila/index.js",
     "./world": "./src/world/index.js",
-    "./freight": "./src/freight/index.js"
+    "./freight": "./src/freight/index.js",
+    "./freight_mysql": "./src/freight_mysql/index.js",
+    "./freight_sqlite": "./src/freight_sqlite/index.js"
   },
   "engines": {
     "node": ">=20.0.0"

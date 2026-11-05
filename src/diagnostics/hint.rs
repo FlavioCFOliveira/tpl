@@ -1970,6 +1970,11 @@ fn bare(error: &Error) -> Cow<'static, str> {
             "point the entry at a SQLite database file: {}",
             repoint_file(entry)
         )),
+        // FR-LITE-043: the remedy is the file's, so the entry is repointed.
+        Error::SqliteNamesAlike { entry, .. } => Cow::Owned(format!(
+            "point the entry at another file: {}",
+            repoint_file(entry)
+        )),
         Error::SqliteFileLookup { entry, .. } | Error::SqliteFileUnreadable { entry, .. } => {
             Cow::Owned(format!(
                 "check that the file and its directory are readable, and that the host has free \

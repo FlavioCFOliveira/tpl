@@ -3642,3 +3642,84 @@ fn fr_out_018_a_mariadb_value_carrying_no_character_of_the_set_is_written_unchan
         );
     }
 }
+
+#[test]
+fn fr_conf_056_a_read_served_from_the_cache_expands_no_variable() {
+    // FR-CONF-056, as it states itself demonstrable: with the store of the
+    // entry filled and the variable its `password` references unset, a read
+    // the cache serves exits 0 and says so, while `--direct` and
+    // `tpl cfg database test` — each of which opens a connection — exit 78
+    // under FR-CONF-022, naming the variable. The control is the first run:
+    // with the variable defined the same entry reads the server.
+    let _guard = fixture::exclusive();
+    let Some(series) =
+        fixture::series("fr_conf_056_a_read_served_from_the_cache_expands_no_variable")
+    else {
+        return;
+    };
+    let Some(server) = series.first() else {
+        return;
+    };
+
+    let sandbox = Sandbox::new();
+    let written = configuration(server, ROOT).replace(
+        &format!("password = \"{}\"", ROOT.1),
+        "password = \"${FIXTURE_PW}\"",
+    );
+    assert!(written.contains("${FIXTURE_PW}"), "{written}");
+    sandbox.project(&written);
+
+    let warmed = sandbox.run_from(
+        sandbox.root(),
+        &[("FIXTURE_PW", ROOT.1)],
+        &["schema", "dump"],
+    );
+    assert_eq!(
+        warmed.status.code(),
+        Some(0),
+        "the control read failed: {}",
+        String::from_utf8_lossy(&warmed.stderr)
+    );
+    let warmed: serde_json::Value =
+        serde_json::from_slice(&warmed.stdout).expect("the dump is JSON");
+    assert_eq!(warmed["source"], "server", "the control read missed");
+
+    // Every hit path of the reader: the whole document, a summary and a
+    // listing, none of which reads a field of the entry.
+    let hits = fixture::connections_attributable_to(server, || {
+        let dumped = document(&sandbox, &["schema", "dump"]);
+        assert_eq!(
+            dumped["source"], "cache",
+            "FR-CDOC-009: the dump was not cached"
+        );
+
+        let info = document(&sandbox, &["schema", "info", "--format", "json"]);
+        assert_eq!(info["source"], "cache");
+
+        let tables = document(&sandbox, &["schema", "tables", "--format", "json"]);
+        assert_eq!(tables["source"], "cache");
+    });
+    assert_eq!(hits, 0, "FR-CACHE-006: a hit opened a connection");
+
+    for arguments in [
+        &["schema", "dump", "--direct"][..],
+        &["cfg", "database", "test", ENTRY][..],
+    ] {
+        let refused = run(&sandbox, arguments);
+        assert_eq!(
+            refused.code,
+            Some(78),
+            "tpl {} exited {:?}: {}",
+            arguments.join(" "),
+            refused.code,
+            refused.err
+        );
+        assert!(
+            refused.err.contains("FIXTURE_PW"),
+            "tpl {}: the diagnostic does not name the variable: {}",
+            arguments.join(" "),
+            refused.err
+        );
+        assert!(refused.out.is_empty(), "{}", refused.out);
+    }
+}

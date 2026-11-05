@@ -72,7 +72,7 @@ Rules for the operator:
 
 - There is no `--password` flag and no `-p`. Don't look for one.
 - When running a command that needs the variable, supply it in the environment (`SHOP_PASSWORD=… tpl …`, or `export` it once). Never print it. If you don't have the secret, ask the user to export it. Don't ask them to paste it into the chat.
-- The variable must be defined for **every** command that uses the entry, cache hits included. An undefined variable exits 78, and the hint names the variable.
+- The variable must be defined for every command that **connects** with the entry: a read that misses the cache or carries `--direct`, `tpl cache load`, `tpl cfg database test`, and a render the cache cannot serve. An undefined variable then exits 78, and the hint names the variable. A read served wholly from the cache expands no `${VAR}` and runs no `password_command`, so it succeeds with the variable unset; `--context` renders never read the entry's credentials at all.
 - `tpl` never prints a credential in an error, at any verbosity. `cfg list` and `cfg database show` print a literal password as `***` and a `${VAR}` as written.
 - A DSN takes no query parameters: a `?` is refused. Strip parameters from strings copied from other tools. `mysql://` and `mariadb://` are equivalent, and neither selects the provider.
 - An account with no password: `password = ""`, a DSN with an empty password part, a `password_command` that prints nothing, or no password source at all. Each is sent as the server's own clients send an empty password.

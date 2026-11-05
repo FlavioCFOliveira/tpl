@@ -652,6 +652,20 @@ fn text_or_null(row: &Row<'_>, at: usize) -> Result<Option<String>, Misread> {
     }
 }
 
+/// A text value borrowed from its row, and the bytes it was converted from.
+type Converted<'r> = (Cow<'r, str>, &'r [u8]);
+
+/// A text field that may be SQL `NULL`, as [`text_or_null`] reads it,
+/// borrowed from its row, and the bytes it was converted from, as
+/// [`text_named`] reads a field.
+fn text_or_null_named<'r>(row: &'r Row<'_>, at: usize) -> Result<Option<Converted<'r>>, Misread> {
+    match row.get_ref(at) {
+        Ok(ValueRef::Text(bytes)) => Ok(Some((String::from_utf8_lossy(bytes), bytes))),
+        Ok(ValueRef::Null) => Ok(None),
+        _ => Err(Misread::Shape(STORAGE_CLASS)),
+    }
+}
+
 /// An integer field, never coerced from another class.
 fn integer(row: &Row<'_>, at: usize) -> Result<i64, Misread> {
     match row.get_ref(at) {
@@ -686,12 +700,7 @@ fn schema_value<'r, T>(
     })
 }
 
-/// A text value of the schema table: its `type`, `name` or `tbl_name`.
-fn schema_text(row: &Row<'_>, at: usize, column: &'static str) -> Result<String, Misread> {
-    schema_named(row, at, column).map(|(text, _)| text.into_owned())
-}
-
-/// A text value of the schema table as [`schema_text`] reads it, borrowed
+/// A text value of the schema table — its `name` or `tbl_name` — borrowed
 /// from its row, and the bytes it was converted from, as [`text_named`]
 /// reads a field.
 fn schema_named<'r>(
@@ -705,7 +714,7 @@ fn schema_named<'r>(
     })
 }
 
-/// The `type` of the schema table as [`schema_text`] reads it, one of the
+/// The `type` of the schema table as [`schema_named`] reads it, one of the
 /// four texts SQLite writes there kept as that spelling, as [`spelled`]
 /// keeps one.
 fn schema_type(row: &Row<'_>, at: usize) -> Result<Cow<'static, str>, Misread> {

@@ -1707,6 +1707,20 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 ),
             })
         }
+        // FR-LITE-043: the path, the kind of the two objects, the table that
+        // holds a column, an index or a trigger, the text both names convert
+        // to, and why the model cannot carry them apart.
+        Error::SqliteNamesAlike { path, names, .. } => Cow::Owned(format!(
+            "{} holds {}{} whose names both read '{}': they differ only in bytes that are not \
+             valid UTF-8, and tpl names each object by its text",
+            path.display(),
+            match &names.table {
+                Some(table) => format!("in table '{table}', "),
+                None => String::new(),
+            },
+            names.kind,
+            names.text
+        )),
         // The note on FR-ERR-034 for a `sqlite` entry: the path, the statement
         // and what ended it, naming a lock only on the library's word.
         Error::SqliteUnavailable {

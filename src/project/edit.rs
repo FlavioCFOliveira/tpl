@@ -18,17 +18,26 @@
 //! would emit a file the serialiser composed, which is a file that has lost
 //! every comment its author wrote.
 //!
-//! **The temporary file is created with the mode rather than chmod'd into it.**
-//! `OpenOptions::mode` sets the permissions at creation, so there is no instant
-//! at which the new file exists at the umask's mode holding the credentials the
-//! old one held. `FR-CFG-042` then makes the rename the whole of the
-//! concurrency story: two processes yield one whole file or the other, and a
-//! killed process leaves nothing locked and nothing half-written.
+//! **The temporary file is created with the mode, and then given it.** The
+//! `openat` that creates it carries `0600`, so there is no instant at which the
+//! new file exists at a looser mode holding the credentials the old one held;
+//! the umask can only narrow that mode, and the `fchmod` on the same
+//! descriptor sets it exactly. `FR-CFG-042` then makes the rename the whole of
+//! the concurrency story: two processes yield one whole file or the other, and
+//! a killed process leaves nothing locked and nothing half-written.
+//!
+//! **Every step acts in the `.tpl` the file was read from** (`FR-CFG-041`,
+//! `FR-SEC-027`). [`Editor::open`] opens that folder once, without following a
+//! link, and keeps the descriptor; the read, the creation of the temporary,
+//! its write, its mode and the rename are each made relative to it by
+//! [`crate::at`], so a link or a folder put in place of a component of the
+//! path after the checks redirects none of them.
 
-use std::fs::OpenOptions;
-use std::io::Write as _;
-use std::os::unix::fs::OpenOptionsExt as _;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+
+use rustix::fd::OwnedFd;
+use rustix::fs::Mode;
 
 use toml_edit::{Array, DocumentMut, Item, Table, Value, value};
 
@@ -40,6 +49,9 @@ use crate::render::{RenderFuel, RenderMemoryLimit, RenderOutputLimit};
 
 /// The mode `FR-PROJ-019` creates `.tpl/.cfg` with and `FR-CFG-034` keeps.
 pub(crate) const MODE: u32 = 0o600;
+
+/// [`MODE`] as the mode `rustix` takes, whose width differs by platform.
+const FILE_MODE: Mode = Mode::RUSR.union(Mode::WUSR);
 
 /// The name of the configuration file inside `.tpl`.
 pub(crate) const CONFIGURATION: &str = ".cfg";
@@ -53,9 +65,9 @@ const DATABASE: &str = "database";
 /// One `.tpl/.cfg` open for writing.
 #[derive(Debug)]
 pub(crate) struct Editor {
-    /// The `.tpl` folder the temporary file is written inside, per
-    /// `FR-CFG-041`.
-    directory: PathBuf,
+    /// The `.tpl` folder the file was read from and the temporary file is
+    /// written inside, held open, per `FR-CFG-041`.
+    folder: OwnedFd,
     /// The file the temporary one is renamed over.
     file: PathBuf,
     /// The document, with its comments and its key order intact.
@@ -130,7 +142,7 @@ impl Editor {
                 })?;
 
         Ok(Self {
-            directory: directory.to_owned(),
+            folder,
             file,
             document,
         })
@@ -245,53 +257,25 @@ impl Editor {
     /// # Errors
     ///
     /// Returns [`Error::ProjectFileUnwritable`] naming the **target** where the
-    /// temporary file could not be created or written, or the rename failed.
-    /// In every one of those cases the previous `.cfg` is still in place,
-    /// unchanged.
+    /// temporary file could not be created, written or given mode `0600`, or
+    /// the rename failed. In every one of those cases the previous `.cfg` is
+    /// still in place, unchanged, and no step has acted outside the folder
+    /// [`Editor::open`] opened.
     pub(crate) fn save(&self) -> Result<(), Error> {
         let rendered = self.document.to_string();
-        let temporary = self
-            .directory
-            .join(format!("{CONFIGURATION}.{}.tmp", std::process::id()));
+        let temporary = format!("{CONFIGURATION}.{}.tmp", std::process::id());
 
-        let unwritable = |returned: std::io::Error| Error::ProjectFileUnwritable {
+        crate::at::replace_in(
+            &self.folder,
+            OsStr::new(CONFIGURATION),
+            OsStr::new(&temporary),
+            FILE_MODE,
+            rendered.as_bytes(),
+        )
+        .map_err(|returned| Error::ProjectFileUnwritable {
             path: self.file.clone(),
             returned,
-        };
-
-        let written = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(MODE)
-            .open(&temporary)
-            .and_then(|mut handle| {
-                handle.write_all(rendered.as_bytes())?;
-                handle.flush()
-            });
-
-        if let Err(returned) = written {
-            let _ = std::fs::remove_file(&temporary);
-            return Err(unwritable(returned));
-        }
-
-        // A file that already existed keeps whatever mode it had, because
-        // `create` does not apply `mode` to it; FR-CFG-034 requires 0600
-        // whatever the previous run left behind.
-        if let Err(returned) = std::fs::set_permissions(
-            &temporary,
-            std::os::unix::fs::PermissionsExt::from_mode(MODE),
-        ) {
-            let _ = std::fs::remove_file(&temporary);
-            return Err(unwritable(returned));
-        }
-
-        if let Err(returned) = std::fs::rename(&temporary, &self.file) {
-            let _ = std::fs::remove_file(&temporary);
-            return Err(unwritable(returned));
-        }
-
-        Ok(())
+        })
     }
 }
 
@@ -664,6 +648,135 @@ mod tests {
             .collect();
 
         assert_eq!(left, [".cfg"]);
+    }
+
+    #[test]
+    fn fr_cfg_034_the_mode_the_rewrite_passes_is_six_hundred() {
+        // FR-CFG-034: the mode handed to `fchmod` is the one the file keeps.
+        assert_eq!(u32::from(super::FILE_MODE.bits()), MODE);
+    }
+
+    /// An editor over `directory` that sets `core.database` to `shop`.
+    fn edited(directory: &std::path::Path) -> Editor {
+        let mut editor = Editor::open(directory).expect("the file parses");
+        editor.set(
+            &key("core.database"),
+            assign(&key("core.database"), "shop").expect("an entry name is a string"),
+        );
+
+        editor
+    }
+
+    #[test]
+    fn fr_cfg_041_a_folder_swapped_for_a_link_after_the_open_redirects_nothing() {
+        // FR-CFG-041, the paragraph of the seventy-ninth edition: the `.tpl`
+        // the file was read from is replaced by a link to another folder
+        // between the open and the rewrite. The rewrite lands in the folder it
+        // was read from, and the file the link reaches is untouched.
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let elsewhere = scratch.directory("elsewhere");
+        let decoy = scratch.file("elsewhere/.cfg", "decoy\n");
+
+        let editor = edited(&directory);
+        let moved = scratch.path("moved");
+        std::fs::rename(&directory, &moved).expect("the folder moves");
+        scratch.link(&elsewhere, &directory);
+
+        editor
+            .save()
+            .expect("the rewrite acts in the folder it holds");
+
+        assert_eq!(
+            std::fs::read_to_string(&decoy).expect("the decoy is there"),
+            "decoy\n"
+        );
+        let left: Vec<_> = std::fs::read_dir(&elsewhere)
+            .expect("the folder is there")
+            .filter_map(|found| Some(found.ok()?.file_name()))
+            .collect();
+        assert_eq!(left, [".cfg"], "nothing was created through the link");
+        assert_eq!(
+            std::fs::read_to_string(moved.join(".cfg")).expect("the file is there"),
+            "[core]\ndatabase = \"shop\"\n"
+        );
+        assert_eq!(scratch.mode(&moved.join(".cfg")), MODE);
+    }
+
+    #[test]
+    fn fr_cfg_041_the_rename_replaces_a_link_at_cfg_and_not_the_file_it_reaches() {
+        // FR-CFG-041: `.cfg` replaced by a link after the open. The rename
+        // replaces the entry named `.cfg`, the link, and the file it pointed
+        // at keeps its bytes.
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let outside = scratch.file("outside", "outside\n");
+
+        let editor = edited(&directory);
+        std::fs::remove_file(directory.join(".cfg")).expect("the file is removed");
+        scratch.link(&outside, &directory.join(".cfg"));
+
+        editor.save().expect("the rewrite replaces the link");
+
+        assert_eq!(
+            std::fs::read_to_string(&outside).expect("the target is there"),
+            "outside\n"
+        );
+        let written = std::fs::symlink_metadata(directory.join(".cfg")).expect("the file is there");
+        assert!(written.file_type().is_file(), "the link was not replaced");
+    }
+
+    #[test]
+    fn fr_cfg_041_a_link_at_the_temporary_name_is_not_opened() {
+        // FR-CFG-041: the temporary is created as a new file, so a link
+        // standing at its name is never opened or written through.
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let outside = scratch.file("outside", "outside\n");
+        let temporary = directory.join(format!(".cfg.{}.tmp", std::process::id()));
+        scratch.link(&outside, &temporary);
+
+        edited(&directory).save().expect("the rewrite succeeds");
+
+        assert_eq!(
+            std::fs::read_to_string(&outside).expect("the target is there"),
+            "outside\n"
+        );
+        assert!(std::fs::symlink_metadata(&temporary).is_err());
+        assert_eq!(
+            std::fs::read_to_string(directory.join(".cfg")).expect("the file is there"),
+            "[core]\ndatabase = \"shop\"\n"
+        );
+    }
+
+    #[test]
+    #[allow(
+        clippy::print_stderr,
+        reason = "a run as the superuser cannot observe the refusal, and says so rather than \
+                  passing in silence"
+    )]
+    fn fr_cfg_041_a_rewrite_that_cannot_act_in_the_folder_is_74_and_leaves_the_file() {
+        // FR-CFG-041: a temporary that cannot be created is 74, and the
+        // previous `.cfg` is in place, unchanged. A process that bypasses the
+        // folder's mode cannot observe the refusal, and says so.
+        if rustix::process::getuid().is_root() {
+            eprintln!("skipped: the superuser bypasses the folder's mode");
+            return;
+        }
+        let scratch = Scratch::new();
+        let directory = project(&scratch, "[core]\n");
+        let editor = edited(&directory);
+        scratch.chmod(&directory, 0o500);
+
+        let refused = editor.save().expect_err("the folder refuses the temporary");
+        scratch.chmod(&directory, 0o700);
+
+        assert!(matches!(refused, Error::ProjectFileUnwritable { .. }));
+        assert_eq!(refused.exit_code(), 74);
+        assert_eq!(
+            std::fs::read_to_string(directory.join(".cfg")).expect("the file is there"),
+            "[core]\n"
+        );
     }
 
     #[test]

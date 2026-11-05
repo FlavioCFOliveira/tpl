@@ -54,8 +54,8 @@ use rusqlite::Row;
 
 use super::fault::Stage;
 use super::{
-    Misread, Session, integer, schema_named, schema_rootpage, schema_sql, schema_text, schema_type,
-    spelled, text, text_named, text_or_null,
+    Misread, Session, integer, schema_named, schema_rootpage, schema_sql, schema_type, spelled,
+    text, text_named, text_or_null, text_or_null_named,
 };
 use crate::error::Error;
 use crate::model::database::Database;
@@ -210,6 +210,8 @@ struct ColumnRow {
     cid: i64,
     /// The `name` field.
     name: String,
+    /// The bytes that name was converted from, where they differ from it.
+    raw: Raw,
     /// The `type` field, exactly as stored.
     declared: String,
     /// The `notnull` field.
@@ -320,10 +322,15 @@ struct KeyRow {
     seq: i64,
     /// The `table` field: the referenced table, as written.
     referenced: String,
+    /// The bytes that name was converted from, where they differ from it.
+    referenced_raw: Raw,
     /// The `from` field.
     from: String,
     /// The `to` field, SQL `NULL` where the key names no parent column.
     to: Option<String>,
+    /// The bytes the `to` field was converted from, where they differ from
+    /// it.
+    to_raw: Raw,
     /// The `on_update` field.
     on_update: Cow<'static, str>,
     /// The `on_delete` field.
@@ -343,6 +350,8 @@ struct StoredRow {
     raw: Raw,
     /// The table or view it is on, for a trigger; itself, for a view.
     table: String,
+    /// The bytes that name was converted from, where they differ from it.
+    table_raw: Raw,
     /// The stored `CREATE` statement.
     sql: Option<String>,
 }
@@ -351,6 +360,32 @@ impl StoredRow {
     /// The bytes of the object's name, as the file holds them.
     fn key(&self) -> &[u8] {
         self.raw.bytes(&self.name)
+    }
+
+    /// The bytes of the name of the table or view it is on, as the file
+    /// holds them.
+    fn table_key(&self) -> &[u8] {
+        self.table_raw.bytes(&self.table)
+    }
+}
+
+impl ColumnRow {
+    /// The bytes of the column's name, as the file holds them.
+    fn key(&self) -> &[u8] {
+        self.raw.bytes(&self.name)
+    }
+}
+
+impl KeyRow {
+    /// The bytes of the referenced table's name, as the file holds them.
+    fn referenced_key(&self) -> &[u8] {
+        self.referenced_raw.bytes(&self.referenced)
+    }
+
+    /// The bytes of the `to` field, as the file holds them, where it is not
+    /// SQL `NULL`.
+    fn to_key(&self) -> Option<&[u8]> {
+        self.to.as_deref().map(|to| self.to_raw.bytes(to))
     }
 }
 
@@ -495,12 +530,19 @@ pub(crate) fn read(session: &Session) -> Result<Catalogue, Error> {
         statements::FOREIGN_KEYS,
         |row| {
             let (table, bytes) = schema_named(row, 1, "name")?;
+            let (referenced, referenced_bytes) = text_named(row, 4)?;
+            let to = text_or_null_named(row, 6)?;
             let key = KeyRow {
                 id: integer(row, 2)?,
                 seq: integer(row, 3)?,
-                referenced: text(row, 4)?,
+                referenced_raw: Raw::of(&referenced, referenced_bytes),
+                referenced: referenced.into_owned(),
                 from: text(row, 5)?,
-                to: text_or_null(row, 6)?,
+                to_raw: to
+                    .as_ref()
+                    .map(|(to, bytes)| Raw::of(to, bytes))
+                    .unwrap_or_default(),
+                to: to.map(|(to, _)| to.into_owned()),
                 on_update: spelled(row, 7, &ACTIONS)?,
                 on_delete: spelled(row, 8, &ACTIONS)?,
                 matched: spelled(row, 9, &MATCHES)?,
@@ -516,11 +558,13 @@ pub(crate) fn read(session: &Session) -> Result<Catalogue, Error> {
         |row| {
             let kind = schema_type(row, 0)?;
             let (name, bytes) = schema_named(row, 1, "name")?;
+            let (table, table_bytes) = schema_named(row, 2, "tbl_name")?;
             Ok(StoredRow {
                 raw: Raw::of(&name, bytes),
                 name: name.into_owned(),
                 kind,
-                table: schema_text(row, 2, "tbl_name")?,
+                table_raw: Raw::of(&table, table_bytes),
+                table: table.into_owned(),
                 sql: schema_sql(row, 3)?,
             })
         },
@@ -570,9 +614,11 @@ fn fill(
 /// The fields of `pragma_table_xinfo` of one row of statement 3, whose
 /// table's type and name precede them.
 fn column_row(row: &Row<'_>) -> Result<ColumnRow, Misread> {
+    let (name, bytes) = text_named(row, 3)?;
     Ok(ColumnRow {
         cid: integer(row, 2)?,
-        name: text(row, 3)?,
+        raw: Raw::of(&name, bytes),
+        name: name.into_owned(),
         declared: text(row, 4)?,
         not_null: integer(row, 5)? != 0,
         default: text_or_null(row, 6)?,
@@ -623,8 +669,8 @@ mod tests {
 
     use super::{Catalogue, IndexMember, IndexRun, Indexes, Run, Tabled};
     use crate::deadline::Deadlines;
+    use crate::error::{AlikeKind, AlikeNames, Error, FileValue};
     use crate::model::database::Database;
-    use crate::model::trigger::TriggerEvent;
     use crate::project::scratch::Scratch;
     use crate::project::settings::{self, FileSettings};
     use crate::sqlite::fixture;
@@ -887,41 +933,20 @@ mod tests {
         ("vw_fe", "76fe"),
     ];
 
-    /// Builds, at `path`, a database whose tables `t\xFF` and `t\xFE`, their
-    /// indexes `i\xFF` and `i\xFE`, their triggers `g\xFF` and `g\xFE` and the
-    /// views `v\xFF` and `v\xFE` differ only in a byte that is not UTF-8, so
-    /// that each pair converts to one text with U+FFFD substituted
-    /// (`FR-OUT-017`). Each is created first, so that its row stands before
-    /// its pair's in the schema table: the reverse of the order of their
-    /// bytes. SQLite writes no such name, so they are written under
+    /// Builds, at `path`, the schema `sql`, then rewrites every occurrence of
+    /// each ASCII name of `renamed` in the schema table's `name`, `tbl_name`
+    /// and `sql` to the bytes beside it. SQLite writes no name that is not
+    /// UTF-8 from a statement's text, so they are written under
     /// `writable_schema`, as `tests/support/sqlite.rs` writes its artefacts,
     /// by a connection whose defensive mode is off.
-    fn colliding(path: &Path) {
+    fn renamed(path: &Path, sql: &str, renamed: &[(&str, &str)]) {
         let connection = Connection::open(path).expect("the database opens");
         connection
             .set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, false)
             .expect("the builder sets defensive mode off");
-        connection
-            .execute_batch(
-                "CREATE TABLE parent (id INTEGER PRIMARY KEY, label TEXT NOT NULL);
-                 CREATE TABLE tbl_ff (id INTEGER PRIMARY KEY, ff_name TEXT NOT NULL,
-                     ff_qty INTEGER DEFAULT 0,
-                     parent_id INTEGER REFERENCES parent (id) ON DELETE CASCADE);
-                 CREATE TABLE tbl_fe (id INTEGER PRIMARY KEY, fe_rate REAL,
-                     parent_id INTEGER REFERENCES parent (id) ON DELETE SET NULL);
-                 CREATE TABLE child (id INTEGER PRIMARY KEY,
-                     ref_fe INTEGER REFERENCES tbl_fe (id),
-                     ref_ff INTEGER REFERENCES tbl_ff (id));
-                 CREATE INDEX idx_ff ON tbl_ff (ff_name, ff_qty DESC);
-                 CREATE INDEX idx_fe ON tbl_fe (fe_rate);
-                 CREATE TRIGGER trg_ff AFTER INSERT ON tbl_ff BEGIN SELECT 1; END;
-                 CREATE TRIGGER trg_fe BEFORE DELETE ON tbl_fe BEGIN SELECT 1; END;
-                 CREATE VIEW vw_ff AS SELECT id, ff_name FROM tbl_ff;
-                 CREATE VIEW vw_fe AS SELECT id, fe_rate FROM tbl_fe;",
-            )
-            .expect("the schema builds");
-        let renamed = |column: &str| {
-            RENAMED
+        connection.execute_batch(sql).expect("the schema builds");
+        let rewritten = |column: &str| {
+            renamed
                 .iter()
                 .fold(column.to_owned(), |text, (name, bytes)| {
                     format!("replace({text}, '{name}', CAST(x'{bytes}' AS TEXT))")
@@ -932,119 +957,208 @@ mod tests {
                 "PRAGMA writable_schema = ON;
                  UPDATE sqlite_schema SET name = {}, tbl_name = {}, sql = {};
                  PRAGMA writable_schema = OFF;",
-                renamed("name"),
-                renamed("tbl_name"),
-                renamed("sql"),
+                rewritten("name"),
+                rewritten("tbl_name"),
+                rewritten("sql"),
             ))
             .expect("the names are rewritten");
         connection.close().expect("the database closes");
     }
 
-    #[test]
-    fn fr_out_017_names_that_convert_alike_keep_the_order_of_their_bytes() {
-        // The statements carried `ORDER BY` until task #323, which ordered two
-        // names that convert to one text by their bytes, and the fold kept
-        // that order wherever the names tied. The model of the database of
-        // [`colliding`] is pinned here as the read with `ORDER BY` gave it:
-        // the rows of both `t\u{fffd}` tables grouped under the one text, those
-        // of `t\xFE` first; the members of both `i\u{fffd}` indexes, `i\xFE`'s
-        // first among those of one `seqno`; the stored text of `v\xFE`; and the
-        // triggers, `g\xFE`'s first.
-        let scratch = Scratch::new();
-        let path = scratch.directory("colliding").join("colliding.sqlite");
-        colliding(&path);
-        let catalogue = read(&path);
-        let database = catalogue.model().expect("the model folds");
-        let replaced = |prefix: &str| format!("{prefix}\u{fffd}");
-
-        let names: Vec<&str> = database.tables.iter().map(|table| table.name()).collect();
-        assert_eq!(
-            names,
-            [
-                "child",
-                "parent",
-                replaced("t").as_str(),
-                replaced("t").as_str()
-            ]
+    /// Builds, at `path`, a database whose tables `t\xFF` and `t\xFE`, their
+    /// indexes `i\xFF` and `i\xFE`, their triggers `g\xFF` and `g\xFE` and the
+    /// views `v\xFF` and `v\xFE` differ only in a byte that is not UTF-8, so
+    /// that each pair converts to one text with U+FFFD substituted
+    /// (`FR-OUT-017`). Each is created first, so that its row stands before
+    /// its pair's in the schema table: the reverse of the order of their
+    /// bytes.
+    fn colliding(path: &Path) {
+        renamed(
+            path,
+            "CREATE TABLE parent (id INTEGER PRIMARY KEY, label TEXT NOT NULL);
+             CREATE TABLE tbl_ff (id INTEGER PRIMARY KEY, ff_name TEXT NOT NULL,
+                 ff_qty INTEGER DEFAULT 0,
+                 parent_id INTEGER REFERENCES parent (id) ON DELETE CASCADE);
+             CREATE TABLE tbl_fe (id INTEGER PRIMARY KEY, fe_rate REAL,
+                 parent_id INTEGER REFERENCES parent (id) ON DELETE SET NULL);
+             CREATE TABLE child (id INTEGER PRIMARY KEY,
+                 ref_fe INTEGER REFERENCES tbl_fe (id),
+                 ref_ff INTEGER REFERENCES tbl_ff (id));
+             CREATE INDEX idx_ff ON tbl_ff (ff_name, ff_qty DESC);
+             CREATE INDEX idx_fe ON tbl_fe (fe_rate);
+             CREATE TRIGGER trg_ff AFTER INSERT ON tbl_ff BEGIN SELECT 1; END;
+             CREATE TRIGGER trg_fe BEFORE DELETE ON tbl_fe BEGIN SELECT 1; END;
+             CREATE VIEW vw_ff AS SELECT id, ff_name FROM tbl_ff;
+             CREATE VIEW vw_fe AS SELECT id, fe_rate FROM tbl_fe;",
+            &RENAMED,
         );
-        let (first, second) = (&database.tables[2], &database.tables[3]);
-        for table in [first, second] {
-            let columns: Vec<&str> = table.columns().iter().map(|column| &*column.name).collect();
-            assert_eq!(
-                columns,
-                [
-                    "id",
-                    "fe_rate",
-                    "parent_id",
-                    "id",
-                    "ff_name",
-                    "ff_qty",
-                    "parent_id"
-                ]
-            );
-            let indexes: Vec<(&str, Vec<&str>)> = table
-                .indexes()
-                .iter()
-                .map(|index| {
-                    (
-                        &*index.name,
-                        index.columns.iter().map(|member| &*member.name).collect(),
-                    )
-                })
-                .collect();
-            assert_eq!(
-                indexes,
-                [(replaced("i").as_str(), vec!["fe_rate", "ff_name", "ff_qty"])]
-            );
+    }
+
+    /// The two names of `FR-LITE-043` the fold of `catalogue` refused, and
+    /// the code it refused them with.
+    fn refused(catalogue: &Catalogue) -> (AlikeNames, u8) {
+        match catalogue.model() {
+            Err(Error::SqliteNamesAlike { names, .. }) => {
+                let code = Error::SqliteNamesAlike {
+                    entry: String::new(),
+                    path: std::path::PathBuf::new(),
+                    names: names.clone(),
+                }
+                .exit_code();
+                (*names, code)
+            }
+            Err(other) => panic!("the fold refused with {other:?}"),
+            Ok(_) => panic!("the fold presented a model"),
         }
-
-        // Both triggers attach to the first table of the name, `g\xFE` first.
-        let events: Vec<&TriggerEvent> = first
-            .triggers()
-            .iter()
-            .map(|trigger| &trigger.event)
-            .collect();
-        assert_eq!(events, [&TriggerEvent::Delete, &TriggerEvent::Insert]);
-        assert!(second.triggers().is_empty());
-        let incoming: Vec<&str> = first
-            .referenced_by()
-            .iter()
-            .map(|incoming| &*incoming.table)
-            .collect();
-        assert_eq!(incoming, ["child", "child"]);
-        assert!(second.referenced_by().is_empty());
-
-        // Both views carry the stored text of `v\xFE`.
-        let definitions: Vec<&str> = database
-            .views
-            .iter()
-            .map(|view| &*view.definition)
-            .collect();
-        let fe = format!(
-            "CREATE VIEW {} AS SELECT id, fe_rate FROM {}",
-            replaced("v"),
-            replaced("t")
-        );
-        assert_eq!(definitions, [fe.as_str(), fe.as_str()]);
     }
 
     #[test]
-    fn fr_out_017_names_that_convert_alike_fold_alike_whatever_order_their_rows_come_in() {
-        // The database of [`colliding`] in five drawn orders folds to the
-        // model its rows fold to as returned.
+    fn fr_lite_043_names_that_convert_alike_are_refused_whatever_order_their_rows_come_in() {
+        // FR-LITE-043: the database of [`colliding`] holds two names of every
+        // set that convert to one text. Before task #349 the fold grouped the
+        // rows of both `t\u{fffd}` tables under that text, so each carried the
+        // other's columns at exit 0; it is now refused with 78 at the first
+        // set — the tables and the views — whatever order the rows come in.
         let scratch = Scratch::new();
         let path = scratch.directory("colliding").join("colliding.sqlite");
         colliding(&path);
         let catalogue = read(&path);
-        let expected = catalogue.model().expect("the model folds");
+        let expected = AlikeNames {
+            kind: AlikeKind::Tables,
+            table: None,
+            text: FileValue::new("t\u{fffd}"),
+        };
 
+        assert_eq!(refused(&catalogue), (expected.clone(), 78));
         for seed in SEEDS {
-            let shuffled = shuffled(&catalogue, seed);
             assert_eq!(
-                shuffled.model().expect("the shuffled rows fold"),
-                expected,
+                refused(&shuffled(&catalogue, seed)),
+                (expected.clone(), 78),
                 "seed {seed}"
             );
         }
+    }
+
+    #[test]
+    fn fr_lite_043_each_set_is_refused_on_its_own() {
+        // FR-LITE-043, its four sets one at a time: two views, a table and a
+        // view, two indexes of one table, and two triggers of one table, each
+        // pair differing only in a byte that is not UTF-8.
+        const PORT: &str = "CREATE TABLE port (port_code TEXT PRIMARY KEY, port_name TEXT, \
+                            country TEXT);";
+        /// One case: its label, its schema, the names rewritten, and the
+        /// kind, the table and the text the refusal names.
+        type Case<'c> = (
+            &'c str,
+            String,
+            &'c [(&'c str, &'c str)],
+            AlikeKind,
+            Option<&'c str>,
+            &'c str,
+        );
+        let cases: [Case<'_>; 4] = [
+            (
+                "views",
+                format!(
+                    "{PORT} CREATE VIEW vw_ff AS SELECT port_code FROM port;
+                     CREATE VIEW vw_fe AS SELECT port_name FROM port;"
+                ),
+                &[("vw_ff", "76ff"), ("vw_fe", "76fe")],
+                AlikeKind::Views,
+                None,
+                "v\u{fffd}",
+            ),
+            (
+                "a table and a view",
+                "CREATE TABLE tbl_ff (id INTEGER PRIMARY KEY);
+                 CREATE VIEW vw_fe AS SELECT id FROM tbl_ff;"
+                    .to_owned(),
+                &[("tbl_ff", "74ff"), ("vw_fe", "74fe")],
+                AlikeKind::TableAndView,
+                None,
+                "t\u{fffd}",
+            ),
+            (
+                "indexes",
+                format!(
+                    "{PORT} CREATE INDEX idx_ff ON port (port_name);
+                     CREATE INDEX idx_fe ON port (country);"
+                ),
+                &[("idx_ff", "69ff"), ("idx_fe", "69fe")],
+                AlikeKind::Indexes,
+                Some("port"),
+                "i\u{fffd}",
+            ),
+            (
+                "triggers",
+                format!(
+                    "{PORT} CREATE TRIGGER trg_ff AFTER INSERT ON port BEGIN SELECT 1; END;
+                     CREATE TRIGGER trg_fe BEFORE DELETE ON port BEGIN SELECT 1; END;"
+                ),
+                &[("trg_ff", "67ff"), ("trg_fe", "67fe")],
+                AlikeKind::Triggers,
+                Some("port"),
+                "g\u{fffd}",
+            ),
+        ];
+
+        for (case, sql, names, kind, table, text) in cases {
+            let scratch = Scratch::new();
+            let path = scratch.directory("alike").join("alike.sqlite");
+            renamed(&path, &sql, names);
+
+            assert_eq!(
+                refused(&read(&path)),
+                (
+                    AlikeNames {
+                        kind,
+                        table: table.map(FileValue::new),
+                        text: FileValue::new(text),
+                    },
+                    78
+                ),
+                "{case}"
+            );
+        }
+    }
+
+    #[test]
+    fn fr_lite_043_names_of_different_sets_that_convert_alike_are_read() {
+        // FR-LITE-043: two names in different sets are never compared — a
+        // column of each of two tables, and a table and a column — so a file
+        // whose only such names are these is read, each carrying U+FFFD.
+        let scratch = Scratch::new();
+        let path = scratch.directory("apart").join("apart.sqlite");
+        renamed(
+            &path,
+            "CREATE TABLE tbl_ff (id INTEGER PRIMARY KEY, col_ff TEXT);
+             CREATE TABLE berth (id INTEGER PRIMARY KEY, col_fe TEXT, tbl_fd TEXT);",
+            &[
+                ("tbl_ff", "74ff"),
+                ("col_ff", "63ff"),
+                ("col_fe", "63fe"),
+                ("tbl_fd", "74fd"),
+            ],
+        );
+        let catalogue = read(&path);
+        let database = catalogue.model().expect("names of different sets are read");
+
+        let shown: Vec<(&str, Vec<&str>)> = database
+            .tables
+            .iter()
+            .map(|table| {
+                (
+                    table.name(),
+                    table.columns().iter().map(|column| &*column.name).collect(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("berth", vec!["id", "c\u{fffd}", "t\u{fffd}"]),
+                ("t\u{fffd}", vec!["id", "c\u{fffd}"]),
+            ]
+        );
     }
 }

@@ -31,8 +31,8 @@
 {%- if not table.primary_key -%}
 {{- fail("rust/sqlx.jinja cannot render " ~ database.name ~ "." ~ table.name ~ ": the table declares no primary key, so read, update and delete have no key to address a row by.") -}}
 {%- endif -%}
-{%- set model = types.type_name(table.name) -%}
-{%- set module = types.ident(table.name) -%}
+{%- set model = types.type_name(types.table_key(table, database.tables)) -%}
+{%- set module = types.module(table, database.tables) -%}
 {%- set relation = table.name | quote -%}
 {#- The column lists of the five statements. Each is built one name per line
     and then joined, because a trailing separator is what `trim` removes and a
@@ -133,13 +133,13 @@ impl {{ model }}Repository for {{ model }}Sqlx {
 {{ insert_binds }}            .execute(&self.pool)
             .await?
             .last_insert_id();
-{% for column in table.columns %}{% if column is auto_increment %}{% if types.value_type(column) == "u64" %}        row.{{ types.ident(column.name) }} = assigned;
-{% else %}        row.{{ types.ident(column.name) }} =
+{% for column in table.columns %}{% if column is auto_increment %}{% if column is nullable %}{% set wrap = ("Some(", ")") %}{% else %}{% set wrap = ("", "") %}{% endif %}{% if types.value_type(column) == "u64" %}        row.{{ types.ident(column.name) }} = {{ wrap[0] }}assigned{{ wrap[1] }};
+{% else %}        row.{{ types.ident(column.name) }} ={{ (" " ~ wrap[0]) if wrap[0] else "" }}
             {{ types.value_type(column) }}::try_from(assigned).map_err(|source| Error::AssignedKey {
                 table: TABLE,
                 column: {{ column.name | json }},
                 source,
-            })?;
+            })?{{ wrap[1] }};
 {% endif %}{% endif %}{% endfor %}{% else %}        sqlx::query(INSERT)
 {{ insert_binds }}            .execute(&self.pool)
             .await?;

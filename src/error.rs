@@ -866,6 +866,51 @@ pub enum SqliteEnd {
     },
 }
 
+/// Two names of one set of `FR-LITE-043` that differ in the bytes the file
+/// holds for them and convert to one text under `FR-OUT-017`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlikeNames {
+    /// The kind of the two objects.
+    pub kind: AlikeKind,
+    /// The table that holds them, for two columns, two indexes or two
+    /// triggers.
+    pub table: Option<FileValue>,
+    /// The text both names convert to.
+    pub text: FileValue,
+}
+
+/// The kinds of the two objects of [`AlikeNames`], by the sets of
+/// `FR-LITE-043`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AlikeKind {
+    /// Two tables (the first set).
+    Tables,
+    /// Two views (the first set).
+    Views,
+    /// A table and a view (the first set).
+    TableAndView,
+    /// Two columns of one table (the second set).
+    Columns,
+    /// Two indexes of one table (the third set).
+    Indexes,
+    /// Two triggers of one table (the fourth set).
+    Triggers,
+}
+
+impl fmt::Display for AlikeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Tables => "two tables",
+            Self::Views => "two views",
+            Self::TableAndView => "a table and a view",
+            Self::Columns => "two columns",
+            Self::Indexes => "two indexes",
+            Self::Triggers => "two triggers",
+        })
+    }
+}
+
 /// A row of the schema table `main.sqlite_schema` that the check of
 /// `FR-LITE-041` refuses: its `type` and its `name`, as values of the file,
 /// and the kind of row it is.
@@ -2739,6 +2784,21 @@ pub enum Error {
         row: Box<RefusedRow>,
     },
 
+    /// The file holds two names of one set of `FR-LITE-043` that differ in
+    /// their bytes and convert to one text: the model, naming each object by
+    /// its text, cannot carry them apart. No model is presented and nothing
+    /// is written to the cache.
+    #[error("the database file holds {} tpl cannot tell apart, for database entry '{entry}'", .names.kind)]
+    SqliteNamesAlike {
+        /// The entry.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The two names, boxed so that [`enum@Error`] stays within the size
+        /// `clippy::result_large_err` admits.
+        names: Box<AlikeNames>,
+    },
+
     /// The server is reachable and authenticated and is not MariaDB
     /// (`FR-SRV-003`). The catalogue is not read.
     #[error("the server reached by database entry '{entry}' is not MariaDB")]
@@ -3526,13 +3586,14 @@ impl Error {
             | Self::ProviderRefusesKeys { .. }
             | Self::SqliteNotRegularFile { .. }
             | Self::SqliteFileRefused { .. }
-            | Self::SqliteSchemaRefused { .. } => 78,
+            | Self::SqliteSchemaRefused { .. }
+            | Self::SqliteNamesAlike { .. } => 78,
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{
         CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven,
         EntryRepair, Error, KeyAbsence, NetworkPhase, PasswordCommandFault, Position,
@@ -3546,7 +3607,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 113;
+    pub(crate) const VARIANT_COUNT: usize = 117;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -4498,6 +4559,52 @@ mod tests {
                 },
                 78,
             ),
+            (
+                Error::SqliteNamesAlike {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    names: Box::new(super::AlikeNames {
+                        kind: super::AlikeKind::Tables,
+                        table: None,
+                        text: super::FileValue::new("r\u{fffd}f"),
+                    }),
+                },
+                78,
+            ),
+            (
+                Error::DatabaseNameRefused {
+                    entry: "shop".to_owned(),
+                    by_dsn: false,
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    name: "freight ".to_owned(),
+                    file: path(),
+                },
+                78,
+            ),
+            (
+                Error::ValueHoldsNul {
+                    entry: "shop".to_owned(),
+                    field: super::NulField::Database,
+                    place: super::NulPlace::Key {
+                        key: "database.shop.database".to_owned(),
+                        file: path(),
+                    },
+                    before: Some("freight".to_owned()),
+                },
+                78,
+            ),
+            (
+                Error::NulValueGiven {
+                    parameter: "--host".to_owned(),
+                    command: "cfg database add".to_owned(),
+                    entry: "shop".to_owned(),
+                    field: super::NulField::Host,
+                    in_dsn: false,
+                    before: Some("db".to_owned()),
+                },
+                64,
+            ),
         ]
     }
 
@@ -4512,7 +4619,7 @@ mod tests {
     /// The variant's name, by an exhaustive match with no wildcard arm: a
     /// variant added to [`Error`] does not compile until it is named here too,
     /// which is what keeps `samples` honest.
-    fn variant_name(error: &Error) -> &'static str {
+    pub(crate) fn variant_name(error: &Error) -> &'static str {
         match error {
             Error::UnknownCommand { .. } => "UnknownCommand",
             Error::UnknownCommandPathSegment { .. } => "UnknownCommandPathSegment",
@@ -4630,6 +4737,7 @@ mod tests {
             Error::SqliteNotRegularFile { .. } => "SqliteNotRegularFile",
             Error::SqliteFileRefused { .. } => "SqliteFileRefused",
             Error::SqliteSchemaRefused { .. } => "SqliteSchemaRefused",
+            Error::SqliteNamesAlike { .. } => "SqliteNamesAlike",
         }
     }
 

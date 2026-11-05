@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""The Go worked example: a data layer for three schemas, and the gate that
+"""The Go worked example: a data layer for every read, and the gate that
 decides whether it is correct.
 
 ``FR-EX-002`` fixes what this produces — source files that declare the tables of
-``sakila``, ``world`` and ``freight`` as Go types — and ``FR-EX-009`` fixes what
+``sakila``, ``world`` and ``freight`` from MariaDB, of ``freight`` from MySQL and
+of the SQLite fixture's main database as Go types — and ``FR-EX-009`` fixes what
 makes it correct: not that ``tpl`` exited ``0``, but that the Go toolchain
 accepts every file that was rendered.
 
@@ -38,6 +39,7 @@ from _driver import (  # noqa: E402
     MalformedEnvelope,
     PasswordNotInEnvironment,
     Render,
+    Schema,
     UnexpectedDocument,
     run,
 )
@@ -96,42 +98,73 @@ def _package_file(directory: Path, name: str) -> Path:
     return candidate
 
 
+def _file_stems(schema: Schema) -> dict[str, str]:
+    """Name each table's files: the table's own name, unless another table's
+    name is equal to it ignoring letter case.
+
+    Two such names — ``Émbarque`` and ``émbarque``, which a SQLite database
+    holds as two tables — would be one file on a filesystem that ignores
+    letter case, as macOS's does by default, and the second render would
+    replace the first. Each name of such a group takes its 1-based position in
+    the group, in the order the schema read listed the tables, which is the
+    order ``templates/go/_types.jinja`` numbers the group's identifiers in.
+    """
+    groups: dict[str, list[str]] = {}
+    for table in schema.tables:
+        groups.setdefault(table.name.lower(), []).append(table.name)
+    stems: dict[str, str] = {}
+    for names in groups.values():
+        for position, name in enumerate(names, start=1):
+            stems[name] = name if len(names) == 1 else f"{name}_{position}"
+    return stems
+
+
 def plan(catalogue: Catalogue) -> list[Render]:
     """Say what to render, which is this example's whole contribution.
 
-    One Go package per schema, and within it:
+    One Go package per read — the three schemas of ``FR-EX-006``, the MySQL
+    ``freight`` of ``FR-EX-011`` and the SQLite database of ``FR-EX-012`` —
+    named after the entry that reads it, and within it:
 
     * ``schema.go``, rendered once with the whole database in context and no
       object flag, per ``FR-RND-006``: the package documentation, the errors,
       the ordering direction and the aggregate of every repository;
-    * three files per table — the row struct, the repository interface, and the
-      ``database/sql`` implementation of that interface.
+    * for each table, the row struct, and for a table that declares a primary
+      key the repository interface and the ``database/sql`` implementation of
+      that interface too: a table with no key has no key to address a row by.
 
-    One file is one invocation, per ``FR-EX-005``, so this returns
-    ``3 x tables + schemas`` renders.
+    The package is the entry's name, passed to every render as ``vars.layer``:
+    the MySQL ``freight`` would otherwise take the MariaDB one's name, and a
+    SQLite database is ``main``, which Go reserves for a program. For a schema
+    of ``FR-EX-006`` the entry is the schema's own name.
+
+    One file is one invocation, per ``FR-EX-005``.
     """
     renders: list[Render] = []
     for schema in catalogue:
-        package = OUTPUT / schema.name
+        package = OUTPUT / schema.entry
+        layer = {"layer": schema.entry}
         renders.append(
             Render(
                 template="go/schema",
                 destination=_package_file(package, "schema.go"),
                 entry=schema.entry,
+                variables=layer,
             )
         )
+        stems = _file_stems(schema)
         for table in schema.tables:
-            for template, suffix in (
-                ("go/struct", ".go"),
-                ("go/repository", "_repository.go"),
-                ("go/sql", "_sql.go"),
-            ):
+            templates = [("go/struct", ".go")]
+            if table.raw.get("primary_key"):
+                templates += [("go/repository", "_repository.go"), ("go/sql", "_sql.go")]
+            for template, suffix in templates:
                 renders.append(
                     Render(
                         template=template,
-                        destination=_package_file(package, table.name + suffix),
+                        destination=_package_file(package, stems[table.name] + suffix),
                         entry=table.entry,
                         table=table.name,
+                        variables=layer,
                     )
                 )
     return renders
@@ -207,7 +240,7 @@ def report(catalogue: Catalogue, written: int) -> None:
 
     The count of distinct ``data_type`` values is the measure that matters for
     ``FR-EX-008``: the mapping is obliged over every value the model reports for
-    a column of the three schemas, and this says how many that was.
+    a column of every read, and this says how many that was.
     """
     types: set[str] = set()
     columns = 0
@@ -220,7 +253,10 @@ def report(catalogue: Catalogue, written: int) -> None:
 
     print(f"\nrendered {written} files into {OUTPUT}", file=sys.stderr)
     for schema in catalogue:
-        print(f"  {schema.name:8s} {len(schema.tables):3d} tables", file=sys.stderr)
+        print(
+            f"  {schema.entry:14s} {schema.provider:7s} {len(schema.tables):3d} tables",
+            file=sys.stderr,
+        )
     print(
         f"  {columns} columns carrying {len(types)} distinct data_type values, "
         f"every one of them mapped by templates/go/_types.jinja",

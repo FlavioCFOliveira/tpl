@@ -1608,6 +1608,239 @@ mod tests {
                 in_dsn: false,
                 before: Some(hostile()),
             },
+            Error::UnknownCommandPathSegment {
+                segment: hostile(),
+                node: "cfg database".to_owned(),
+                nearest: vec![hostile()],
+            },
+            Error::DirectWithContext,
+            Error::RoutinePrefixNotLowerCase {
+                token: hostile(),
+                prefix: "procedure",
+                name: hostile(),
+                invocation: "schema routine",
+                template: None,
+            },
+            Error::AmbiguousRoutineName {
+                name: hostile(),
+                entry: hostile(),
+                database: hostile(),
+                invocation: "schema routine",
+                template: None,
+            },
+            Error::AmbiguousRoutineInContext {
+                name: hostile(),
+                path: hostile_path(),
+                database: hostile(),
+                invocation: "render --routine",
+                template: None,
+            },
+            Error::RepeatedSetKey {
+                key: hostile(),
+                first: hostile(),
+                second: hostile(),
+            },
+            Error::LoadWithoutStoring { object: None },
+            Error::ContextDocumentVersion {
+                path: hostile_path().into_boxed_path(),
+                found: 2,
+            },
+            Error::ContextObjectNotFound {
+                kind: CatalogueObjectKind::Table,
+                name: hostile(),
+                path: hostile_path(),
+                database: hostile(),
+                nearest: vec![hostile()],
+            },
+            Error::TemplateNotRegular {
+                name: hostile(),
+                file: hostile(),
+                kind: "a FIFO",
+            },
+            Error::DefaultEntryUndeclared {
+                name: hostile(),
+                nearest: vec![hostile()],
+                declared: true,
+            },
+            Error::ConfigurationNotRegular {
+                path: hostile_path(),
+                kind: "a FIFO",
+            },
+            // `within` is composed by `tpl` below `.tpl` from `.cache`, an
+            // entry name FR-CONF-048 has admitted and a collection name, so it
+            // carries no value the caller wrote; `path` carries the payload.
+            Error::CachePathLinked {
+                path: hostile_path(),
+                within: PathBuf::from(".cache"),
+                removal: true,
+            },
+            Error::EntryKeyMissing {
+                entry: hostile(),
+                key: hostile(),
+                file: hostile_path(),
+                flag: "--host",
+                placeholder: "<host>",
+                absence: crate::error::KeyAbsence::Absent,
+            },
+            Error::TcpConnectFailed {
+                entry: hostile(),
+                by_dsn: false,
+                host: hostile(),
+                port: 3306,
+                fault: crate::error::TcpFault::HostUnreachable,
+            },
+            Error::LoginNotCompleted {
+                entry: hostile(),
+                by_dsn: false,
+                host: hostile(),
+                port: 3306,
+                provider: crate::model::database::Provider::Mariadb,
+                fault: crate::error::LoginFault::ConnectionClosed,
+            },
+            Error::LoginRefused {
+                entry: hostile(),
+                host: hostile(),
+                port: 3306,
+                number: 1040,
+                reason: crate::error::LoginRefusal::ServerConnectionLimit,
+            },
+            Error::StatementFailed {
+                entry: hostile(),
+                host: hostile(),
+                port: 3306,
+                statement: crate::error::SessionStatement::VersionProbe,
+                fault: crate::error::StatementFault::ServerError(1927),
+            },
+            Error::AccountRefused {
+                entry: hostile(),
+                by_dsn: false,
+                user: hostile(),
+                host: hostile(),
+                reason: crate::error::AccountRefusal::Locked,
+            },
+            Error::SecureTransportRequired {
+                entry: hostile(),
+                host: hostile(),
+                port: 3306,
+                tls: "disabled",
+            },
+            Error::FlagRefusedByProvider {
+                command: "cfg database add",
+                entry: hostile(),
+                flag: "--host",
+                provider: crate::model::database::Provider::Sqlite,
+                given: true,
+            },
+            Error::PathRequired { entry: hostile() },
+            Error::ProviderIncoherentWrite {
+                entry: hostile(),
+                provider: crate::model::database::Provider::Sqlite,
+                own: crate::model::database::Provider::Sqlite,
+                written: hostile(),
+                carried: vec!["host", "port"],
+                value: Some(hostile()),
+            },
+            Error::SqliteUnavailable {
+                entry: hostile(),
+                path: hostile_path(),
+                statement: "the version probe",
+                ended: crate::error::SqliteEnd::Deadline {
+                    bound: DeadlineBound::Phase,
+                    limit: Duration::from_secs(1),
+                },
+            },
+            Error::SqliteControlNotInEffect {
+                entry: hostile(),
+                path: hostile_path(),
+                control: "temp_store",
+                set: "MEMORY (2)",
+                read_back: crate::error::FileValue::new(payload),
+            },
+            Error::SqliteDefect {
+                entry: hostile(),
+                path: hostile_path(),
+                at: crate::error::SqliteAt::Open,
+                invariant: "an invariant",
+                report: None,
+                location: Location::caller(),
+            },
+            Error::SqliteFileLookup {
+                entry: hostile(),
+                path: hostile_path(),
+                returned: io::Error::from(io::ErrorKind::NotFound),
+            },
+            Error::SqliteFileUnreadable {
+                entry: hostile(),
+                path: hostile_path(),
+                at: crate::error::SqliteAt::Open,
+                report: crate::error::LibraryReport {
+                    code: 14,
+                    message: Some(crate::error::FileValue::new(payload)),
+                },
+            },
+            Error::ProviderRefusesKeys {
+                entry: hostile(),
+                file: hostile_path(),
+                provider: crate::model::database::Provider::Sqlite,
+                written: true,
+                keys: vec!["host"],
+            },
+            Error::SqliteNotRegularFile {
+                entry: hostile(),
+                path: hostile_path(),
+                kind: "directory",
+            },
+            Error::SqliteFileRefused {
+                entry: hostile(),
+                path: hostile_path(),
+                at: crate::error::SqliteAt::Statement("the version probe"),
+                report: crate::error::LibraryReport {
+                    code: 26,
+                    message: Some(crate::error::FileValue::new(payload)),
+                },
+            },
+            Error::ServerNotMysql {
+                by_dsn: false,
+                entry: hostile(),
+                reported: hostile(),
+            },
+            // The window is the variant's own `'static` table, so it cannot
+            // carry the payload; `mysql_samples` carries a hostile one.
+            Error::MysqlSeriesNotSupported {
+                by_dsn: false,
+                entry: hostile(),
+                version: hostile(),
+                series: hostile(),
+                supported: &["Z.9", "Z.8"],
+            },
+            Error::PublicKeyRequestRefused {
+                provider: crate::model::database::Provider::Mysql,
+                entry: hostile(),
+                user: hostile(),
+                host: hostile(),
+                port: 3306,
+                tls: "preferred",
+                no_tls_offered: true,
+                method: "caching_sha2_password",
+            },
+            Error::SqliteNamesAlike {
+                entry: hostile(),
+                path: hostile_path(),
+                names: Box::new(crate::error::AlikeNames {
+                    kind: crate::error::AlikeKind::Columns,
+                    table: Some(crate::error::FileValue::new(payload)),
+                    text: crate::error::FileValue::new(payload),
+                }),
+            },
+            Error::SqliteSchemaRefused {
+                entry: hostile(),
+                path: hostile_path(),
+                row: Box::new(crate::error::RefusedRow {
+                    row_type: crate::error::FileValue::new("view"),
+                    name: crate::error::FileValue::new(payload),
+                    kind: crate::error::RefusedKind::PragmaName,
+                }),
+            },
         ]
     }
 
@@ -1664,13 +1897,32 @@ mod tests {
 
     #[test]
     fn fr_err_001_the_sample_set_reaches_every_code_of_the_table() {
-        // Per-variant coverage is not this set's job: the matches in `cause`
-        // and `hint` are exhaustive and carry no wildcard arm, so a variant
-        // added to `Error` fails to compile until both derive a line for it.
+        // Per-variant coverage is `every_variant_of_error_is_sampled`'s; this
+        // test asks that the set reaches every code of the table.
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 87, "every variant of Error is sampled");
+    }
+
+    #[test]
+    fn every_variant_of_error_is_sampled() {
+        // What the property tests over `samples()` claim — "every variant" —
+        // holds only if the set names every variant, so the claim is checked
+        // here: the variants the set reaches, by name, are all of them. A
+        // variant sampled twice, for a second arm of its own line, counts
+        // once.
+        let names: BTreeSet<&'static str> = samples()
+            .iter()
+            .map(crate::error::tests::variant_name)
+            .collect();
+
+        // `crate::error::tests::VARIANT_COUNT` is the count, kept true by the
+        // exhaustive match of `variant_name` and the sample set beside it.
+        assert_eq!(
+            names.len(),
+            crate::error::tests::VARIANT_COUNT,
+            "a variant of Error is not sampled"
+        );
     }
 
     #[test]
@@ -1752,13 +2004,31 @@ mod tests {
 
     #[test]
     fn fr_err_022_no_hint_line_carries_a_value_the_character_set_governs() {
-        // FR-ERR-022 and FR-ERR-023, over every variant at once: a hint is
-        // built from literals and from names matching `[A-Za-z0-9_]{1,64}`, so
-        // a value outside the set reaches no hint line in any form — neither as
-        // a runnable command nor as prose.
+        // FR-ERR-022 and FR-ERR-023, over every variant at once but two: a
+        // hint is built from literals and from names matching
+        // `[A-Za-z0-9_]{1,64}`, so a value outside the set reaches no hint line
+        // in any form — neither as a runnable command nor as prose.
+        //
+        // The two are the second outcome of FR-ERR-049 and the first two of
+        // FR-ERR-047, whose own examples write the host into the hint's prose
+        // (`check that db.example.com is reachable from here`), a value the
+        // set does not admit. For those two the hint is held to FR-ERR-024
+        // instead: the host reaches it escaped, and no control character
+        // survives.
+        const HOST_IN_PROSE: [&str; 2] = ["TcpConnectFailed", "LoginNotCompleted"];
+
         for error in samples_carrying(UNGATED) {
             let rendered = render(&error);
             let hint = line(&rendered, Label::Hint);
+
+            if HOST_IN_PROSE.contains(&crate::error::tests::variant_name(&error)) {
+                assert!(!hint.contains('\u{1b}'), "{hint:?}");
+                assert!(
+                    hint.contains("\\u{1b}"),
+                    "the host was not escaped: {hint:?}"
+                );
+                continue;
+            }
 
             assert!(
                 !hint.contains(NEVER_IN_A_HINT),

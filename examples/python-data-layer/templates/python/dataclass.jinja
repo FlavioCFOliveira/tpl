@@ -20,10 +20,9 @@
   expression produces another comment line; the same text inside a docstring
   could carry a `"""` and end it.
 -#}
-{%- if not table.primary_key -%}
-{{- fail("python/dataclass.jinja cannot render " ~ database.name ~ "." ~ table.name ~ ": the table declares no primary key, so read, update and delete have no key to address a row by. Give the table a primary key, or render it with a template that generates a read-only data layer.") -}}
-{%- endif -%}
-{%- set model = types.type_name(table.name) -%}
+{#- A table that declares no primary key has no key to address a row by: its
+    module carries no key type, and the plan renders no repository for it. -#}
+{%- set model = types.type_name(types.table_key(table, database.tables)) -%}
 {%- set qualified = database.name ~ "." ~ table.name -%}
 {#- Which standard-library modules the mapped types need. The type mapping is
     the only thing that knows, so the answer is read off it rather than
@@ -53,8 +52,8 @@ __all__ = [
     "{{ model }}",
     "{{ model }}Column",
     "{{ model }}Filter",
-    "{{ model }}Key",
-    "{{ model }}Order",
+{% if table.primary_key %}    "{{ model }}Key",
+{% endif %}    "{{ model }}Order",
 ]
 
 
@@ -77,7 +76,7 @@ class {{ model }}:
 {% endif %}{% if column.comment %}    #:
 {{ column.comment | comment("    #:") }}
 {% endif %}    {{ types.ident(column.name) }}: {{ types.field_type(column) }}
-{% endfor %}
+{% endfor %}{% if table.primary_key %}
     def key(self) -> {{ model }}Key:
         """Return the primary key of the row."""
         return {{ model }}Key(
@@ -96,7 +95,7 @@ class {{ model }}Key:
 
 {% for key in table.primary_key.columns %}{% set keyed = column(table.name, key.name) %}{{ types.declared(keyed) | comment("    #:") }}
     {{ types.ident(keyed.name) }}: {{ types.field_type(keyed) }}
-{% endfor %}
+{% endfor %}{% endif %}
 
 class {{ model }}Column(enum.Enum):
     """One column of `{{ qualified }}`.

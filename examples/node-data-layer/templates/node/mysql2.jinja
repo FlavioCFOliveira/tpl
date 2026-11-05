@@ -34,9 +34,9 @@
 {%- if not table.primary_key -%}
 {{- fail("node/mysql2.jinja cannot render " ~ database.name ~ "." ~ table.name ~ ": the table declares no primary key, so read, update and delete have no key to address a row by.") -}}
 {%- endif -%}
-{%- set model = types.type_name(table.name) -%}
-{%- set module = table.name -%}
-{%- set prefix = types.ident(table.name) -%}
+{%- set model = types.type_name(types.table_key(table, database.tables)) -%}
+{%- set module = types.table_key(table, database.tables) -%}
+{%- set prefix = types.ident(types.table_key(table, database.tables)) -%}
 {%- set qualified = database.name ~ "." ~ table.name -%}
 {%- set relation = types.sql_name(table.name) -%}
 {#- The column lists of the five statements. Each is built one name per line

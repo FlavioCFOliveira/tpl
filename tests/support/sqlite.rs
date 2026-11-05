@@ -19,8 +19,9 @@
 //! | A view's `sql` and a trigger's `type` stored as BLOBs; a `CREATE TABLE` row at root page `0`, and a `CREATE VIRTUAL TABLE` row at another — the four written under `writable_schema` | `scripts/sqlite/blob_view_sql.sql`, `blob_trigger_type.sql`, `rootpage_zero.sql`, `rootpage_virtual.sql`, on a connection whose defensive mode is off |
 //! | A table `pragma_encoding` typed `TABLE`, an ordinary table typed `Table`, a trigger typed `trigger` and a NUL character; a second row with no text for an index, `NULL` typed `table` and empty typed `view`; a trigger whose `tbl_name` ends in a NUL character; a view whose `sql` carries text after a NUL character; and a trigger whose text begins `CREATE TEMP TRIGGER` — the eight written under `writable_schema` | `scripts/sqlite/type_upper_pragma.sql`, `type_title_case.sql`, `type_nul_trigger.sql`, `no_text_table.sql`, `empty_text_view.sql`, `nul_trigger_table.sql`, `nul_view_sql.sql`, `temp_trigger.sql`, on a connection whose defensive mode is off |
 //! | An `fts5` table, a view over it that compiles, and no view that does not | `scripts/sqlite/fts5_view.sql` |
+//! | Two tables whose names differ only in a byte that is not UTF-8; a table with two such columns; a table whose name holds such a byte and a key naming its name with another — the three written under `writable_schema` (`FR-LITE-043`) | `scripts/sqlite/alike_tables.sql`, `alike_columns.sql`, `alike_dangling_key.sql`, on a connection whose defensive mode is off |
 //!
-//! **Defensive mode is turned off here, and only here**, for the twelve
+//! **Defensive mode is turned off here, and only here**, for the fifteen
 //! databases written under `writable_schema`: defensive mode refuses
 //! `PRAGMA writable_schema=ON`, and SQLite writes no such schema any other way
 //! (`OD-37`, as amended for rmp `#317`). The builder sets it off and reads it
@@ -103,6 +104,18 @@ const NUL_VIEW_SQL: &str = include_str!("../../scripts/sqlite/nul_view_sql.sql")
 /// `CREATE TEMP TRIGGER`.
 const TEMP_TRIGGER: &str = include_str!("../../scripts/sqlite/temp_trigger.sql");
 
+/// The SQL text of the database holding two tables whose names differ only in
+/// a byte that is not UTF-8.
+const ALIKE_TABLES: &str = include_str!("../../scripts/sqlite/alike_tables.sql");
+
+/// The SQL text of the database holding a table with two columns whose names
+/// differ only in a byte that is not UTF-8.
+const ALIKE_COLUMNS: &str = include_str!("../../scripts/sqlite/alike_columns.sql");
+
+/// The SQL text of the database holding a table whose name holds a byte that
+/// is not UTF-8, and a key whose parent differs from it in another such byte.
+const ALIKE_DANGLING_KEY: &str = include_str!("../../scripts/sqlite/alike_dangling_key.sql");
+
 /// The length of the oversized `CREATE TABLE` statement, past the million
 /// bytes of `FR-LITE-011`.
 const OVERSIZED: usize = 1_100_000;
@@ -175,6 +188,16 @@ pub struct Artefacts {
     /// A database whose schema table holds a trigger whose text begins
     /// `CREATE TEMP TRIGGER`.
     pub temp_trigger: PathBuf,
+    /// A database holding two tables whose names differ only in a byte that
+    /// is not UTF-8 (`FR-LITE-043`, its first set).
+    pub alike_tables: PathBuf,
+    /// A database holding a table with two columns whose names differ only in
+    /// a byte that is not UTF-8 (`FR-LITE-043`, its second set).
+    pub alike_columns: PathBuf,
+    /// A database holding a table whose name holds a byte that is not UTF-8,
+    /// and a second table with a key whose parent's name differs from the
+    /// first table's only in another such byte (`FR-LITE-043`).
+    pub alike_dangling_key: PathBuf,
 }
 
 impl Artefacts {
@@ -391,6 +414,9 @@ pub fn build(root: &Path) -> Artefacts {
     let nul_trigger_table = built("nul-trigger-table.sqlite", NUL_TRIGGER_TABLE, true);
     let nul_view_sql = built("nul-view-sql.sqlite", NUL_VIEW_SQL, true);
     let temp_trigger = built("temp-trigger.sqlite", TEMP_TRIGGER, true);
+    let alike_tables = built("alike-tables.sqlite", ALIKE_TABLES, true);
+    let alike_columns = built("alike-columns.sqlite", ALIKE_COLUMNS, true);
+    let alike_dangling_key = built("alike-dangling-key.sqlite", ALIKE_DANGLING_KEY, true);
 
     Artefacts {
         root: root.to_owned(),
@@ -420,5 +446,8 @@ pub fn build(root: &Path) -> Artefacts {
         nul_trigger_table,
         nul_view_sql,
         temp_trigger,
+        alike_tables,
+        alike_columns,
+        alike_dangling_key,
     }
 }

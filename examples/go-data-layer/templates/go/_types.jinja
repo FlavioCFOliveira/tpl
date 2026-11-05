@@ -7,7 +7,8 @@
   project that holds it. FR-ENV-011 fixes the form the opinion takes — a
   template macro — and FR-EX-008 fixes its obligation: a Go type for every
   value of `data_type` the model reports for a column of `sakila`, `world` and
-  `freight`. There are 39 of them, and all 39 are branched on below.
+  `freight` from MariaDB, of `freight` from MySQL, and of the SQLite fixture's
+  main database. There are 44 of them, and all 44 are branched on below.
 
   Nothing falls through. The final branch calls `fail()`, per FR-ENV-020 and
   FR-SEM-014, so a type this file has never met ends the render with 65 and
@@ -42,8 +43,14 @@
   * BIT becomes `[]byte`. The driver returns the bit string as raw bytes.
   * The eight spatial types become `[]byte`, which is the well-known binary the
     server sends behind a four-byte SRID prefix.
-  * A JSON column is not a branch of its own because the model never reports
-    one: MariaDB reports such a column as `longtext`, per FR-CAT-038.
+  * A JSON column reaches this macro only from a MySQL read, which reports
+    `json` (FR-MYSQL-028); MariaDB reports such a column as `longtext`, per
+    FR-CAT-038. It is mapped as the text the server sends. `geomcollection`,
+    MySQL's name for `geometrycollection`, is mapped as the other spatial
+    types are.
+  * The three SQLite affinities no server read reports — `integer`, `real` and
+    `numeric` (FR-LITE-026) — take the type of a 64-bit integer, of a double
+    and of a decimal; `text` and `blob` are the types of those names above.
 -#}
 {% macro go_value_type(column) -%}
 {%- set kind = column | sql_type -%}
@@ -62,6 +69,7 @@
 {%- elif kind == "text" -%}string
 {%- elif kind == "mediumtext" -%}string
 {%- elif kind == "longtext" -%}string
+{%- elif kind == "json" -%}string
 {%- elif kind == "enum" -%}string
 {%- elif kind == "set" -%}string
 {%- elif kind == "binary" -%}[]byte
@@ -80,14 +88,18 @@
 {%- elif kind == "uuid" -%}string
 {%- elif kind == "geometry" -%}[]byte
 {%- elif kind == "geometrycollection" -%}[]byte
+{%- elif kind == "geomcollection" -%}[]byte
 {%- elif kind == "linestring" -%}[]byte
 {%- elif kind == "multilinestring" -%}[]byte
 {%- elif kind == "multipoint" -%}[]byte
 {%- elif kind == "multipolygon" -%}[]byte
 {%- elif kind == "point" -%}[]byte
 {%- elif kind == "polygon" -%}[]byte
+{%- elif kind == "integer" -%}int64
+{%- elif kind == "real" -%}float64
+{%- elif kind == "numeric" -%}string
 {%- else -%}
-{{- fail("go/_types.jinja maps no Go type onto the column " ~ column.table_name ~ "." ~ column.name ~ ", whose column_type is " ~ column.column_type ~ ". FR-EX-008 obliges this macro to cover every data_type the three schemas report: add a branch for it rather than letting an unmapped type reach the Go compiler as a guess.") -}}
+{{- fail("go/_types.jinja maps no Go type onto the column " ~ column.table_name ~ "." ~ column.name ~ ", whose column_type is " ~ column.column_type ~ ". FR-EX-008 obliges this macro to cover every data_type the schemas and the database the examples read report: add a branch for it rather than letting an unmapped type reach the Go compiler as a guess.") -}}
 {%- endif -%}
 {%- endmacro %}
 
@@ -187,4 +199,26 @@
 -#}
 {% macro go_unexported(name) -%}
 {{- go_sanitised(name) | camel -}}
+{%- endmacro %}
+
+{#-
+  table_key(table, tables) — the name a table's identifiers are built from.
+
+  It is the table's own name, unless another table of `tables` would yield the
+  same exported identifier ignoring letter case: `Émbarque` and `émbarque`,
+  which a SQLite database holds as two tables (FR-LITE-038, item 14), both
+  become `Émbarque`, and two files whose names differ only in letter case are
+  one file on a filesystem that ignores it. Each table of such a group is then
+  named with its 1-based position in the group, in the order of `tables`, which
+  is the order of NFR-DET-002 and does not depend on the read.
+-#}
+{% macro table_key(table, tables) -%}
+{%- set ns = namespace(count=0, at=0) -%}
+{%- for other in tables -%}
+{%- if go_exported(other.name) | lower == go_exported(table.name) | lower -%}
+{%- set ns.count = ns.count + 1 -%}
+{%- if other.name == table.name %}{% set ns.at = ns.count %}{% endif -%}
+{%- endif -%}
+{%- endfor -%}
+{%- if ns.count > 1 -%}{{ table.name }}_{{ ns.at }}{%- else -%}{{ table.name }}{%- endif -%}
 {%- endmacro %}

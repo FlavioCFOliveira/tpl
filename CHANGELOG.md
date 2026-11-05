@@ -70,8 +70,11 @@ workflow, before it closes.
 - **The exit codes of a `sqlite` entry.** `74` when the path names nothing or
   the file cannot be opened or read; `78` when the path names something other
   than a regular file, the file is not a SQLite database, is damaged or holds
-  a schema `tpl` refuses, or the entry has no `path` or carries a key its
-  provider does not take; `69` when a writer keeps the database locked past
+  a schema `tpl` refuses, the entry has no `path` or carries a key its
+  provider does not take, or the file holds two tables or views — or two
+  columns, indexes or triggers of one table — whose names differ only in bytes
+  that are not valid UTF-8, which the document could not tell apart: no model
+  is presented and nothing is cached; `69` when a writer keeps the database locked past
   `core.query_timeout`; `70` when a safeguard of the read does not take
   effect.
 - **The write-ahead-log files of a SQLite database.** A read of a database in
@@ -143,7 +146,8 @@ workflow, before it closes.
   `ProviderIncoherentWrite` gained `own`, and `error::NetworkPhase` gained
   `Login`, `ReadOnlyStatement`, `ReadOnlyReadBack` and `VersionProbe`.
   `tpl::Error` also gained `DatabaseNameRefused`, `ValueHoldsNul` and
-  `NulValueGiven`, with the new `error::NulField` and `error::NulPlace`. `tpl::model` gained `database::Provider`, with the values
+  `NulValueGiven`, with the new `error::NulField` and `error::NulPlace`, and
+  `SqliteNamesAlike`, with the new `error::AlikeNames` and `error::AlikeKind`. `tpl::model` gained `database::Provider`, with the values
   `Mariadb`, `Mysql` and `Sqlite`, `index::PrimaryKey` and the field
   `Database::provider`; `Table::primary_key` now returns a `PrimaryKey`
   rather than an `Index`; and fields a SQLite or a MySQL read cannot fill
@@ -237,6 +241,14 @@ workflow, before it closes.
   login, and the session statements are no longer reported as `server
   query`. The `query:` lines, one per catalogue query, are unchanged.
 
+- **The worked examples cover MySQL and SQLite.** Each of the four examples
+  also renders, and passes its compile gate over, the data layer of the MySQL
+  fixture's `freight` and of the SQLite fixture's main database, built from
+  `scripts/sqlite/freight.sql` on every run; each type mapping covers `json`,
+  `geomcollection`, `integer`, `real` and `numeric`. A table with no primary
+  key gets its row types and no repository, and the MariaDB output of every
+  example is unchanged.
+
 ### Fixed
 
 - **A short or malformed packet from a server no longer ends `tpl` with
@@ -263,6 +275,20 @@ workflow, before it closes.
   Given to `tpl cfg set`, or to `--dsn`, `--host`, `--user`, `--schema` or
   `--path` of `tpl cfg database add` and `update`, it exits `64` and writes
   nothing.
+- **A read served from the cache needs no credential.** A `${VAR}` in `dsn`,
+  `host`, `port`, `user`, `password` or `database` is expanded, and
+  `password_command` run, only by an invocation that opens a connection: a
+  read that misses the cache or carries `--direct`, the read a render returns
+  to, `tpl cache load` and `tpl cfg database test`. A read the cache serves
+  exited `78` when such a variable was unset; it now succeeds, with
+  `"source":"cache"`, and the `78` is raised by the first invocation that
+  connects.
+- **An include suggestion names another template, or none.** A name an
+  `{% include %}`, `{% import %}` or `{% extends %}` writes that does not exist
+  is never answered with the template that holds it, and one that names a FIFO,
+  a socket or a device is answered with no suggestion, as `tpl render`,
+  `tpl template show`, `check` and `path` given such a name already were: an
+  include of a FIFO `h.jinja` from `i.jinja` suggested `'i.jinja'`.
 - **An account with no password logs in with an empty password.** A
   `mariadb` entry whose password is the empty string — `password = ""`, a DSN
   whose password part is empty, or a `password_command` that prints nothing —
@@ -273,6 +299,13 @@ workflow, before it closes.
 
 ### Security
 
+- **A rewrite of `.tpl/.cfg` acts only in the `.tpl` it read.** The five
+  commands that rewrite the file create the temporary file, write it, give it
+  mode `0600` and rename it over `.cfg` relative to the `.tpl` folder they
+  opened, following no link, so a link or a folder put in place of a component
+  of its path after the checks redirects none of those steps, and a link at
+  `.cfg` is replaced rather than written through. A rewrite that cannot act in
+  that folder exits `74`, leaving the previous file in place.
 - **C1 controls and bidirectional formatting characters are escaped.** In
   the text output of the read commands and in every diagnostic, a character
   from U+0080 to U+009F, and each of the twelve characters Unicode marks

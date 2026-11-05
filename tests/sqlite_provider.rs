@@ -32,6 +32,7 @@
 //! | `FR-LITE-014` | No configuration key names a control of `FR-LITE-010` or a limit of `FR-LITE-011` |
 //! | `FR-LITE-003`, `FR-LITE-023`, `FR-LITE-024` | The `database` and `table` objects a caller reads carry the values those requirements fix |
 //! | `FR-LITE-033`, `FR-LITE-036` | Naming a view that does not compile exits `0` with its nine properties, and a dump marks nothing |
+//! | `FR-LITE-043` | Two tables, or two columns of one table, whose names differ only in a byte that is not UTF-8 are `78`, with no model and no cache write; a key whose parent differs from a table's name in such a byte is excluded as dangling, and the read succeeds |
 //! | `NFR-PERF-003` | A cache hit on a `sqlite` entry reaches no file: the database removed, the hit answers the same bytes |
 //! | `NFR-PERF-004` | A `sqlite` invocation opens the database file once, observed by the syscall trace on Linux |
 
@@ -1841,4 +1842,107 @@ fn fr_err_046_a_name_of_the_file_reaches_a_did_you_mean_only_within_the_bound() 
         "{written}"
     );
     assert!(!written.contains("characters omitted"), "{written}");
+}
+
+// ------------------------------------------------------------ FR-LITE-043 ---
+
+/// The text `entrep\xF4t` and `entrep\xD4t` both convert to (`FR-OUT-017`).
+const WAREHOUSE: &str = "entrep\u{fffd}t";
+
+#[test]
+fn fr_lite_043_two_names_of_one_set_that_convert_alike_are_78_with_no_model_and_no_cache() {
+    // FR-LITE-043 over the first two databases FR-LITE-038 adds for it: two
+    // tables, then two columns of one table, whose names differ only in a
+    // byte that is not UTF-8. Each read is 78, writes nothing to stdout and
+    // writes no cache file; the cause names the path, the kind of the two
+    // objects, the table that holds two columns, and the text both convert
+    // to; the hint repoints the entry.
+    let (sandbox, built) = artefacts();
+
+    for (database, kind, table, text) in [
+        (&built.alike_tables, "two tables", None, WAREHOUSE),
+        (
+            &built.alike_columns,
+            "two columns",
+            Some("customs_line"),
+            "d\u{fffd}signation",
+        ),
+    ] {
+        repoint(&sandbox, database);
+        for arguments in [&["schema", "dump"][..], &["render", "listing"][..]] {
+            let spelled = format!("{} over {}", arguments.join(" "), database.display());
+            let written = refused(&sandbox.run(arguments), 78, &spelled);
+
+            assert!(
+                line(&written, "error:").contains(&format!("holds {kind} tpl cannot tell apart")),
+                "{spelled}: {written}"
+            );
+            let cause = line(&written, "cause:");
+            assert!(
+                cause.contains(&database.display().to_string()),
+                "{spelled}: {written}"
+            );
+            assert!(
+                cause.contains(&format!("{kind} whose names both read '{text}'")),
+                "{spelled}: {written}"
+            );
+            assert!(
+                cause.contains("differ only in bytes that are not valid UTF-8"),
+                "{spelled}: {written}"
+            );
+            if let Some(table) = table {
+                assert!(
+                    cause.contains(&format!("in table '{table}'")),
+                    "{spelled}: {written}"
+                );
+            }
+            assert!(line(&written, "hint:").contains(REPOINT), "{written}");
+            assert!(
+                !sandbox.path(&format!(".tpl/.cache/{ENTRY}")).exists(),
+                "{spelled} wrote to the cache"
+            );
+        }
+    }
+}
+
+#[test]
+fn fr_lite_043_a_key_whose_parent_differs_only_in_an_invalid_byte_is_excluded_as_dangling() {
+    // FR-LITE-043 and FR-LITE-021 over the third database: the key of
+    // `stock_lot` names `entrep\xD4t`, which SQLite does not hold, while the
+    // table it holds is `entrep\xF4t`; both convert to one text. The read
+    // succeeds, carries the table under that text, and excludes the key,
+    // which a match on the text would have attached. The cache written is the
+    // control that the absence above observes a write.
+    let (sandbox, built) = artefacts();
+    repoint(&sandbox, &built.alike_dangling_key);
+
+    let dumped = succeeded(&sandbox.run(&["schema", "dump"]), "schema dump");
+    let document: serde_json::Value = serde_json::from_str(&dumped).expect("the dump is JSON");
+    let tables = document["data"]["database"]["tables"]
+        .as_array()
+        .expect("the dump carries tables");
+    let names: Vec<&str> = tables
+        .iter()
+        .map(|table| table["name"].as_str().expect("a table has a name"))
+        .collect();
+    assert_eq!(names, [WAREHOUSE, "stock_lot"]);
+
+    for table in tables {
+        assert_eq!(
+            table["foreign_keys"].as_array().map(Vec::len),
+            Some(0),
+            "{}",
+            table["name"]
+        );
+        assert_eq!(
+            table["referenced_by"].as_array().map(Vec::len),
+            Some(0),
+            "{}",
+            table["name"]
+        );
+    }
+    assert!(
+        sandbox.path(&format!(".tpl/.cache/{ENTRY}")).exists(),
+        "the read that succeeded wrote no cache"
+    );
 }

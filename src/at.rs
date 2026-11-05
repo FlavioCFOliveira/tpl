@@ -1,8 +1,10 @@
 //! Directory-relative file operations below the canonical `.tpl`
-//! (`FR-SEC-026`, `FR-SEC-027`, `FR-CDOC-017`, `FR-PROJ-030`, `FR-TMPL-033`;
+//! (`FR-SEC-026`, `FR-SEC-027`, `FR-CDOC-017`, `FR-PROJ-030`, `FR-TMPL-033`,
+//! `FR-CFG-041`;
 //! `OD-24`, amended 2026-09-24).
 //!
-//! The cache, `.tpl/.cfg` and the templates are all read through here.
+//! The cache, `.tpl/.cfg` and the templates are all read through here, and
+//! the cache and `.tpl/.cfg` are written through here (`FR-CFG-041`).
 //!
 //! Every operation here starts from a directory descriptor, never from a path
 //! resolved by name at the moment of use:
@@ -11,7 +13,7 @@
 //! |---|---|
 //! | Reach a directory | `open` of the anchor, then `openat` of each component with `O_DIRECTORY \| O_NOFOLLOW` |
 //! | Read a file | `openat` with `O_NOFOLLOW \| O_NONBLOCK`, then `fstat` of the descriptor must say regular file |
-//! | Write a file | `openat` of the temporary with `O_CREAT \| O_EXCL \| O_NOFOLLOW`, then `renameat` over the target |
+//! | Write a file | `openat` of the temporary with `O_CREAT \| O_EXCL \| O_NOFOLLOW`, `fchmod` where the mode is a requirement, then `renameat` over the target |
 //! | Remove | `unlinkat`, recursively for a directory, each child reached by `openat` with `O_NOFOLLOW` |
 //! | Create a directory | `mkdirat` on the parent's descriptor |
 //!
@@ -436,15 +438,7 @@ pub(crate) fn write_in(
 
     let written = (|| -> Result<(), Errno> {
         let handle = rfs::openat(folder, temporary.as_bytes(), CREATE, mode)?;
-        let mut rest = bytes;
-        while !rest.is_empty() {
-            match rustix::io::write(&handle, rest) {
-                Ok(0) => return Err(Errno::IO),
-                Ok(count) => rest = rest.get(count..).unwrap_or_default(),
-                Err(Errno::INTR) => {}
-                Err(errno) => return Err(errno),
-            }
-        }
+        write_all(&handle, bytes)?;
         drop(handle);
 
         rfs::renameat(folder, temporary.as_bytes(), folder, name.as_bytes())
@@ -456,6 +450,62 @@ pub(crate) fn write_in(
     }
 
     true
+}
+
+/// Replaces `name` under `folder` with `bytes`, through the temporary
+/// `temporary` in the same folder, given `mode` on its descriptor and renamed
+/// over the target (`FR-CFG-041`).
+///
+/// It is [`write_in`] for a file whose failure is a condition rather than a
+/// missed optimisation: whatever stands at the temporary's name is removed
+/// first, as itself where it is a link, the temporary is created exclusively
+/// with `O_NOFOLLOW`, written, `fchmod`ed to `mode` — the umask applies to
+/// `openat`'s mode and not to `fchmod`'s — and `renameat` replaces the entry
+/// `name` of `folder`, a link there included, and no file a link points at.
+/// Every step acts on `folder`'s descriptor, so no component of its path
+/// resolved again can redirect one of them.
+///
+/// # Errors
+///
+/// Returns what the filesystem returned for the first step that failed. The
+/// target is then untouched, and the temporary removed.
+pub(crate) fn replace_in(
+    folder: &OwnedFd,
+    name: &OsStr,
+    temporary: &OsStr,
+    mode: Mode,
+    bytes: &[u8],
+) -> io::Result<()> {
+    let _ = rfs::unlinkat(folder, temporary.as_bytes(), AtFlags::empty());
+
+    let replaced = (|| -> Result<(), Errno> {
+        let handle = rfs::openat(folder, temporary.as_bytes(), CREATE, mode)?;
+        write_all(&handle, bytes)?;
+        rfs::fchmod(&handle, mode)?;
+        drop(handle);
+
+        rfs::renameat(folder, temporary.as_bytes(), folder, name.as_bytes())
+    })();
+
+    replaced.map_err(|errno| {
+        let _ = rfs::unlinkat(folder, temporary.as_bytes(), AtFlags::empty());
+        io_error(errno)
+    })
+}
+
+/// Writes all of `bytes` to `handle`, retrying an interrupted write.
+fn write_all(handle: &OwnedFd, bytes: &[u8]) -> Result<(), Errno> {
+    let mut rest = bytes;
+    while !rest.is_empty() {
+        match rustix::io::write(handle, rest) {
+            Ok(0) => return Err(Errno::IO),
+            Ok(count) => rest = rest.get(count..).unwrap_or_default(),
+            Err(Errno::INTR) => {}
+            Err(errno) => return Err(errno),
+        }
+    }
+
+    Ok(())
 }
 
 /// Opens `directory` below `anchor`, creating each missing component with
