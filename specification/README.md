@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty-three editions. All are in force;
+The specification has been written in eighty-four editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6680,6 +6680,31 @@ divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
 against the change, and none is amended. The fifth validation rule is
 applied: the root `README.md` describes the rewrite as atomic, which stays
 true, and says nothing of a failure after the rename, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-fourth edition — the time of a connection phase, as far as it can be read
+
+rmp `#340`, of sprint 29: the timing lines of `FR-GLOB-017` are implemented,
+and the user decided to accept and document the one thing they cannot always
+report. **No identifier is assigned, retired or renumbered**; no open
+question or divergence entry is raised, and [glossary.md](glossary.md) is
+unchanged.
+
+- **Where the attribution of time stops** —
+  [global-flags.md](global-flags.md). `FR-GLOB-017` states that a phase's
+  time is attributed from readings taken while the connection runs; that
+  under `required`, `verify-ca` and `verify-identity` the handshake always
+  has its line, which may carry zero; that under `preferred` a handshake
+  completed between two readings may have no line; and that a caller may
+  rely on the set of lines and the sum of the connection phases' times, and
+  not on one phase's time nor, under `preferred`, on the handshake's line as
+  evidence of encryption.
+- **This file** — the edition count of the Scope, and this record.
+
+`NFR-DET-001`, `NFR-PERF-008`, `FR-CONF-005` and `FR-CONF-013` were read
+against the change, and none is amended. The fifth validation rule is
+applied: the root `README.md` says only that stderr carries phase timings
+outside the contract, which stays true, so
 [upstream-divergences.md](upstream-divergences.md) raises no entry.
 
 ### Still out of scope

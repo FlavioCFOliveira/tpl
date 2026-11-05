@@ -376,6 +376,41 @@ which belongs to that command's module.
   catalogue query, and is distinguishable from it, so that the count of
   `NFR-PERF-008` is unchanged.
 
+  **Where the attribution of time stops.** The time of a connection phase is
+  attributed from readings of how far the connection has got, taken while
+  it runs, and the time between two readings is charged to the phase the
+  earlier reading saw. Under the `tls` modes `required`, `verify-ca` and
+  `verify-identity`, which always negotiate a TLS handshake, the handshake
+  SHALL have its line whenever the connection reached it, and that line MAY
+  carry a time of zero, where no reading fell inside the handshake; its time
+  is then on the line of the phase before it. Under `preferred`, whether a
+  handshake was negotiated is known only from a reading taken inside it, so
+  a handshake that begins and ends between two readings MAY have no line,
+  its time being on the line of another connection phase. A caller MAY rely
+  on the set of phase lines, and on the sum of the times of the connection
+  phases' lines as the time the connection took; it SHALL NOT rely on the
+  time of a single connection phase's line, nor, under `preferred`, on the
+  presence or absence of the handshake's line as evidence of whether the
+  session is encrypted.
+
+  *Consequence, stated plainly.* A connection fast enough to complete its
+  handshake between two readings is reported under `preferred` as one that
+  negotiated none, and under the three other modes as a handshake that took
+  no time. The diagnostic stream stays outside the contract, per
+  `NFR-DET-001`; this paragraph states what its lines are worth, not a new
+  promise. *Not observed.* No run was observed in which the line was
+  missing; the limit is derived from how the phases are read. *What would
+  change this.* A driver that reports each phase as it begins and ends, in
+  place of a phase the caller reads, would let every line carry its own time
+  under every mode; taking it is a change to the decision records of the
+  driver, not to this requirement's purpose.
+
+  *Amended in the eighty-fourth edition: the paragraph above is new,* for
+  rmp `#340`, by the user's decision to accept and document the limit rather
+  than patch the vendored driver further. The paragraph before it read that
+  each line carries the time the connection spent in its phase, which the
+  readings cannot always give; it is qualified here rather than rewritten.
+
   *Amended in the seventy-ninth edition,* for rmp `#340`: the paragraph above
   is new. `FR-CONF-005` names four connection phases, and the implementation
   wrote a line for DNS resolution and one for the TCP connect, whose time
