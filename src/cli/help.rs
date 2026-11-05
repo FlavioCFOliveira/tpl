@@ -554,13 +554,13 @@ const DSN: Documented = Documented {
 /// `--host`, as every node that declares it states it.
 const HOST: Documented = Documented {
     name: "--host",
-    purpose: "Sets the host name or IP address of the MariaDB server.",
+    purpose: "Sets the host name or IP address of the MariaDB or MySQL server.",
     excludes: &["--dsn", "--path"],
 };
 /// `--port`, as every node that declares it states it.
 const PORT: Documented = Documented {
     name: "--port",
-    purpose: "Sets the TCP port of the MariaDB server, from 1 to 65535.",
+    purpose: "Sets the TCP port of the MariaDB or MySQL server, from 1 to 65535.",
     excludes: &["--dsn", "--path"],
 };
 /// `--user`, as every node that declares it states it.
@@ -572,7 +572,7 @@ const USER: Documented = Documented {
 /// `--schema`, as every node that declares it states it.
 const SCHEMA: Documented = Documented {
     name: "--schema",
-    purpose: "Sets the name of the database on the MariaDB server, stored as \
+    purpose: "Sets the name of the database on the MariaDB or MySQL server, stored as \
               database.<entry>.database; this is not the entry name that -d selects.",
     excludes: &["--dsn", "--path"],
 };
@@ -853,8 +853,9 @@ const HELP_COMMAND_PATH: Documented = Documented {
 const GLOBAL_ARGUMENTS: [Documented; 7] = [
     Documented {
         name: "--database",
-        purpose: "Selects the database entry to use, a named connection in .tpl/.cfg that tpl cfg \
-                  database list lists; it overrides core.database.",
+        purpose: "Selects the database entry to use, a named database in .tpl/.cfg — a MariaDB \
+                  or a MySQL server, or a SQLite database file — that tpl cfg database list \
+                  lists; it overrides core.database.",
         excludes: &[],
     },
     Documented {
@@ -1295,7 +1296,8 @@ const SCHEMA_LISTING: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         ca_path holds no certificate, or the server is not a supported version of the entry's \
+         provider, MariaDB or MySQL; for a \
          sqlite entry, the entry has no path or carries a key its provider does not take, or the \
          path is not a regular file or not a readable SQLite database.",
     ),
@@ -1335,7 +1337,8 @@ const SCHEMA_OBJECT: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         ca_path holds no certificate, or the server is not a supported version of the entry's \
+         provider, MariaDB or MySQL; for a \
          sqlite entry, the entry has no path or carries a key its provider does not take, or the \
          path is not a regular file or not a readable SQLite database.",
     ),
@@ -1375,7 +1378,8 @@ const SCHEMA_ROUTINE: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         ca_path holds no certificate, or the server is not a supported version of the entry's \
+         provider, MariaDB or MySQL; for a \
          sqlite entry, the entry has no path or carries a key its provider does not take, or the \
          path is not a regular file or not a readable SQLite database.",
     ),
@@ -1414,7 +1418,8 @@ const SCHEMA_DUMP: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         ca_path holds no certificate, or the server is not a supported version of the entry's \
+         provider, MariaDB or MySQL; for a \
          sqlite entry, the entry has no path or carries a key its provider does not take, or the \
          path is not a regular file or not a readable SQLite database.",
     ),
@@ -1464,7 +1469,8 @@ const RENDER: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         ca_path holds no certificate, or the server is not a supported version of the entry's \
+         provider, MariaDB or MySQL; for a \
          sqlite entry, the entry has no path or carries a key its provider does not take, or the \
          path is not a regular file or not a readable SQLite database.",
     ),
@@ -1615,7 +1621,8 @@ const CACHE_LOAD: &[Outcome] = &[
         "No project was found, .tpl/.cfg cannot be used, no database entry is selected (give -d or \
          set core.database), the entry is incomplete (no host, or no server database name) or its \
          password cannot be obtained (a ${VAR} is undefined, or password_command failed), \
-         ca_path holds no certificate, or the server is not a supported MariaDB version; for a \
+         ca_path holds no certificate, or the server is not a supported version of the entry's \
+         provider, MariaDB or MySQL; for a \
          sqlite entry, the entry has no path or carries a key its provider does not take, or the \
          path is not a regular file or not a readable SQLite database.",
     ),
@@ -1879,8 +1886,8 @@ const CFG_DATABASE_TEST: &[Outcome] = &[
     outcome(Code::NoPermission, "The server refused the login."),
     outcome(
         Code::Configuration,
-        "The login succeeded but the server is not a supported MariaDB version or the session \
-         could not be made read-only; the entry is incomplete (no host, or no server database \
+        "The login succeeded but the server is not a supported version of the entry's provider, \
+         MariaDB or MySQL, or the session could not be made read-only; the entry is incomplete (no host, or no server database \
          name) or its password cannot be obtained (a ${VAR} is undefined, or password_command \
          failed); ca_path holds no certificate; or no project was found, or .tpl/.cfg cannot be \
          used. For a sqlite entry, the entry has no path or carries a key its provider does not \
@@ -2009,8 +2016,9 @@ const fn local_only(entry: &'static str, files: &'static str, stdout: &'static s
 const ENTRIES: [Entry; 35] = [
     Entry {
         path: &[],
-        description: "tpl reads the structure of a MariaDB database (its tables, views and \
-                      routines) and renders MiniJinja templates with it. It never writes to the \
+        description: "tpl reads the structure of a MariaDB or MySQL database, or of a SQLite \
+                      database file (its tables, views and routines), and renders MiniJinja \
+                      templates with it. It never writes to the \
                       database. It works inside a project: a .tpl folder, created by tpl init, \
                       that holds the configuration file .tpl/.cfg and the templates under \
                       .tpl/templates/.",
@@ -2020,10 +2028,11 @@ const ENTRIES: [Entry; 35] = [
                 rows: &[
                     row(
                         "database entry",
-                        "A named connection to a MariaDB server, stored in .tpl/.cfg. Its \
-                         --schema is the name of the database on that server, which need not \
-                         be the entry's name. Select one with -d NAME, or make one the default \
-                         with tpl cfg set core.database NAME.",
+                        "A named way to reach one database, stored in .tpl/.cfg: a MariaDB or \
+                         a MySQL server, whose --schema names the database on it and need not \
+                         be the entry's name, or a SQLite database file, named by --path. \
+                         Select one with -d NAME, or make one the default with tpl cfg set \
+                         core.database NAME.",
                     ),
                     row(
                         "cache",
@@ -3006,10 +3015,10 @@ const ENTRIES: [Entry; 35] = [
                       --password-command, --ca-file and --ca-path may be added to either. For a \
                       SQLite database file, give --provider sqlite and --path, and no other flag. \
                       A NAME already in use is refused; change an entry with tpl cfg database \
-                      update. To connect, a MariaDB entry needs --host and --schema, or a --dsn \
-                      that names both; --port defaults to 3306 and --user is optional. An entry \
-                      without them is stored, but every later command that connects with it exits \
-                      78. A MySQL entry needs the same. -d/--database has no effect here: the database on the server is set \
+                      update. To connect, a MariaDB or a MySQL entry needs --host and --schema, or \
+                      a --dsn that names both; --port defaults to 3306 and --user is optional. An \
+                      entry without them is stored, but every later command that connects with it \
+                      exits 78. -d/--database has no effect here: the database on the server is set \
                       with --schema, or is the path part of --dsn for an entry defined by dsn. \
                       The database file of a sqlite entry is set with --path.",
         blocks: &[
@@ -3235,7 +3244,7 @@ const ENTRIES: [Entry; 35] = [
         path: &["cfg", "database", "test"],
         description: "Connects with one database entry and reports four answers: whether it \
                       connected and logged in, whether the session was made read-only, which \
-                      MariaDB server answered, and whether the database user may read the database \
+                      server answered, MariaDB or MySQL, and whether the database user may read the database \
                       structure (can_read_catalogue). Exit 0 means the four checks ran, not that \
                       all of them passed: read can_read_catalogue. For a sqlite entry the four \
                       answers are whether the file opened read-only, whether every safeguard of \

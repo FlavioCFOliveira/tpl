@@ -7,6 +7,8 @@
 //! | `FR-ERR-049` | A refused TCP connect carries the first outcome, word for word, for both providers |
 //! | `FR-ERR-047`, `FR-CONF-005`, `ADR-014` point 6 | A connection that closes in the login, and an answer that is not the protocol, are the login's first two outcomes |
 //! | `FR-ERR-047` | A `mariadb` entry whose login needs the server's RSA public key ends at `69` with the facts of `FR-MYSQL-045` |
+//! | `FR-ERR-048`, error `1102` | A `mysql` entry whose database name ends with a space is refused by every MySQL server with `1102`, and ends at `78` pointing at the entry, never "can be run again" |
+//! | `FR-GLOB-017` | At `-v`, a connection that negotiates TLS writes one line for the TLS handshake and one for the login, on every MariaDB series and every MySQL server, and one that does not negotiates writes none for it |
 //!
 //! The passwordless account is `tpl_nopass`, which both fixtures create with
 //! no password and `SELECT, EXECUTE ON freight.*`, per their READMEs. The
@@ -37,6 +39,10 @@ const NOPASS: &str = "tpl_nopass";
 
 /// The schema both fixtures grant `NOPASS` on.
 const SCHEMA: &str = "freight";
+
+/// The reduced-grant reader of the MariaDB fixture, as `scripts/mariadb/`
+/// creates it and the other test binaries name it.
+const MARIADB_READER: (&str, &str) = ("tpl_reader", "tpl-reader-pw");
 
 /// What one run produced.
 struct Outcome {
@@ -239,9 +245,9 @@ fn fr_err_047_a_connection_closed_in_the_login_is_the_first_outcome() {
                  cause: the TCP connect to 127.0.0.1:{port} succeeded, and the connection failed \
                  before the login completed: the server closed it, it was reset, or the operating \
                  system abandoned it\n\
-                 hint:  check that 127.0.0.1:{port} is the address of a running {} server, then run \
-                 the command again, or change the address with: tpl cfg database update {ENTRY} \
-                 --host <host> --port <port>\n\
+                 hint:  check that the host and port named above are the address of a running {} \
+                 server, then run the command again, or change the address with: tpl cfg database \
+                 update {ENTRY} --host <host> --port <port>\n\
                  exit:  69 (EX_UNAVAILABLE)\n",
                 server_name(provider)
             ),
@@ -271,8 +277,9 @@ fn fr_err_047_an_answer_outside_the_protocol_is_the_second_outcome() {
                  cause: what answered the login at 127.0.0.1:{port} did not answer as a {server} \
                  server does: it does not speak the {server} protocol, or it asked for a step tpl \
                  does not implement, such as an authentication method\n\
-                 hint:  check that 127.0.0.1:{port} is the address of a {server} server, or change \
-                 it with: tpl cfg database update {ENTRY} --host <host> --port <port>\n\
+                 hint:  check that the host and port named above are the address of a {server} \
+                 server, or change it with: tpl cfg database update {ENTRY} --host <host> \
+                 --port <port>\n\
                  exit:  69 (EX_UNAVAILABLE)\n"
             ),
             "{provider}"
@@ -374,6 +381,186 @@ fn fr_err_047_a_mariadb_entry_whose_login_needs_the_key_ends_at_69() {
                     );
                 }
             }
+        }
+    }
+}
+
+// -------------------------------------------------------------- FR-ERR-048 ---
+
+#[test]
+fn fr_err_048_a_database_name_the_server_refuses_is_78_and_names_the_entry() {
+    // FR-ERR-048, the row of 1102, eightieth edition: rmp #357 recorded that
+    // both MySQL series answer a database name ending with a space with 1102,
+    // which fell to the last row and exited 69 with "can be run again". It is
+    // the entry's database key, and 78.
+    let test = "fr_err_048_a_database_name_the_server_refuses_is_78_and_names_the_entry";
+    let _exclusive = mysql::exclusive();
+    let Some(tls) = mysql::servers(test, mysql::Role::Series) else {
+        return;
+    };
+    let names = mysql::names();
+    let reader = (names.reader.0.as_str(), names.reader.1.as_str());
+
+    for server in &tls {
+        for mode in ["verify-identity", "disabled"] {
+            let sandbox = project(&mysql::configuration(
+                server, ENTRY, "freight ", reader, mode,
+            ));
+            let outcome = read(&sandbox);
+            let address = server.address();
+
+            assert_eq!(
+                outcome.code,
+                Some(78),
+                "{} {mode}: {}",
+                server.name(),
+                outcome.err
+            );
+            let lines: Vec<&str> = outcome.err.lines().collect();
+            assert_eq!(
+                lines.first().copied(),
+                Some(
+                    format!(
+                        "error: the server at {address} refused the database name, for database \
+                         entry '{ENTRY}'"
+                    )
+                    .as_str()
+                ),
+                "{}: {}",
+                server.name(),
+                outcome.err
+            );
+            let cause = lines.get(1).copied().unwrap_or_default();
+            assert!(
+                cause.starts_with(&format!(
+                    "cause: the server at {address} refused the login with server error 1102: it \
+                     does not accept 'freight ' as a database name, which \
+                     database.{ENTRY}.database gives in "
+                )) && cause.ends_with(".tpl/.cfg"),
+                "{}: {cause}",
+                server.name()
+            );
+            assert_eq!(
+                lines.get(2).copied(),
+                Some(
+                    format!(
+                        "hint:  correct the database name: tpl cfg database update {ENTRY} \
+                         --schema <database>"
+                    )
+                    .as_str()
+                ),
+                "{}",
+                server.name()
+            );
+            assert_eq!(lines.get(3).copied(), Some("exit:  78 (EX_CONFIG)"));
+            assert!(!outcome.err.contains("run again"), "{}", outcome.err);
+        }
+    }
+}
+
+// -------------------------------------------------------------- FR-GLOB-017 ---
+
+/// The phases the `phase:` lines of `err` name, in the order written.
+fn phases(err: &str) -> Vec<&str> {
+    err.lines()
+        .filter_map(|line| line.strip_prefix("phase: "))
+        .filter_map(|rest| rest.split_once(" took ").map(|(phase, _)| phase))
+        .collect()
+}
+
+/// The connection phases and session statements a session that opened and
+/// read writes, with or without a TLS handshake.
+fn opened(tls: bool) -> Vec<&'static str> {
+    let mut expected = vec!["dns resolution", "tcp connect"];
+    if tls {
+        expected.push("tls handshake");
+    }
+    expected.extend([
+        "login",
+        "read-only session statement",
+        "read-back of the read-only session",
+        "version probe",
+    ]);
+
+    expected
+}
+
+/// Runs `tpl -v schema info --direct --no-cache` and returns the phases it
+/// reported before the first catalogue query.
+fn reported(sandbox: &Sandbox, name: &str) -> Vec<String> {
+    let printed = sandbox.run(&["-v", "schema", "info", "--direct", "--no-cache"]);
+    let err = String::from_utf8_lossy(&printed.stderr);
+    assert_eq!(printed.status.code(), Some(0), "{name}: {err}");
+
+    phases(&err)
+        .into_iter()
+        .take_while(|phase| *phase != "server query")
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn fr_glob_017_a_negotiated_tls_handshake_has_its_line_on_every_mariadb_series() {
+    // FR-GLOB-017, seventy-ninth edition: the TLS handshake has a line where
+    // the mode negotiated one, and the login one line of its own, before and
+    // after it.
+    let Some(series) = mariadb::series(
+        "fr_glob_017_a_negotiated_tls_handshake_has_its_line_on_every_mariadb_series",
+    ) else {
+        return;
+    };
+    let _exclusive = mariadb::exclusive();
+    let ca = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/mariadb/tls/ca.pem");
+
+    for server in series {
+        let disabled = mariadb::configuration(server, ENTRY, SCHEMA, MARIADB_READER);
+        let verified = disabled.replace(
+            "tls = \"disabled\"\n",
+            &format!(
+                "tls = \"verify-identity\"\nca_file = \"{}\"\n",
+                ca.display()
+            ),
+        );
+        assert_ne!(
+            verified, disabled,
+            "the configuration carried tls = disabled"
+        );
+
+        assert_eq!(
+            reported(&project(&verified), server.name()),
+            opened(true),
+            "{}",
+            server.name()
+        );
+        assert_eq!(
+            reported(&project(&disabled), server.name()),
+            opened(false),
+            "{}",
+            server.name()
+        );
+    }
+}
+
+#[test]
+fn fr_glob_017_a_negotiated_tls_handshake_has_its_line_on_every_mysql_server() {
+    // FR-GLOB-017, as above, against the MySQL series of FR-MYSQL-003.
+    let test = "fr_glob_017_a_negotiated_tls_handshake_has_its_line_on_every_mysql_server";
+    let _exclusive = mysql::exclusive();
+    let Some(tls) = mysql::servers(test, mysql::Role::Series) else {
+        return;
+    };
+    let names = mysql::names();
+    let reader = (names.reader.0.as_str(), names.reader.1.as_str());
+
+    for server in &tls {
+        for (mode, negotiated) in [("verify-identity", true), ("disabled", false)] {
+            let sandbox = project(&mysql::configuration(server, ENTRY, SCHEMA, reader, mode));
+            assert_eq!(
+                reported(&sandbox, server.name()),
+                opened(negotiated),
+                "{} {mode}",
+                server.name()
+            );
         }
     }
 }

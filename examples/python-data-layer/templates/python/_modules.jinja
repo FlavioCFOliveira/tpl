@@ -1,0 +1,14 @@
+{%- import "python/_types.jinja" as types -%}
+{#-
+  The module stem of every table's files, as one JSON object from the table's
+  name to the stem `python/_types.jinja` derives for it. `run.py` renders it
+  once per read and names each file it writes by it, so a file and the import
+  `python/package.jinja` writes for it are derived by one macro and agree.
+
+      tpl -d <entry> render python/_modules
+-#}
+{
+{%- for table in database.tables %}
+  {{ table.name | json }}: {{ types.module(table, database.tables) | json }}{{ "," if not loop.last }}
+{%- endfor %}
+}

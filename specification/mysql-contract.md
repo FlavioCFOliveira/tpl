@@ -1,7 +1,7 @@
 ---
 title: MySQL Contract
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [configuration-model.md, server-contract.md, sqlite-contract.md, catalogue-coverage.md, context-document.md, privileges-and-completeness.md, security.md, cfg-commands.md, performance-requirements.md, errors-and-exit-codes.md, template-environment.md, open-questions.md]
 ---
 
@@ -938,6 +938,29 @@ second.
   *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
   observation* note is replaced by the *Observed* note above, which confirms
   it. The requirement is unchanged.
+
+- **FR-MYSQL-048**: For a `mysql` entry, `FR-SRV-043` SHALL hold, with the
+  closed list of `FR-MYSQL-015` in place of `FR-SRV-006`: a name the system
+  did not write itself — the database the entry names, or the name of a
+  table, a view or a routine a command names — changes no part of a
+  statement but the value its rows are compared with, whatever characters it
+  holds.
+
+  *Rationale.* rmp `#352` asks how a name a caller supplies reaches a MySQL
+  catalogue statement, which the technical specification records as a gap.
+  The means is the technical specification's to record; the property is the
+  one `FR-SRV-043` states for a `mariadb` entry, and a `mysql` entry's closed
+  list, which `BR-MYSQL-002` makes the part of its read-only promise that
+  prevents, rests on it as that list does. The target database of item 17
+  of `FR-MYSQL-044` and its four decoys are the databases a test of it
+  reads.
+
+  *Amended in the eightieth edition,* for rmp `#352`: the rationale named
+  the identifiers of item 14 of `FR-MYSQL-044`, which hold no name a quoting
+  or a pattern could read as another database; item 17 is the fixture the
+  tests of this requirement read.
+
+  *Added in the seventy-ninth edition,* for rmp `#352`.
 
 - **FR-MYSQL-017**: WHEN the system opens a connection for a `mysql` entry, it
   SHALL issue the three connection-start statements of `FR-MYSQL-015` in the
@@ -3000,9 +3023,23 @@ second.
       character outside the basic multilingual plane, which every series
       stores and returns as `?`, per `FR-MYSQL-026`;
   14. identifiers carrying a space, a backtick and a double quote;
-  15. a scheduled event and a partitioned table, which the read excludes; and
+  15. a scheduled event and a partitioned table, which the read excludes;
   16. a reduced-grant reader holding `SELECT` and `EXECUTE` on the main
-      schema and nothing more, and a schema declaring no collation of its own.
+      schema and on the target database of item 17, and nothing more, and a
+      schema declaring no collation of its own; and
+  17. for `FR-SRV-043`, by way of `FR-MYSQL-048`: a target database whose
+      name holds a quotation mark, a backslash and a backtick — ``tpl_q'b\s`k``
+      — holding objects of its own: a table, a view, and a table whose name
+      holds a quotation mark, a backtick and a `%` beside one whose name that
+      name, read as a `LIKE` pattern, matches; and four decoy databases,
+      each holding objects whose names differ from those of the target and
+      of every other decoy: the target's name without the backslash,
+      ``tpl_q'bs`k``; the target's name with the backslash doubled,
+      ``tpl_q'b\\s`k``; a name other than the target's that the `LIKE` pattern
+      `tpl_q_b_s_k` matches, such as `tpl_q_b_s_k` itself; and the target's
+      name in another letter case, ``TPL_Q'B\S`K``, a database of its own under
+      the `lower_case_table_names` `0` the fixture's servers run with. The
+      reduced-grant reader of item 16 holds no grant on a decoy.
 
   A structure or a statement of `setup.sql` or `seed.sql` that a series of
   `FR-MYSQL-003` refuses SHALL be omitted from them rather than made
@@ -3054,7 +3091,7 @@ second.
   that ages.
 
   *What the list does not exercise.* Two cases this file states were observed
-  on scratch objects and are not among the sixteen: a key declared
+  on scratch objects and are not among the seventeen: a key declared
   `SET DEFAULT`, which `FR-MYSQL-033` carries, and a generated invisible
   primary key, which `FR-MYSQL-027` carries. A test of either needs DDL the
   shared files do not hold. Neither is refused by a series, so either could
@@ -3089,6 +3126,30 @@ second.
   without a primary key gains a generated one. The paragraph on the fixture's
   own choices and the notes after it are new, and the rationale no longer
   says that the observations are still to be taken.
+
+  *Amended in the eightieth edition,* for rmp `#352`: item 17 is new, and
+  item 16 grants the reader the target database. `FR-SRV-043` requires that
+  a name a caller supplies change no part of a statement but the value it
+  compares, whatever its characters, and its *Demonstrable* note names
+  tests the fixture could not run: no database of it held a name a quoting
+  or a pattern could get wrong. Each decoy is the database a defect of one
+  kind would read in the target's place: one that dropped the backslash as
+  an escape, one that doubled it, one that read the name as a pattern, and
+  one that folded the letter case. The tests of the target run on both
+  series of `FR-MYSQL-003`, as the fixture's privileged account, which sees
+  every decoy, so that a read that strayed into one would show its objects;
+  and as the reduced-grant reader, whose grant on the target is what lets a
+  read of it succeed under a reduced grant. What `FR-SRV-043` makes each
+  test expect: a read whose entry names the target presents the target's
+  objects and no object of a decoy, save the case variant's where the server
+  compares the two names equal, which a statement naming the target as a
+  literal shows; a read of the table whose name holds a `%` presents that
+  table and not the one its pattern matches; and an entry naming a database
+  the fixture does not hold, by a name holding a quotation mark, a backslash
+  and a `%` that the decoys match as a pattern, reads none of them and is
+  reported under `FR-PRIV-021`. The backslash and the backtick are written
+  in `setup.sql` as a quoted identifier writes them; the names above are the
+  names as the server holds them.
 
 ## Dependencies
 

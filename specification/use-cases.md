@@ -1,7 +1,7 @@
 ---
 title: Use Cases
 status: approved
-last-reviewed: 2026-09-24
+last-reviewed: 2026-11-05
 related: [schema-commands.md, render-command.md, cache-commands.md, cfg-commands.md, examples.md]
 ---
 
@@ -263,15 +263,21 @@ here introduces behaviour of its own.
 - **Trigger**: an application needs types for one target language that match a
   database it does not own
 - **Preconditions**: a server of the most recent series of `FR-SRV-015` is
-  reachable and carries the three schemas of `FR-EX-006`; the workspace of
-  `FR-EX-010` is writable
+  reachable and carries the three schemas of `FR-EX-006`; a server of the
+  fixture of `scripts/mysql/` of the most recent series of `FR-MYSQL-003` is
+  reachable and carries the schema of `FR-EX-011`; the database file of
+  `FR-EX-012` has been built from `scripts/sqlite/freight.sql`; the
+  workspace of `FR-EX-010` is writable
 - **Main flow**:
   1. Run `tpl init` in the workspace. The project is created, per `UC-001`.
      The example's own templates are then placed under `.tpl/templates/`, per
      `FR-EX-010`, because that is where step 5 reads a template from, per
      `FR-TMPL-004`.
   2. Run `tpl cfg database add <name> --host … --user … --schema <schema>`, once
-     per schema read, per `UC-002`.
+     per schema read, per `UC-002`, with `--provider mysql` for the schema of
+     `FR-EX-011`; and, for the database of `FR-EX-012`,
+     `tpl cfg database add <name> --provider sqlite --path <path>`, per
+     `FR-CFG-055`.
   3. Run `tpl cfg database test <name>`. The four steps of `FR-CFG-024` are
      reported, and `can_read_catalogue` is read from the `0` rather than
      inferred from it, per `FR-CFG-045`.
@@ -290,6 +296,9 @@ here introduces behaviour of its own.
     to remove it first, which is what makes an example re-runnable.
   - Step 3 exits `78`: the entry names a server outside the supported window,
     per `FR-CFG-043`, and no read is attempted.
+  - Step 3 exits `74` or `78` for the entry of `FR-EX-012`: the file the entry
+    names cannot be read, or is one a `sqlite` read refuses, per
+    `FR-CFG-056`, and no read is attempted.
   - Step 3 exits `0` with `can_read_catalogue` false: the entry's user cannot
     see the catalogue, so step 4 would return an incomplete read under
     `FR-PRIV-001` and the data layer would be short without saying so.
@@ -306,7 +315,7 @@ here introduces behaviour of its own.
   interface, per `FR-EX-004`. Which types the rendered files declare is the
   example's type-mapping macro's, per `FR-EX-008` and `FR-ENV-011`, and not
   `tpl`'s
-- **Requirements**: `FR-EX-001` … `FR-EX-010`, `FR-PROJ-014`, `FR-PROJ-017`,
+- **Requirements**: `FR-EX-001` … `FR-EX-012`, `FR-PROJ-014`, `FR-PROJ-017`,
   `FR-TMPL-004`, `FR-CFG-024`, `FR-CFG-045`, `FR-SCH-004`, `FR-RND-002`,
   `FR-RND-028`, `FR-ENV-011`
 

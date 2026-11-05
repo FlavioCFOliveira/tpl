@@ -55,7 +55,11 @@ minijinja-contrib = "~2.24.0"
 rusqlite = { version = "0.41.1", default-features = false, features = ["bundled", "limits"] }
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "process"] }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+# `raw_value` keeps the members of a table's `foreign_keys` and
+# `referenced_by` as the bytes a cache file holds until a render reaches them
+# (`FR-CACHE-038`). It adds no crate: `sqlx-core`'s `json` feature already
+# enables it, and it is named here so the cache does not depend on that.
+serde_json = { version = "1.0.151", features = ["raw_value"] }
 # The MariaDB driver of `ADR-003`, taken as its two crates rather than through
 # the `sqlx` facade. The facade's optional `sqlx-sqlite` requires
 # `libsqlite3-sys` below 0.38, Cargo resolves optional dependencies into the
@@ -103,17 +107,19 @@ rusqlite = { version = "0.41.1", default-features = false, features = ["trace"] 
 #
 # `sqlx-mysql`: 0.9.0 requests the server's RSA public key over a session TLS
 # does not protect, which `FR-MYSQL-045` forbids; sends a scramble of an empty
-# or absent password, which `FR-CONF-055` forbids; and cannot report the phase
-# a connection reached, which `FR-CONF-005` needs. The vendored copy refuses
-# the key request with a typed error, sends the response the servers' own
-# clients send for an empty password, and records the phase in a handle the
-# caller passes (`ADR-014`, points 3, 5 and 6). Each part leaves on its own
-# condition (`ADR-014`, point 7): the refusal, at the first `sqlx` release
+# or absent password, which `FR-CONF-055` forbids; cannot report the phase a
+# connection reached, which `FR-CONF-005` needs; and panics on a short or
+# malformed packet from the server, where `FR-ERR-047` and `FR-ERR-048` require
+# exit 69. The vendored copy refuses the key request with a typed error, sends
+# the response the servers' own clients send for an empty password, records the
+# phase in a handle the caller passes, and carries upstream commit 4161768c
+# (PR #4458) whole (`ADR-014`, points 3, 5, 6 and 8). Each part leaves on its
+# own condition (`ADR-014`, point 7): the refusal, at the first `sqlx` release
 # whose `sqlx-mysql` lets a caller refuse the request; the empty password, at
 # the first that sends those responses at the first response and at every
-# switch; and the handle, at the first that lets a caller learn the phase
-# reached. This entry is deleted, with the directory it points at, with the
-# last of them.
+# switch; the handle, at the first that lets a caller learn the phase reached;
+# and the hardening, at the first that contains commit 4161768c. This entry is
+# deleted, with the directory it points at, with the last of them.
 #
 # Each entry goes on its own condition: the retirement of one leaves the other
 # in force, and the table goes only with the last of them.

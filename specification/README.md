@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, sqlite-contract.md, mysql-contract.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventy-eight editions. All are in force;
+The specification has been written in eighty-seven editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6405,6 +6405,375 @@ moves, and against the requirements their new passages paraphrase —
 `FR-CONF-055`. One passage contradicted this corpus, and is `DIV-062`,
 discharged by the second reading. `DIV-036`, `DIV-037` and `DIV-050`, whose
 passages of `CLAUDE.md` sit beside the corrected lines, stand as they were.
+
+### Seventy-ninth edition — a password a cache hit never needed, three statements with no deadline of their own, and two tables that read alike
+
+Sprint 29, *Fixes and Improvements*, sets out to leave the code base with no
+known defect outstanding and to have all three providers read schemas and
+generate code without failure. This edition specifies what that requires of
+ten of its tasks, all relayed by the session coordinator in one brief: rmp
+`#310`, `#339`, `#340`, `#341`, `#349` and `#353`, and four it was asked to
+check and change only where needed, rmp `#311`, `#313`, `#342` and `#352`,
+each of which did need a change. Three decisions are the user's: for rmp
+`#310`, that a reference be expanded only when the entry is resolved for a
+connection; and, on 2026-11-05, after reading the first draft of this
+edition, that the refusal of rmp `#349` stand as written and that the worked
+examples of rmp `#353` cover all three providers, which the edition took in
+before it was committed. Every other choice between viable options is this
+edition's, and each is recorded with the options it rejected beside the
+requirement it shapes.
+
+**Six identifiers of a requirement are assigned**: `FR-CONF-056`,
+`FR-SRV-043`, `FR-MYSQL-048`, `FR-LITE-043`, `FR-EX-011` and `FR-EX-012`;
+and three divergence entries, `DIV-063`, `DIV-064` and `DIV-065`. None is
+retired and none is renumbered. No open question is raised, so the index of
+[open-questions.md](open-questions.md) stays empty. [glossary.md](glossary.md)
+gains *session statement*.
+
+- **A password a cache hit never needed** — rmp `#310`. `FR-CONF-056`, new,
+  in [configuration-model.md](configuration-model.md): the six fields of
+  `FR-CONF-015` are expanded, and `password_command` is run, only when the
+  entry is resolved for a connection — a read that misses the cache or
+  carries `--direct`, a read a render returns to, `tpl cache load` and
+  `tpl cfg database test` — and a read served from the cache does neither.
+  Every field, and not the password alone, because a hit reads none of
+  them. The conditions expansion and the helper raise, the `78` of
+  `FR-CONF-022` among them, are raised at the cache-or-connection step and
+  never on a hit. `FR-CONF-022` and `FR-CACHE-006` gain a note,
+  `FR-CONF-050` and `FR-ERR-006` an amendment that moves the refusal of an
+  empty expansion, and the expansion itself, out of entry resolution.
+- **Three statements with no deadline of their own** — rmp `#339`.
+  `FR-CONF-005`: the [session statement](glossary.md#session-statement) is a
+  phase, and each of the read-only session statement, its read-back and the
+  version probe takes the deadline of `core.query_timeout` on its own, the
+  deadline the implementation already applied. `FR-ERR-027` names the
+  statement whose deadline expired, the version probe as the version probe,
+  with three examples, and puts the expiry on `69` whichever statement it
+  ends. The `69` row of `FR-ERR-034` names the phase, `FR-SRV-010` gains a
+  note, and the table of `FR-GLOB-026` names the session statements and
+  counts the connection phases as four, which two of its rows still counted
+  as three.
+- **A line for every connection phase** — rmp `#340`. `FR-GLOB-017`, in
+  [global-flags.md](global-flags.md): at `INFO`, a line for each phase of
+  `FR-CONF-005` the connection ran — DNS resolution, the TCP connect, the
+  TLS handshake where one is negotiated, the login, whose line carries the
+  time of its two stretches together, and each session statement — written
+  once the connection has opened or failed, or the statement has ended.
+- **The errors a privilege probe reads as no privilege** — rmp `#341`.
+  `FR-CFG-044`, in [cfg-commands.md](cfg-commands.md): a privilege error is
+  an error packet carrying `1044`, `1142`, `1143` or `1227`, the denials a
+  `SELECT` can meet, named alike in MariaDB's and MySQL's error references,
+  read on 2026-11-05; any other error packet ends the command with `69`
+  under the third way of `FR-ERR-036`, whose paragraph on the probe follows.
+- **A truncated greeting** — rmp `#342`. `FR-ERR-047`: a truncated or
+  malformed greeting is the second outcome, at `69`, and never the `70` of
+  `FR-ERR-030`; a greeting cut short by the connection is the first. Both
+  were within the outcomes as written; the sentences make a test of them
+  derivable.
+- **Two tables that read alike** — rmp `#349`. `FR-LITE-043`, new, in
+  [sqlite-contract.md](sqlite-contract.md): a `sqlite` read groups rows and
+  matches names on the bytes the file holds, and refuses with `78` a file in
+  which two names of one set — the tables and views, or the columns, the
+  indexes or the triggers of one table — differ in their bytes and convert to
+  one text under `FR-OUT-017`. `FR-LITE-007` gains its row, `BR-LITE-003` and
+  `FR-OUT-017` a note, and `FR-LITE-038` three databases.
+- **A name that reaches a statement** — rmp `#352`. `FR-SRV-043`, new, in
+  [server-contract.md](server-contract.md), and `FR-MYSQL-048`, new, in
+  [mysql-contract.md](mysql-contract.md): a name the system did not write
+  itself changes no part of a catalogue statement but the value its rows are
+  compared with, whatever characters it holds. How it reaches the statement
+  is left to the technical specification, as rmp `#352` asks.
+- **The rewrite of `.tpl/.cfg`** — rmp `#313`. `FR-CFG-041`: every step of
+  the rewrite acts in the folder whose `.cfg` was checked, creates its
+  temporary file new, and is redirected by no link, the property the cache's
+  paths and the read of `.cfg` already hold. `FR-SEC-027` gains a note.
+- **A suggestion that named the template asking** — rmp `#311`.
+  `FR-TMPL-033` bars a nearest-match suggestion for an entry that exists and
+  is not a regular file, on the command line and in a template, and
+  `FR-TMPL-009` keeps the template that holds a name out of the candidates
+  of any suggestion offered for it.
+- **The worked examples over all three providers** — rmp `#353`, by the
+  user's decision. `FR-EX-011`, new, in [examples.md](examples.md): all four
+  examples also read the `freight` schema of the fixture of
+  `scripts/mysql/`, through a `mysql` entry, from one server of the most
+  recent series of `FR-MYSQL-003`, and compile its data layer. `FR-EX-012`,
+  new: they also read, through a `sqlite` entry, the main database the
+  fixture of `scripts/sqlite/` builds from `freight.sql`, and compile its
+  data layer. `FR-EX-006` gains a note; `FR-EX-007`, `FR-EX-008`, whose type
+  mappings now cover the values of `json` and `geomcollection` and the five
+  SQLite affinities, and `BR-EX-002` reach both; and `UC-013` in
+  [use-cases.md](use-cases.md) gains their preconditions, their two forms of
+  `tpl cfg database add` and an alternate flow for the file.
+- **The register** — [upstream-divergences.md](upstream-divergences.md)
+  raises `DIV-063`, `DIV-064` and `DIV-065` against the root `README.md`,
+  and its counts move.
+- **This file** — the edition count of the Scope, and this record.
+
+**What changes for a `mariadb` entry, and what does not.** `FR-CONF-056`
+changes when a `mariadb` and a `mysql` entry expand a reference and run
+their helper, and so which invocations exit `78` for an undefined variable:
+a read served from the cache no longer does. `FR-ERR-027` changes the
+message of an expired session statement, `FR-GLOB-017` the diagnostic
+lines, `FR-CFG-044` the outcome of a privilege probe answered with an error
+packet that is not a denial, from `0` to `69`, and `FR-CFG-041` where a
+rewrite acts. `FR-CONF-005` states the deadline the implementation already
+applies, `FR-ERR-047` changes no message, and `FR-SRV-043` and
+`FR-MYSQL-048` state a property and change no output where it holds. No
+requirement of a `sqlite` entry changes meaning but `FR-LITE-043`, whose
+refusal is new and whose grouping on the bytes corrects what a read
+presents. `FR-CONF-004`, `FR-CONF-049`, `FR-CACHE-002`, `FR-CACHE-038`,
+`FR-CACHE-039`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-SRV-006`, `FR-SRV-042`,
+`FR-MYSQL-015`, `FR-MYSQL-017`, `FR-MYSQL-019`, `FR-ERR-019`,
+`FR-ERR-021`, `FR-ERR-048`, `FR-TMPL-027`, `FR-PROJ-028`, `FR-PROJ-030`,
+`FR-LITE-009`, `FR-LITE-021` and `NFR-PERF-008` were read against the
+changes, and none is amended.
+
+The fifth validation rule is applied for this edition: neither root
+document has changed since `9468588`, which the seventy-eighth edition
+read in its working tree; at `b3f87a2` both were searched for every subject
+this edition amends — a reference expanded on a cache hit, a deadline of a
+session statement, the diagnostic lines of a connection, the privilege
+probe, a greeting, a SQLite name that is not valid UTF-8, a name in a
+catalogue statement, the rewrite of `.tpl/.cfg`, a suggestion for a
+template, and the worked examples. Three passages of `README.md` paraphrase
+a requirement this edition amends, and
+[upstream-divergences.md](upstream-divergences.md) raises `DIV-063`,
+`DIV-064` and `DIV-065` against them. `CLAUDE.md` paraphrases none.
+
+### Eightieth edition — a database name the server refuses, one it never sees whole, and the databases a quoting could mistake
+
+The seventy-ninth edition was committed at `5b1a568`, so the follow-up pass
+of sprint 29 is an edition of its own. It specifies rmp `#357`, which the
+user brought into the sprint from the security review of the `mysql`
+provider; the fixture rmp `#352` needs to prove the property `FR-SRV-043`
+states; and, for rmp `#342`, every short packet of the login on which the
+driver may panic.
+
+**One identifier is assigned**: `FR-CONF-057`. None is retired and none is
+renumbered. No open question is raised, so the index of
+[open-questions.md](open-questions.md) stays empty, no divergence entry is
+raised or discharged, and [glossary.md](glossary.md) is unchanged.
+
+- **A database name the server refuses** — rmp `#357`. `FR-ERR-048` gains
+  the row of `1102`, `ER_WRONG_DB_NAME`, read alike for both providers, at
+  `78`: the server refuses the name the entry gives, as for a name ending
+  with a space, and the next step is the entry's `database` key. Its
+  message names the host and port, the number and the name between
+  quotation marks, and its `hint` the command that changes the name; it no
+  longer says that the operation can be run again. Both error references
+  were read for the number, and both identifier pages for the trailing
+  space; which number a MariaDB server sends for that name is not observed.
+  A name ending with a space is not refused before connecting: the server's
+  rules for a name are the server's.
+- **A name the server never sees whole** — rmp `#357`. `FR-CONF-057`, new,
+  in [configuration-model.md](configuration-model.md), in a section of its
+  own: a NUL character is refused in `host`, `user`, `password` and
+  `database`, in each of those parts of a `dsn` once percent-decoded, in a
+  `sqlite` entry's `path`, and in the password a `password_command` prints —
+  with `64` on the command line, with `78` at entry resolution in the file,
+  and with `78` where the helper runs — because the login, the servers' C
+  interface and SQLite's open each end the value at it. `FR-CONF-054` gains
+  a note.
+- **The databases a quoting could mistake** — rmp `#352`. `FR-MYSQL-044`
+  gains item 17: a target database whose name holds a quotation mark, a
+  backslash and a backtick, with objects of its own, among them a table
+  whose name holds a `%`; four decoys — the name without the backslash, with
+  it doubled, a name its pattern matches, and a case variant; and, in item
+  16, the reduced-grant reader's grant on the target and on no decoy. The
+  note on it states what each test of `FR-SRV-043` expects on both series.
+  `FR-SRV-043` gains a note naming the item and recording that the fixture
+  of `scripts/mariadb/` holds no such database, and the rationale of
+  `FR-MYSQL-048` names the item.
+- **Every short packet of the login** — rmp `#342`. `FR-ERR-047`'s second
+  outcome reaches every packet of the login that ends before its fields or
+  holds what none of its kind holds — the greeting, an error packet in the
+  greeting's place or later in the login, a request to switch the method, and
+  a packet that continues one, such as a `caching_sha2_password` packet cut
+  to its byte `0x01` — at `69` and never `70`; and `FR-ERR-048` says so of an
+  error packet it cannot read. Each case was the second outcome as written.
+- **This file** — the edition count of the Scope, and this record.
+
+**What changes for a `mariadb` entry, and what does not.** `1102` moves from
+`69` to `78` for both server providers, and its message changes;
+`FR-CONF-057` refuses, for every provider, values that were accepted and
+then cut. `FR-ERR-047` and `FR-ERR-048` change no message: they bar a `70`
+that no requirement permitted. `FR-MYSQL-044` obliges the MySQL fixture and
+changes nothing `tpl` does. `FR-CONF-015`, `FR-CONF-040`, `FR-CONF-041`,
+`FR-CONF-049`, `FR-CONF-050`, `FR-CONF-056`, `FR-CFG-010`, `FR-CFG-027`,
+`FR-CFG-031`, `FR-CFG-055`, `FR-ERR-006`, `FR-ERR-034`, `FR-ERR-036`,
+`FR-PRIV-021`, `FR-SRV-006`, `FR-MYSQL-015` and `FR-LITE-005` were read
+against the changes, and none is amended.
+
+The fifth validation rule is applied for this edition: neither root
+document has changed since `9468588`; at `5b1a568` both were searched for
+an error packet of the login, a database name, a NUL character, the
+contents of the MySQL fixture and a short packet. Neither paraphrases a
+requirement this edition amends, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-first edition — a decoding no requirement asked for, and a host in a hint
+
+Two conflicts the implementation of the eightieth edition met, at `f7c5385`
+and `e2260b8`, and the session coordinator relayed. **No identifier is
+assigned, retired or renumbered**; no open question is raised, no divergence
+entry is raised or discharged, and [glossary.md](glossary.md) is unchanged.
+
+- **A `dsn` part as written** — rmp `#357`. `FR-CONF-057` read a part of a
+  `dsn` after a percent-decoding that no requirement states: `FR-CONF-009`
+  fixes the grammar and `FR-CONF-018` the order of parsing, expansion and
+  encoding, and neither decodes. The requirement now reads each part as the
+  `dsn` holds it, so a `%00` is three characters, and it states that a Unix
+  argument vector carries no NUL character, so the refusal on the command
+  line is a guard verified in process.
+- **A host in a hint** — rmp `#344`. `FR-ERR-022` governs the whole of a
+  `hint` and admits no host; the examples of `FR-ERR-047` and `FR-ERR-049`
+  wrote one into the prose. The requirement stands and says so, and the five
+  examples refer to "the host and port named above", as the `hint` of
+  `FR-ERR-027` for the TCP connect already did.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied for this edition: neither root
+document paraphrases a `dsn` part's decoding or the prose of a `hint`, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-second edition — two parts of a cached table decoded when they are reached
+
+rmp `#347`, of sprint 29, found that a cached render decodes each table's
+embedded neighbours whether or not the template reads them, so that a render
+the direct path performs is refused at the render memory limit. **No
+identifier is assigned, retired or renumbered**; no open question or
+divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **The deferred parts** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-038` admits deferring the decoding of a table's `foreign_keys`
+  and `referenced_by` until the template first reaches each, validates the
+  part then, makes a faulty part a miss answered by `FR-CACHE-039`, and keeps
+  the document, and so the output, that of an up-front read. Every other
+  command that reads the cache decodes everything before its first byte of
+  output. `FR-CACHE-039` gains a note.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-CACHE-033`, `FR-CTX-006`, `FR-RND-034`, `FR-RND-039`, `FR-ERR-006` and
+`NFR-PERF-003` were read against the change, and none is amended. The fifth
+validation rule is applied: neither root document states when a cached file
+is decoded, so [upstream-divergences.md](upstream-divergences.md) raises no
+entry.
+
+### Eighty-third edition — a rewrite of `.tpl/.cfg` made durable
+
+rmp `#313`, of sprint 29: the user decided that the rewrite of `.tpl/.cfg`
+be made durable, and the implementation does it at `401b6f1`. **No
+identifier is assigned, retired or renumbered**; no open question or
+divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **Durability, and a failure after the rename** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-041` states that the new
+  content is on the device before the rename names it, and the rename
+  before the command exits `0`, without naming the calls; that a failure up
+  to the rename leaves the previous file; and that a failure to make the
+  rename durable exits `74` with a message stating that the file holds the
+  new content, whose durability is not confirmed, and a `hint` carrying
+  `tpl cfg list`.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-CFG-042`, `FR-PROJ-028`, `FR-ERR-001` and `FR-ERR-034` were read
+against the change, and none is amended. The fifth validation rule is
+applied: the root `README.md` describes the rewrite as atomic, which stays
+true, and says nothing of a failure after the rename, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-fourth edition — the time of a connection phase, as far as it can be read
+
+rmp `#340`, of sprint 29: the timing lines of `FR-GLOB-017` are implemented,
+and the user decided to accept and document the one thing they cannot always
+report. **No identifier is assigned, retired or renumbered**; no open
+question or divergence entry is raised, and [glossary.md](glossary.md) is
+unchanged.
+
+- **Where the attribution of time stops** —
+  [global-flags.md](global-flags.md). `FR-GLOB-017` states that a phase's
+  time is attributed from readings taken while the connection runs; that
+  under `required`, `verify-ca` and `verify-identity` the handshake always
+  has its line, which may carry zero; that under `preferred` a handshake
+  completed between two readings may have no line; and that a caller may
+  rely on the set of lines and the sum of the connection phases' times, and
+  not on one phase's time nor, under `preferred`, on the handshake's line as
+  evidence of encryption.
+- **This file** — the edition count of the Scope, and this record.
+
+`NFR-DET-001`, `NFR-PERF-008`, `FR-CONF-005` and `FR-CONF-013` were read
+against the change, and none is amended. The fifth validation rule is
+applied: the root `README.md` says only that stderr carries phase timings
+outside the contract, which stays true, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-fifth edition — three divergences discharged
+
+`536f836` corrected the three passages of the root `README.md` against
+which the seventy-ninth edition raised `DIV-063`, `DIV-064` and `DIV-065`.
+This edition reads the file at that commit and records what it found; no
+requirement changes. **No identifier is assigned, retired or renumbered**;
+no open question is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **Three entries discharged** — each part of each correction was found
+  made, and each entry's status names `536f836` and keeps the status it was
+  raised with. `DIV-065`'s correction was owed with the implementation of
+  `FR-EX-011` and `FR-EX-012`, and the commit follows it.
+- **The counts** — the Overview of
+  [upstream-divergences.md](upstream-divergences.md) counts sixty-five
+  entries: three due in full, fifty-eight discharged and four partly
+  discharged; seven still owe something, five to `CLAUDE.md` and two to
+  `README.md`. `DIV-032` and `DIV-041` restate the count.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied: the corrected sections were read
+against `FR-CONF-005`, `FR-CONF-056`, `FR-EX-006`, `FR-EX-011`, `FR-EX-012`
+and `FR-EX-008`, and agree with them; the rest of the file was not re-read
+for status.
+
+### Eighty-sixth edition — help that names the three providers
+
+rmp `#358`, which the user brought into sprint 29: the help of `tpl` named
+MariaDB alone, and no requirement fixed what it says of a provider.
+**One identifier is assigned**: `FR-HELP-038`, in
+[help-and-version.md](help-and-version.md). None is retired and none is
+renumbered; no open question or divergence entry is raised, and
+[glossary.md](glossary.md) is unchanged.
+
+- **A provider named only where the statement is that provider's** —
+  `FR-HELP-038`: a statement of the help, text or JSON, names a provider only
+  where it holds of that provider alone, names MariaDB and MySQL both, or
+  the server, where it holds of both, and never describes `tpl` as reading
+  MariaDB alone; eight statements are fixed word for word — the first
+  sentence of the description of `tpl`, its row on a database entry, the
+  purposes of `--host`, `--port` and `--schema`, a sentence of
+  `tpl cfg database add`, an answer of `tpl cfg database test`, and the
+  clause of the `78` outcome on the server.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-HELP-030`, `FR-HELP-037`, `BR-HELP-002`, `FR-CFG-033` and `FR-CONF-051`
+were read against the change, and none is amended. The fifth validation rule
+is applied: the root `README.md` quotes no help text, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-seventh edition — where the help's provider statements live
+
+Two points the implementation of `FR-HELP-038` met, at `1639e40`. **No
+identifier is assigned, retired or renumbered**; no open question or
+divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **The root's two statements** — `FR-HELP-038` requires its statements in
+  the JSON command tree only where the tree carries their string, so the
+  description of `tpl` and its row on a database entry are required in the
+  text help alone; `FR-HELP-019` gives the root no entry, and `FR-HELP-017`'s
+  document is unchanged.
+- **The purpose of `-d/--database`** — a ninth row fixes it, naming the
+  three kinds of database an entry reaches, in the text help and in
+  `data.global_flags`.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied: the root `README.md` quotes no help
+text, so [upstream-divergences.md](upstream-divergences.md) raises no entry.
 
 ### Still out of scope
 

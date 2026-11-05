@@ -1,7 +1,7 @@
 ---
 title: Template Commands (Second Arm)
 status: approved
-last-reviewed: 2026-09-25
+last-reviewed: 2026-11-05
 related: [cli-contract.md, render-command.md, project-and-discovery.md, security.md]
 ---
 
@@ -98,6 +98,19 @@ tpl template path  [<name>]             Print the template root, or one template
   *Accepted cost.* A name copied from `tpl template list` into an
   `{% include %}` fails, because the listing omits the extension the include
   requires.
+
+  WHERE the message carries a nearest-match suggestion over the templates of
+  the project, the template that holds the name SHALL NOT be among the
+  candidates: a template that includes, imports or extends itself recurses
+  and never renders, so it is never what the name meant.
+
+  *Amended in the seventy-ninth edition: the paragraph above is new,* for rmp
+  `#311`. An `{% include %}` naming an entry that is not a regular file was
+  answered with a suggestion naming the including template itself, one edit
+  from the name written. This requirement does not oblige a suggestion for a
+  name written in a template, and states what a suggestion offered there
+  excludes; `FR-TMPL-033` states that none is offered for an entry that
+  exists and is not a regular file.
 
 - **FR-TMPL-010**: The help of `tpl template list` SHALL state that listed names
   omit the `.jinja` extension and that an `{% include %}` requires it.
@@ -345,12 +358,14 @@ tpl template path  [<name>]             Print the template root, or one template
      `tpl template check` and `tpl template path` given its name SHALL exit
      `66` (`EX_NOINPUT`), per `FR-TMPL-027`. The `cause` SHALL state that the
      entry exists and is not a regular file, and SHALL name the kind found,
-     so that it does not read as a name that is absent.
+     so that it does not read as a name that is absent. The message SHALL
+     carry no nearest-match suggestion, although `FR-TMPL-027` offers one
+     for a template that does not exist.
   3. **Named by another template.** `{% include %}`, `{% import %}` and
      `{% extends %}` naming it SHALL fail the render with `65`
      (`EX_DATAERR`), per `FR-TMPL-009`, naming the template, the line and
      the column; the `cause` SHALL state that the entry is not a regular
-     file.
+     file. The message SHALL carry no nearest-match suggestion.
 
   ```
   tpl template show header
@@ -377,6 +392,16 @@ tpl template path  [<name>]             Print the template root, or one template
   escapes; the entry is inside the root and is not a template.
 
   *Added in the sixty-third edition,* for rmp `#307`.
+
+  *Amended in the seventy-ninth edition,* for rmp `#311`: items 2 and 3 bar
+  the suggestion. The name the caller wrote is the name of the entry, and the
+  fault is the entry's kind, which the `cause` states; a neighbour's name
+  would send the caller to another template, and the one `{% include %}` of a
+  FIFO was answered with the including template's own. `FR-ERR-019` offers
+  a suggestion for a name that does not exist, and this entry exists.
+  *Rejected: keeping the suggestion and excluding the including template
+  alone,* which `FR-TMPL-009` now does for a name that resolves to nothing,
+  because it would still offer another template for a name that is right.
 
 ## Business rules
 

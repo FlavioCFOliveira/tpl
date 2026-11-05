@@ -52,13 +52,16 @@
 //! statement into the three ways of `FR-ERR-036`: an `Error::Io` of any kind,
 //! or an `Error::Tls`, is the connection failing; an error packet is its
 //! number; and anything else is an answer outside the protocol. The read-only
-//! pair (`78`) and the privilege probe's `false` are classified by their
-//! callers before this is reached.
+//! pair (`78`) and the privilege probe's `false` — an error packet carrying
+//! one of the four numbers of `FR-CFG-044`, [`is_privilege_error`] — are
+//! classified by their callers before this is reached.
 
 // The harness is asked rather than restated, for the reason
 // `super::catalogue` gives where it declares the same module.
 #[cfg(test)]
 use super::catalogue::fixture;
+
+use std::path::Path;
 
 use rustix::io::Errno;
 use sqlx_mysql::{ConnectPhase, MySqlDatabaseError, PublicKeyRequestRefused};
@@ -97,6 +100,11 @@ pub(crate) struct Reached<'a> {
     pub(crate) tls: TlsMode,
     /// The entry's provider.
     pub(crate) provider: Provider,
+    /// Whether the entry is defined by `dsn` (`FR-ERR-045`), which decides
+    /// the key a refused database name is carried by.
+    pub(crate) by_dsn: bool,
+    /// The `.tpl/.cfg` the entry was read from.
+    pub(crate) file: &'a Path,
 }
 
 impl<'a> Reached<'a> {
@@ -110,6 +118,8 @@ impl<'a> Reached<'a> {
             database: target.database(),
             tls: target.tls(),
             provider,
+            by_dsn: target.by_dsn(),
+            file: target.file(),
         }
     }
 }
@@ -212,6 +222,20 @@ pub(crate) fn refused_login(reached: &Reached<'_>, number: u16) -> Error {
             },
             None => limit(LoginRefusal::Unclassified),
         },
+        // FR-ERR-048, error 1102: the server does not accept the name the
+        // entry gives as a database name. A connection that names no database
+        // receives it under the last row.
+        (_, 1102) => match reached.database {
+            Some(database) => Error::DatabaseNameRefused {
+                entry: reached.entry.to_owned(),
+                by_dsn: reached.by_dsn,
+                host: reached.host.to_owned(),
+                port: reached.port,
+                name: database.to_owned(),
+                file: reached.file.to_owned(),
+            },
+            None => limit(LoginRefusal::Unclassified),
+        },
         (_, 1045 | 1698) => Error::AuthenticationRefused {
             entry: reached.entry.to_owned(),
             user: reached.user.to_owned(),
@@ -305,12 +329,39 @@ fn tls_failed(reached: &Reached<'_>, fault: TlsFault) -> Error {
     }
 }
 
+/// The error numbers the privilege probe of `FR-CFG-044` reads as a privilege
+/// error, alike for a `mariadb` and a `mysql` entry: `ER_DBACCESS_DENIED_ERROR`,
+/// `ER_TABLEACCESS_DENIED_ERROR`, `ER_COLUMNACCESS_DENIED_ERROR` and
+/// `ER_SPECIFIC_ACCESS_DENIED_ERROR`.
+pub(crate) const PRIVILEGE_ERRORS: [u16; 4] = [1044, 1142, 1143, 1227];
+
+/// Whether `number` is one of [`PRIVILEGE_ERRORS`] (`FR-CFG-044`).
+pub(crate) fn denies_privilege(number: u16) -> bool {
+    PRIVILEGE_ERRORS.contains(&number)
+}
+
+/// Whether `driver` is an error packet carrying a privilege error, the one
+/// answer of the privilege probe that is its `false` rather than a failure
+/// (`FR-CFG-044`, `FR-ERR-036`).
+///
+/// The number is the one fact read from the packet, per `FR-GLOB-018`. Any
+/// other error packet is the third way of `FR-ERR-036`, which [`speaking`]
+/// classifies with its number.
+pub(crate) fn is_privilege_error(driver: &sqlx_core::Error) -> bool {
+    match driver {
+        sqlx_core::Error::Database(packet) => packet
+            .try_downcast_ref::<MySqlDatabaseError>()
+            .is_some_and(|packet| denies_privilege(packet.number())),
+        _ => false,
+    }
+}
+
 /// The condition a failure of a statement on an open session is reported as
 /// (`FR-ERR-036`).
 ///
 /// The callers classify the conditions routed elsewhere before this is
-/// reached: the read-only pair is `78`, and an error packet the privilege
-/// probe receives is its `false`.
+/// reached: the read-only pair is `78`, and an error packet carrying a
+/// privilege error is the privilege probe's `false`.
 pub(crate) fn speaking(
     entry: &str,
     error: &sqlx_core::Error,
@@ -393,6 +444,8 @@ mod tests {
             database: Some(DATABASE),
             tls,
             provider: Provider::Mariadb,
+            by_dsn: false,
+            file: std::path::Path::new("/home/ana/shop/.tpl/.cfg"),
         }
     }
 
@@ -413,6 +466,69 @@ mod tests {
             io::ErrorKind::InvalidData,
             "invalid peer certificate: UnknownIssuer",
         ))
+    }
+
+    #[test]
+    fn fr_err_048_error_1102_is_the_entry_database_name_at_78() {
+        // FR-ERR-048, the row of 1102, of the eightieth edition: the name the
+        // entry gives, the key or the part of dsn that carries it, and 78;
+        // where the connection named no database, the last row, at 69.
+        let condition = super::refused_login(&reached(TlsMode::Disabled), 1102);
+        assert_eq!(condition.exit_code(), 78);
+        match condition {
+            Error::DatabaseNameRefused {
+                ref entry,
+                by_dsn: false,
+                ref host,
+                port: PORT,
+                ref name,
+                ref file,
+            } => {
+                assert_eq!(entry, "shop");
+                assert_eq!(host, HOST);
+                assert_eq!(name, DATABASE);
+                assert_eq!(file, std::path::Path::new("/home/ana/shop/.tpl/.cfg"));
+            }
+            ref other => panic!("{other:?}"),
+        }
+
+        let by_dsn = Reached {
+            by_dsn: true,
+            ..reached_mysql()
+        };
+        assert!(matches!(
+            super::refused_login(&by_dsn, 1102),
+            Error::DatabaseNameRefused { by_dsn: true, .. }
+        ));
+
+        let none = Reached {
+            database: None,
+            ..reached(TlsMode::Disabled)
+        };
+        let unclassified = super::refused_login(&none, 1102);
+        assert_eq!(unclassified.exit_code(), 69);
+        assert!(matches!(
+            unclassified,
+            Error::LoginRefused { number: 1102, .. }
+        ));
+    }
+
+    #[test]
+    fn fr_cfg_044_only_the_four_privilege_errors_are_the_probe_false() {
+        // FR-CFG-044, amended in the seventy-ninth edition: 1044, 1142, 1143
+        // and 1227 are a privilege error; every other number — a statement the
+        // server killed, a resource it ran out of — is not, and is the third
+        // way of FR-ERR-036.
+        for number in [1044, 1142, 1143, 1227] {
+            assert!(super::denies_privilege(number), "{number}");
+        }
+        for number in [1045, 1049, 1105, 1146, 1205, 1317, 1927, 3024] {
+            assert!(!super::denies_privilege(number), "{number}");
+        }
+
+        // An error that is no error packet is no privilege error either.
+        assert!(!super::is_privilege_error(&unreachable()));
+        assert!(!super::is_privilege_error(&refused_tls()));
     }
 
     #[test]

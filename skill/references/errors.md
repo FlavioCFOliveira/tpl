@@ -63,7 +63,7 @@ Causes and actions:
 | Malformed `.cfg`, unknown key, bad value, dsn with a `?`, `${` in `ca_file` or `ca_path` | Fix it with `cfg set`/`unset`, or edit the named line |
 | No entry selected | `-d NAME`, or `tpl cfg set core.database NAME` for an entry that already exists |
 | Entry incomplete (no host or no server database) | `tpl cfg database update NAME --host … --schema …` |
-| `${VAR}` undefined | Define it in the environment of the command, cache hits included |
+| `${VAR}` undefined | Define it in the environment of the command. Only a command that connects reads it: a cache miss, `--direct`, `tpl cache load`, `tpl cfg database test`. A read served from the cache does not |
 | `password_command` failed, timed out or printed too much | Run the command yourself (without echoing its output) and fix it |
 | Session could not be made read-only; the server is not the product the entry's provider names (MariaDB for `mariadb`, MySQL for `mysql`), or its series is unsupported | Report to the user. Where the entry names the wrong product, ask the user before changing its provider with `tpl cfg set database.NAME.provider mysql` (or `mariadb`); the hint itself only repoints the entry. Don't try to bypass it |
 | MySQL: the login over an unencrypted session needs the server's RSA public key, which `tpl` never requests | `tpl cfg database update NAME --tls verify-identity`, with `--ca-file` where the certificate is not publicly trusted; a server offering no TLS must be given TLS first |

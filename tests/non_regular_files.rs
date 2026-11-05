@@ -218,6 +218,64 @@ fn fr_tmpl_033_an_include_of_a_fifo_is_65_naming_its_kind() {
 }
 
 #[test]
+fn fr_tmpl_033_a_fifo_named_anywhere_carries_no_suggestion() {
+    // FR-TMPL-033 items 2 and 3, as amended for rmp #311: the name the caller
+    // wrote is the entry's own, so neither the command line nor an include
+    // offers another template. The project is the one #311 records: `i.jinja`
+    // includes `h.jinja`, a FIFO, one edit from `i.jinja` itself.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(".tpl/templates/i.jinja", "{% include 'h.jinja' %}\n");
+    sandbox.write(".tpl/templates/g.jinja", "g\n");
+    sandbox.write("context.json", CONTEXT);
+    fifo(&sandbox.path(".tpl/templates/h.jinja"));
+
+    let included = sandbox.run(&["render", "i", "--context", "context.json"]);
+    let written = refused(&included, 65, "render i");
+    assert!(
+        line(&written, "cause: ").contains("which exists under the template folder and is a FIFO"),
+        "{written}"
+    );
+    assert!(!written.contains("did you mean"), "{written}");
+    assert!(!line(&written, "hint: ").contains("i.jinja"), "{written}");
+
+    for arguments in [
+        &["render", "h", "--context", "context.json"][..],
+        &["template", "show", "h"][..],
+        &["template", "check", "h"][..],
+        &["template", "path", "h"][..],
+    ] {
+        let printed = sandbox.run(arguments);
+        let written = refused(&printed, 66, &arguments.join(" "));
+
+        assert!(
+            !written.contains("did you mean"),
+            "{arguments:?}: {written}"
+        );
+    }
+}
+
+#[test]
+fn fr_tmpl_009_an_include_suggestion_never_names_the_including_template() {
+    // FR-TMPL-009, as amended for rmp #311: `i.jinja` includes `j.jinja`,
+    // which does not exist. `i.jinja` and `k.jinja` are both one edit from
+    // it; the suggestion names `k.jinja`, which is the control that a
+    // suggestion is offered at all, and never `i.jinja`.
+    let sandbox = Sandbox::new();
+    sandbox.project("[core]\n");
+    sandbox.write(".tpl/templates/i.jinja", "{% include 'j.jinja' %}\n");
+    sandbox.write(".tpl/templates/k.jinja", "k\n");
+    sandbox.write("context.json", CONTEXT);
+
+    let printed = sandbox.run(&["render", "i", "--context", "context.json"]);
+    let written = refused(&printed, 65, "render i");
+    let hint = line(&written, "hint: ");
+
+    assert!(hint.contains("did you mean 'k.jinja'?"), "{written}");
+    assert!(!hint.contains("'i.jinja'"), "{written}");
+}
+
+#[test]
 fn fr_tmpl_024_a_template_linked_to_a_device_is_refused_and_not_read() {
     // A symbolic link under the root is refused by FR-TMPL-024 before any
     // read, whatever it points at: here `/dev/null`, which a read would take

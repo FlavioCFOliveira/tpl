@@ -1,7 +1,7 @@
 ---
 title: Server Contract
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [catalogue-coverage.md, context-document.md, cfg-commands.md, cache-commands.md, errors-and-exit-codes.md, privileges-and-completeness.md, security.md, performance-requirements.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -1713,6 +1713,57 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
   what `tpl` is built to send, it holds whatever the server permits, and it is
   the only part of the promise that prevents rather than detects.
 
+- **FR-SRV-043**: WHERE a statement of `FR-SRV-006` is restricted by a name
+  the system did not write itself — the server-side database the entry
+  names, per `FR-CONF-041`, or the name of a table, a view or a routine a
+  command names — the name SHALL change no part of the statement but the
+  value its rows are compared with. Whatever characters the name holds — a
+  quotation mark, a backslash, a backtick, a `%` or an `_`, or text that
+  would read as SQL — the statement SHALL remain the statement of the closed
+  list it is for every other name, SHALL read the rows the server compares
+  equal to that name and no other, and SHALL NOT take a character of the name
+  as part of its syntax or as a pattern character. How the name reaches the
+  statement is not fixed by this corpus.
+
+  *Rationale.* `BR-SRV-001` makes the closed list the read-only guarantee,
+  and the list fixes which statements exist. A name a caller supplies is the
+  one value that can change what a statement is: a statement it changed would
+  be outside the list whatever the list says, and a name read as a pattern
+  would read another database or another object than the one named, at exit
+  `0`. `FR-SCH-013` already keeps the pattern of `--pattern` out of every
+  statement; this requirement is the boundary for the names that do reach
+  one, and no requirement stated it — rmp `#352`, from a gap the technical
+  specification recorded and could not settle without a requirement.
+
+  *Which rows compare equal is the server's.* The server compares the name
+  under the collation of the catalogue field it is compared with, so whether
+  two spellings name one database is the server's answer, and this
+  requirement does not change it. What it fixes is that the name is compared
+  as a value, the answer a literal equal to it would get, and nothing else.
+
+  *Not fixed: the means.* A value the driver binds and a value written into
+  the text under the server's quoting rules can both meet the property; which
+  one the implementation uses is the technical specification's to record.
+
+  *Demonstrable.* A read whose entry names a database the server does not
+  hold, under a name holding a quotation mark, a backslash and a `%`, reads
+  no database and is reported under `FR-PRIV-021`, and never reads a database
+  whose name the pattern would match; and a table or a view requested by a
+  name holding a quotation mark, a backtick or a `%` is read as the object of
+  that name, or is reported absent under `FR-SCH-010`, and never as another.
+
+  *Added in the seventy-ninth edition,* for rmp `#352`.
+
+  *Note added in the eightieth edition,* for rmp `#352`. For a `mysql` entry
+  the databases these clauses read are those of item 17 of `FR-MYSQL-044`: a
+  target whose name holds a quotation mark, a backslash and a backtick, and
+  four decoys a quoting or a pattern could read in its place. A server can
+  compare a name with letter case folded, so a read of the target meets the
+  decoy in another case exactly where a statement naming the target as a
+  literal meets it. No database of the fixture of `scripts/mariadb/` holds
+  such a name, and `FR-CONF-038` does not oblige one, so for a `mariadb`
+  entry these clauses have no fixture to run against.
+
 ## The order of the connection start
 
 - **FR-SRV-042**: WHEN the system opens a connection, it SHALL issue the three
@@ -1823,6 +1874,12 @@ table uses implicit versioning, so `IS_SYSTEM_TIME_PERIOD_START` and
 
 - **FR-SRV-010**: IF the setting cannot be applied, or the read-back does not
   confirm it, THEN the system SHALL exit `78` and SHALL NOT read the catalogue.
+
+  *Note added in the seventy-ninth edition,* for rmp `#339`. A deadline that
+  expires while either statement runs is not this condition: it is the `69`
+  of `FR-ERR-027`, under the deadline `FR-CONF-005` gives each
+  [session statement](glossary.md#session-statement), and the catalogue is
+  not read either.
 
 - **FR-SRV-011**: There SHALL be no flag, configuration key, or environment
   condition that disables `FR-SRV-006` through `FR-SRV-010`.

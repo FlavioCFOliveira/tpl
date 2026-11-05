@@ -1,9 +1,11 @@
-# `go-data-layer` — a Go data layer, built from three schemas through the command line
+# `go-data-layer` — a Go data layer, built from five reads through the command line
 
 This is the Go member of the four worked examples `FR-EX-001` requires. It reads
-`sakila`, `world` and `freight` from one MariaDB server and renders a Go package
-per schema: a row struct, its primary key, a repository interface and a
-`database/sql` implementation of that interface, for every one of the 36 tables.
+`sakila`, `world` and `freight` from one MariaDB server, `freight` from
+one MySQL server and the SQLite fixture's main database, and renders a Go package
+per read: a row struct, its primary key, a repository interface and a
+`database/sql` implementation of that interface, for every one of the 82
+tables; a table with no primary key gets its row types alone.
 
 Its acceptance signal is not that `tpl` exited `0`. It is that `go build` and
 `go vet` accept every file it rendered, per `FR-EX-009`, and the example's own
@@ -18,12 +20,12 @@ python3 examples/go-data-layer/run.py
 
 | Path | Rendered from | Count |
 |---|---|---|
-| `out/<schema>/schema.go` | `go/schema` | 3, one per schema |
-| `out/<schema>/<table>.go` | `go/struct` | 36, one per table |
-| `out/<schema>/<table>_repository.go` | `go/repository` | 36 |
-| `out/<schema>/<table>_sql.go` | `go/sql` | 36 |
+| `out/<entry>/schema.go` | `go/schema` | 5, one per read |
+| `out/<entry>/<table>.go` | `go/struct` | 82, one per table |
+| `out/<entry>/<table>_repository.go` | `go/repository` | 80, one per table with a primary key |
+| `out/<entry>/<table>_sql.go` | `go/sql` | 80, one per table with a primary key |
 
-111 files, from 111 invocations of `tpl render`. One file is one invocation,
+247 files, from 247 invocations of `tpl render`. One file is one invocation,
 because `tpl render` writes to standard output and nowhere else — `FR-RND-028`,
 and `FR-EX-005` is the consequence.
 
@@ -76,8 +78,8 @@ the project holding it. The opinion is therefore a macro of this example,
 `templates/go/_types.jinja`, in the form `FR-ENV-011` fixes.
 
 It is obliged to cover every value of `data_type` the model reports for a column
-of the three schemas, per `FR-EX-008`. That is **39 values over 362 columns**,
-and all 39 are branched on. Nothing falls through: the final branch calls
+of every read, per `FR-EX-008`. That is **44 values over 755 columns**, and all
+44 are branched on. Nothing falls through: the final branch calls
 `fail()`, so a type the macro has never met ends the render with `65` and names
 the column. Removing the `uuid` branch and re-rendering `freight.audit_event`
 produces exactly that, which is how the guard was shown not to be vacuous.
@@ -124,7 +126,12 @@ produces exactly that, which is how the guard was shown not to be vacuous.
 | `point` | `[]byte` | • |
 | `polygon` | `[]byte` | • |
 
-**25 of the 39 are carried by `freight` alone**, which is why `FR-EX-006` puts a
+The five values the MySQL and the SQLite reads add — `json` and `geomcollection`
+from `FR-MYSQL-028`, and the affinities `integer`, `real` and `numeric` from
+`FR-LITE-026` — are mapped to `string`, `[]byte`, `int64`, `float64`, `string` in that order, and are not rows of the table above: the compile gate
+accepted them, and no value of them was read back through the driver.
+
+**25 of the 39 MariaDB values are carried by `freight` alone**, which is why `FR-EX-006` puts a
 third schema beside the two published ones. A mapping written against `sakila`
 and `world` would have been complete over 14 types and would never have met a
 spatial column, a `BIT`, an `INET6`, a `UUID`, a generated column or a
@@ -190,11 +197,11 @@ or a network to fetch it.
 | | |
 |---|---|
 | The binary | `cargo build --release` |
-| The server | `./scripts/mariadb/up.sh`, then `./scripts/mariadb/seed-datasets.sh 12.3` |
+| The servers | `./scripts/mariadb/up.sh`, then `./scripts/mariadb/seed-datasets.sh 12.3`; and `./scripts/mysql/up.sh 9.7`. The SQLite database is built by the driver |
 | The password | `export FIXTURE_PW=tpl-root` |
 | Go | 1.24 or newer — the floor the driver's own `go.mod` sets. `sql.Null[T]`, which the rendered code uses for every nullable column, needs 1.22 |
 
-The server, the three schemas and the entries are the driver's, not this
+The servers, the SQLite database, the reads and the entries are the driver's, not this
 example's: [`_driver/README.md`](../_driver/README.md) documents them, and
 `FR-EX-007` is why all four examples read them the same way.
 
@@ -229,6 +236,8 @@ visible because the compile gate is what would report it:
   That is what `FR-ENV-033`'s `pascal` does, and its own *accepted cost* clause
   records it; buying it back would need an initialism list, which is a second
   opinion to maintain and another way for two columns to collide.
-- **A table with no primary key is refused.** All 36 have one. A table without
-  one ends the render with `65` and says why, because `Read`, `Update` and
+- **A table with no primary key has no repository.** Two of the 82 have none,
+  MySQL's `currency` and `edi_message_staging`: each gets its row types alone,
+  and the repository templates, given one, end the render with `65` and say why,
+  because `Read`, `Update` and
   `Delete` would have no key to address a row by.

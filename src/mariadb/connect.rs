@@ -4,7 +4,7 @@
 //! `NFR-PERF-004` allows one connection per invocation and `ADR-003` uses the
 //! driver without a pool, so this module opens exactly one socket and hands it
 //! back. Two things are settled here and nowhere else: what the driver is
-//! configured with, and how the two phases before the session exists are
+//! configured with, and how the four phases before the session exists are
 //! bounded and attributed.
 //!
 //! | Obligation | What this module does with it |
@@ -14,8 +14,8 @@
 //! | `FR-CONF-014` — `ca_file` and `ca_path` supply the trust material | [`trust`] assembles both into one bundle, under the two modes that validate |
 //! | `FR-CONF-039` — supplied material is **additional** to the bundled roots | Nothing here substitutes: the driver adds what it is given, per `ADR-002` |
 //! | `FR-SRV-006`, `FR-SRV-007` — a closed statement list | Every option that would make the driver issue a statement of its own is turned off; see below |
-//! | `FR-CONF-005`, `OD-12` — DNS resolution and the connect are separate phases | Both run under one shared budget, each reporting its own phase |
-//! | `FR-GLOB-017` — `INFO` reports which phases ran and how long each took | Each of the two is timed where it runs and reported through [`emit::phase_ran`] |
+//! | `FR-CONF-005`, `OD-12` — the four connection phases are separate phases | All run under one shared budget, each reporting its own phase |
+//! | `FR-GLOB-017` — `INFO` reports which phases ran and how long each took | DNS resolution is timed where it runs, the three inside the driver's call by [`Ledger`], and each is reported through [`emit::phase_ran`] |
 //!
 //! **The driver issues a statement of its own unless it is told not to, and
 //! that statement is outside the closed list.** `sqlx` 0.9.0 follows the
@@ -43,8 +43,9 @@
 //! `NFR-PERF-004` is untouched.
 
 use std::fmt;
+use std::future::Future as _;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use sqlx_core::connection::Connection as _;
 use sqlx_mysql::{
@@ -102,6 +103,8 @@ pub(crate) struct Target<'a> {
     ca_path: Option<&'a Path>,
     /// The four phase deadlines of `FR-CONF-004`.
     deadlines: Deadlines,
+    /// The `.tpl/.cfg` the entry was read from (`FR-ERR-048`, error `1102`).
+    file: &'a Path,
 }
 
 impl<'a> Target<'a> {
@@ -124,6 +127,7 @@ impl<'a> Target<'a> {
             ca_file: settings.ca_file(),
             ca_path: settings.ca_path(),
             deadlines: settings.deadlines(),
+            file: settings.file(),
         })
     }
 
@@ -197,6 +201,12 @@ impl<'a> Target<'a> {
     /// one (`FR-CONF-041`).
     pub(crate) const fn database(&self) -> Option<&'a str> {
         self.database
+    }
+
+    /// The `.tpl/.cfg` the entry was read from, which the `cause` of a refused
+    /// database name names (`FR-ERR-048`, error `1102`).
+    pub(crate) const fn file(&self) -> &'a Path {
+        self.file
     }
 }
 
@@ -472,20 +482,19 @@ fn options(target: &Target<'_>) -> Result<DriverOptions, Error> {
 
 /// Opens the one connection of `NFR-PERF-004`.
 ///
-/// The two phases before a session exists are bounded by the one budget
-/// `FR-CONF-005` gives the three connection phases: the instant is taken once,
-/// and DNS resolution and the connect consume it in the order they run, so the
-/// second of them may find nothing left. The TLS handshake is inside the
-/// second call and is not separable from it — `MySqlConnectOptions` has no
-/// method that accepts an already-connected socket — and is separated in the
-/// report instead, by the driver's own discriminant, per `OD-12`.
+/// The four connection phases are bounded by the one budget `FR-CONF-005`
+/// gives them: the instant is taken once, and DNS resolution and the driver's
+/// call consume it in the order they run, so the second of them may find
+/// nothing left. The TCP connect, the TLS handshake and the login are inside
+/// the second call and are not separable from it — `MySqlConnectOptions` has
+/// no method that accepts an already-connected socket — and are told apart by
+/// the phase the driver records (`ADR-014`, point 6).
 ///
-/// **Each of the two is timed and reported**, per `FR-GLOB-017`, whether it
-/// ended in an answer or in a refusal: a phase that failed is a phase that ran,
-/// and how long it took before it failed is what a caller diagnosing a slow
-/// invocation came for. The TLS handshake carries no line of its own for the
-/// reason above — its duration is inside the connect's, and a line naming it
-/// would be a number this module does not have.
+/// **Each phase that ran is timed and reported**, per `FR-GLOB-017`, whether
+/// it ended in an answer, a refusal or an expired budget: a phase that failed
+/// is a phase that ran, and how long it took before it failed is what a caller
+/// diagnosing a slow invocation came for. The three inside the call are timed
+/// by [`Ledger`], from the driver's record read after every poll.
 ///
 /// # Errors
 ///
@@ -599,12 +608,29 @@ pub(crate) fn open_classified(
             ));
         }
 
-        let started = Instant::now();
-        let opened = timeout(bound.remaining(), options.connect()).await;
-        // FR-GLOB-017. The TLS handshake ran inside this call where the mode
-        // negotiates one, so its time is inside this number and it has no line
-        // of its own.
-        emit::phase_ran(Phase::TcpConnect, started.elapsed());
+        // FR-GLOB-017: one call opens the socket, negotiates TLS and logs in,
+        // so the time of each phase is read from the driver's record as the
+        // call is polled, and each phase that ran has its line once the call
+        // has ended, an expired or failed phase included.
+        let mut ledger = Ledger::new(Instant::now());
+        let mut connecting = std::pin::pin!(options.connect());
+        let opened = timeout(
+            bound.remaining(),
+            std::future::poll_fn(|context| {
+                let polled = connecting.as_mut().poll(context);
+                ledger.observe(reached.phase(), Instant::now());
+                polled
+            }),
+        )
+        .await;
+        ledger.observe(reached.phase(), Instant::now());
+        // FR-GLOB-017: a mode that requires TLS opens no connection without
+        // negotiating it, so an opened connection under such a mode ran the
+        // handshake even where no reading fell inside it (ADR-014, point 6).
+        if matches!(opened, Ok(Ok(_))) && requires_tls(target.tls) {
+            ledger.negotiated_tls();
+        }
+        ledger.report();
 
         // FR-CONF-005: the phase the connection had reached, read from the
         // driver's record once the call has ended. The load needs no unsafe
@@ -623,15 +649,139 @@ pub(crate) fn open_classified(
     })
 }
 
+/// Whether `mode` refuses a connection that negotiates no TLS, so that a
+/// connection it opened negotiated one (`FR-CONF-013`).
+///
+/// `preferred` is not among them: it opens a connection either way, and
+/// whether its server offered TLS is not something the record of `ADR-014`
+/// point 6 carries.
+const fn requires_tls(mode: TlsMode) -> bool {
+    match mode {
+        TlsMode::Required | TlsMode::VerifyCa | TlsMode::VerifyIdentity => true,
+        TlsMode::Disabled | TlsMode::Preferred => false,
+    }
+}
+
+/// The time the one call that opens a connection spent in each of its three
+/// phases (`FR-GLOB-017`).
+///
+/// The driver records the phase it reaches in the handle of `ADR-014` point 6,
+/// synchronously, inside a poll of the call; [`open_classified`] reads the
+/// handle after every poll, so a change is seen at the end of the poll that
+/// made it, which is before the call next waits on the network. The time
+/// between two readings is charged to the phase the first one saw. The login
+/// runs before and after a TLS handshake (`FR-CONF-005`), and both stretches
+/// are added into its one line.
+///
+/// A phase the record never named did not run and has no line: on a
+/// connection that negotiates no TLS the driver records the handshake and the
+/// login again within one poll, and the handshake is never seen. A handshake
+/// that was negotiated can be left within one poll too, where its replies are
+/// already buffered; the caller that knows it ran says so through
+/// [`Ledger::negotiated_tls`], and its line is written with no time of its
+/// own. The record is read and never written here, and its handle is the
+/// driver's unchanged.
+#[derive(Debug)]
+struct Ledger {
+    /// The phase the last reading saw.
+    current: ConnectPhase,
+    /// When that phase was first seen, or the last reading was taken.
+    since: Instant,
+    /// The time charged to the TCP connect.
+    tcp_connect: Duration,
+    /// The time charged to the TLS handshake, where it was seen.
+    tls_handshake: Option<Duration>,
+    /// The time charged to the login, where it was seen.
+    login: Option<Duration>,
+}
+
+impl Ledger {
+    /// A ledger whose TCP connect began at `started`, the phase a new handle
+    /// holds.
+    const fn new(started: Instant) -> Self {
+        Self {
+            current: ConnectPhase::TcpConnect,
+            since: started,
+            tcp_connect: Duration::ZERO,
+            tls_handshake: None,
+            login: None,
+        }
+    }
+
+    /// Charges the time since the last reading to the phase it saw, and
+    /// records that the connection is now in `phase`.
+    fn observe(&mut self, phase: ConnectPhase, now: Instant) {
+        let spent = now.saturating_duration_since(self.since);
+        self.since = now;
+
+        match self.current {
+            ConnectPhase::TcpConnect => self.tcp_connect += spent,
+            ConnectPhase::TlsHandshake => {
+                *self.tls_handshake.get_or_insert(Duration::ZERO) += spent;
+            }
+            ConnectPhase::Login => *self.login.get_or_insert(Duration::ZERO) += spent,
+        }
+
+        if phase != self.current {
+            match phase {
+                ConnectPhase::TcpConnect => {}
+                ConnectPhase::TlsHandshake => {
+                    self.tls_handshake.get_or_insert(Duration::ZERO);
+                }
+                ConnectPhase::Login => {
+                    self.login.get_or_insert(Duration::ZERO);
+                }
+            }
+            self.current = phase;
+        }
+    }
+
+    /// Records that the TLS handshake ran, whether or not a reading fell
+    /// inside it, so that it has its line (`FR-GLOB-017`).
+    ///
+    /// A handshake no reading saw was recorded and left between two readings,
+    /// so the ledger's readings measure none of it: its line carries the time
+    /// they charged to it, zero where none was, and the time between those two
+    /// readings stays with the phase the first of them saw — the resolution
+    /// the readings have, as for a handshake refused at once. A handshake that
+    /// was seen keeps its time.
+    fn negotiated_tls(&mut self) {
+        self.tls_handshake.get_or_insert(Duration::ZERO);
+    }
+
+    /// The lines of the phases that ran, in the order they first ran.
+    fn lines(&self) -> Vec<(Phase, Duration)> {
+        let mut lines = Vec::with_capacity(3);
+        lines.push((Phase::TcpConnect, self.tcp_connect));
+        if let Some(took) = self.tls_handshake {
+            lines.push((Phase::TlsHandshake, took));
+        }
+        if let Some(took) = self.login {
+            lines.push((Phase::Login, took));
+        }
+        lines
+    }
+
+    /// Writes the line of each phase that ran (`FR-GLOB-017`).
+    fn report(&self) {
+        for (phase, took) in self.lines() {
+            emit::phase_ran(phase, took);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{REDACTED_OPTIONS, Target, options, ssl_mode, trust};
+    use super::{Ledger, REDACTED_OPTIONS, Target, options, requires_tls, ssl_mode, trust};
+    use crate::deadline::Phase;
     use crate::error::Error;
     use crate::project::config;
     use crate::project::config::entry::TlsMode;
     use crate::project::scratch::Scratch;
     use crate::project::settings::{self, Settings};
+    use sqlx_mysql::ConnectPhase;
     use sqlx_mysql::MySqlSslMode;
+    use std::time::{Duration, Instant};
 
     /// A lookup that defines nothing, which every document below is written
     /// to need nothing from.
@@ -1114,5 +1264,132 @@ mod tests {
         assert!(target.password.is_none());
         let composed = options(&target).expect("no trust material is declared");
         assert_eq!(presented(&composed), "password: None");
+    }
+
+    #[test]
+    fn fr_glob_017_each_phase_the_record_named_has_its_time_and_the_login_both_stretches() {
+        // FR-GLOB-017, amended in the seventy-ninth edition: the TCP connect,
+        // the TLS handshake where one was negotiated, and the login, whose line
+        // carries the greeting and the authentication together, before and
+        // after the handshake.
+        let start = Instant::now();
+        let at = |millis| start + Duration::from_millis(millis);
+        let mut ledger = Ledger::new(start);
+
+        ledger.observe(ConnectPhase::TcpConnect, at(2));
+        ledger.observe(ConnectPhase::Login, at(5)); // the connect ended
+        ledger.observe(ConnectPhase::TlsHandshake, at(9)); // the greeting arrived
+        ledger.observe(ConnectPhase::TlsHandshake, at(20));
+        ledger.observe(ConnectPhase::Login, at(30)); // the handshake ended
+        ledger.observe(ConnectPhase::Login, at(37)); // the login ended
+
+        assert_eq!(
+            ledger.lines(),
+            [
+                (Phase::TcpConnect, Duration::from_millis(5)),
+                (Phase::TlsHandshake, Duration::from_millis(21)),
+                (Phase::Login, Duration::from_millis(11)),
+            ]
+        );
+    }
+
+    #[test]
+    fn fr_glob_017_a_phase_not_reached_has_no_line_and_a_failed_one_keeps_its_own() {
+        // A connect that never ended reached nothing past the TCP connect: one
+        // line, carrying the whole time.
+        let start = Instant::now();
+        let mut ledger = Ledger::new(start);
+        ledger.observe(ConnectPhase::TcpConnect, start + Duration::from_millis(40));
+        assert_eq!(
+            ledger.lines(),
+            [(Phase::TcpConnect, Duration::from_millis(40))]
+        );
+
+        // No TLS negotiated: the driver records the handshake and the login
+        // within one poll, so the handshake is never seen and has no line.
+        let mut ledger = Ledger::new(start);
+        ledger.observe(ConnectPhase::Login, start + Duration::from_millis(1));
+        ledger.observe(ConnectPhase::Login, start + Duration::from_millis(4));
+        assert_eq!(
+            ledger.lines(),
+            [
+                (Phase::TcpConnect, Duration::from_millis(1)),
+                (Phase::Login, Duration::from_millis(3)),
+            ]
+        );
+
+        // A handshake that failed at once — the refusal of a mode that
+        // requires TLS — is a phase that ran, and keeps its line.
+        let mut ledger = Ledger::new(start);
+        ledger.observe(ConnectPhase::Login, start + Duration::from_millis(1));
+        ledger.observe(ConnectPhase::TlsHandshake, start + Duration::from_millis(3));
+        ledger.observe(ConnectPhase::TlsHandshake, start + Duration::from_millis(3));
+        assert_eq!(
+            ledger.lines(),
+            [
+                (Phase::TcpConnect, Duration::from_millis(1)),
+                (Phase::TlsHandshake, Duration::ZERO),
+                (Phase::Login, Duration::from_millis(2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn fr_glob_017_a_negotiated_handshake_no_reading_saw_still_has_its_line() {
+        // rmp #340: the TLS handshake was recorded and left between two
+        // readings — the phase jumped from the TCP connect straight past it to
+        // the login — and the mode required TLS, so the connection that opened
+        // negotiated it. It has its line, with the time the readings charged
+        // to it, none; the interval stays with the phase the first reading saw.
+        let start = Instant::now();
+        let at = |millis| start + Duration::from_millis(millis);
+        let mut ledger = Ledger::new(start);
+
+        ledger.observe(ConnectPhase::TcpConnect, at(2));
+        ledger.observe(ConnectPhase::Login, at(9)); // past the handshake
+        ledger.observe(ConnectPhase::Login, at(15)); // the login ended
+        ledger.negotiated_tls();
+
+        assert_eq!(
+            ledger.lines(),
+            [
+                (Phase::TcpConnect, Duration::from_millis(9)),
+                (Phase::TlsHandshake, Duration::ZERO),
+                (Phase::Login, Duration::from_millis(6)),
+            ]
+        );
+
+        // A handshake a reading did see keeps the time charged to it.
+        let mut ledger = Ledger::new(start);
+        ledger.observe(ConnectPhase::Login, at(1));
+        ledger.observe(ConnectPhase::TlsHandshake, at(3));
+        ledger.observe(ConnectPhase::Login, at(10));
+        ledger.observe(ConnectPhase::Login, at(12));
+        ledger.negotiated_tls();
+        assert_eq!(
+            ledger.lines(),
+            [
+                (Phase::TcpConnect, Duration::from_millis(1)),
+                (Phase::TlsHandshake, Duration::from_millis(7)),
+                (Phase::Login, Duration::from_millis(4)),
+            ]
+        );
+    }
+
+    #[test]
+    fn fr_glob_017_only_a_mode_that_refuses_plaintext_proves_a_handshake_ran() {
+        // `preferred` opens a connection with or without TLS, and `disabled`
+        // never negotiates one, so neither proves a handshake that no reading
+        // saw; the three modes that refuse a plaintext session do.
+        for mode in TlsMode::ALL {
+            assert_eq!(
+                requires_tls(mode),
+                matches!(
+                    mode,
+                    TlsMode::Required | TlsMode::VerifyCa | TlsMode::VerifyIdentity
+                ),
+                "{mode:?}"
+            );
+        }
     }
 }

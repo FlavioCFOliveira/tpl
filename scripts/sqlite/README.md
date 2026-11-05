@@ -24,13 +24,16 @@ there is no container, no harness and no script to run.
 | `nul_view_sql.sql` | A database whose schema table holds a view whose `sql` is its definition followed by a NUL character and further text, written under `writable_schema` |
 | `temp_trigger.sql` | A database whose schema table holds a trigger whose text begins `CREATE TEMP TRIGGER`, written under `writable_schema` |
 | `fts5_view.sql` | A database holding an `fts5` table, a view over it that compiles, and no view that does not |
+| `alike_tables.sql` | A database holding two tables whose names differ only in a byte that is not valid UTF-8, written under `writable_schema` (`FR-LITE-043`) |
+| `alike_columns.sql` | A database holding a table with two columns whose names differ only in a byte that is not valid UTF-8, written under `writable_schema` (`FR-LITE-043`) |
+| `alike_dangling_key.sql` | A database holding a table whose name holds a byte that is not valid UTF-8, and a second table with a foreign key whose parent's name differs from the first table's only in another such byte, written under `writable_schema` (`FR-LITE-043`) |
 
 ## How the tests build it
 
 `tests/support/sqlite.rs` builds every artefact into a temporary directory of
 the test's own, through `rusqlite` — the SQLite library the binary carries —
 on a plain connection with none of `tpl`'s controls, so that the `CHECK` of
-item 9 is written under `trusted_schema` on. The twelve databases written under
+item 9 is written under `trusted_schema` on. The fifteen databases written under
 `writable_schema` are built on a connection whose defensive mode the builder
 sets off and reads back, because defensive mode refuses
 `PRAGMA writable_schema=ON`; that connection is the builder's own, and nothing

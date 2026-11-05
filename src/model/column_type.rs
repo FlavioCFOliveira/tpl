@@ -79,7 +79,7 @@ const CLOSE: char = ')';
 /// reports `longtext`, per `FR-CAT-038`, and one declared `NUMERIC` reports
 /// `decimal`.
 ///
-/// The array is sorted, which [`recognised`] relies on and a test enforces.
+/// The array is sorted, and a test holds [`recognised`] to it.
 const RECOGNISED_DATA_TYPES: [&str; 39] = [
     "bigint",
     "binary",
@@ -441,9 +441,51 @@ impl<'a> ColumnType<'a> {
     }
 }
 
-/// Whether a `data_type` is one the system recognises, per `FR-CTX-018`.
+/// Whether a `data_type` is one the system recognises, per `FR-CTX-018`: a
+/// member of [`RECOGNISED_DATA_TYPES`].
+///
+/// PERF: the binary search compared up to six whole strings per column, on
+/// every column of every read (rmp `#356`). The length selects the few
+/// candidates of that length first, so a value is compared with at most eight
+/// strings of its own length; a test holds this match to the list, member for
+/// member.
 fn recognised(data_type: &str) -> bool {
-    RECOGNISED_DATA_TYPES.binary_search(&data_type).is_ok()
+    let answer = match data_type.len() {
+        3 => matches!(data_type, "bit" | "int" | "set"),
+        4 => matches!(
+            data_type,
+            "blob" | "char" | "date" | "enum" | "text" | "time" | "uuid" | "year"
+        ),
+        5 => matches!(data_type, "float" | "inet4" | "inet6" | "point"),
+        6 => matches!(data_type, "bigint" | "binary" | "double"),
+        7 => matches!(data_type, "decimal" | "polygon" | "tinyint" | "varchar"),
+        8 => matches!(
+            data_type,
+            "datetime"
+                | "geometry"
+                | "longblob"
+                | "longtext"
+                | "smallint"
+                | "tinyblob"
+                | "tinytext"
+        ),
+        9 => matches!(data_type, "mediumint" | "timestamp" | "varbinary"),
+        10 => matches!(
+            data_type,
+            "linestring" | "mediumblob" | "mediumtext" | "multipoint"
+        ),
+        12 => data_type == "multipolygon",
+        15 => data_type == "multilinestring",
+        18 => data_type == "geometrycollection",
+        _ => false,
+    };
+    debug_assert_eq!(
+        answer,
+        RECOGNISED_DATA_TYPES.binary_search(&data_type).is_ok(),
+        "the match answers as the list for {data_type:?}"
+    );
+
+    answer
 }
 
 /// Whether a raw type string carries the unsigned attribute, per `FR-CTX-038`.
@@ -852,6 +894,24 @@ mod tests {
 
         for data_type in ["bigint", "decimal", "datetime", "longtext", "uuid"] {
             assert!(super::recognised(data_type), "{data_type}");
+        }
+
+        // rmp #356: `recognised` matches by length, and answers exactly the
+        // list — every member, and no string one byte away from a member.
+        for data_type in RECOGNISED_DATA_TYPES {
+            assert!(super::recognised(data_type), "{data_type}");
+            for near in [
+                format!("{data_type}s"),
+                data_type[..data_type.len() - 1].to_owned(),
+                data_type.to_uppercase(),
+                format!(" {data_type}"),
+            ] {
+                assert_eq!(
+                    super::recognised(&near),
+                    RECOGNISED_DATA_TYPES.binary_search(&near.as_str()).is_ok(),
+                    "{near:?}"
+                );
+            }
         }
 
         // Neither of the first two is a value the catalogue reports: a JSON

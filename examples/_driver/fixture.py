@@ -1,10 +1,14 @@
-"""The one server and the three schemas every worked example reads.
+"""The servers, the schemas and the database file every worked example reads.
 
 ``FR-EX-006`` has all four examples read ``sakila``, ``world`` and ``freight``
-from one server of the most recent supported series, and ``FR-EX-007`` has them
-read those schemas "under the same conditions: the same server, the same three
-schemas at the same state, and database entries that differ in nothing a read
-can observe".
+from one MariaDB server of the most recent supported series; ``FR-EX-011`` adds
+the ``freight`` schema of the MySQL fixture, read through a ``mysql`` entry from
+one server of the most recent series ``FR-MYSQL-003`` names; and ``FR-EX-012``
+adds the main database of the SQLite fixture, built from
+``scripts/sqlite/freight.sql`` and read through a ``sqlite`` entry.
+``FR-EX-007`` has them read each "under the same conditions": the same server or
+file, at the same state, through entries that differ in nothing a read can
+observe.
 
 That is why the access lives here and not in an example. Four copies of a host,
 a port and a user would drift, and a difference between two rendered data
@@ -26,12 +30,19 @@ from pathlib import Path
 from .discovery import repository_root
 
 __all__ = [
+    "MYSQL_ENTRY",
+    "MYSQL_SCHEMA",
+    "MYSQL_SERVER",
     "PASSWORD_ENV",
     "SCHEMAS",
     "SERVER",
+    "SQLITE_DATABASE",
+    "SQLITE_ENTRY",
     "PasswordNotInEnvironment",
     "Server",
+    "build_sqlite",
     "ca_file",
+    "mysql_ca_file",
     "require_password",
 ]
 
@@ -85,6 +96,35 @@ SERVER = Server(host="127.0.0.1", port=13309, user="root")
 #: reads through the user that can see one.
 SCHEMAS: Sequence[str] = ("sakila", "world", "freight")
 
+#: The MySQL server of ``FR-EX-011``: one server of the fixture of
+#: ``scripts/mysql/`` of the most recent series ``FR-MYSQL-003`` names, ``9.7``,
+#: published on this port by ``scripts/mysql/up.sh``. The account is the
+#: fixture's ``root``, whose password ``scripts/mysql/series.env`` states and
+#: which is the MariaDB fixture's, so the one variable :data:`PASSWORD_ENV`
+#: serves both servers. ``FR-MYSQL-014`` records that every field the model
+#: carries returned the same value on both supported series, which is why one
+#: server is read.
+MYSQL_SERVER = Server(host="127.0.0.1", port=13321, user="root")
+
+#: The schema of ``FR-EX-011``: the main schema ``FR-MYSQL-044`` obliges the
+#: MySQL fixture to hold.
+MYSQL_SCHEMA = "freight"
+
+#: The entry the MySQL ``freight`` is registered under. It is not the schema's
+#: name, which the MariaDB ``freight`` already takes, and it names the provider
+#: so that an example's output for it is told apart from the MariaDB one's.
+MYSQL_ENTRY = "freight_mysql"
+
+#: The entry the SQLite database of ``FR-EX-012`` is registered under.
+SQLITE_ENTRY = "freight_sqlite"
+
+#: Where the SQLite database is built, relative to the project directory: inside
+#: the ``.tpl`` folder the workflow creates and removes, because the database is
+#: a product of the run, as the project is, and is never committed
+#: (``FR-EX-012``, ``FR-LITE-038``). ``FR-CONF-054`` resolves the entry's
+#: ``path`` against the project directory, so the entry carries it as written.
+SQLITE_DATABASE = Path(".tpl") / "fixture" / "freight.sqlite"
+
 
 class PasswordNotInEnvironment(RuntimeError):
     """Raised when :data:`PASSWORD_ENV` is absent from the environment.
@@ -110,6 +150,58 @@ def require_password() -> None:
             f"{SERVER.user}, which scripts/mariadb/README.md documents:\n"
             f"    export {PASSWORD_ENV}=<password>"
         )
+
+
+def build_sqlite(destination: Path) -> Path:
+    """Build the SQLite database of ``FR-EX-012`` at ``destination``.
+
+    The database is the main database of ``FR-LITE-038``, built from the text of
+    ``scripts/sqlite/freight.sql``, every statement of it accepted, on a plain
+    connection of the standard library's ``sqlite3``. Nothing is committed as a
+    binary file: it is built on every run, into the ``.tpl`` folder the
+    workflow has just created. ``tpl`` itself never writes a database, so the
+    build is the driver's.
+
+    Raises:
+        FileNotFoundError: if the fixture's SQL text is absent.
+        sqlite3.Error: if a statement of it is refused.
+    """
+    import sqlite3
+
+    source = repository_root() / "scripts" / "sqlite" / "freight.sql"
+    if not source.is_file():
+        raise FileNotFoundError(
+            f"the SQLite fixture's text is missing: {source}. "
+            "It is committed; a checkout without it is incomplete."
+        )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        destination.unlink()
+    connection = sqlite3.connect(destination)
+    try:
+        connection.executescript(source.read_text(encoding="utf-8"))
+    finally:
+        connection.close()
+    return destination
+
+
+def mysql_ca_file() -> Path:
+    """Return the MySQL fixture's root certificate, for ``--ca-file``.
+
+    The MySQL servers present a certificate of their own fixture, signed by the
+    root ``scripts/mysql/README.md`` names, so ``verify-identity`` is given that
+    root and not the MariaDB fixture's.
+
+    Raises:
+        FileNotFoundError: if the fixture's trust material is absent.
+    """
+    path = repository_root() / "scripts" / "mysql" / "tls" / "ca.pem"
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"the MySQL fixture's root certificate is missing: {path}. "
+            "It is committed; a checkout without it is incomplete."
+        )
+    return path
 
 
 def ca_file() -> Path:

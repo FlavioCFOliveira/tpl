@@ -1,7 +1,7 @@
 ---
 title: Technology Stack
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -50,7 +50,7 @@ here.
 | Minimum supported toolchain | A rule — the higher of the edition floor and the highest floor declared in the shipped graph — and the figure it yields | [`ADR-007`](../adr/adr-007-msrv.md), registered as [`OD-02`](open-decisions.md#od-02--the-msrv) |
 | Release profile | Five settings, and the panic path that reports `70` under them | [`ADR-004`](../adr/adr-004-release-profile-and-panic-path.md), registered as [`OD-28`](open-decisions.md#od-28--the-release-profile-against-the-caught-panic-condition-of-70) |
 | Package layout | One package carrying a library and a binary; `benches/` gets no package of its own | [`ADR-006`](../adr/adr-006-package-layout.md), registered as [`OD-04`](open-decisions.md#od-04--one-package-or-a-workspace) |
-| `unsafe` | `#![forbid(unsafe_code)]` at the top of the crate | `CLAUDE.md`, *Regras Inegociáveis*; consequence [below](#the-consequence-of-forbidding-unsafe) |
+| `unsafe` | `#![forbid(unsafe_code)]` at the top of the crate | `CLAUDE.md`, *Non-Negotiable Rules*; consequence [below](#the-consequence-of-forbidding-unsafe) |
 
 The toolchain used to build the four targets of `NFR-PERF-018`, and the
 development toolchain that is above the floor, are
@@ -92,7 +92,7 @@ rejected option and cites the argument rather than reproducing it.
 |---|---|---|---|
 | `clap` | Parses the invocation and supplies the runtime tree introspection `FR-HELP-021` requires | It is the parser `CLAUDE.md` *Stack* fixes, and its typed error context is the only source of the token `FR-ERR-034` row `64` obliges | Recovering the token by a second parse of `argv`; letting the parser render its own diagnostics and its own help ([`OD-07`](open-decisions.md#od-07--help-the-parsers-renderer-or-tpls-own), [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics)) |
 | `cap` | The process's `#[global_allocator]`, wrapping `std::alloc::System`, whose count of live heap bytes the render memory limit of `FR-RND-039` reads; installed by the binary, no features, hard limit unset | [`ADR-011`](../adr/adr-011-render-memory-accounting.md) | [`ADR-011`](../adr/adr-011-render-memory-accounting.md): an allocator of this crate's own, `setrlimit`, resident-set polling, the crate's hard limit, and six other crates |
-| `minijinja` | Compiles and renders a template at run time, per `FR-TMPL-004` and `CLAUDE.md` *Invariantes de Implementação*; with its `fuel` feature, counts the render fuel of `FR-RND-036` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md); every compile-time engine is excluded by `CLAUDE.md` *Invariantes de Implementação* |
+| `minijinja` | Compiles and renders a template at run time, per `FR-TMPL-004` and `CLAUDE.md` *Implementation Invariants*; with its `fuel` feature, counts the render fuel of `FR-RND-036` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md); every compile-time engine is excluded by `CLAUDE.md` *Implementation Invariants* |
 | `minijinja-contrib` | Adds utility filters and globals, all of them group 3 of `FR-ENV-019` | [`ADR-001`](../adr/adr-001-template-engine-pin.md) | [`ADR-001`](../adr/adr-001-template-engine-pin.md) |
 | `sqlx-core`, `sqlx-mysql` | Connect to MariaDB and issue the closed statement list of `FR-SRV-006`, for a `mariadb` entry; connect to MySQL and issue that of `FR-MYSQL-015`, for a `mysql` entry | [`ADR-003`](../adr/adr-003-database-driver.md) — settled by `FR-CONF-036`, not by the measurement; the form is [`ADR-013`](../adr/adr-013-sqlite-driver.md)'s point 4; for a `mysql` entry, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) | [`ADR-003`](../adr/adr-003-database-driver.md); for the form, [`ADR-013`](../adr/adr-013-sqlite-driver.md); for a `mysql` entry, [`ADR-014`](../adr/adr-014-mysql-provider-driver.md), `mysql_async` among them |
 | `rusqlite` | Opens a SQLite database file read-only, applies and reads back the hardening of `FR-LITE-010` and `FR-LITE-011`, and issues the closed list of `FR-LITE-015`, for a `sqlite` entry; carries the SQLite library itself, compiled in (`FR-LITE-001`) | [`ADR-013`](../adr/adr-013-sqlite-driver.md) — selected by the rule of `FR-LITE-004` | [`ADR-013`](../adr/adr-013-sqlite-driver.md): the crate `sqlite`, the SQLite driver of `sqlx`, `turso`, a patched `rusqlite`, and `rusqlite` 0.39.0 |
@@ -247,8 +247,10 @@ and does not enter the budget below. `sqlx-mysql`'s is on the terms
 [`ADR-014`](../adr/adr-014-mysql-provider-driver.md) sets, which apply
 `ADR-010`'s form to a second tree: its patch refuses the RSA public-key request
 over a session TLS does not protect, presents an empty or absent password as
-the server's own clients do, and records the phase a connection reached, and
-that record holds each part, its scope and the condition that retires it. The
+the server's own clients do, records the phase a connection reached, and
+carries upstream pull request `#4458` whole, which bounds every read of a
+short or malformed packet so that none panics (point 8); that record holds each
+part, its scope and the condition that retires it. The
 pin is unchanged and remains
 [`ADR-003`](../adr/adr-003-database-driver.md)'s. A path patch removes the
 crate's registry source from `Cargo.lock`, so `cargo audit` no longer matches
@@ -343,6 +345,13 @@ is matched as an integer, not through the driver's `ErrorCode`, and its
 wildcard arm is the last row of `FR-LITE-040`
 ([`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify)).
 
+**The build options `tpl` adds are the record's.** `.cargo/config.toml`
+undoes the extension loading `libsqlite3-sys` enables, omits the loader, and
+starts the library with its memory statistics off
+(`SQLITE_DEFAULT_MEMSTATUS=0`), which `tpl` never reads
+([`ADR-013`](../adr/adr-013-sqlite-driver.md) point 2); the options and the
+grounds are not restated.
+
 **The bundled build defines more than the controls touch.** `libsqlite3-sys`
 0.39.1 compiles the library with, among others, `SQLITE_USE_URI`,
 `SQLITE_ENABLE_FTS5`, `SQLITE_ENABLE_RTREE`, `SQLITE_ENABLE_DBSTAT_VTAB` and
@@ -423,7 +432,13 @@ this document's own reading, with the source and the date beside each.
 
 ## Serialisation
 
-Derived `Serialize` through `serde_json`, into a writer `tpl` owns; the field
+Derived `Serialize` through `serde_json`, into a writer `tpl` owns. The one
+feature enabled on it is `raw_value`: "`RawValue` is only available if
+serde_json is built with the `"raw_value"` feature" (docs.rs, `serde_json`
+1.0.151, `RawValue`, consulted 2026-11-05), and `cache.rs` reads each member
+of a cached table's two deferred key lists as a `RawValue`, keeping its bytes
+undecoded until the template reaches the list (`FR-CACHE-038`;
+[architecture.md](architecture.md#the-cache-as-a-read-through-layer)). The field
 declaration order **is** the key order, `preserve_order` is off, `serde_json`
 does not depend on `indexmap`, and `skip_serializing_if` governs **one field of
 the model**, written once for each kind that can carry the marking. All five
@@ -486,12 +501,12 @@ the process ID as the PGID" (Rust standard library documentation,
 
 The rule is the root coordination document's: prefer `std`, justify each crate,
 check what it drags in, and refuse one used for a trivial function (`CLAUDE.md`,
-*Desempenho e Eficiência*). Five conditions apply it here.
+*Performance and Efficiency*, *Implementation rules*). Five conditions apply it here.
 
 | Condition | Source |
 |---|---|
 | The budget is a budget on the **shipped** graph, which an unfiltered `cargo tree` overstates | [`ADR-006`](../adr/adr-006-package-layout.md) |
-| A crate must compile and pass tests on all four targets of `NFR-PERF-018`; one that does not support `aarch64` does not enter | `CLAUDE.md`, *Plataformas Suportadas* |
+| A crate must compile and pass tests on all four targets of `NFR-PERF-018`; one that does not support `aarch64` does not enter | `CLAUDE.md`, *Supported Platforms* |
 | A crate that declares a toolchain floor above the current one raises the MSRV, so admission is also an MSRV question | [`ADR-007`](../adr/adr-007-msrv.md) |
 | A closed grammar written into the corpus is implemented, not depended on | Below |
 | A crate that compiles C source adds a C compile to every target's build | [`ADR-013`](../adr/adr-013-sqlite-driver.md) for the bundled library; [operations.md](operations.md#msrv-the-development-toolchain-and-the-cross-build-path) for the toolchain that compiles it |

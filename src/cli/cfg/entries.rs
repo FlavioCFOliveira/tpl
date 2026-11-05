@@ -149,7 +149,7 @@ pub(crate) fn add(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> Res
     // Every value is validated, and the entry the flags would leave behind is
     // then measured against `FR-CONF-007` — both before the editor is asked to
     // hold anything, so a refusal of either leaves the file as it was.
-    let written = flags.items().map_err(|refused| at(refused, ADD))?;
+    let written = flags.items().map_err(|refused| at(refused, ADD, name))?;
     coherence::refuse(
         &configuration,
         ADD,
@@ -212,7 +212,7 @@ pub(crate) fn update(supplied: &Supplied<'_>, name: &str, flags: &Flags<'_>) -> 
         return Err(configuration.entry_not_found(name, false));
     }
 
-    let written = flags.items().map_err(|refused| at(refused, UPDATE))?;
+    let written = flags.items().map_err(|refused| at(refused, UPDATE, name))?;
 
     // `FR-CFG-020` leaves the rest of the entry untouched, so the combination
     // measured is the entry as it stands with these fields changed — and
@@ -404,9 +404,23 @@ fn apply(editor: &mut Editor, name: &str, written: Vec<(EntryKey, Item)>) {
 }
 
 /// `refused` with the command whose help states what its flag takes, where it
-/// is a value the flag did not accept.
-fn at(refused: Error, command: &str) -> Error {
+/// is a value the flag did not accept, and the entry `name` it was given for.
+fn at(refused: Error, command: &str, name: &str) -> Error {
     match refused {
+        Error::NulValueGiven {
+            parameter,
+            field,
+            in_dsn,
+            before,
+            ..
+        } => Error::NulValueGiven {
+            parameter,
+            command: command.to_owned(),
+            entry: name.to_owned(),
+            field,
+            in_dsn,
+            before,
+        },
         Error::MalformedValue {
             parameter,
             value,
@@ -653,19 +667,37 @@ impl Flags<'_> {
         let mut written: Vec<(EntryKey, Result<Item, Error>)> = Vec::with_capacity(9);
 
         if let Some(dsn) = self.dsn {
-            written.push((EntryKey::Dsn, referenced(DSN, dsn).and_then(dsn_item)));
+            written.push((
+                EntryKey::Dsn,
+                without_nul(DSN, EntryKey::Dsn, dsn)
+                    .and_then(|dsn| referenced(DSN, dsn))
+                    .and_then(dsn_item),
+            ));
         }
         if let Some(host) = self.host {
-            written.push((EntryKey::Host, nonempty("--host", host)));
+            written.push((
+                EntryKey::Host,
+                without_nul("--host", EntryKey::Host, host)
+                    .and_then(|host| nonempty("--host", host)),
+            ));
         }
         if let Some(port) = self.port {
             written.push((EntryKey::Port, Ok(value(i64::from(port)))));
         }
         if let Some(user) = self.user {
-            written.push((EntryKey::User, referenced("--user", user).map(value)));
+            written.push((
+                EntryKey::User,
+                without_nul("--user", EntryKey::User, user)
+                    .and_then(|user| referenced("--user", user))
+                    .map(value),
+            ));
         }
         if let Some(schema) = self.schema {
-            written.push((EntryKey::Database, nonempty("--schema", schema)));
+            written.push((
+                EntryKey::Database,
+                without_nul("--schema", EntryKey::Database, schema)
+                    .and_then(|schema| nonempty("--schema", schema)),
+            ));
         }
         if let Some(command) = self.password_command {
             written.push((EntryKey::PasswordCommand, command_item(command)));
@@ -687,6 +719,17 @@ impl Flags<'_> {
         }
 
         written
+    }
+}
+
+/// `written`, where it holds no NUL character (`FR-CONF-057`, item 1).
+///
+/// The command and the entry are filled in by the caller, as for every refused
+/// flag value.
+fn without_nul<'v>(flag: &str, field: EntryKey, written: &'v str) -> Result<&'v str, Error> {
+    match edit::nul_given(flag, "", "", field, written) {
+        Some(refused) => Err(refused),
+        None => Ok(written),
     }
 }
 
@@ -773,6 +816,7 @@ fn database_path_item(path: &std::path::Path) -> Result<Item, Error> {
         expected: "a filesystem path",
     })?;
 
+    let written = without_nul("--path", EntryKey::Path, written)?;
     if crate::project::config::keys::is_blank(written) {
         return Err(Error::EmptyValue {
             parameter: "--path".to_owned(),
@@ -963,6 +1007,106 @@ mod tests {
         ));
         assert_eq!(condition.exit_code(), 64);
         assert!(harness.written().contains("host = \"db\""));
+    }
+
+    #[test]
+    fn fr_conf_057_a_flag_value_holding_a_nul_is_refused_with_64_and_nothing_is_written() {
+        // FR-CONF-057, item 1: --dsn, --host, --user, --schema and --path, the
+        // value of --dsn once each part is read. The cause names the flag, the
+        // entry and the part before the NUL, and never a password.
+        use crate::error::NulField;
+
+        for (flags, parameter, field, in_dsn, before) in [
+            (
+                Flags {
+                    host: Some("db\0x"),
+                    ..Flags::default()
+                },
+                "--host",
+                NulField::Host,
+                false,
+                Some("db"),
+            ),
+            (
+                Flags {
+                    host: Some("db"),
+                    user: Some("rea\0der"),
+                    ..Flags::default()
+                },
+                "--user",
+                NulField::User,
+                false,
+                Some("rea"),
+            ),
+            (
+                Flags {
+                    host: Some("db"),
+                    schema: Some("freight\0x"),
+                    ..Flags::default()
+                },
+                "--schema",
+                NulField::Database,
+                false,
+                Some("freight"),
+            ),
+            (
+                Flags {
+                    dsn: Some("mysql://alice:pw\0x@db.example.com/freight"),
+                    ..Flags::default()
+                },
+                "--dsn",
+                NulField::Password,
+                true,
+                None,
+            ),
+            (
+                Flags {
+                    dsn: Some("mysql://alice@db.example.com/fre\0ight"),
+                    ..Flags::default()
+                },
+                "--dsn",
+                NulField::Database,
+                true,
+                Some("fre"),
+            ),
+            (
+                Flags {
+                    provider: Some(crate::model::database::Provider::Sqlite),
+                    path: Some(std::path::Path::new("data/led\0ger.sqlite")),
+                    ..Flags::default()
+                },
+                "--path",
+                NulField::Path,
+                false,
+                Some("data/led"),
+            ),
+        ] {
+            let harness = Harness::new("");
+            let condition = harness
+                .add("shop", flags)
+                .expect_err("a value holding a NUL is refused");
+
+            assert_eq!(condition.exit_code(), 64, "{condition:?}");
+            match condition {
+                Error::NulValueGiven {
+                    parameter: ref given,
+                    ref command,
+                    ref entry,
+                    field: refused,
+                    in_dsn: part,
+                    before: ref kept,
+                } => {
+                    assert_eq!(given, parameter);
+                    assert_eq!(command, "cfg database add");
+                    assert_eq!(entry, "shop");
+                    assert_eq!(refused, field, "{parameter}");
+                    assert_eq!(part, in_dsn, "{parameter}");
+                    assert_eq!(kept.as_deref(), before, "{parameter}");
+                }
+                ref other => panic!("{parameter}: {other:?}"),
+            }
+            assert_eq!(harness.written(), "", "{parameter}");
+        }
     }
 
     #[test]

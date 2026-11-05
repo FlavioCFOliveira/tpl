@@ -21,8 +21,8 @@
 {%- if not table.primary_key -%}
 {{- fail("rust/repository.jinja cannot render " ~ database.name ~ "." ~ table.name ~ ": the table declares no primary key, so read, update and delete have no key to address a row by.") -}}
 {%- endif -%}
-{%- set model = types.type_name(table.name) -%}
-{%- set module = types.ident(table.name) -%}
+{%- set model = types.type_name(types.table_key(table, database.tables)) -%}
+{%- set module = types.module(table, database.tables) -%}
 {%- set generated -%}
 {%- for column in table.columns %}{% if column is auto_increment %}<auto>{% endif %}{% endfor -%}
 {%- endset -%}

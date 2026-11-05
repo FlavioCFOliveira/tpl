@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -25,11 +25,49 @@ Every document listed below is **written**. A document not yet written would be
 listed as *waiting*, where it waits on a named entry of `open-decisions.md`, or
 as *unblocked*, where no entry stands against it; none is either today.
 
-As of 2026-11-03 one entry of `open-decisions.md` is open — `OD-33`, whether
-`UC-013` joins the acceptance skeleton — and **no document waits**: what it
-blocks is a statement, not a document. Every other entry is settled. `OD-30`,
+As of 2026-11-05 two entries of `open-decisions.md` are open — `OD-33`, whether
+`UC-013` joins the acceptance skeleton, and `OD-39`, a `dsn` value whose
+percent-encoding `FR-CONF-018` requires and no code performs — and **no
+document waits**: what each blocks is a statement, not a document. Every other
+entry is settled. `OD-30`,
 the one entry that was settled and **interim**, was discharged on 2026-09-22,
 when the last leaf of the tree was implemented.
+
+**Changes of 2026-11-05**, for rmp `#343` and `#312` and sprint 29 — against the
+seventy-eighth to eighty-fourth editions of `/specification`,
+[`ADR-013`](../adr/adr-013-sqlite-driver.md) and
+[`ADR-014`](../adr/adr-014-mysql-provider-driver.md) as amended,
+[`ADR-015`](../adr/adr-015-mysql-catalogue-name-conveyance.md), and the code at
+`9d2538e`, which implements all of it. No crate is adopted.
+
+- **Seven stale statements corrected (`#343`).** `overview.md` no longer says
+  every entry of the register is settled; `architecture.md`, `interfaces.md`
+  and `OD-05` name `mariadb/catalogue/completeness.rs`; `operations.md` states
+  that `src/project/init.rs` carries both shipped templates;
+  `verification.md` records row 10 whole since `b61661d` and the suite with
+  every target and every module of `tests/support/`; `traceability.md` and
+  `verification.md` count twenty key forms; and every citation of a section of
+  `CLAUDE.md` names a heading of the English file.
+- **`traceability.md` current with the eighty-fourth edition (`#312`).**
+  Section 29 maps `examples.md`, every one of the 999 identifiers the edition
+  defines is drawn on by a row, and the header records the method and the
+  count.
+- **Sprint 29.** `architecture.md`: the resolution split into a check of the
+  entry as written and a resolution for a connection; the session statements
+  as phases of their own, under
+  [The phase deadlines](architecture.md#the-phase-deadlines), and the `-v`
+  line of each phase with the limit of its attribution; the MySQL reader's name
+  conveyance cited to `ADR-015`; the privilege probe's four errors; the
+  SQLite fold grouping on bytes and the refusal of `FR-LITE-043`; the deferred
+  key lists of a cached render and the held collection folder.
+  `interfaces.md`: contracts 41 and 42, `1102`, the short-packet hardening, the
+  NUL refusals, the rewrite through the held descriptor and its failure after
+  the rename, the include-suggestion rules. `security.md`: the recorded gap on
+  the caller-supplied name is discharged by citing `ADR-015`.
+  `data-model.md`, `technology-stack.md`, `operations.md` and
+  `verification.md` follow.
+- **`open-decisions.md`** gains `OD-39`, open, amends `OD-05` and `OD-12`, and
+  records the re-read of `CLAUDE.md`, `ADR-013`, `ADR-014` and `ADR-015`.
 
 **Changes of 2026-11-04, third pass**, for rmp `#328` — the third provider,
 against the seventy-third to seventy-seventh editions of `/specification`,
@@ -42,7 +80,7 @@ No crate is adopted.
   connectivity command for it. The module map gains `mysql/`; the dispatch,
   the connection lifecycle, the model's producers and the runtime row of lazy
   initialisation name three readers; *The six phase deadlines* becomes
-  [The seven phase deadlines](architecture.md#the-seven-phase-deadlines), the
+  [The seven phase deadlines](architecture.md#the-phase-deadlines), the
   login among them and the phase read from the driver's record; and the
   render's quiescence check is described as built, in `provider.rs`.
 - `interfaces.md` gains [The MySQL reader](interfaces.md#the-mysql-reader) and
@@ -383,7 +421,7 @@ requirements.
 |---|---|---|
 | `README.md` | The index: the four sources of truth, the two carriers of the architecture, what each document owns | written |
 | `traceability.md` | The functional-to-technical mapping, and the reverse mapping from every `specification/` file | written |
-| `open-decisions.md` | The decision register: thirty-seven settled entries, each carrying its rejected options or citing the record that holds them, and one open — `OD-33` — carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
+| `open-decisions.md` | The decision register: thirty-seven settled entries, each carrying its rejected options or citing the record that holds them, and two open — `OD-33` and `OD-39` — each carrying its options and its owner; the obligations that survive settlement with their owners; and any conflict owed to the functional owner — there is none today | written |
 | `overview.md` | What the built system is, its boundaries, what it is not, and the limits it does not overcome | written |
 | `architecture.md` | Components, responsibilities, interactions, the invocation pipeline, the module map | written |
 | `technology-stack.md` | Each technology: version, purpose, why chosen, what was rejected, source consulted; the dependency budget | written |
@@ -423,8 +461,9 @@ ordered stages in the order `FR-SRV-042` fixes, closed when the read ends. The
 catalogue reader and the query-count invariants. The cache as a read-through layer. The model as
 the single junction of three sources and three consumers. The render component:
 engine construction, loader, undefined behaviour, the output formatter,
-auto-escape, context assembly. Deadlines on seven named blocking phases, the
-phase of a server connection read from the driver's record. The four
+auto-escape, context assembly. Deadlines on every blocking phase, each session statement
+its own, the phase of a server connection read from the driver's record, and
+the `-v` line of each phase. The four
 render bounds, their composition, and the poll interval of the memory limit.
 Lazy initialisation. The
 synchronous process and the runtime boundary inside the two server readers.
@@ -522,7 +561,8 @@ injection surfaces. Transport, including the mode set explicitly on every
 connection, the trust material that widens rather than narrows, and how a
 directory of trust material is resolved and when it refuses. The RSA
 public-key request never made over a session TLS does not protect, and the
-empty password. The read-only promise in its two parts, for a `mariadb` and a
+empty password. How the one caller-supplied name reaches a server statement,
+by provider. The read-only promise in its two parts, for a `mariadb` and a
 `mysql` entry, and in the three of a `sqlite` entry. The
 controls a SQLite database file is read under, and the check that refuses a
 schema able to forge the catalogue. The four template capability

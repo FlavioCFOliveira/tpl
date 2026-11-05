@@ -32,9 +32,12 @@
 //! and the rationale of `FR-MYSQL-042` in one reading: each statement reads one
 //! table, restricted to the database alone.
 //!
-//! **Every value travels as a bind parameter**, so each text is a
-//! `&'static str` and nothing a caller supplies is composed into SQL. The one
-//! literal, `'CHECK'`, is the constraint type `FR-MYSQL-034` selects on.
+//! **Each text is a `&'static str` with one `?`, the right-hand side of the
+//! comparison of a schema column**, and nothing else a caller supplies is in
+//! it. The schema name takes the place of the `?` as the hexadecimal literal of
+//! `ADR-015`, composed by `super::compose`, and the statement is sent over the
+//! text protocol. The one other literal, `'CHECK'`, is the constraint type
+//! `FR-MYSQL-034` selects on.
 //!
 //! **No field outside the mapping is named**, so every field a statement reads
 //! is one `FR-MYSQL-025` … `FR-MYSQL-038` maps to the model or uses as a
@@ -248,8 +251,8 @@ impl Read {
 
 /// The statements of a read, in the order they are issued (`NFR-PERF-001`).
 ///
-/// It is the constant [`Read::ALL`]: the schema name is bound to each, and
-/// nothing else varies.
+/// It is the constant [`Read::ALL`]: the schema name is written into each as
+/// the literal of `ADR-015`, and nothing else varies.
 pub(super) const fn plan() -> [Read; Read::COUNT] {
     Read::ALL
 }
@@ -304,7 +307,8 @@ mod tests {
             ] {
                 assert!(!sql.contains(barred), "{barred} in {sql}");
             }
-            // One bind, the schema; nothing is composed into the text.
+            // One placeholder, the schema, which ADR-015 replaces with its
+            // literal; nothing else is composed into the text.
             assert_eq!(sql.matches('?').count(), 1, "{sql}");
         }
     }

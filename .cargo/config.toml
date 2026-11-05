@@ -1,8 +1,11 @@
 # Every build of `tpl` compiles the bundled SQLite of `rusqlite` without
 # extension loading (`FR-LITE-001`): the `-U` undoes the
-# `SQLITE_ENABLE_LOAD_EXTENSION=1` that `libsqlite3-sys` defines, and the `-D`
-# omits the loader. `force` makes this value win over one already set in the
-# environment. Cargo reads this file only when it is invoked from inside this
-# directory tree, so the read-back of `FR-LITE-010` stays the guarantee.
+# `SQLITE_ENABLE_LOAD_EXTENSION=1` that `libsqlite3-sys` defines, and the first
+# `-D` omits the loader. The second `-D` starts the library with its memory
+# statistics off, so an allocation does not enter the global memory mutex;
+# `tpl` reads none of those statistics (`ADR-013`, point 2). `force` makes this
+# value win over one already set in the environment. Cargo reads this file only
+# when it is invoked from inside this directory tree, so the read-back of
+# `FR-LITE-010` stays the guarantee of the omission; the statistics need none.
 [env]
-LIBSQLITE3_FLAGS = { value = "-USQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_OMIT_LOAD_EXTENSION", force = true }
+LIBSQLITE3_FLAGS = { value = "-USQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_DEFAULT_MEMSTATUS=0", force = true }

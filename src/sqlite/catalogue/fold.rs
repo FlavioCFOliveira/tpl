@@ -17,6 +17,19 @@
 //! | The triggers | The rows of type `trigger` on a covered table, their timing and event from the header; a trigger on a view excluded | `FR-LITE-032`, `FR-LITE-021` |
 //! | The views | Their name and their whole stored statement, and `null` for the seven server fields; no columns, and no marking | `FR-LITE-033`, `FR-LITE-036` |
 //!
+//! **Rows are grouped, and names matched, on the bytes the file holds**
+//! (`FR-LITE-043`). SQLite holds a name as the bytes a statement wrote, valid
+//! UTF-8 or not, and `FR-OUT-017` converts those bytes to text with U+FFFD
+//! substituted, so two names that differ only in invalid UTF-8 convert to one
+//! text. Every row is therefore found by the bytes of its object's name
+//! ([`super::Raw`]), never by the text, so each row stays with its object and
+//! every reference with the object SQLite resolves it to. Where two names of
+//! one set — the covered tables and the views together, or the columns, the
+//! indexes or the triggers of one covered table — differ in their bytes and
+//! convert to one text, the document could not tell them apart, and the read
+//! is refused with the `78` of `FR-LITE-043` before anything is folded
+//! ([`alike`]).
+//!
 //! **Names are matched as SQLite matches them** (`BR-LITE-003`). SQLite writes
 //! a trigger's `tbl_name`, and reports a foreign key's parent table and
 //! columns, as the statement wrote them, and resolves each by folding the 26
@@ -26,17 +39,19 @@
 //! columns — after folding the 26 ASCII letters over the whole name, and no
 //! other character; and the object found is carried under its own name, so
 //! that the byte-wise lookups of the document find it (`NFR-DET-002`,
-//! `FR-CTX-023`). An index's members and a key's own columns are not matched:
-//! the library reports each as its table declares it.
+//! `FR-CTX-023`). The comparison is of the bytes the file holds for each name,
+//! with the 26 ASCII letters folded (`FR-LITE-043`). An index's members and a
+//! key's own columns are not matched: the library reports each as its table
+//! declares it.
 //!
 //! **The fold indexes before it looks up.** Every collection the fold reads
 //! by a name is grouped once and then looked up, and no object is found by
 //! scanning another collection. The column, index and key rows are grouped by
 //! their table: each statement's runs of rows ([`Tabled`]) are sorted once by
-//! their table's name and a table's are found by binary search; a table's
-//! index runs are sorted by the index's name, which brings an index's members
-//! together; the stored rows of the views are sorted by their name and found
-//! the same way. The covered tables, the views and a table's columns are
+//! the bytes of their table's name and a table's are found by binary search; a
+//! table's index runs are sorted by the bytes of the index's name, which
+//! brings an index's members together; the stored rows of the views are
+//! sorted by the bytes of their name and found the same way. The covered tables, the views and a table's columns are
 //! looked up by the name `BR-LITE-003` matches, through a map keyed by that
 //! name with the 26 ASCII letters folded ([`Names`]) — a table's columns only
 //! where a key names its parent columns. The fold runs after the last
@@ -58,17 +73,12 @@
 //! content (`FR-LITE-031`); and the tables, the indexes, the triggers and the
 //! views by name (`NFR-DET-002`).
 //!
-//! **Names that convert alike keep the order of their bytes.** Two names that
-//! differ only in invalid UTF-8 convert to one text (`FR-OUT-017`), and the
-//! fold groups by that text, so their rows are grouped together. Where such
-//! names tie, every order is the one the statements' `ORDER BY` gave before
-//! it was removed, which SQLite's `BINARY` collation decided over the bytes the
-//! file holds: the objects and the stored rows by their names' bytes; a group's
-//! columns by their table's bytes, then `cid`; its index members by their
-//! table's and their index's bytes, then `seqno`; its key pairs by `id`,
-//! `seq`, then their table's bytes. Each name keeps those bytes only where the
-//! conversion changed them ([`super::Raw`]); elsewhere the text is the bytes,
-//! and the order is the one above.
+//! **No two names of one set tie.** [`alike`] has refused a file in which two
+//! names of one set convert to one text, so every order by name above is
+//! total. The objects are taken in the order of their names' bytes before they
+//! are sorted by text, so that whatever order the rows came in, the fold is
+//! the same. Each name keeps its bytes only where the conversion changed them
+//! ([`super::Raw`]); elsewhere the text is the bytes.
 //!
 //! PERF: the model borrows every name and text from the rows the read owns,
 //! and copies none of them.
@@ -79,7 +89,7 @@ use std::hash::{Hash, Hasher};
 
 use super::trigger::{self, Event, Timing};
 use super::{Catalogue, ColumnRow, IndexMember, IndexRun, KeyRow, Object, Run, StoredRow, Tabled};
-use crate::error::Error;
+use crate::error::{AlikeKind, AlikeNames, Error, FileValue};
 use crate::model::column::{Column, Generated, GeneratedStorage};
 use crate::model::column_default::ColumnDefault;
 use crate::model::column_type::ColumnType;
@@ -136,10 +146,12 @@ const FOLD: Stage = Stage::Catalogue("the fold of the catalogue the statements r
 /// upper-case letters of each are folded to lower case, over the whole name,
 /// and no other character folded.
 ///
-/// PERF: it hashes the folded bytes and compares ignoring ASCII case, so a map
-/// keyed by it holds the name itself and never a folded copy of it.
+/// It is taken over the bytes the file holds for the name, not over the text
+/// they convert to (`FR-LITE-043`). PERF: it hashes the folded bytes and
+/// compares ignoring ASCII case, so a map keyed by it holds the name itself
+/// and never a folded copy of it.
 #[derive(Debug, Clone, Copy)]
-struct Folded<'n>(&'n str);
+struct Folded<'n>(&'n [u8]);
 
 impl PartialEq for Folded<'_> {
     fn eq(&self, other: &Self) -> bool {
@@ -150,12 +162,12 @@ impl PartialEq for Folded<'_> {
 impl Eq for Folded<'_> {}
 
 impl Hash for Folded<'_> {
-    /// The bytes [`str::to_ascii_lowercase`] gives, in chunks of a fixed
+    /// The bytes [`slice::to_ascii_lowercase`] gives, in chunks of a fixed
     /// size, then a terminator, so that two names equal under
     /// [`PartialEq`] — which have one length — hash alike.
     fn hash<H: Hasher>(&self, state: &mut H) {
         let mut folded = [0_u8; 32];
-        for chunk in self.0.as_bytes().chunks(folded.len()) {
+        for chunk in self.0.chunks(folded.len()) {
             let folded = folded.get_mut(..chunk.len()).unwrap_or_default();
             folded.copy_from_slice(chunk);
             folded.make_ascii_lowercase();
@@ -178,8 +190,8 @@ struct Names<'n> {
 }
 
 impl<'n> Names<'n> {
-    /// The names, each at its position in `names`.
-    fn of(names: impl Iterator<Item = &'n str>) -> Self {
+    /// The names, by their bytes, each at its position in `names`.
+    fn of(names: impl Iterator<Item = &'n [u8]>) -> Self {
         let mut folded = HashMap::with_capacity(names.size_hint().0);
         for (at, name) in names.enumerate() {
             folded.entry(Folded(name)).or_insert(at);
@@ -187,8 +199,8 @@ impl<'n> Names<'n> {
         Self { folded }
     }
 
-    /// The position of the name `name` matches.
-    fn position(&self, name: &str) -> Option<usize> {
+    /// The position of the name the bytes `name` match.
+    fn position(&self, name: &[u8]) -> Option<usize> {
         let folded: &HashMap<Folded<'_>, usize> = &self.folded;
         folded.get(&Folded(name)).copied()
     }
@@ -199,32 +211,28 @@ impl<'n> Names<'n> {
 struct ByTable<'c, T> {
     /// The rows.
     tabled: &'c Tabled<T>,
-    /// Their runs in ascending order of their table's name, byte-wise, then
-    /// of the bytes that name was converted from; the sort is stable, so the
-    /// runs of one table keep the order the statement returned them in.
+    /// Their runs in ascending order of the bytes of their table's name; the
+    /// sort is stable, so the runs of one table keep the order the statement
+    /// returned them in.
     runs: Vec<&'c Run>,
 }
 
 impl<'c, T> ByTable<'c, T> {
-    /// Groups the runs of `tabled` by their table's name, once.
+    /// Groups the runs of `tabled` by the bytes of their table's name, once.
     fn of(tabled: &'c Tabled<T>) -> Self {
         let mut runs: Vec<&'c Run> = tabled.runs.iter().collect();
-        runs.sort_by(|left, right| {
-            order::compare(&left.table, &right.table).then_with(|| left.key().cmp(right.key()))
-        });
+        runs.sort_by(|left, right| left.key().cmp(right.key()));
         Self { tabled, runs }
     }
 
-    /// The rows of `table`, each with its run, run by run: the runs in the
-    /// order of the bytes their tables' names were converted from, and each
-    /// run's rows in the order the statement returned them.
-    fn rows(&self, table: &str) -> Vec<(&'c Run, &'c T)> {
-        let start = self
-            .runs
-            .partition_point(|run| order::compare(&run.table, table).is_lt());
+    /// The rows of the table whose name the file holds as `table`, each with
+    /// its run, run by run, and each run's rows in the order the statement
+    /// returned them.
+    fn rows(&self, table: &[u8]) -> Vec<(&'c Run, &'c T)> {
+        let start = self.runs.partition_point(|run| run.key() < table);
         let after = self.runs.get(start..).unwrap_or_default();
         let runs = after
-            .get(..after.partition_point(|run| run.table == table))
+            .get(..after.partition_point(|run| run.key() == table))
             .unwrap_or_default();
 
         let mut rows = Vec::with_capacity(runs.iter().map(|run| run.rows.len()).sum());
@@ -244,8 +252,8 @@ struct Grouped<'c> {
     indexes: ByTable<'c, IndexRun>,
     /// The key rows, by their table.
     keys: ByTable<'c, KeyRow>,
-    /// The stored rows of the views, in ascending order of name, byte-wise,
-    /// then of the bytes the name was converted from.
+    /// The stored rows of the views, in ascending order of the bytes of
+    /// their name.
     views: Vec<&'c StoredRow>,
 }
 
@@ -257,9 +265,7 @@ impl<'c> Grouped<'c> {
             .iter()
             .filter(|row| row.kind == VIEW)
             .collect();
-        views.sort_by(|left, right| {
-            order::compare(&left.name, &right.name).then_with(|| left.key().cmp(right.key()))
-        });
+        views.sort_by(|left, right| left.key().cmp(right.key()));
 
         Self {
             columns: ByTable::of(&catalogue.columns),
@@ -269,12 +275,10 @@ impl<'c> Grouped<'c> {
         }
     }
 
-    /// The stored row of the view `name` whose bytes come first.
-    fn view(&self, name: &str) -> Option<&'c StoredRow> {
-        let at = self
-            .views
-            .partition_point(|row| order::compare(&row.name, name).is_lt());
-        self.views.get(at).copied().filter(|row| row.name == name)
+    /// The stored row of the view whose name the file holds as `name`.
+    fn view(&self, name: &[u8]) -> Option<&'c StoredRow> {
+        let at = self.views.partition_point(|row| row.key() < name);
+        self.views.get(at).copied().filter(|row| row.key() == name)
     }
 }
 
@@ -282,7 +286,9 @@ impl<'c> Grouped<'c> {
 ///
 /// # Errors
 ///
-/// Returns the `70` of `FR-LITE-032` and of `FR-CAT-044`.
+/// Returns the `78` of `FR-LITE-043` where two names of one set convert to
+/// one text from different bytes, before anything is folded, and the `70` of
+/// `FR-LITE-032` and of `FR-CAT-044`.
 pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'_>, Error> {
     let place = Place {
         entry: &catalogue.entry,
@@ -301,12 +307,38 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'_>, Error> {
         .copied()
         .filter(|object| covered_table(object))
         .collect();
-    let names = Names::of(tables.iter().map(|table| table.name.as_str()));
+    let names = Names::of(tables.iter().map(|table| table.key()));
+    let view_names = Names::of(
+        objects
+            .iter()
+            .filter(|object| object.kind == VIEW)
+            .map(|object| object.key()),
+    );
 
-    let mut parts: Vec<TableParts<'_>> = tables
+    // FR-LITE-032 and FR-LITE-021: the triggers whose `tbl_name` matches a
+    // covered table under BR-LITE-003, each with that table's position; one
+    // that matches a view is excluded, and one on no covered table is an
+    // object the model does not cover.
+    let mut triggers: Vec<&StoredRow> = catalogue
+        .stored
+        .iter()
+        .filter(|row| row.kind == TRIGGER)
+        .collect();
+    triggers.sort_by(|left, right| left.key().cmp(right.key()));
+    let triggers: Vec<(usize, &StoredRow)> = triggers
+        .into_iter()
+        .filter(|row| view_names.position(row.table_key()).is_none())
+        .filter_map(|row| Some((names.position(row.table_key())?, row)))
+        .collect();
+
+    // FR-LITE-043: before anything is folded, and so before any model or
+    // cache write.
+    alike(place, &objects, &tables, &grouped, &triggers)?;
+
+    let (mut parts, column_keys): (Vec<TableParts<'_>>, Vec<Vec<&[u8]>>) = tables
         .iter()
         .map(|table| self::table(catalogue, &grouped, table))
-        .collect();
+        .unzip();
 
     // FR-LITE-031: the keys, once every table's columns and key are known.
     // A table's columns are matched by name only for a key that names its
@@ -315,8 +347,14 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'_>, Error> {
     {
         let mut folded: HashMap<usize, Names<'_>> = HashMap::new();
         for (at, table) in tables.iter().enumerate() {
-            let rows = grouped.keys.rows(&table.name);
-            for (parent, key) in keys(rows, &tables, &names, &mut folded, &parts) {
+            let rows = grouped.keys.rows(table.key());
+            let parents = Parents {
+                tables: &tables,
+                names: &names,
+                parts: &parts,
+                columns: &column_keys,
+            };
+            for (parent, key) in keys(rows, &parents, &mut folded) {
                 outgoing.push((at, table.name.as_str(), parent, key));
             }
         }
@@ -341,30 +379,7 @@ pub(super) fn database(catalogue: &Catalogue) -> Result<Database<'_>, Error> {
         }
     }
 
-    // FR-LITE-032 and FR-LITE-021: the triggers whose `tbl_name` matches a
-    // covered table under BR-LITE-003; one that matches a view is excluded.
-    let view_names = Names::of(
-        objects
-            .iter()
-            .filter(|object| object.kind == VIEW)
-            .map(|object| object.name.as_str()),
-    );
-    let mut triggers: Vec<&StoredRow> = catalogue
-        .stored
-        .iter()
-        .filter(|row| row.kind == TRIGGER)
-        .collect();
-    triggers.sort_by(|left, right| left.key().cmp(right.key()));
-    for row in triggers {
-        if view_names.position(&row.table).is_some() {
-            // A trigger on a view: the model carries triggers on tables.
-            continue;
-        }
-        let Some(at) = names.position(&row.table) else {
-            // A trigger on no covered table — an object the model does not
-            // cover.
-            continue;
-        };
+    for (at, row) in triggers {
         let sql = row.sql.as_deref().unwrap_or_default();
         let header =
             trigger::header(sql).ok_or_else(|| fault::defect(place, FOLD, HEADER, None))?;
@@ -445,30 +460,22 @@ fn internal(name: &str) -> bool {
 
 /// One table's parts: its columns, its primary key and its indexes
 /// (`FR-LITE-024` … `FR-LITE-030`).
+///
+/// The bytes of each column's name are returned beside the parts, in the order
+/// of their columns, for the match of a key's parent columns.
 fn table<'c>(
     catalogue: &'c Catalogue,
     grouped: &Grouped<'c>,
     object: &'c Object,
-) -> TableParts<'c> {
-    // FR-LITE-025: the columns in ascending order of `cid`, after the bytes
-    // of their table's name.
-    let mut rows = grouped.columns.rows(&object.name);
-    rows.sort_by(|(left_run, left), (right_run, right)| {
-        left_run
-            .key()
-            .cmp(right_run.key())
-            .then(left.cid.cmp(&right.cid))
-    });
-    // FR-LITE-030: the index runs in ascending order of the index's name,
-    // then of the bytes of their table's name and of the index's name, so
-    // that the runs of one index stand together whatever order its members
-    // came in.
-    let mut entries = grouped.indexes.rows(&object.name);
-    entries.sort_by(|(left_table, left), (right_table, right)| {
-        order::compare(&left.name, &right.name)
-            .then_with(|| left_table.key().cmp(right_table.key()))
-            .then_with(|| left.key().cmp(right.key()))
-    });
+) -> (TableParts<'c>, Vec<&'c [u8]>) {
+    // FR-LITE-025: the columns in ascending order of `cid`.
+    let mut rows = grouped.columns.rows(object.key());
+    rows.sort_by_key(|(_, row)| row.cid);
+    // FR-LITE-030: the index runs in ascending order of the bytes of the
+    // index's name, so that the runs of one index stand together whatever
+    // order its members came in.
+    let mut entries = grouped.indexes.rows(object.key());
+    entries.sort_by(|(_, left), (_, right)| left.key().cmp(right.key()));
     let members = &catalogue.indexes;
 
     // FR-LITE-029: the primary key's columns, in ascending order of `pk`.
@@ -496,6 +503,7 @@ fn table<'c>(
         .iter()
         .map(|(_, row)| column(row, &object.name, alias == Some(row.name.as_str())))
         .collect();
+    let column_keys = rows.iter().map(|(_, row)| row.key()).collect();
 
     // The direction of each member of the index of origin `pk`, by its name.
     let descending: HashMap<&str, bool> = origin_members
@@ -528,23 +536,25 @@ fn table<'c>(
         ignored: false,
     });
 
-    TableParts {
+    let parts = TableParts {
         engine: None,
         collation: None,
         columns,
         indexes: self::indexes(members, &entries),
         primary_key,
         ..TableParts::new(Cow::Borrowed(&object.name), TableType::Base)
-    }
+    };
+
+    (parts, column_keys)
 }
 
 /// One index run of a table, with the run of its table.
 type Entry<'c> = (&'c Run, &'c IndexRun);
 
-/// One table's index runs, ordered by the index's name and then by bytes, as
-/// one slice per index name.
+/// One table's index runs, ordered by the bytes of the index's name, as one
+/// slice per index.
 fn by_index<'r, 'c>(entries: &'r [Entry<'c>]) -> impl Iterator<Item = &'r [Entry<'c>]> {
-    entries.chunk_by(|(_, left), (_, right)| left.name == right.name)
+    entries.chunk_by(|(_, left), (_, right)| left.key() == right.key())
 }
 
 /// The bytes of the table's name and of the index's name of the first run of
@@ -587,8 +597,8 @@ fn ordered_members<'c>(
     ordered
 }
 
-/// The indexes of one table, from its index runs ordered by the index's name
-/// and then by bytes, less those with an expression member (`FR-LITE-030`,
+/// The indexes of one table, from its index runs ordered by the bytes of the
+/// index's name, less those with an expression member (`FR-LITE-030`,
 /// `FR-LITE-021`).
 fn indexes<'c>(members: &'c super::Indexes, entries: &[Entry<'c>]) -> Vec<Index<'c>> {
     by_index(entries)
@@ -784,6 +794,19 @@ fn blob(written: &str) -> bool {
         .is_some_and(|hex| hex.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
+/// What a key's parent is matched against: the covered tables, their names,
+/// their parts, and the bytes of each one's column names in column order.
+struct Parents<'r, 'c> {
+    /// The covered tables.
+    tables: &'r [&'c Object],
+    /// Their names, by their bytes.
+    names: &'r Names<'r>,
+    /// Their parts, at the tables' positions.
+    parts: &'r [TableParts<'c>],
+    /// The bytes of each one's column names, at the tables' positions.
+    columns: &'r [Vec<&'c [u8]>],
+}
+
 /// The outgoing keys of one covered table, from its key rows, less those
 /// `FR-LITE-021` excludes, each with the position of the covered table its
 /// parent matched (`FR-LITE-031`).
@@ -792,10 +815,8 @@ fn blob(written: &str) -> bool {
 /// indexed on first need.
 fn keys<'c, 'p>(
     mut rows: Vec<(&'c Run, &'c KeyRow)>,
-    tables: &[&'c Object],
-    names: &Names<'_>,
+    parents: &Parents<'p, 'c>,
     folded: &mut HashMap<usize, Names<'p>>,
-    parts: &'p [TableParts<'c>],
 ) -> Vec<(usize, ForeignKey<'c>)> {
     // One key per `id`, in ascending order of `id`, its pairs in ascending
     // order of `seq` and then of the bytes of their table's name, whatever
@@ -811,10 +832,11 @@ fn keys<'c, 'p>(
             let (_, first) = pairs.first()?;
 
             // FR-LITE-021: the parent table must match a covered table under
-            // BR-LITE-003, and the key carries that table's own name.
-            let parent_at = names.position(&first.referenced)?;
-            let parent = parts.get(parent_at)?;
-            let parent_name = &tables.get(parent_at)?.name;
+            // BR-LITE-003, on the bytes the file holds (FR-LITE-043), and the
+            // key carries that table's own name.
+            let parent_at = parents.names.position(first.referenced_key())?;
+            let parent = parents.parts.get(parent_at)?;
+            let parent_name = &parents.tables.get(parent_at)?.name;
 
             // `to` NULL on every pair: the parent's primary key, in its order;
             // a parent with none is excluded. Otherwise each `to` must match a
@@ -827,16 +849,13 @@ fn keys<'c, 'p>(
                     .map(|member| member.name.clone())
                     .collect()
             } else {
-                let columns = folded.entry(parent_at).or_insert_with(|| {
-                    Names::of(parent.columns.iter().map(|column| column.name.as_ref()))
-                });
+                let keys = parents.columns.get(parent_at)?;
+                let columns = folded
+                    .entry(parent_at)
+                    .or_insert_with(|| Names::of(keys.iter().copied()));
                 pairs
                     .iter()
-                    .map(|(_, row)| {
-                        row.to
-                            .as_deref()
-                            .and_then(|to| carried(parent, columns, to))
-                    })
+                    .map(|(_, row)| row.to_key().and_then(|to| carried(parent, columns, to)))
                     .collect::<Option<Vec<Cow<'c, str>>>>()?
             };
             // FR-LITE-021: a key naming no parent column of a parent whose
@@ -875,13 +894,109 @@ fn keys<'c, 'p>(
         .collect()
 }
 
-/// The name a column of `table` carries, matched under `BR-LITE-003` through
-/// the table's column names grouped once.
-fn carried<'c>(table: &TableParts<'c>, names: &Names<'_>, column: &str) -> Option<Cow<'c, str>> {
+/// The name a column of `table` carries, matched under `BR-LITE-003` on the
+/// bytes `column` through the table's column names grouped once.
+fn carried<'c>(table: &TableParts<'c>, names: &Names<'_>, column: &[u8]) -> Option<Cow<'c, str>> {
     names
         .position(column)
         .and_then(|at| table.columns.get(at))
         .map(|carried| carried.name.clone())
+}
+
+/// Refuses a file in which two names of one set of `FR-LITE-043` differ in
+/// their bytes and convert to one text: the covered tables and the views
+/// together, then, table by table in the order of their bytes, the columns,
+/// the indexes and the triggers of one covered table.
+///
+/// `objects` are in the order of their names' bytes, and `triggers` are each
+/// with the position of the covered table they matched.
+///
+/// # Errors
+///
+/// Returns [`Error::SqliteNamesAlike`] for the first pair found.
+fn alike(
+    place: Place<'_>,
+    objects: &[&Object],
+    tables: &[&Object],
+    grouped: &Grouped<'_>,
+    triggers: &[(usize, &StoredRow)],
+) -> Result<(), Error> {
+    let refused = |kind, table: Option<&str>, text: &str| Error::SqliteNamesAlike {
+        entry: place.entry.to_owned(),
+        path: place.path.to_owned(),
+        names: Box::new(AlikeNames {
+            kind,
+            table: table.map(FileValue::new),
+            text: FileValue::new(text),
+        }),
+    };
+
+    // The first set: the covered tables and the views, taken together.
+    let named = objects
+        .iter()
+        .filter(|object| object.kind == VIEW || covered_table(object))
+        .map(|object| (object.name.as_str(), object.key(), object.kind == VIEW));
+    if let Some(((text, _, left), (_, _, right))) = first_alike(named) {
+        let kind = match (left, right) {
+            (false, false) => AlikeKind::Tables,
+            (true, true) => AlikeKind::Views,
+            _ => AlikeKind::TableAndView,
+        };
+        return Err(refused(kind, None, text));
+    }
+
+    for (at, table) in tables.iter().enumerate() {
+        let held = Some(table.name.as_str());
+
+        let columns = grouped.columns.rows(table.key());
+        let columns = columns
+            .iter()
+            .map(|(_, row)| (row.name.as_str(), row.key(), ()));
+        if let Some(((text, _, ()), _)) = first_alike(columns) {
+            return Err(refused(AlikeKind::Columns, held, text));
+        }
+
+        let indexes = grouped.indexes.rows(table.key());
+        let indexes = indexes
+            .iter()
+            .map(|(_, run)| (run.name.as_str(), run.key(), ()));
+        if let Some(((text, _, ()), _)) = first_alike(indexes) {
+            return Err(refused(AlikeKind::Indexes, held, text));
+        }
+
+        let on_table = triggers
+            .iter()
+            .filter(|(of, _)| *of == at)
+            .map(|(_, row)| (row.name.as_str(), row.key(), ()));
+        if let Some(((text, _, ()), _)) = first_alike(on_table) {
+            return Err(refused(AlikeKind::Triggers, held, text));
+        }
+    }
+
+    Ok(())
+}
+
+/// One name of a set of `FR-LITE-043`: its text, the bytes it was converted
+/// from, and a tag.
+type Named<'n, T> = (&'n str, &'n [u8], T);
+
+/// The first two of `names` whose texts are equal and whose bytes differ, in
+/// the order of their texts and then of their bytes.
+///
+/// A name that appears more than once with the same bytes — the runs of one
+/// index, or the rows of one object — is one name, and is not a pair.
+fn first_alike<'n, T: Copy>(
+    names: impl Iterator<Item = Named<'n, T>>,
+) -> Option<(Named<'n, T>, Named<'n, T>)> {
+    let mut sorted: Vec<Named<'n, T>> = names.collect();
+    sorted.sort_by(|(left, left_bytes, _), (right, right_bytes, _)| {
+        order::compare(left, right).then_with(|| left_bytes.cmp(right_bytes))
+    });
+
+    sorted.windows(2).find_map(|pair| match pair {
+        [left, right] if left.0 == right.0 && left.1 != right.1 => Some((*left, *right)),
+        _ => None,
+    })
 }
 
 /// The views: each one's name and whole stored statement, and nothing a view
@@ -893,7 +1008,7 @@ fn views<'c>(objects: &[&'c Object], grouped: &Grouped<'c>) -> Vec<View<'c>> {
         .filter(|object| object.kind == VIEW)
         .map(|object| {
             let definition = grouped
-                .view(&object.name)
+                .view(object.key())
                 .and_then(|row| row.sql.as_deref())
                 .unwrap_or_default();
 
@@ -1042,14 +1157,20 @@ mod tests {
         // differs from it in one letter outside ASCII, or in its length,
         // does not.
         let long = "Consignment_Customs_Declaration_Line_Item_Archive_2026";
-        let names = Names::of([long, "other"].into_iter());
+        let names = Names::of([long, "other"].into_iter().map(str::as_bytes));
 
-        assert_eq!(names.position(long), Some(0));
-        assert_eq!(names.position(&long.to_ascii_uppercase()), Some(0));
-        assert_eq!(names.position(&long.to_ascii_lowercase()), Some(0));
-        assert_eq!(names.position(&long.replace('A', "\u{c0}")), None);
-        assert_eq!(names.position(&long[..long.len() - 1]), None);
-        assert_eq!(names.position(&format!("{long}x")), None);
+        assert_eq!(names.position(long.as_bytes()), Some(0));
+        assert_eq!(
+            names.position(long.to_ascii_uppercase().as_bytes()),
+            Some(0)
+        );
+        assert_eq!(
+            names.position(long.to_ascii_lowercase().as_bytes()),
+            Some(0)
+        );
+        assert_eq!(names.position(long.replace('A', "\u{c0}").as_bytes()), None);
+        assert_eq!(names.position(&long.as_bytes()[..long.len() - 1]), None);
+        assert_eq!(names.position(format!("{long}x").as_bytes()), None);
     }
 
     #[test]
@@ -1075,7 +1196,7 @@ mod tests {
         let grouped = ByTable::of(&tabled);
         let rows = |table: &str| -> Vec<i32> {
             grouped
-                .rows(table)
+                .rows(table.as_bytes())
                 .into_iter()
                 .map(|(_, row)| *row)
                 .collect()
@@ -1126,7 +1247,7 @@ mod tests {
         assert_eq!(read.indexes.rows.len(), 5);
 
         let grouped = ByTable::of(&read.indexes);
-        let mut entries = grouped.rows("t");
+        let mut entries = grouped.rows(b"t");
         entries.sort_by(|(_, left), (_, right)| left.name.cmp(&right.name));
         let built = indexes(&read, &entries);
 
@@ -1266,27 +1387,73 @@ mod tests {
     }
 
     #[test]
+    fn fr_lite_043_names_that_convert_alike_are_two_names_to_the_match() {
+        // FR-LITE-043: the match is made on the bytes the file holds, so two
+        // names that differ only in a byte that is not UTF-8 — both of which
+        // convert to `r\u{fffd}f` — are two names, each found by its own
+        // bytes and by its ASCII letters folded, and neither by the other's.
+        let names = Names::of([b"r\xffF".as_slice(), b"r\xfeF"].into_iter());
+
+        assert_eq!(names.position(b"r\xffF"), Some(0));
+        assert_eq!(names.position(b"R\xfef"), Some(1));
+        assert_eq!(names.position("r\u{fffd}F".as_bytes()), None);
+        assert_eq!(names.position(b"r\xfdF"), None);
+    }
+
+    #[test]
+    fn fr_lite_043_the_first_pair_that_converts_alike_is_found_and_no_other() {
+        // FR-LITE-043: two names of one set whose texts are equal and whose
+        // bytes differ are a pair; one name repeated with its own bytes — the
+        // runs of one index — is not.
+        let pair = super::first_alike(
+            [
+                ("b", b"b".as_slice(), ()),
+                ("r\u{fffd}f", b"r\xfef".as_slice(), ()),
+                ("a", b"a".as_slice(), ()),
+                ("r\u{fffd}f", b"r\xfff".as_slice(), ()),
+            ]
+            .into_iter(),
+        );
+        let ((text, left, ()), (_, right, ())) = pair.expect("the pair is found");
+        assert_eq!(text, "r\u{fffd}f");
+        assert_eq!((left, right), (b"r\xfef".as_slice(), b"r\xfff".as_slice()));
+
+        let repeated = super::first_alike(
+            [
+                ("ix", b"ix".as_slice(), ()),
+                ("ix", b"ix".as_slice(), ()),
+                ("r\u{fffd}f", b"r\xfff".as_slice(), ()),
+            ]
+            .into_iter(),
+        );
+        assert!(repeated.is_none());
+    }
+
+    #[test]
     fn br_lite_003_names_match_with_the_26_ascii_letters_folded_and_no_other_character() {
-        let names =
-            Names::of(["Vessel", "port_call", "\u{c9}mbarque", "\u{e9}mbarque"].into_iter());
+        let names = Names::of(
+            ["Vessel", "port_call", "\u{c9}mbarque", "\u{e9}mbarque"]
+                .map(str::as_bytes)
+                .into_iter(),
+        );
 
         // Folded over the whole name, in either direction.
-        assert_eq!(names.position("Vessel"), Some(0));
-        assert_eq!(names.position("VESSEL"), Some(0));
-        assert_eq!(names.position("vessel"), Some(0));
-        assert_eq!(names.position("vEsSeL"), Some(0));
-        assert_eq!(names.position("PORT_CALL"), Some(1));
+        assert_eq!(names.position("Vessel".as_bytes()), Some(0));
+        assert_eq!(names.position("VESSEL".as_bytes()), Some(0));
+        assert_eq!(names.position("vessel".as_bytes()), Some(0));
+        assert_eq!(names.position("vEsSeL".as_bytes()), Some(0));
+        assert_eq!(names.position("PORT_CALL".as_bytes()), Some(1));
         // No character outside ASCII is folded: É and é are two names.
-        assert_eq!(names.position("\u{c9}MBARQUE"), Some(2));
-        assert_eq!(names.position("\u{e9}MBARQUE"), Some(3));
-        assert_eq!(names.position("\u{c9}mbarque"), Some(2));
+        assert_eq!(names.position("\u{c9}MBARQUE".as_bytes()), Some(2));
+        assert_eq!(names.position("\u{e9}MBARQUE".as_bytes()), Some(3));
+        assert_eq!(names.position("\u{c9}mbarque".as_bytes()), Some(2));
         // The whole name, and nothing near it.
         for other in ["Vesse", "Vessels", "v\u{e9}ssel", "port call", "", "berth"] {
-            assert_eq!(names.position(other), None, "{other}");
+            assert_eq!(names.position(other.as_bytes()), None, "{other}");
         }
         // A file whose schema loads holds no two names that fold alike; were
         // it given them, the first is kept.
-        let clashing = Names::of(["a", "A"].into_iter());
-        assert_eq!(clashing.position("A"), Some(0));
+        let clashing = Names::of([b"a".as_slice(), b"A"].into_iter());
+        assert_eq!(clashing.position(b"A"), Some(0));
     }
 }

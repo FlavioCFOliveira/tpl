@@ -1,8 +1,8 @@
 ---
 title: Worked Examples
 status: approved
-last-reviewed: 2026-09-22
-related: [use-cases.md, template-environment.md, server-contract.md, render-command.md, cfg-commands.md, project-and-discovery.md, template-commands.md]
+last-reviewed: 2026-11-05
+related: [use-cases.md, template-environment.md, server-contract.md, mysql-contract.md, sqlite-contract.md, render-command.md, cfg-commands.md, project-and-discovery.md, template-commands.md]
 ---
 
 # Worked Examples
@@ -23,14 +23,18 @@ example renders is accepted by the target language's own toolchain, per
 ## Scope
 
 In scope: what a worked example is, how many there are, which schemas they
-read, which server they read them from, what artefacts each one holds, the
-workflow each one drives, where that workflow runs, where its type mapping
-comes from, and what makes one correct.
+read, which servers and which database file they read them from, through
+which of the three providers, what artefacts each one holds, the workflow
+each one drives, where that workflow runs, where its type mapping comes from,
+and what makes one correct.
 
 Out of scope: the content of any template, the content of any type mapping, the
-code any example renders, the tools a compile gate invokes, and how the server
-of `FR-EX-006` is provisioned. The first four are the examples' own; the last is
-fixture work, with an owner outside this corpus.
+code any example renders, the tools a compile gate invokes, how the servers
+of `FR-EX-006` and `FR-EX-011` are provisioned, and how the database file of
+`FR-EX-012` is built from its text. The first four are the examples' own; the
+last two are fixture work, with an owner outside this corpus — for the
+server of `FR-EX-011`, the fixture `FR-MYSQL-044` obliges, and for the file
+of `FR-EX-012`, the fixture `FR-LITE-038` obliges.
 
 **The subject of the requirements in this file is the worked example and not
 `tpl`.** What they fix is an artefact of the repository rather than a behaviour
@@ -223,9 +227,103 @@ exception and its two members.
   four-series obligation belongs to the fixture of `scripts/mariadb/`, which is
   what `FR-SRV-029` binds its tests to, and a worked example reads one server.
 
+  *Note added in the seventy-ninth edition,* for rmp `#353`. The three
+  schemas are read through a `mariadb` entry. `FR-EX-011` adds a schema read
+  through a `mysql` entry from a server of its own, and `FR-EX-012` a
+  database read through a `sqlite` entry from a file, and both leave this
+  requirement as it stands.
+
+- **FR-EX-011**: All four worked examples SHALL also read the `freight`
+  schema of the fixture of `scripts/mysql/`, through a `mysql` entry, from
+  one server of that fixture of the most recent series named by
+  `FR-MYSQL-003`, and SHALL render and submit to their compile gate, per
+  `FR-EX-009`, the data layer of that schema as they do the data layer of
+  each schema of `FR-EX-006`. `BR-SRV-005` and `BR-MYSQL-001` govern the
+  series: this requirement names the criterion and never the number.
+
+  *Why this schema.* It is the main schema `FR-MYSQL-044` obliges the fixture
+  to hold, modelled on a realistic domain and carrying every native type
+  every series of `FR-MYSQL-003` accepts, so a data layer rendered from it
+  meets the `data_type` of every native type both series accept, as the
+  schemas of `FR-EX-006` together do for a `mariadb` read. Among them are
+  the two values no read of a `mariadb` entry produces, `json` and
+  `geomcollection`, which `FR-MYSQL-028` records and whose families
+  `FR-ENV-049` fixes; the examples' type mappings were written over the
+  three schemas of `FR-EX-006` and had met neither. The fixture's other two
+  schemas are not read: the second schema of the eighth item of
+  `FR-MYSQL-044`, whose foreign keys with `freight` cross a schema and are
+  excluded from a read of `freight` under `FR-CAT-057`, and a database that
+  holds no object, which `FR-MYSQL-042` compares with `freight` for
+  `NFR-PERF-001`.
+
+  *Why one server, and the most recent series.* `FR-MYSQL-014` records that
+  every field the model carries returned the same value on both series for
+  the fixture's schemas, so a second server would render the same files;
+  and a worked example reads one server per provider, as `FR-EX-006` reasons
+  for MariaDB.
+
+  *Rationale.* The examples are this corpus's demonstration that the
+  commands compose into code a toolchain accepts, and sprint 29 requires
+  that every provider read a schema and generate code without failure. Over
+  a `mysql` entry the demonstration did not exist: each example's type
+  mapping calls `fail()` for a value it does not handle, which ends the
+  render with `65` under `FR-SEM-014`, and it did not handle `json` or
+  `geomcollection` (rmp `#353`). The user decided on 2026-11-05 that the
+  examples cover all three providers; `FR-EX-012` is the third.
+
+  *Added in the seventy-ninth edition,* for rmp `#353`.
+
+- **FR-EX-012**: All four worked examples SHALL also read, through a
+  `sqlite` entry, the main database of the fixture of `scripts/sqlite/` —
+  the database `FR-LITE-038` builds from `scripts/sqlite/freight.sql` — and
+  SHALL render and submit to their compile gate, per `FR-EX-009`, the data
+  layer of that database as they do the data layer of each schema of
+  `FR-EX-006`. The database SHALL be built from that text, every statement of
+  it accepted, and SHALL NOT be committed as a binary file, per
+  `FR-LITE-038`; the entry SHALL name it by `path`, per `FR-CONF-054`.
+
+  *Why this database.* It is the counterpart of the `freight` of
+  `FR-EX-006` and of `FR-EX-011`: the main database of its provider's
+  fixture, in the same freight domain, and the one `FR-LITE-038` obliges to
+  exercise every case [sqlite-contract.md](sqlite-contract.md) states,
+  declared types yielding each of the five affinities among them. The
+  fixture's other databases each hold one shape a `sqlite` read refuses, or a
+  case a data layer does not exercise, and are not read.
+
+  *What a type mapping meets.* A `sqlite` read gives every column the
+  `data_type` `FR-LITE-026` derives from its declared type: one of the five
+  affinities `integer`, `text`, `blob`, `real` and `numeric`, whose families
+  `FR-ENV-048` fixes, with every size part `null` and the declared type whole
+  in `column_type`. `integer`, `real` and `numeric` are values no `mariadb`
+  or `mysql` read produces, so the examples' type mappings meet three values
+  no schema they read before carried.
+
+  *Consequence, stated plainly.* The model of a `sqlite` read is the model of
+  every other read, and differs where the provider's contract says it does:
+  the shadow tables of the database's `fts5` table are covered as tables,
+  per `FR-LITE-020`, and enter the data layer as the other tables do; a view
+  carries no columns, per `FR-LITE-033`; a foreign key carries no name, per
+  `FR-LITE-031`; `routines` is empty, per `FR-LITE-022`; and
+  `database.provider` is `sqlite`, per `FR-CTX-043`. A template that renders
+  over all three providers reads each of these as the model gives it.
+
+  *Rationale.* The user decided on 2026-11-05 that the four examples cover
+  all three providers, which is what sprint 29's requirement that every
+  provider generate code without failure asks of the demonstration. Before
+  this edition no example read a `sqlite` entry: `FR-EX-006` named a server
+  before the `sqlite` provider existed, and no edition since had extended the
+  set to a database file.
+
+  *Added in the seventy-ninth edition,* for rmp `#353`.
+
 - **FR-EX-007**: The four worked examples SHALL read those schemas under the
   same conditions: the same server, the same three schemas at the same state,
-  and database entries that differ in nothing a read can observe.
+  and database entries that differ in nothing a read can observe. The same
+  SHALL hold of the schema of `FR-EX-011`: the four read it from the same
+  server, at the same state, through entries that differ in nothing a read
+  can observe. And the same SHALL hold of the database of `FR-EX-012`: the
+  four read a file built from the same text, at the same state, through
+  entries that differ in nothing a read can observe.
 
   *Rationale.* The set is comparable only if one axis varies. Where two
   examples render different data layers, the difference must be attributable to
@@ -242,12 +340,19 @@ exception and its two members.
   corpus, in the terms the eighth edition used for `FR-CONF-038`. This
   requirement fixes that there is one, and what must be true of it.
 
+  *Amended in the seventy-ninth edition,* for rmp `#353`: the last two
+  sentences of the requirement are new, for the schema `FR-EX-011` adds and
+  the database `FR-EX-012` adds. The conditions are per provider: the
+  examples compare their data layers schema by schema, and no comparison
+  sets a read of one provider beside a read of another.
+
 ## The type mapping
 
 - **FR-EX-008**: Each worked example SHALL carry its own type mapping,
   delivered as a template macro in the form `FR-ENV-011` fixes, and that macro
   SHALL produce a type of the target language for every value of `data_type`
-  the model reports for a column of the three schemas of `FR-EX-006`. No worked
+  the model reports for a column of the three schemas of `FR-EX-006`, of the
+  schema of `FR-EX-011`, and of the database of `FR-EX-012`. No worked
   example SHALL expect `tpl` to supply a mapping for its language.
 
   *Rationale.* `FR-ENV-011` and `BR-ENV-002` put the mapping in the project
@@ -268,6 +373,20 @@ exception and its two members.
   complete over MariaDB, and this requirement does not claim it is. What it
   buys is that no type the examples actually meet is left to a fallback nobody
   wrote.
+
+  *Amended in the seventy-ninth edition,* for rmp `#353`: the obligation
+  reaches the schema of `FR-EX-011` and the database of `FR-EX-012`. A
+  `mysql` read carries the values of `data_type` that `FR-MYSQL-028`
+  records, of which `json` and `geomcollection` are the two no `mariadb` read
+  produces; the mapping is obliged over every value that schema yields, those
+  two among them, and `FR-ENV-049` gives the family each belongs to. The
+  accepted cost reads the same for MySQL: a mapping complete over that schema
+  is not complete over MySQL — `vector`, which one series accepts and the
+  fixture's shared DDL cannot declare, per `FR-MYSQL-044`, is outside it. A
+  `sqlite` read carries one of the five affinities of `FR-LITE-026` for every
+  column, and the database of `FR-EX-012` declares types yielding all five,
+  so the mapping is obliged over the whole of what a `sqlite` read can
+  report; `FR-ENV-048` gives the family of each.
 
 ## What makes a worked example correct
 
@@ -312,10 +431,11 @@ exception and its two members.
   is corrected here, never worked around in the example.
 
 - **BR-EX-002**: The four examples are one set and are maintained as one. A
-  change to the schemas of `FR-EX-006`, or to the model a schema produces,
-  reaches all four; an example left behind is a broken example, not a stale
-  one, because the compile gate of `FR-EX-009` is the only thing that says so
-  and it says so for each example separately.
+  change to the schemas of `FR-EX-006` or of `FR-EX-011`, to the database of
+  `FR-EX-012`, or to the model a schema or a database produces, reaches all
+  four; an example left behind is a broken
+  example, not a stale one, because the compile gate of `FR-EX-009` is the
+  only thing that says so and it says so for each example separately.
 
 ## Dependencies
 
@@ -334,6 +454,14 @@ exception and its two members.
   which fix the fields a type mapping reads.
 - [server-contract.md](server-contract.md) — `FR-SRV-015` and `BR-SRV-005`,
   which fix the series `FR-EX-006` names by criterion.
+- [mysql-contract.md](mysql-contract.md) — `FR-MYSQL-003` and `BR-MYSQL-001`,
+  which fix the series `FR-EX-011` names by criterion; `FR-MYSQL-044`, the
+  fixture that holds its schema; and `FR-MYSQL-028`, the values of
+  `data_type` a `mysql` read produces.
+- [sqlite-contract.md](sqlite-contract.md) — `FR-LITE-038`, the fixture that
+  builds the database of `FR-EX-012`; `FR-LITE-026`, the values of
+  `data_type` a `sqlite` read produces; and the requirements that fill the
+  model of a `sqlite` read.
 - [catalogue-coverage.md](catalogue-coverage.md) — what the model carries, and
   therefore what `freight` is obliged to exercise.
 

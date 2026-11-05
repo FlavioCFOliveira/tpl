@@ -1,7 +1,7 @@
 ---
 title: Help and Version
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md, context-document.md, render-command.md, project-and-discovery.md]
 ---
 
@@ -410,6 +410,55 @@ alongside the command it documents.
   exists, as the line of `FR-CFG-053` does after finding AE-02; the
   `tpl cfg unset` row inherits the wording by reference. The `tpl cache
   clean` row states no cache as present and is unchanged.
+
+- **FR-HELP-038**: A help text, and every string of the JSON command tree of
+  `FR-HELP-016`, SHALL name a database provider only where its statement
+  holds of that provider alone. A statement that holds for every provider of
+  `FR-CONF-051` SHALL name all three, or none; one that holds for a
+  `mariadb` and a `mysql` entry alike SHALL name MariaDB and MySQL both, or
+  speak of the server; and none SHALL describe `tpl` as reading MariaDB
+  alone. The following statements SHALL read as the table gives them, in
+  the text help, and in the JSON command tree WHERE the tree carries the
+  string they belong to — the `description` of a command's entry, or the
+  `purpose` of a flag, per `FR-HELP-019`, `FR-HELP-020` and `FR-HELP-018`:
+
+  | Where | Statement |
+  |---|---|
+  | `DESCRIPTION` of `tpl`, first sentence | `tpl reads the structure of a MariaDB or MySQL database, or of a SQLite database file (its tables, views and routines), and renders MiniJinja templates with it.` |
+  | The row `database entry` of the help of `tpl` | `A named way to reach one database, stored in .tpl/.cfg: a MariaDB or a MySQL server, whose --schema names the database on it and need not be the entry's name, or a SQLite database file, named by --path. Select one with -d NAME, or make one the default with tpl cfg set core.database NAME.` |
+  | The purpose of `-d/--database`, per `FR-HELP-030` | `Selects the database entry to use, a named database in .tpl/.cfg — a MariaDB or a MySQL server, or a SQLite database file — that tpl cfg database list lists; it overrides core.database.` |
+  | The purpose of `--host`, per `FR-HELP-030` | `Sets the host name or IP address of the MariaDB or MySQL server.` |
+  | The purpose of `--port` | `Sets the TCP port of the MariaDB or MySQL server, from 1 to 65535.` |
+  | The purpose of `--schema` | `Sets the name of the database on the MariaDB or MySQL server, stored as database.<entry>.database; this is not the entry name that -d selects.` |
+  | `DESCRIPTION` of `tpl cfg database add`, the sentence on connecting | `To connect, a MariaDB or a MySQL entry needs --host and --schema, or a --dsn that names both; --port defaults to 3306 and --user is optional.` |
+  | `DESCRIPTION` of `tpl cfg database test`, the third answer | `which server answered, MariaDB or MySQL,` |
+  | The `78` outcome of every command that opens a connection, the clause on the server | `the server is not a supported version of the entry's provider, MariaDB or MySQL` |
+
+  The rest of each text is the implementation's, under `BR-HELP-002`.
+
+  *Rationale.* rmp `#358`: the help of `tpl` said that it reads "a MariaDB
+  database" and called a database entry "a named connection to a MariaDB
+  server", although `FR-CONF-051` gives an entry three providers. The help
+  is one of the three channels the primary consumer has, per
+  `FR-HELP-014`, and a caller reading it would conclude that a MySQL server
+  or a SQLite file cannot be read. The statements are fixed, as the opening
+  line of `FR-HELP-037` is, because the error was in what they say, which
+  no requirement had fixed; the rule above them reaches every line no row
+  names.
+
+  *Added in the eighty-sixth edition,* for rmp `#358`.
+
+  *Amended in the eighty-seventh edition,* for rmp `#358`. The table's
+  statements were required "in the text help and in the JSON command tree
+  alike", and the first two belong to the root `tpl`, which `FR-HELP-019`
+  gives no entry in `data.commands`: they are now required in the text help,
+  and in the tree only where it carries their string, which for those two
+  it does not. *Rejected: a key of `data` for the root's description.* It
+  changes the document `FR-HELP-017` fixes, for two sentences a caller of
+  the tree reaches in `tpl --help`. The row of `-d/--database` is new: its
+  purpose called an entry "a named connection", which names no provider and
+  reads as a server; the flag's purpose is carried in `data.global_flags`,
+  so it is required there too.
 
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help

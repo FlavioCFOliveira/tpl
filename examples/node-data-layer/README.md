@@ -1,11 +1,12 @@
-# `node-data-layer` — a Node.js data layer, built from three schemas through the command line
+# `node-data-layer` — a Node.js data layer, built from five reads through the command line
 
 This is the Node.js member of the four worked examples `FR-EX-001` requires. It
-reads `sakila`, `world` and `freight` from one MariaDB server and renders one ES
-module directory per schema: a JSDoc `@typedef` for the row, its primary key, the
+reads `sakila`, `world` and `freight` from one MariaDB server, `freight` from
+one MySQL server and the SQLite fixture's main database, and renders one ES
+module directory per read: a JSDoc `@typedef` for the row, its primary key, the
 columns an ordering may name, the filter a search takes, a base class carrying
-the contract and a `mysql2/promise` implementation of it, for every one of the 36
-tables.
+the contract and a `mysql2/promise` implementation of it, for every one of the 82
+tables; a table with no primary key gets its row types alone.
 
 Its acceptance signal is not that `tpl` exited `0`. It is that `node --check` and
 `tsc --checkJs --noEmit` accept every file it rendered, per `FR-EX-009`, and the
@@ -21,13 +22,13 @@ python3 examples/node-data-layer/run.py
 
 | Path | Rendered from | Count |
 |---|---|---|
-| `src/<schema>/core.js` | `node/core` | 3, one per schema |
-| `src/<schema>/index.js` | `node/index` | 3 |
-| `src/<schema>/<table>.js` | `node/model` | 36, one per table |
-| `src/<schema>/<table>_repository.js` | `node/repository` | 36 |
-| `src/<schema>/<table>_mysql2.js` | `node/mysql2` | 36 |
+| `src/<entry>/core.js` | `node/core` | 5, one per read |
+| `src/<entry>/index.js` | `node/index` | 5 |
+| `src/<entry>/<table>.js` | `node/model` | 82, one per table |
+| `src/<entry>/<table>_repository.js` | `node/repository` | 80, one per table with a primary key |
+| `src/<entry>/<table>_mysql2.js` | `node/mysql2` | 80, one per table with a primary key |
 
-114 files and 25,001 lines, from 114 invocations of `tpl render`. One file is one
+252 files and 54,317 lines, from 252 invocations of `tpl render`. One file is one
 invocation, because `tpl render` writes to standard output and nowhere else —
 `FR-RND-028`, and `FR-EX-005` is the consequence.
 
@@ -160,8 +161,8 @@ from nothing: `tpl init` writes a starter macro for Rust, per `FR-PROJ-017`, and
 this language has none, which is the case the extension point exists for.
 
 It is obliged to cover every value of `data_type` the model reports for a column
-of the three schemas, per `FR-EX-008`. That is **39 values over 362 columns**, and
-all 39 are branched on. Nothing falls through: the final branch calls `fail()`, so
+of every read, per `FR-EX-008`. That is **44 values over 755 columns**, and all
+44 are branched on. Nothing falls through: the final branch calls `fail()`, so
 a type the macro has never met ends the render with `65` and names the column.
 Removing the `uuid` branch and re-rendering `freight.customer` produces exactly
 that —
@@ -221,13 +222,18 @@ the driver's documentation.
 | `datetime` | `Date` | |
 | `timestamp` | `Date` | |
 
-**25 of the 39 are carried by `freight` alone**, which is why `FR-EX-006` puts a
+The five values the MySQL and the SQLite reads add — `json` and `geomcollection`
+from `FR-MYSQL-028`, and the affinities `integer`, `real` and `numeric` from
+`FR-LITE-026` — are mapped to `string`, `Buffer`, `string`, `number`, `string` in that order, and are not rows of the table above: the compile gate
+accepted them, and no value of them was read back through the driver.
+
+**25 of the 39 MariaDB values are carried by `freight` alone**, which is why `FR-EX-006` puts a
 third schema beside the two published ones. A mapping written against `sakila` and
 `world` would have been complete over 14 types and would never have met a spatial
 column, a `BIT`, a `BIGINT`, an `INET6`, a `UUID`, a `TIME`, a generated column or
 a system-versioned table.
 
-The mapping needs **no dependency beyond mysql2**: four types answer for 39, and
+The mapping needs **no dependency beyond mysql2**: four types answer for 44, and
 all four — `number`, `string`, `Buffer` and `Date` — are the platform's own.
 
 ### The `BIGINT` decision, and why it is a decision about the connection
@@ -420,8 +426,12 @@ Four of those rows are JavaScript-specific:
 
 A rendered file is named for the table exactly as the catalogue names it, and
 every import names it the same way, so no transformation stands between a
-module's name and its file's. That is one of the Python example's known limits
-that this one does not have.
+module's name and its file's — save one: where two tables' names are equal
+ignoring letter case, as SQLite's `Émbarque` and `émbarque` are, each is numbered
+by its position in the group, `Émbarque_1` and `émbarque_2`, in its file and in
+every import of it, because a filesystem that ignores letter case would make the
+two files one. `run.py` and `table_key` in `templates/node/_types.jinja` apply
+the same rule.
 
 ### Two hazards the other examples do not have, and one they have that this does not
 
@@ -503,7 +513,7 @@ committed `src/` stays exactly as rendered.
 | | |
 |---|---|
 | The binary | `cargo build --release` |
-| The server | `./scripts/mariadb/up.sh`, then `./scripts/mariadb/seed-datasets.sh 12.3` |
+| The servers | `./scripts/mariadb/up.sh`, then `./scripts/mariadb/seed-datasets.sh 12.3`; and `./scripts/mysql/up.sh 9.7`. The SQLite database is built by the driver |
 | The password | `export FIXTURE_PW=tpl-root` |
 | Node.js | 20 or newer, which is the floor `engines` states. Verified on v26.9.0 |
 
@@ -529,7 +539,7 @@ which reaches no network.
 The three above are needed by the *rendered* package and by the gate that reads
 it.
 
-The server, the three schemas and the entries are the driver's, not this
+The servers, the SQLite database, the reads and the entries are the driver's, not this
 example's: [`_driver/README.md`](../_driver/README.md) documents them, and
 `FR-EX-007` is why all four examples read them the same way.
 
@@ -566,8 +576,10 @@ because the compile gate is what would report it:
   own *accepted cost* clause records it; buying it back would need an initialism
   list, which is a second opinion to maintain and another way for two columns to
   collide.
-- **A table with no primary key is refused.** All 36 have one. A table without one
-  ends the render with `65` and says why, because read, update and delete would
+- **A table with no primary key has no repository.** Two of the 82 have none,
+  MySQL's `currency` and `edi_message_staging`: each gets its row types alone,
+  and the repository templates, given one, end the render with `65` and say why,
+  because read, update and delete would
   have no key to address a row by. So is a table whose every column is generated
   or part of the key, which would leave an `UPDATE` with an empty `SET`.
 - **An equality filter over a `BIT` column matches nothing**, for the measured

@@ -10,11 +10,17 @@ Read the schema              ``tpl schema tables``
 Render                       ``tpl render``
 ===========================  ==================================
 
+Steps two to four run once per read: the three MariaDB schemas of
+``FR-EX-006``, the MySQL ``freight`` of ``FR-EX-011``, and the SQLite database
+of ``FR-EX-012``, which is built from ``scripts/sqlite/freight.sql`` before its
+entry is registered.
+
 Four copies of that sequence would drift, and a drift would cost the set the
 one property it is for: ``FR-EX-007`` requires the four examples to read the
-same three schemas under the same conditions, so that a difference between two
-rendered data layers is attributable to the templates and the type mappings and
-to nothing else. Written once, that holds by construction.
+same schemas and the same database under the same conditions, so that a
+difference between two rendered data layers is attributable to the templates
+and the type mappings and to nothing else. Written once, that holds by
+construction.
 
 What this module does **not** know is any example. There is no language here,
 no template name, no file name and no table list: an example supplies those by
@@ -36,10 +42,17 @@ from typing import Any
 from .catalogue import Catalogue, Schema, tables_from
 from .cli import Invocation, Tpl
 from .fixture import (
+    MYSQL_ENTRY,
+    MYSQL_SCHEMA,
+    MYSQL_SERVER,
     PASSWORD_ENV,
     SCHEMAS,
     SERVER,
+    SQLITE_DATABASE,
+    SQLITE_ENTRY,
+    build_sqlite,
     ca_file,
+    mysql_ca_file,
     require_password,
 )
 
@@ -157,7 +170,7 @@ class Outcome:
     project: Path
     #: The workspace the example was given.
     workspace: Path
-    #: The three schemas, read once each. Kept out of the default ``repr``: it
+    #: Every read, once each. Kept out of the default ``repr``: it
     #: carries every column of every table, so printing an :class:`Outcome`
     #: would print upwards of a megabyte of catalogue.
     catalogue: Catalogue = field(repr=False)
@@ -169,7 +182,7 @@ class Outcome:
     invocations: tuple[Invocation, ...]
 
 
-#: An example's contribution: given the three schemas, say what to render.
+#: An example's contribution: given every read, say what to render.
 #:
 #: This is the whole of the example-specific surface. Everything the driver
 #: knows is fixture; everything the example knows arrives through here.
@@ -194,8 +207,10 @@ def run(
             created if absent, and ``<workspace>/.tpl`` belongs to this
             function: an example keeps its own artefacts somewhere else and
             passes this a directory it is content to see rewritten.
-        plan: called once, with the three schemas read, and returns the renders
-            to perform. This is where an example's own knowledge lives.
+        plan: called once, with every read made — the three schemas of
+            ``FR-EX-006``, the schema of ``FR-EX-011`` and the database of
+            ``FR-EX-012`` — and returns the renders to perform. This is where
+            an example's own knowledge lives.
         templates: a directory whose contents are copied into
             ``<workspace>/.tpl/templates/`` after ``tpl init``, merging over
             what ``init`` wrote so that an example may replace the macro of
@@ -261,36 +276,25 @@ def run(
     schemas: list[Schema] = []
     access: list[Access] = []
 
-    for schema in SCHEMAS:
-        entry = schema
+    def read(entry: str, name: str, provider: str, added: Sequence[str]) -> None:
+        """Steps two to four for one entry: register, verify, read.
 
-        # ------------------------------------------- 2. register the access --
-        tpl.run(
-            "cfg",
-            "database",
-            "add",
-            entry,
-            "--host",
-            SERVER.host,
-            "--port",
-            str(SERVER.port),
-            "--user",
-            SERVER.user,
-            "--schema",
-            schema,
-            "--tls",
-            SERVER.tls,
-            "--ca-file",
-            str(ca_file()),
-        )
-        # The password is the one field never written into the file and never
-        # passed as a value: what goes in is the literal `${FIXTURE_PW}`, which
-        # `tpl` expands from the environment at connection time. The single
-        # quotes a shell would need are not needed here — no shell is involved.
-        tpl.run("cfg", "set", f"database.{entry}.password", f"${{{PASSWORD_ENV}}}")
-        say(f"add      {entry} -> {SERVER.user}@{SERVER.host}:{SERVER.port}/{schema}")
+        ``added`` is what follows the entry's name on ``cfg database add``.
+        A server entry is given its password afterwards, as the literal
+        ``${FIXTURE_PW}``; a ``sqlite`` entry carries none (``FR-CONF-052``).
+        """
+        # ----------------------------------------------- 2. register the access --
+        tpl.run("cfg", "database", "add", entry, *added)
+        if provider != "sqlite":
+            # The password is the one field never written into the file and
+            # never passed as a value: what goes in is the literal
+            # `${FIXTURE_PW}`, which `tpl` expands from the environment when it
+            # opens a connection. The single quotes a shell would need are not
+            # needed here — no shell is involved.
+            tpl.run("cfg", "set", f"database.{entry}.password", f"${{{PASSWORD_ENV}}}")
+        say(f"add      {entry} -> {provider} {name}")
 
-        # --------------------------------------------- 3. verify the access --
+        # ------------------------------------------------- 3. verify the access --
         reported = _verify(tpl, entry)
         access.append(reported)
         say(
@@ -300,11 +304,68 @@ def run(
             f"server={reported.server.get('version')}"
         )
 
-        # ------------------------------------------------ 4. read the schema --
+        # ---------------------------------------------------- 4. read the schema --
         data = tpl.envelope("-d", entry, "schema", "tables")
-        tables = tables_from(data, schema=schema, entry=entry)
-        schemas.append(Schema(name=schema, entry=entry, tables=tables))
+        tables = tables_from(data, schema=name, entry=entry)
+        schemas.append(Schema(name=name, entry=entry, tables=tables, provider=provider))
         say(f"schema   {entry}: {len(tables)} tables")
+
+    def server(host: str, port: int, user: str, schema: str, tls: str, ca: Path) -> list[str]:
+        """The flags of ``cfg database add`` for a server entry."""
+        return [
+            "--host",
+            host,
+            "--port",
+            str(port),
+            "--user",
+            user,
+            "--schema",
+            schema,
+            "--tls",
+            tls,
+            "--ca-file",
+            str(ca),
+        ]
+
+    # FR-EX-006: the three MariaDB schemas, each under an entry of its own name.
+    for schema in SCHEMAS:
+        read(
+            schema,
+            schema,
+            "mariadb",
+            server(SERVER.host, SERVER.port, SERVER.user, schema, SERVER.tls, ca_file()),
+        )
+
+    # FR-EX-011: the MySQL fixture's `freight`, through a `mysql` entry.
+    read(
+        MYSQL_ENTRY,
+        MYSQL_SCHEMA,
+        "mysql",
+        [
+            "--provider",
+            "mysql",
+            *server(
+                MYSQL_SERVER.host,
+                MYSQL_SERVER.port,
+                MYSQL_SERVER.user,
+                MYSQL_SCHEMA,
+                MYSQL_SERVER.tls,
+                mysql_ca_file(),
+            ),
+        ],
+    )
+
+    # FR-EX-012: the SQLite fixture's main database, built from its text into
+    # the project the workflow has just created, through a `sqlite` entry that
+    # names it by a path relative to the project directory (FR-CONF-054).
+    built = build_sqlite(workspace / SQLITE_DATABASE)
+    say(f"sqlite   built {built}")
+    read(
+        SQLITE_ENTRY,
+        "main",
+        "sqlite",
+        ["--provider", "sqlite", "--path", str(SQLITE_DATABASE)],
+    )
 
     catalogue = Catalogue(schemas=tuple(schemas))
 

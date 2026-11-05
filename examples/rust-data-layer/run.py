@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""The Rust worked example: a data layer for three schemas, and the gate that
+"""The Rust worked example: a data layer for every read, and the gate that
 decides whether it is correct.
 
 ``FR-EX-002`` fixes what this produces — source files that declare the tables of
-``sakila``, ``world`` and ``freight`` as Rust types — and ``FR-EX-009`` fixes
+``sakila``, ``world`` and ``freight`` from MariaDB, of ``freight`` from MySQL and
+of the SQLite fixture's main database as Rust types — and ``FR-EX-009`` fixes
 what makes it correct: not that ``tpl`` exited ``0``, but that the Rust
 toolchain accepts every file that was rendered.
 
@@ -22,6 +23,7 @@ password in the environment::
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -38,8 +40,11 @@ from _driver import (  # noqa: E402
     MalformedEnvelope,
     PasswordNotInEnvironment,
     Render,
+    Schema,
+    Tpl,
     UnexpectedDocument,
     run,
+    tpl_binary,
 )
 
 #: The templates this example owns, copied into the project by the driver.
@@ -65,7 +70,7 @@ WORKSPACE = EXAMPLE
 OUTPUT = EXAMPLE / "src"
 
 #: The one Rust file of the crate this example does not render. It carries the
-#: crate's attributes and names the three schema modules; everything else under
+#: crate's attributes and names the five schema modules; everything else under
 #: :data:`OUTPUT` is generated and is removed before each run.
 CRATE_ROOT = OUTPUT / "lib.rs"
 
@@ -109,44 +114,76 @@ def _module_file(directory: Path, name: str) -> Path:
     return candidate
 
 
+def _module_stems(schema: Schema) -> dict[str, str]:
+    """The file stem of every table of ``schema``, as the templates derive it.
+
+    ``templates/rust/_types.jinja`` derives the module a table's row is declared
+    in — the table's name made a Rust identifier, and numbered where two tables
+    would otherwise share one ignoring letter case — and ``rust/_modules``
+    renders the file that module lives in for the whole read. A file is named
+    by it, so the file and the ``pub mod`` ``rust/schema`` writes for it are
+    derived by one macro and cannot disagree.
+    """
+    tpl = Tpl(binary=tpl_binary(), tpl_dir=WORKSPACE / ".tpl")
+    stems = json.loads(tpl.run("-d", schema.entry, "render", "rust/_modules").text())
+    if not isinstance(stems, dict) or set(stems) != {t.name for t in schema.tables}:
+        raise UnexpectedDocument(
+            f"rust/_modules did not name every table of {schema.entry}: {stems!r}"
+        )
+    return {str(name): str(stem) for name, stem in stems.items()}
+
+
 def plan(catalogue: Catalogue) -> list[Render]:
     """Say what to render, which is this example's whole contribution.
 
-    One Rust module per schema, and within it:
+    One Rust module per read — the three schemas of ``FR-EX-006``, the MySQL
+    ``freight`` of ``FR-EX-011`` and the SQLite database of ``FR-EX-012`` —
+    named after the entry that reads it, and within it:
 
-    * ``<schema>.rs``, rendered once with the whole database in context and no
+    * ``<entry>.rs``, rendered once with the whole database in context and no
       object flag, per ``FR-RND-006``: the module documentation, the errors, the
       ordering direction, the two column adapters the type mapping names, the
       connection, and the aggregate of every repository;
-    * three files per table — the row, the repository trait, and the ``sqlx``
-      implementation of that trait.
+    * for each table, the row, and for a table that declares a primary key the
+      repository trait and the ``sqlx`` implementation of that trait too: a
+      table with no key has no key to address a row by.
 
-    One file is one invocation, per ``FR-EX-005``, so this returns
-    ``3 x tables + schemas`` renders.
+    The module is the entry's name, passed to every render as ``vars.layer``:
+    the MySQL ``freight`` would otherwise take the MariaDB one's name. For a
+    schema of ``FR-EX-006`` the entry is the schema's own name. Each table's
+    files are named by :func:`_module_stems`.
+
+    One file is one invocation, per ``FR-EX-005``.
     """
     renders: list[Render] = []
     for schema in catalogue:
-        module = _module_file(OUTPUT, f"{schema.name}.rs")
+        layer = {"layer": schema.entry}
+        module = _module_file(OUTPUT, f"{schema.entry}.rs")
         renders.append(
             Render(
                 template="rust/schema",
                 destination=module,
                 entry=schema.entry,
+                variables=layer,
             )
         )
-        directory = _module_file(OUTPUT, schema.name)
+        directory = _module_file(OUTPUT, schema.entry)
+        stems = _module_stems(schema)
         for table in schema.tables:
-            for template, suffix in (
-                ("rust/struct", ".rs"),
-                ("rust/repository", "_repository.rs"),
-                ("rust/sqlx", "_sqlx.rs"),
-            ):
+            templates = [("rust/struct", ".rs")]
+            if table.raw.get("primary_key"):
+                templates += [
+                    ("rust/repository", "_repository.rs"),
+                    ("rust/sqlx", "_sqlx.rs"),
+                ]
+            for template, suffix in templates:
                 renders.append(
                     Render(
                         template=template,
-                        destination=_module_file(directory, table.name + suffix),
+                        destination=_module_file(directory, stems[table.name] + suffix),
                         entry=table.entry,
                         table=table.name,
+                        variables=layer,
                     )
                 )
     return renders
@@ -263,7 +300,7 @@ def report(catalogue: Catalogue, written: int) -> None:
 
     The count of distinct ``data_type`` values is the measure that matters for
     ``FR-EX-008``: the mapping is obliged over every value the model reports for
-    a column of the three schemas, and this says how many that was.
+    a column of every read, and this says how many that was.
     """
     types: set[str] = set()
     columns = 0
@@ -276,7 +313,10 @@ def report(catalogue: Catalogue, written: int) -> None:
 
     print(f"\nrendered {written} files into {OUTPUT}", file=sys.stderr)
     for schema in catalogue:
-        print(f"  {schema.name:8s} {len(schema.tables):3d} tables", file=sys.stderr)
+        print(
+            f"  {schema.entry:14s} {schema.provider:7s} {len(schema.tables):3d} tables",
+            file=sys.stderr,
+        )
     print(
         f"  {columns} columns carrying {len(types)} distinct data_type values, "
         f"every one of them mapped by templates/rust/_types.jinja",

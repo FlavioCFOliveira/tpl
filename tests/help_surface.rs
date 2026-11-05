@@ -833,7 +833,7 @@ fn fr_help_030_every_flag_and_argument_of_the_document_states_what_supplying_it_
 }
 
 #[test]
-fn fr_help_030_the_sentence_of_the_document_is_the_sentence_of_the_text_help() {
+fn fr_help_030_the_sentence_of_the_document_is_the_sentence_of_the_prose() {
     // FR-HELP-022 makes the typed table the one source of the sentence for both
     // channels and forbids deriving either from the other. What a caller can
     // check from outside is that the two agree, node by node.
@@ -1450,12 +1450,13 @@ fn rmp_274_the_help_states_what_the_second_re_audit_found_it_left_out() {
 
     // S-02: what an entry needs before it can connect. Since the sixty-fifth
     // edition of the specification a sqlite entry needs --path instead
-    // (FR-CONF-053), so the sentence names the provider it holds for.
+    // (FR-CONF-053), so the sentence names the providers it holds for, as
+    // FR-HELP-038 of the eighty-sixth edition fixes it.
     let add = prose(&["cfg", "database", "add"]);
     assert!(
         add.contains(
-            "To connect, a MariaDB entry needs --host and --schema, or a --dsn that names both; --port \
-             defaults to 3306 and --user is optional. An entry without them is stored, but every \
+            "To connect, a MariaDB or a MySQL entry needs --host and --schema, or a --dsn that \
+             names both; --port defaults to 3306 and --user is optional. An entry without them is stored, but every \
              later command that connects with it exits 78."
         ),
         "{add}"
@@ -1481,10 +1482,11 @@ fn rmp_274_the_help_states_what_the_second_re_audit_found_it_left_out() {
     assert!(prose(&["help"]).contains("An unknown flag, a flag given twice"));
     assert!(prose(&["version"]).contains("a global flag that takes a value given twice"));
 
-    // The walkthrough: --schema is glossed, and listing points at JSON.
+    // The walkthrough: --schema is glossed, in the words FR-HELP-038 of the
+    // eighty-sixth edition fixes for the row, and listing points at JSON.
     let root = prose(&[]);
     assert!(
-        root.contains("Its --schema is the name of the database on that server"),
+        root.contains("whose --schema names the database on it and need not be the entry's name"),
         "{root}"
     );
     assert!(root.contains("tpl schema tables --format json"), "{root}");
@@ -1583,6 +1585,170 @@ fn fr_help_035_every_flag_and_argument_default_is_null_or_one_string() {
             } else {
                 &flag["long"]
             }
+        );
+    }
+}
+
+// ------------------------------------------------------------ FR-HELP-038 ---
+
+/// The entry of `path` in the JSON command tree.
+fn json_entry(tree: &serde_json::Value, path: &[&str]) -> serde_json::Value {
+    tree["data"]["commands"]
+        .as_array()
+        .expect("data.commands is an array")
+        .iter()
+        .find(|entry| {
+            entry["path"].as_array().is_some_and(|segments| {
+                segments
+                    .iter()
+                    .map(|s| s.as_str())
+                    .eq(path.iter().map(|s| Some(*s)))
+            })
+        })
+        .unwrap_or_else(|| panic!("the tree carries no entry for {path:?}"))
+        .clone()
+}
+
+/// The `purpose` of `flag` in the entry of `path`.
+fn json_purpose(entry: &serde_json::Value, flag: &str) -> String {
+    entry["options"]
+        .as_array()
+        .expect("options is an array")
+        .iter()
+        .find(|option| option["long"] == flag)
+        .and_then(|option| option["purpose"].as_str())
+        .unwrap_or_else(|| panic!("no {flag} in {}", entry["path"]))
+        .to_owned()
+}
+
+/// The `meaning` of exit code `code` in the entry of `path`.
+fn json_meaning(entry: &serde_json::Value, code: i64) -> String {
+    entry["exit_codes"]
+        .as_array()
+        .expect("exit_codes is an array")
+        .iter()
+        .find(|row| row["code"] == code)
+        .and_then(|row| row["meaning"].as_str())
+        .unwrap_or_else(|| panic!("no exit code {code} in {}", entry["path"]))
+        .to_owned()
+}
+
+#[test]
+fn fr_help_038_the_fixed_statements_read_as_the_requirement_gives_them() {
+    // FR-HELP-038, eighty-sixth edition: the eight statements that named
+    // MariaDB alone, in the text help and in the JSON command tree.
+    const DESCRIPTION: &str = "tpl reads the structure of a MariaDB or MySQL database, or of a \
+        SQLite database file (its tables, views and routines), and renders MiniJinja templates \
+        with it.";
+    const ENTRY: &str = "A named way to reach one database, stored in .tpl/.cfg: a MariaDB or a \
+        MySQL server, whose --schema names the database on it and need not be the entry's name, \
+        or a SQLite database file, named by --path. Select one with -d NAME, or make one the \
+        default with tpl cfg set core.database NAME.";
+    const HOST: &str = "Sets the host name or IP address of the MariaDB or MySQL server.";
+    const PORT: &str = "Sets the TCP port of the MariaDB or MySQL server, from 1 to 65535.";
+    const SCHEMA: &str = "Sets the name of the database on the MariaDB or MySQL server, stored \
+        as database.<entry>.database; this is not the entry name that -d selects.";
+    const CONNECT: &str = "To connect, a MariaDB or a MySQL entry needs --host and --schema, or \
+        a --dsn that names both; --port defaults to 3306 and --user is optional.";
+    const ANSWERED: &str = "which server answered, MariaDB or MySQL,";
+    const SERVER: &str =
+        "the server is not a supported version of the entry's provider, MariaDB or MySQL";
+
+    const DATABASE: &str = "Selects the database entry to use, a named database in \
+        .tpl/.cfg — a MariaDB or a MySQL server, or a SQLite database file — that tpl cfg \
+        database list lists; it overrides core.database.";
+
+    let tree = document();
+
+    // The purpose of -d/--database, in the global flags of the text help and
+    // in data.global_flags (FR-HELP-038, eighty-seventh edition).
+    assert!(prose(&[]).contains(DATABASE), "{}", prose(&[]));
+    let global = tree["data"]["global_flags"]
+        .as_array()
+        .expect("data.global_flags is an array")
+        .iter()
+        .find(|flag| flag["long"] == "--database")
+        .and_then(|flag| flag["purpose"].as_str())
+        .expect("data.global_flags carries --database")
+        .to_owned();
+    assert_eq!(global, DATABASE);
+    let json = |value: String| value.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    // The root: its description and its row of words. The JSON command tree
+    // carries no entry for the root, so these two are read in the text alone.
+    let root = prose(&[]);
+    assert!(root.contains(DESCRIPTION), "{root}");
+    assert!(root.contains(ENTRY), "{root}");
+    assert!(!root.contains("a MariaDB database"), "{root}");
+
+    // The three flags, at both nodes that declare them.
+    for path in [
+        &["cfg", "database", "add"][..],
+        &["cfg", "database", "update"],
+    ] {
+        let text = prose(path);
+        let entry = json_entry(&tree, path);
+        for (flag, purpose) in [("--host", HOST), ("--port", PORT), ("--schema", SCHEMA)] {
+            assert!(text.contains(purpose), "{path:?} {flag}: {text}");
+            assert_eq!(json_purpose(&entry, flag), purpose, "{path:?} {flag}");
+        }
+    }
+
+    // The sentence on connecting, without the sentence it replaced.
+    let add = ["cfg", "database", "add"];
+    let text = prose(&add);
+    let description = json(
+        json_entry(&tree, &add)["description"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
+    );
+    for found in [&text, &description] {
+        assert!(found.contains(CONNECT), "{found}");
+        assert!(!found.contains("A MySQL entry needs the same."), "{found}");
+    }
+
+    // The third answer of the connectivity check.
+    let test = ["cfg", "database", "test"];
+    assert!(prose(&test).contains(ANSWERED));
+    assert!(
+        json(
+            json_entry(&tree, &test)["description"]
+                .as_str()
+                .unwrap_or_default()
+                .to_owned()
+        )
+        .contains(ANSWERED)
+    );
+
+    // The 78 of every command that opens a connection (FR-GLOB-026).
+    let mut connecting: Vec<Vec<String>> = node_paths()
+        .into_iter()
+        .filter(|path| path.len() == 2 && path[0] == "schema")
+        .collect();
+    connecting.extend(
+        [
+            &["cache", "load"][..],
+            &["render"],
+            &["cfg", "database", "test"],
+        ]
+        .iter()
+        .map(|path| path.iter().map(|segment| (*segment).to_owned()).collect()),
+    );
+    assert_eq!(
+        connecting.len(),
+        11,
+        "eight schema subcommands and three more: {connecting:?}"
+    );
+
+    for path in &connecting {
+        let path: Vec<&str> = path.iter().map(String::as_str).collect();
+        assert!(prose(&path).contains(SERVER), "{path:?}");
+        let meaning = json(json_meaning(&json_entry(&tree, &path), 78));
+        assert!(meaning.contains(SERVER), "{path:?}: {meaning}");
+        assert!(
+            !meaning.contains("supported MariaDB version"),
+            "{path:?}: {meaning}"
         );
     }
 }

@@ -1,7 +1,7 @@
 ---
 title: SQLite Contract
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [configuration-model.md, server-contract.md, catalogue-coverage.md, context-document.md, privileges-and-completeness.md, security.md, cfg-commands.md, performance-requirements.md, errors-and-exit-codes.md, global-flags.md, project-and-discovery.md]
 ---
 
@@ -458,6 +458,7 @@ would present.
   | The file's schema table holds a row with no text that is not an index's, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
   | The file's schema table holds a NUL character in a name or a text, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
   | The file's schema table holds a trigger whose header SQLite does not write, per `FR-LITE-041` | The check of `FR-LITE-041` returns its row | `78` |
+  | The file holds two names of one set of `FR-LITE-043` that differ in their bytes and convert to one text | The rows the catalogue statements returned, compared before the model is presented | `78` |
   | The database is in write-ahead-log mode and its directory refuses the files that mode needs, per `FR-LITE-008` | `SQLITE_READONLY_DIRECTORY` | `74` |
   | A read of the file fails part-way | `SQLITE_IOERR` | `74` |
   | The database stays locked by a writer until the catalogue-query deadline expires, per `FR-LITE-009` | `SQLITE_BUSY` | `69` (`EX_UNAVAILABLE`) |
@@ -466,7 +467,8 @@ would present.
   check of the file's kind that failed, and what the library returned,
   including the object and the reason where the library names them — or, for
   the check of the kind, what the filesystem returned. For the seven rows of
-  `FR-LITE-041`, the `cause` SHALL name what that requirement fixes. For `74`
+  `FR-LITE-041`, and for the row of `FR-LITE-043`, the `cause` SHALL name what
+  that requirement fixes. For `74`
   and `78` the `hint` SHALL carry
   `tpl cfg database update <entry> --path <path>`.
 
@@ -541,6 +543,14 @@ would present.
   them, none is a result code: the library loads such a row without error.
   Each is a damaged schema, the condition of the third row, found by the
   check rather than by the library. No other row moves.
+
+  *Amended in the seventy-ninth edition,* for rmp `#349`. One row is new,
+  for the two names `FR-LITE-043` refuses, and the `cause` sentence names it.
+  It is not a result code, nor a row of the check: SQLite writes and loads
+  such names without error, and the condition is met once the rows the
+  catalogue statements returned are compared. Unlike the rows before it, it
+  is not a damaged schema; its ground is the first row's, a file this entry
+  cannot read into the model. No other row moves.
 
 - **FR-LITE-008**: The system SHALL NOT write to the database file. WHERE the
   database is in write-ahead-log mode, the library MAY create the two files
@@ -2380,6 +2390,100 @@ would present.
   observation under `FR-LITE-041` found the trigger's `tbl_name` written in
   another letter case.
 
+  *Note added in the seventy-ninth edition,* for rmp `#349`. The names this
+  rule compares are the bytes the file holds for them, with the 26 ASCII
+  letters folded as above, and not the text they convert to under
+  `FR-OUT-017`, per `FR-LITE-043`.
+
+- **FR-LITE-043**: For a `sqlite` read, the system SHALL decide which object
+  a row belongs to, and every match of `BR-LITE-003`, on the bytes the file
+  holds for each name, and SHALL NOT decide either on the text a name
+  converts to under `FR-OUT-017`. IF two names of one of the following sets
+  differ in those bytes and convert to one text, THEN the system SHALL exit
+  `78` (`EX_CONFIG`), SHALL present no model, and SHALL write nothing to the
+  cache:
+
+  1. the tables and the views the read covers, taken together;
+  2. the columns of one covered table;
+  3. the indexes of one covered table;
+  4. the triggers of one covered table.
+
+  The `cause` SHALL name the path as resolved, the kind of the two objects,
+  for a column, an index or a trigger the table that holds them, and the text
+  both names convert to, escaped under `FR-ERR-024` and bounded under
+  `FR-ERR-046`; and SHALL state that the file holds them as two names that
+  differ only in bytes that are not valid UTF-8, which the model, naming each
+  object by its text, cannot carry apart. The `hint` SHALL carry
+  `tpl cfg database update <entry> --path <path>`, per `FR-LITE-007`.
+
+  ```
+  error: the database file holds two tables tpl cannot tell apart, for database entry 'ledger'
+  cause: /home/ana/shop/data/ledger.db holds two tables whose names both read 'r�f': they differ only in bytes that are not valid UTF-8, and tpl names each object by its text
+  hint:  point the entry at another file: tpl cfg database update ledger --path <path>
+  exit:  78 (EX_CONFIG)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code. The text in the `cause` is the names as
+  `FR-OUT-017` converts them, with U+FFFD, the replacement character, where
+  the file holds the bytes.
+
+  *Rationale.* SQLite holds a name as the bytes a statement wrote, valid
+  UTF-8 or not, and compares names on those bytes, folding the ASCII letters
+  alone, as `BR-LITE-003` records: "As far as SQLite is concerned, those
+  names are just byte sequences," and "SQLite does not care whether they are
+  valid UTF or not", at `https://sqlite.org/invalidutf.html`, last updated
+  2025-05-31 and checked 2026-11-05. Two names that differ only in bytes that
+  are not valid UTF-8 are therefore two objects to SQLite, and one text to
+  the model once `FR-OUT-017` replaces those bytes. The implementation
+  grouped the rows of each statement by that text, so the rows of two such
+  tables were folded together and each table carried the other's columns, at
+  exit `0`; this is rmp `#349`. Deciding on the bytes keeps every row with
+  its object, and every reference with the object SQLite resolves it to: a
+  foreign key whose parent table converts to a covered table's name from
+  other bytes names a table SQLite does not hold, and `FR-LITE-021` excludes
+  it as dangling.
+
+  *Why the read is refused where two names of one set convert to one text.*
+  The bytes keep the two objects apart inside the read, and nothing keeps
+  them apart after it. The document names every member of these collections
+  by its text, and `NFR-DET-002` orders them by it: a foreign key names its
+  referenced table and its columns, an index its members, a cached object is
+  a file named after it, per `FR-CACHE-030`, and a command names an object by
+  its name, per `FR-SCH-010`. Two objects under one name would make each of
+  those name both, tie in the order, and present at exit `0` a document in
+  which a reference may resolve to the wrong object with nothing to show it,
+  which is the defect moved out of the read. A refusal says why, and the
+  remedy is the file's: rename one of the two objects.
+
+  *Why `78`.* The file is one this entry cannot read into the model, the
+  ground `FR-LITE-007` gives for a file that is not a database, and
+  `FR-LITE-041` for a table named like a pragma function, which SQLite also
+  writes legitimately. The next step is the same: correct the file, or point
+  the entry at one `tpl` can read.
+
+  *Two names in different sets are not refused.* A table and a column, or
+  the columns of two tables, are never compared with one another by name, so
+  their texts may coincide without any name in the document naming two
+  objects. *Consequence, stated plainly.* A file whose names hold bytes that
+  are not valid UTF-8 is read, each such name carrying U+FFFD, wherever no
+  two names of one set convert to one text.
+
+  *Rejected: carrying both objects, each with its own rows, under one name.*
+  It is what deciding on the bytes alone yields, and it moves the merge out
+  of the read into every consumer of the document: the cache would write
+  both tables to one file, so that a read served from it would present one
+  where the file holds two, and a command naming the object, or a template
+  resolving a reference by name, would find either. Making it safe needs a
+  rule in each of those places, for a file whose two names no output can tell
+  apart. *Rejected: excluding both objects under `FR-LITE-021`.* Every
+  exclusion there is of a shape the model has no form for; these are tables
+  and columns the read covers under `FR-LITE-020`, and an exclusion would drop
+  them at exit `0` with nothing to say so.
+
+  *Added in the seventy-ninth edition,* for rmp `#349`.
+
 - **FR-LITE-023**: For a `sqlite` read, the `database` object SHALL carry
   `name` `main`, per `FR-LITE-019`; `charset` read from `pragma_encoding`;
   `collation` `null`; `provider` `sqlite`, per `FR-CTX-043`; and the `server`
@@ -3092,6 +3196,16 @@ would present.
   under `FR-LITE-041`; the last database is the one `FR-LITE-018` records
   statements over.
 
+  It SHALL also produce three databases whose names hold bytes that are not
+  valid UTF-8: one holding two tables whose names differ only in such a
+  byte; one holding a table with two columns whose names differ only in such
+  a byte; and one holding a table whose name holds such a byte, and a second
+  table with a foreign key whose parent table's name differs from the first
+  table's only in another such byte. A read of each of the first two SHALL
+  end with `78` under `FR-LITE-043`, and a read of the third SHALL succeed,
+  carrying the first table under its name with U+FFFD and excluding the key
+  as dangling under `FR-LITE-021`.
+
   The three views of item 10 that do not compile are the cases of
   `FR-LITE-033` and `FR-LITE-036`: a read of the main database SHALL succeed
   over them, mark none of them, and present each with its nine properties.
@@ -3167,6 +3281,15 @@ would present.
   shows that the comparison takes the whole value, which a comparison
   folding letter case alone does not, per the rejected option under
   `FR-LITE-041`.
+
+  *Amended in the seventy-ninth edition,* for rmp `#349`. The paragraph on
+  the three databases whose names hold bytes that are not valid UTF-8 is new.
+  The first two are the refusals of `FR-LITE-043`, and the first is the case
+  of rmp `#349`, in which each of the two tables carried the other's columns
+  at exit `0`. The third shows that a name holding such a byte is read, and
+  that a reference is matched on the bytes and not on the text they convert
+  to. They are built apart from the main database so that no name of it
+  carries U+FFFD.
 
 ## Dependencies
 

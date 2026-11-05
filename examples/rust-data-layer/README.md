@@ -1,10 +1,11 @@
-# `rust-data-layer` — a Rust data layer, built from three schemas through the command line
+# `rust-data-layer` — a Rust data layer, built from five reads through the command line
 
 This is the Rust member of the four worked examples `FR-EX-001` requires. It
-reads `sakila`, `world` and `freight` from one MariaDB server and renders one
-Rust module per schema: a row, its primary key, the columns an ordering may
-name, a repository trait and an `sqlx` implementation of that trait, for every
-one of the 36 tables.
+reads `sakila`, `world` and `freight` from one MariaDB server, `freight` from
+one MySQL server and the SQLite fixture's main database, and renders one
+Rust module per read: a row, its primary key, the columns an ordering may
+name, a repository trait and an `sqlx` implementation of that trait, for every one of the 82
+tables; a table with no primary key gets its row types alone.
 
 Its acceptance signal is not that `tpl` exited `0`. It is that `cargo build` and
 `cargo clippy -- -D warnings` accept every file it rendered, per `FR-EX-009`,
@@ -19,12 +20,12 @@ python3 examples/rust-data-layer/run.py
 
 | Path | Rendered from | Count |
 |---|---|---|
-| `src/<schema>.rs` | `rust/schema` | 3, one per schema |
-| `src/<schema>/<table>.rs` | `rust/struct` | 36, one per table |
-| `src/<schema>/<table>_repository.rs` | `rust/repository` | 36 |
-| `src/<schema>/<table>_sqlx.rs` | `rust/sqlx` | 36 |
+| `src/<entry>.rs` | `rust/schema` | 5, one per read |
+| `src/<entry>/<table>.rs` | `rust/struct` | 82, one per table |
+| `src/<entry>/<table>_repository.rs` | `rust/repository` | 80, one per table with a primary key |
+| `src/<entry>/<table>_sqlx.rs` | `rust/sqlx` | 80, one per table with a primary key |
 
-111 files and 26,000 lines, from 111 invocations of `tpl render`. One file is one
+247 files and 56,189 lines, from 247 invocations of `tpl render`, and five more of `rust/_modules`, which writes no file and names the files of each read. One file is one
 invocation, because `tpl render` writes to standard output and nowhere else —
 `FR-RND-028`, and `FR-EX-005` is the consequence.
 
@@ -45,7 +46,7 @@ that still compiles.
 
 ### The module
 
-`src/<schema>.rs` is rendered once per schema with the whole database in context
+`src/<entry>.rs` is rendered once per schema with the whole database in context
 and no object flag, per `FR-RND-006`. It carries the module documentation, the
 provenance of the read, `SCHEMA`, `connect`, the `Error` enum, the ordering
 `Direction`, the two column adapters the type mapping names, and `Repositories`,
@@ -107,8 +108,8 @@ it outright, which is what `FR-EX-008` allows and what makes the Rust example th
 one that exercises replacement rather than addition.
 
 It is obliged to cover every value of `data_type` the model reports for a column
-of the three schemas, per `FR-EX-008`. That is **39 values over 362 columns**,
-and all 39 are branched on. Nothing falls through: the final branch calls
+of every read, per `FR-EX-008`. That is **44 values over 755 columns**, and all
+44 are branched on. Nothing falls through: the final branch calls
 `fail()`, so a type the macro has never met ends the render with `65` and names
 the column. Removing the `uuid` branch and re-rendering `freight.customer`
 produces exactly that —
@@ -169,7 +170,12 @@ becomes — were bound back as query parameters as well.
 | `point` | `Wkb` | • |
 | `polygon` | `Wkb` | • |
 
-**25 of the 39 are carried by `freight` alone**, which is why `FR-EX-006` puts a
+The five values the MySQL and the SQLite reads add — `json` and `geomcollection`
+from `FR-MYSQL-028`, and the affinities `integer`, `real` and `numeric` from
+`FR-LITE-026` — are mapped to `String`, `Wkb`, `i64`, `f64`, `Decimal` in that order, and are not rows of the table above: the compile gate
+accepted them, and no value of them was read back through the driver.
+
+**25 of the 39 MariaDB values are carried by `freight` alone**, which is why `FR-EX-006` puts a
 third schema beside the two published ones. A mapping written against `sakila`
 and `world` would have been complete over 14 types and would never have met a
 spatial column, a `BIT`, an `INET6`, a `UUID`, a `TIME`, a generated column or a
@@ -263,7 +269,7 @@ the Go example's:
   one of Rust's. The macro still carries the whole keyword list: a name whose
   snake case is a Rust keyword is written as a raw identifier, `r#match`, and
   the four keywords that cannot be raw — `crate`, `self`, `Self`, `super` — take
-  a trailing underscore instead. No column of these three schemas needs it, so
+  a trailing underscore instead. No column of the five reads needs it, so
   the escape is a guard rather than a demonstration, and the compile gate is
   what would report its absence.
 
@@ -302,7 +308,7 @@ fetch what it depends on.
 | | |
 |---|---|
 | The binary | `cargo build --release` |
-| The server | `./scripts/mariadb/up.sh`, then `./scripts/mariadb/seed-datasets.sh 12.3` |
+| The servers | `./scripts/mariadb/up.sh`, then `./scripts/mariadb/seed-datasets.sh 12.3`; and `./scripts/mysql/up.sh 9.7`. The SQLite database is built by the driver |
 | The password | `export FIXTURE_PW=tpl-root` |
 | Rust | 1.85 or newer — the floor edition 2024 sets, and the `rust-version` of the rendered crate. Verified on 1.98.1 |
 
@@ -310,7 +316,7 @@ The crate's one dependency is `sqlx` 0.9 with `mysql`, `runtime-tokio`,
 `tls-rustls-ring-webpki` and `chrono`. `Cargo.lock` is committed; the first run
 needs those crates in the registry cache or a network to fetch them.
 
-The server, the three schemas and the entries are the driver's, not this
+The servers, the SQLite database, the reads and the entries are the driver's, not this
 example's: [`_driver/README.md`](../_driver/README.md) documents them, and
 `FR-EX-007` is why all four examples read them the same way.
 
@@ -324,7 +330,7 @@ example's: [`_driver/README.md`](../_driver/README.md) documents them, and
   non-reproducibility, per `FR-CTX-030`, and a generated file carrying one
   produces a diff on every run for a reason that is not a change. Provenance —
   the server, its series, its standing and the version of `tpl` — is rendered
-  once per schema into `src/<schema>.rs`.
+  once per schema into `src/<entry>.rs`.
 - **It runs no query.** The gate compiles; it does not connect. The type mapping
   was measured against the server while it was being written, and the rendered
   code carries that result rather than re-establishing it.
@@ -341,12 +347,16 @@ because the compile gate is what would report it:
   That is what `FR-ENV-033`'s `pascal` does, and its own *accepted cost* clause
   records it; buying it back would need an initialism list, which is a second
   opinion to maintain and another way for two columns to collide.
-- **A module's file name is the table's name unchanged.** `run.py` writes
-  `src/<schema>/<table>.rs` while the module declaration is the table's name in
-  snake case, so a table whose name is not already snake case would render a
-  declaration with no file behind it. All 36 are.
-- **A table with no primary key is refused.** All 36 have one. A table without
-  one ends the render with `65` and says why, because read, update and delete
+- **A module's file is named by the macro that names the module.** `run.py`
+  renders `rust/_modules` once per read and writes each table's files under the
+  stem it gives, so a file and the `pub mod` that loads it are derived by one
+  macro. A module whose name is not ASCII — SQLite's `émbarque_1` — is declared
+  with a `#[path]`, because Rust loads a file by a module's name only where the
+  name is ASCII (E0754).
+- **A table with no primary key has no repository.** Two of the 82 have none,
+  MySQL's `currency` and `edi_message_staging`: each gets its row types alone,
+  and the repository templates, given one, end the render with `65` and say why,
+  because read, update and delete
   would have no key to address a row by. So is a table whose every column is
   generated or part of the key, which would leave an `UPDATE` with an empty
   `SET`.

@@ -195,11 +195,13 @@ fn arrived(statement: Read, rows: Vec<MySqlRow>) -> Result<Vec<MySqlRow>, Error>
 
 /// Runs the privilege probe of `FR-CFG-044` over a settled session.
 ///
-/// One `SELECT` against `SCHEMATA`, restricted to `schema` by a bind
-/// parameter; the answer is true where it was answered without an error
-/// packet and returned at least one row. No row is read into the model, and a
-/// privilege refusal is an answer rather than a condition (`FR-CFG-045`), as
-/// `crate::mariadb::catalogue::probe` records.
+/// One `SELECT` against `SCHEMATA`, restricted to `schema` by the literal of
+/// `ADR-015`; the answer is true where it was answered without a privilege
+/// error and returned at least one row. No row is read into the model, and a
+/// privilege refusal — one of the four numbers of `FR-CFG-044` — is an answer
+/// rather than a condition (`FR-CFG-045`), as
+/// `crate::mariadb::catalogue::probe` records; any other error packet is the
+/// third way of `FR-ERR-036`.
 ///
 /// # Errors
 ///
@@ -215,7 +217,9 @@ pub(crate) fn probe(
 ) -> Result<bool, Error> {
     match issue(session, target, clock, statements::probe(), schema)? {
         Ok(rows) => Ok(!rows.is_empty()),
-        Err(driver) if driver.as_database_error().is_some() => Ok(false),
+        // FR-CFG-044: only the four privilege errors are its `false`; any
+        // other error packet is the third way of FR-ERR-036.
+        Err(driver) if fault::is_privilege_error(&driver) => Ok(false),
         Err(driver) => Err(fault::speaking(
             target.entry(),
             &driver,
@@ -226,12 +230,91 @@ pub(crate) fn probe(
     }
 }
 
-/// Sends one statement, `schema` bound to its one parameter, and hands back
-/// what the driver answered.
+/// The prefix of [`literal`]'s output: the introducer that fixes the
+/// literal's character set, and the opening of a hexadecimal literal.
+const LITERAL_OPEN: &str = "_utf8mb4 X'";
+
+/// The close of [`literal`]'s output.
+const LITERAL_CLOSE: char = '\'';
+
+/// The uppercase hexadecimal digits, indexed by value.
+const HEX_UPPER: &[u8; 16] = b"0123456789ABCDEF";
+
+/// What a statement's one placeholder must follow: the comparison of an
+/// `INFORMATION_SCHEMA` column with the name (`ADR-015`, point 2).
+const COMPARED: &str = " = ";
+
+/// The one placeholder of each statement, which [`compose`] replaces.
+const PLACEHOLDER: char = '?';
+
+/// The invariant [`compose`] enforces on the twelve constant texts.
+const ONE_COMPARED_PLACEHOLDER: &str = "every mysql catalogue statement holds one `?`, \
+     and it is the right-hand side of `<INFORMATION_SCHEMA column> =`";
+
+/// `name` as the text of a literal the server reads as exactly those bytes,
+/// in `utf8mb4` (`FR-SRV-043`, `FR-MYSQL-048`, `ADR-015`, point 2).
+///
+/// It is `_utf8mb4 X'`, two uppercase hexadecimal digits for each byte of
+/// `name`, and `'`, and nothing else: an empty name is `_utf8mb4 X''`. The
+/// output is ASCII and holds no `\`, `"`, `|`, `;` or `--`, so no `sql_mode`
+/// and no client character set changes how the server reads it, and no byte
+/// of the name reaches the text as itself.
+fn literal(name: &str) -> String {
+    let mut written =
+        String::with_capacity(LITERAL_OPEN.len() + 2 * name.len() + LITERAL_CLOSE.len_utf8());
+    written.push_str(LITERAL_OPEN);
+    for byte in name.bytes() {
+        written.push(char::from(HEX_UPPER[usize::from(byte >> 4)]));
+        written.push(char::from(HEX_UPPER[usize::from(byte & 0x0f)]));
+    }
+    written.push(LITERAL_CLOSE);
+
+    written
+}
+
+/// The text of `statement` with [`literal`] of `schema` in place of its one
+/// `?` (`ADR-015`, point 2).
+///
+/// The constant must hold one `?`, as the right-hand side of
+/// `<INFORMATION_SCHEMA column> =`; a text that does not is the `70` of a
+/// violated invariant and is never sent. None of the twelve is written beside
+/// `COLLATE`, `CONVERT`, `LIKE` or `REGEXP`, which a test asserts of every
+/// composed text.
+///
+/// # Errors
+///
+/// Returns [`Error::InternalInvariant`] where the constant does not hold the
+/// one compared placeholder.
+#[track_caller]
+fn compose(statement: Read, schema: &str) -> Result<String, Error> {
+    let sql = statement.sql();
+    let violated = || Error::InternalInvariant {
+        invariant: ONE_COMPARED_PLACEHOLDER,
+        location: Location::caller(),
+    };
+    let (before, after) = sql.split_once(PLACEHOLDER).ok_or_else(violated)?;
+    if !before.ends_with(COMPARED) || after.contains(PLACEHOLDER) {
+        return Err(violated());
+    }
+
+    let literal = literal(schema);
+    let mut composed = String::with_capacity(sql.len() - PLACEHOLDER.len_utf8() + literal.len());
+    composed.push_str(before);
+    composed.push_str(&literal);
+    composed.push_str(after);
+
+    Ok(composed)
+}
+
+/// Sends one statement, `schema` written into it as [`literal`] writes it, and
+/// hands back what the driver answered.
 ///
 /// It is `crate::mariadb::catalogue`'s statement runner for a `mysql`
-/// session: the bound of `FR-CONF-005` composed with `FR-GLOB-011`, the two
-/// lines of `FR-GLOB-017`, and the bind that keeps the schema out of the text.
+/// session: the bound of `FR-CONF-005` composed with `FR-GLOB-011`, and the
+/// two lines of `FR-GLOB-017`. The statement goes over the text protocol
+/// (`ADR-015`, point 1): handed to the driver with no arguments, it is one
+/// `COM_QUERY` and its rows arrive in the text format, where a bound value
+/// made it a `COM_STMT_PREPARE` and a `COM_STMT_EXECUTE`.
 fn issue(
     session: &mut Session,
     target: &Target<'_>,
@@ -261,7 +344,11 @@ fn issue(
         crate::diagnostics::emit::CatalogueSource::InformationSchema,
     );
 
-    let query = sqlx_core::query::query::<sqlx_mysql::MySql>(statement.sql()).bind(schema);
+    // ADR-015, point 2: the one site that vouches for a composed text. It is
+    // a constant of `statements` and one `literal`, and nothing else.
+    let query = sqlx_core::raw_sql::raw_sql(sqlx_core::sql_str::AssertSqlSafe(compose(
+        statement, schema,
+    )?));
 
     let (runtime, connection) = session.parts();
     let connection = connection.ok_or_else(|| Error::InternalInvariant {

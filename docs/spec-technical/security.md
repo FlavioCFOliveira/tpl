@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -39,8 +39,8 @@ raw.
 | # | Untrusted input | First seen by | What that boundary does with it | Forced by |
 |---|---|---|---|---|
 | 1 | The argument vector | `cli/` | Parsed and classified before any filesystem access; a rejected token leaves the parser as a typed value in an error, never as text the parser rendered | `FR-ERR-006`, `FR-CLI-006`, [`OD-08`](open-decisions.md#od-08--the-parsers-own-diagnostics) |
-| 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised; the file is opened without following a link and without blocking, and its type and both trust checks are judged on that descriptor as a **precondition** of reading it; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal | `FR-PROJ-009`, `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004` |
-| 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-SEC-007` |
+| 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised; the file is opened without following a link and without blocking, and its type and both trust checks are judged on that descriptor as a **precondition** of reading it; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal. A value that would reach the login, the server's C interface or SQLite's open holding a NUL character is refused at entry resolution, before it can be cut there | `FR-PROJ-009`, `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004`, `FR-CONF-057` |
+| 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all, and only on an invocation that opens a connection; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-CONF-056`, `FR-SEC-007` |
 | 4 | Catalogue values | `mariadb/`, or `mysql/` for a `mysql` entry | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006`, `FR-MYSQL-015` |
 | 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
 | 6 | Files under the template root | `render/` | Reached only through the one resolution function, which is where containment is enforced; the three `template` subcommands that resolve without the engine call the same function | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023`, `FR-TMPL-024`, `FR-TMPL-025`, `FR-TMPL-026` |
@@ -53,7 +53,7 @@ values, row 4's population, and the library's messages about the file reach a
 `FR-ERR-046` — which is why escaping is a property of the
 emitting and the diagnostic paths and not of these boundaries.
 
-**Recorded gap — the cache is not one of the six.** `.tpl/.cache/` holds
+**Recorded gap — the cache is not one of the seven.** `.tpl/.cache/` holds
 documents `tpl` itself wrote (`FR-PROJ-023`), so the corpus does not place it
 among the untrusted inputs, and neither does this document. `FR-CACHE-033` and
 `FR-CDOC-004` fix the treatment of a file that cannot be read or carries an
@@ -121,8 +121,10 @@ The third row is what makes *the resolved DSN* a category a diagnostic cannot
 write: the value exists only between `project/settings.rs` and `mariadb/`, and
 no component between them emits. Nothing re-composes a URL on that path either —
 the resolution hands on fields, not a string — so the value a diagnostic would
-have to be denied is never assembled in the first place (`FR-CONF-018`,
-`FR-SEC-009`).
+have to be denied is never assembled in the first place (`FR-SEC-009`). The
+same absence is why the percent-encoding `FR-CONF-018` names has nothing to
+apply to, which [`OD-39`](open-decisions.md#od-39--a-dsn-value-percent-encoded-by-nothing)
+holds open.
 
 ### The six categories that reach no diagnostic stream
 
@@ -202,14 +204,15 @@ not a configuration layer (`FR-CONF-030`;
 |---|---|---|
 | Expansion reaches the six fields that admit it and no others | `project/settings.rs`, deciding from the declared key space and not from the caller | `FR-SEC-007`, `FR-CONF-015` |
 | Two fields are excluded by the same table, so the exclusion is structural: neither the encryption mode nor the child command is expandable, and no variable can therefore weaken transport or choose the program that runs | The declared key space, asked per field | `FR-SEC-008`, `FR-CONF-016`, `FR-CONF-017` |
-| Inside a connection string, substitution happens after the URL has been broken into fields, and what it substitutes is encoded for the field it lands in | `project/config/dsn.rs` splits, `project/settings.rs` expands, before any connection exists | `FR-SEC-009`, `FR-CONF-018` |
+| Inside a connection string, substitution happens after the URL has been broken into fields, and the fields are handed to the driver one by one, never joined into a URL again; the percent-encoding `FR-CONF-018` names is performed by nothing ([`OD-39`](open-decisions.md#od-39--a-dsn-value-percent-encoded-by-nothing)) | `project/config/dsn.rs` splits, `project/settings.rs` expands, before any connection exists | `FR-SEC-009`, `FR-CONF-018` |
+| Expansion and the child run only for an invocation that opens a connection, so a read the cache serves neither reads the environment nor starts `password_command` | `Prepared::connect` in `project/settings.rs`, reached from the connection branch of step 6 alone | `FR-CONF-056` |
 | An undefined variable ends the invocation; it is never an empty substitution | `project/config/expand.rs` → `error.rs` | `FR-SEC-010`, `FR-CONF-022`, `BR-CONF-002` |
 
 The third row is an ordering, not a sanitisation, and the order is what does
 the work: the field boundaries exist before any substitution occurs, so a
-substituted value is confined to the field it was written into, and encoding it
-afterwards keeps that value from re-entering the grammar it sits in. One pass
-only, so nothing substituted is substituted again (`FR-CONF-019`).
+substituted value is confined to the field it was written into, and no grammar
+is parsed again afterwards for it to re-enter. One pass only, so nothing
+substituted is substituted again (`FR-CONF-019`).
 
 ## The child process
 
@@ -277,6 +280,7 @@ therefore contains.
 | It is a regular file | Its type is read from the descriptor it is then read through, so a link, a FIFO, a socket or a device is `78` and nothing blocks | `FR-PROJ-030`, `FR-SEC-027` |
 | Naming the folder explicitly exempts nothing | The explicit path suppresses the walk and enters the same check sequence | `FR-SEC-016`, `FR-PROJ-008` |
 | An absent file is not a bypass | There is no file to own and nothing to grant, so the `.tpl` folder's ownership is checked instead; the configuration is then empty, and the write surface may create the file again | `FR-PROJ-028`, `FR-PROJ-001`, `FR-CFG-004` |
+| A rewrite acts in the folder the checks judged | The five commands that rewrite `.cfg` start from the text the checks read and make every step relative to the `.tpl` descriptor the checks opened and held, following no link, so a link or a folder swapped into the path afterwards redirects nothing and a link at `.cfg` is replaced rather than written through ([interfaces.md](interfaces.md#the-configuration-reader-and-the-writer)) | `FR-CFG-041`, `FR-SEC-027` |
 
 Two consequences are worth stating because a reader would otherwise assume more
 or less than the design gives. The boundary is **not** what refuses a project
@@ -355,18 +359,22 @@ must quote it, and the registered filter is what it quotes with
 boundary, and no requirement claims otherwise
 ([overview.md](overview.md#what-tpl-is-not)).
 
-**Recorded gap — the one caller-supplied value that reaches the server.**
-`NFR-PERF-002` establishes a named-object read in which the name restricts the
-statement the server receives, and `FR-CFG-044` restricts the privilege probe to
-the configured database; the qualified-routine-name parser resolves its operand
-against `mariadb/` ([interfaces.md](interfaces.md#the-shared-functions-and-the-phase-clock)).
-The closed statement list of `FR-SRV-006` fixes **which** statements exist and
-`FR-SCH-013` keeps the pattern out of them, but no requirement and no settled
-entry of [open-decisions.md](open-decisions.md) fixes **how** a caller-supplied
-name is conveyed into a statement — as a value bound by the driver, or composed
-into the statement text. Settling it here would be taking a decision the
-register has not taken, which this folder does not admit; it is reported to the
-register owner.
+**The one caller-supplied value that reaches a server statement**, the
+database name the entry gives (`FR-CONF-041`), changes no part of a statement
+but the value its rows are compared with (`FR-SRV-043`, `FR-MYSQL-048`). Every
+server read is the whole catalogue, so a table, view or routine named on the
+command line is matched in memory and reaches no statement; the pattern is
+kept out by `FR-SCH-013`. The two server readers convey the name differently:
+
+| Reader | How the name reaches the statement | Recorded in |
+|---|---|---|
+| `mariadb/` | A parameter the driver binds, the statement prepared and executed; the text never holds the value | `mariadb/catalogue.rs`, read at `9d2538e` |
+| `mysql/` | Composed into the constant text at one site as a `_utf8mb4` hexadecimal literal and sent over the text protocol; the rule, its limits, the evidence that certified it and the rejected alternatives — a quoted literal among them — are the record's | [`ADR-015`](../adr/adr-015-mysql-catalogue-name-conveyance.md) |
+
+The login packet carries the same name as a protocol field, which ends at a
+NUL character; `FR-CONF-057` refuses such a name before any connection
+(*The seven untrusted inputs*, row 2). This paragraph discharges the gap this
+section recorded until 2026-11-05.
 
 ## A SQLite database file
 
@@ -420,6 +428,13 @@ through: in rollback-journal mode the writer cannot commit until the read
 ends, and in write-ahead-log mode what it commits stays invisible to the read
 (`FR-SEC-028`, `FR-LITE-042`). How the transaction stands to the read-only
 promise is [below](#for-a-sqlite-entry-three-parts).
+
+**Rows are grouped and names matched on the bytes the file holds**, never on
+the text they convert to, so no row is attached to another object and no
+reference resolves to another object than the one SQLite resolves it to; a
+file in which two names of one set convert alike is refused with `78` before
+anything is folded (`FR-LITE-043`;
+[architecture.md](architecture.md#the-sqlite-reader)).
 
 **No statement carries a value from the file, and none compiles a view or
 connects a virtual table.** Every statement is a constant, and none is issued
@@ -524,7 +539,7 @@ same terms.
 
 | Part | What it is in the build | What it does | Forced by |
 |---|---|---|---|
-| The closed statement list | The three connection-start statements in `mysql/session.rs` and the twelve statements of `mysql/catalogue/statements.rs`, each a constant of the crate; each of the twelve reads one table of `FR-MYSQL-015`, with the database name bound as a parameter | **Prevents** | `FR-MYSQL-015`, `FR-MYSQL-016` |
+| The closed statement list | The three connection-start statements in `mysql/session.rs`, constants of the crate, and the twelve statement texts of `mysql/catalogue/statements.rs`, each reading one table of `FR-MYSQL-015` and receiving only the database name, by the rule of [`ADR-015`](../adr/adr-015-mysql-catalogue-name-conveyance.md) at its one composition site in `mysql/catalogue.rs` | **Prevents** | `FR-MYSQL-015`, `FR-MYSQL-016`, `FR-MYSQL-048` |
 | The read-only session | Applied once, then confirmed by reading `@@session.transaction_read_only` — the one spelling a supported MySQL series carries — and accepting the integer `1` alone, decoded whatever its signedness; a failure of either half refuses the connection before any catalogue statement | **Detects** | `FR-MYSQL-018`, `FR-MYSQL-019` |
 
 Neither is disableable (`FR-MYSQL-019`). A `mariadb` entry that reaches a MySQL

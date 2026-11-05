@@ -323,12 +323,15 @@ impl Binding<'_> {
             Self::Table(name) => {
                 let (index, _) =
                     named::member(shelved.tables(), CatalogueObjectKind::Table, name, at)?;
-                let Some(table) = store.table(index) else {
+                // FR-CACHE-038: the bound table is reached whole before the
+                // render starts, its two deferred parts with it, so a fault in
+                // either is decided here, as a fault in the file is.
+                let Some(table) = store.table(index).and_then(|reached| reached.whole()) else {
                     return Ok(Chosen::Missed);
                 };
                 completeness::of_table(&table)?;
 
-                Chosen::Bound(Some((TABLE, Value::from_serialize(&*table))))
+                Chosen::Bound(Some((TABLE, Value::from_serialize(&table))))
             }
             Self::View(name) => {
                 let (index, _) =

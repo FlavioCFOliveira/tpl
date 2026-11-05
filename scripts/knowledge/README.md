@@ -100,7 +100,7 @@ Each of these is a decision, not an omission:
 | `tests/support/fixture.rs` | module `support/fixture` — a test crate is not a module of the library, and it keeps the shape of its own path |
 | an inline `mod tests` | the enclosing module with `::tests` appended |
 | a `Test` | `<file>::<function name>`, the file being repository-relative |
-| a `Method` | `<owner type key>::<method name>` |
+| a `Method` | `<owner type key>::<method name>`; where that key would be shared by methods in more than one `impl` block of one type path, each such method takes its qualified path instead: `<Type<Args> as Trait<Args>>::<method name>` for a trait `impl`, and `<Type<Args>>::<method name>` for an inherent `impl` unless it is the only inherent one, which keeps the plain key. `Type` and `Trait` are fully qualified keys, and `<Args>` are the generic arguments the `impl` header writes, lifetimes removed and whitespace normalised |
 
 **An `impl` is repaired against the file's `use` list.** A key is derived from
 the file that writes it, so `impl Named for Table<'_>` written in

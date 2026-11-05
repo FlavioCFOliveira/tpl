@@ -271,6 +271,20 @@ pub(crate) fn obtain(
         });
     }
 
+    // FR-CONF-057, item 3: a password holding a NUL character is one the
+    // login would cut, so it is refused here, before the first connection
+    // phase. No part of the output is carried (FR-ERR-013).
+    if bytes.contains(&0) {
+        return Err(Error::ValueHoldsNul {
+            entry: entry.to_owned(),
+            field: error::NulField::Password,
+            place: error::NulPlace::Helper {
+                command: arguments.to_vec(),
+            },
+            before: None,
+        });
+    }
+
     // FR-OUT-017 is the corpus's posture on a byte sequence that is not valid
     // UTF-8: replace it and continue. A helper that prints one has produced a
     // password the server will refuse, which is a `77` the caller can read,
@@ -508,8 +522,10 @@ mod tests {
     #[test]
     fn fr_conf_031_output_exactly_at_the_cap_is_accepted() {
         // The cap is the most that is read, so a helper printing exactly that
-        // many bytes is not over it.
-        let head = tool(&["/usr/bin/head", "/bin/head"]);
+        // many bytes is not over it. The bytes are a printable character, not
+        // the NUL of /dev/zero as written, because FR-CONF-057 refuses a
+        // password holding a NUL whatever its length, and this body is about
+        // the length alone.
         let zero = "/dev/zero";
         if !std::path::Path::new(zero).exists() {
             return;
@@ -517,11 +533,19 @@ mod tests {
 
         let produced = obtain(
             ENTRY,
-            &command(&[&head, "-c", &OUTPUT_CAP.to_string(), zero]),
+            &command(&[
+                SH,
+                "-c",
+                &format!("head -c {OUTPUT_CAP} {zero} | tr '\\000' x"),
+            ]),
             bound(10),
         );
 
-        assert!(produced.is_ok(), "{produced:?}");
+        assert_eq!(
+            produced.as_ref().map(|secret| secret.expose().len()).ok(),
+            Some(OUTPUT_CAP),
+            "{produced:?}"
+        );
     }
 
     #[test]

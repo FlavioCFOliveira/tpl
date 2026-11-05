@@ -1,7 +1,7 @@
 ---
 title: Overview
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, traceability.md, open-decisions.md]
 ---
 
@@ -62,7 +62,7 @@ scope, the two findings it preserves are re-applied and not re-derived.
 | A reader of any database but a MariaDB server, a MySQL server or a SQLite database file | `FR-CONF-051`, `FR-SRV-001`, `FR-SRV-003`, `FR-MYSQL-001`, `FR-MYSQL-008`, `FR-LITE-001` |
 | Interactive | No prompt, no pager, no stdin but an explicit `--context -` (`BR-CLI-003`) |
 | Configurable from the environment | The command line and the project decide everything; `${VAR}` inside the configuration file is the single exception (`FR-CLI-021`, `FR-CLI-023`, `BR-CLI-002`) |
-| Terminal-aware | No terminal detection, no colour, no ANSI byte on either stream (`NFR-DET-003`, `NFR-DET-004`) |
+| Terminal-aware | No terminal detection, no colour, and no ANSI byte in what the system composes for presentation; a byte carried from the catalogue, a template, a `--context` value or the argument vector is escaped where `FR-ERR-024` and `FR-OUT-018` require, and passed through where `FR-OUT-019` does (`NFR-DET-003`, `NFR-DET-004`) |
 | Extensible at the command level | `FR-CLI-002`, `FR-CLI-006` |
 | Talkative on success | A successful command writes its result and nothing else (`BR-CLI-004`) |
 
@@ -186,11 +186,13 @@ technical question this folder leaves under-determined.
 
 Two boundaries bound this document itself:
 
-- **Nothing is open.** `specification/open-questions.md` carries an empty
-  index, and every entry of [open-decisions.md](open-decisions.md) is settled.
-  No statement in this folder may be deferred by citing an open functional
-  question, and the boundary against the other three sources of truth is
-  [README.md](README.md#the-four-sources-of-truth), settled as
+- **No functional question is open.** `specification/open-questions.md`
+  carries an empty index, so no statement in this folder may be deferred by
+  citing an open functional question. Two entries of
+  [open-decisions.md](open-decisions.md) are open — `OD-33` and `OD-39` — and
+  each blocks a statement named in the entry, not a document; their state is
+  recorded there and nowhere else. The boundary against the other three
+  sources of truth is [README.md](README.md#the-four-sources-of-truth), settled as
   [`OD-26`](open-decisions.md#od-26--the-boundary-against-the-knowledge-graph).
 - **No catalogue fact is re-derived here.** A requirement resting on direct
   observation is falsifiable by a later observation

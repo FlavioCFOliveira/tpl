@@ -258,12 +258,13 @@ pub(crate) fn read(
 ///
 /// **A privilege refusal is an answer, not a condition.** `FR-CFG-045` fixes
 /// the exit code of a false at `0`, so a server that answers this statement
-/// with an error packet has answered it: the statement's text is a
-/// `&'static str` of the repertoire, valid on every series of `FR-SRV-015` per
-/// `FR-SRV-037`, and the only thing about it that can be refused is this
-/// reader's standing. A failure that is **not** an error packet — a socket that
-/// dropped, a TLS fault, a phase that outlived its bound — is the server
-/// ceasing to answer, and stays what `FR-ERR-034` makes it.
+/// with an error packet carrying one of the four privilege errors of
+/// `FR-CFG-044` has answered it. An error packet carrying any other number
+/// says nothing about the reader — a statement the server killed, a resource
+/// it ran out of — and is the third way of `FR-ERR-036`, with its number, as
+/// the seventy-ninth edition requires; so is every failure that is not an
+/// error packet, in the first or the second way, and an expired deadline is
+/// `FR-ERR-027`'s.
 ///
 /// This is not the attempt-and-fall-back read `FR-SRV-023` forbids, for the two
 /// reasons `FR-CFG-044` gives: the statement is always the same one and is
@@ -290,11 +291,12 @@ pub(crate) fn probe(
         // FR-CFG-044, the second fact: at least one row.
         Ok(rows) => Ok(!rows.is_empty()),
 
-        // FR-CFG-044, the first fact. The server answered with an error packet,
-        // which for this statement is a privilege refusal; the discriminant
-        // read is the presence of a database error and nothing inside it, which
-        // is what `FR-GLOB-018` and `OD-06` leave a caller of the driver.
-        Err(driver) if driver.as_database_error().is_some() => Ok(false),
+        // FR-CFG-044, the first fact. The server answered with an error packet
+        // carrying one of the four privilege errors; the number is the one fact
+        // read from it, which is what `FR-GLOB-018` and `OD-06` leave a caller
+        // of the driver. Any other error packet is the third way of
+        // FR-ERR-036, which the arm below reports with its number.
+        Err(driver) if fault::is_privilege_error(&driver) => Ok(false),
 
         Err(driver) => Err(fault::speaking(
             target.entry(),

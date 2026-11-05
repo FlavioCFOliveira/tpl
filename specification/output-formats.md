@@ -1,7 +1,7 @@
 ---
 title: Output Formats
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [cli-contract.md, schema-commands.md, errors-and-exit-codes.md, help-and-version.md]
 ---
 
@@ -356,6 +356,13 @@ owns the shape of its `data`.
   *Accepted cost.* A printed value is then no longer byte-identical to what the
   server holds, and a template generating code from a comment receives U+FFFD
   rather than the original byte — which was not representable anyway.
+
+  *Note added in the seventy-ninth edition,* for rmp `#349`. The replacement
+  changes what a value reads, and never which object a value belongs to. For
+  a `sqlite` read, `FR-LITE-043` decides that, and every match of names, on
+  the bytes the file holds, and refuses with `78` a file in which two names
+  of one collection convert to one text, which this requirement would
+  otherwise present as one name for two objects.
 
 - **FR-OUT-018**: The system SHALL escape C0 control characters, C1 control
   characters — U+0080 to U+009F — and

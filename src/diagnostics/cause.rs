@@ -22,9 +22,9 @@ use std::borrow::Cow;
 
 use crate::error::{
     AccountRefusal, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven, EntryRepair,
-    Error, KeyAbsence, LoginFault, LoginRefusal, Missing, PasswordCommandFault, ReadOnlyFault,
-    ReferenceFault, RefusedKind, RenderReason, SqliteEnd, StatementFault, TcpFault, TlsFault,
-    TplDirFault, Unresolved, context_name, password_pair,
+    Error, KeyAbsence, LoginFault, LoginRefusal, Missing, NulField, NulPlace, PasswordCommandFault,
+    ReadOnlyFault, ReferenceFault, RefusedKind, RenderReason, SqliteEnd, StatementFault, TcpFault,
+    TlsFault, TplDirFault, Unresolved, context_name, password_pair,
 };
 use crate::model::database::Provider;
 
@@ -374,6 +374,25 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 reference_named(name)
             )),
         },
+        // FR-CONF-057, item 1: the flag or the key, that the value holds a
+        // NUL character, the part before it where the field is not the
+        // password, and why tpl refuses it.
+        Error::NulValueGiven {
+            parameter,
+            field,
+            in_dsn,
+            before,
+            ..
+        } => Cow::Owned(format!(
+            "{} holds a NUL character (U+0000){}; tpl refuses it, because {}",
+            if *in_dsn {
+                format!("the {field} part of the value given to {parameter}")
+            } else {
+                format!("the value given to {parameter}")
+            },
+            nul_position(before.as_deref()),
+            nul_consequence(*field, before.as_deref())
+        )),
         // FR-CONF-050: the flag or the key, and that the value is empty.
         Error::EmptyValue { parameter, .. } => Cow::Owned(format!(
             "{parameter} is empty or holds only whitespace; an entry must name {}",
@@ -928,9 +947,12 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                  {limit:?} expired; core.connect_timeout sets that budget, which DNS resolution, \
                  the TCP connect, the TLS handshake and the login share"
             )),
+            // FR-ERR-027: a session statement or a catalogue query, under the
+            // deadline core.query_timeout gives each statement on its own.
             DeadlineBound::Phase => Cow::Owned(format!(
                 "{phase} for {host}:{port} had not finished when its own deadline of {limit:?} \
-                 expired; that deadline bounds this phase alone"
+                 expired; core.query_timeout sets that deadline, which bounds each statement on \
+                 its own"
             )),
             DeadlineBound::Overall => Cow::Owned(format!(
                 "{phase} for {host}:{port} had not finished when the overall budget of {limit:?} \
@@ -986,6 +1008,15 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         )),
         Error::ProjectFileUnwritable { path, returned } => Cow::Owned(format!(
             "the write of {} returned: {}; the previous file is still in place, unchanged",
+            path.display(),
+            os(returned)
+        )),
+        // FR-CFG-041, the eighty-third edition: the rename took effect, so the
+        // file holds the new content, and the previous one is never said to
+        // stand.
+        Error::ProjectFileNotDurable { path, returned } => Cow::Owned(format!(
+            "{} holds the new content; making the rename durable failed: the filesystem \
+             returned {}",
             path.display(),
             os(returned)
         )),
@@ -1452,6 +1483,46 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
              newest that is. A mysql entry supports {}",
             listed(supported)
         )),
+        // FR-ERR-048, error 1102: the host and port, the number, the name
+        // between quotation marks, the key or the part of dsn that carries it
+        // and the file, and that the server does not accept that name.
+        Error::DatabaseNameRefused {
+            entry,
+            by_dsn,
+            host,
+            port,
+            name,
+            file,
+        } => Cow::Owned(format!(
+            "the server at {host}:{port} refused the login with server error 1102: it does not \
+             accept '{name}' as a database name, which {} gives in {}",
+            if *by_dsn {
+                format!("the database part of database.{entry}.dsn")
+            } else {
+                format!("database.{entry}.database")
+            },
+            file.display()
+        )),
+        // FR-CONF-057, items 2 and 3: the key or the part of dsn and the file,
+        // or the command as stored; the part before the NUL where the field is
+        // not the password; and why tpl refuses it.
+        Error::ValueHoldsNul {
+            field,
+            place,
+            before,
+            ..
+        } => Cow::Owned(format!(
+            "{} holds a NUL character (U+0000){}; tpl refuses it, because {}",
+            match place {
+                NulPlace::Key { key, file } => format!("{key} in {}", file.display()),
+                NulPlace::DsnPart { key, file } =>
+                    format!("the {field} part of {key} in {}", file.display()),
+                NulPlace::Helper { command } =>
+                    format!("the password password_command {command:?} printed"),
+            },
+            nul_position(before.as_deref()),
+            nul_consequence(*field, before.as_deref())
+        )),
         // FR-ERR-048, error 3159: the host and port, the number, and the mode
         // under which the session was not encrypted.
         Error::SecureTransportRequired {
@@ -1645,6 +1716,20 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
                 ),
             })
         }
+        // FR-LITE-043: the path, the kind of the two objects, the table that
+        // holds a column, an index or a trigger, the text both names convert
+        // to, and why the model cannot carry them apart.
+        Error::SqliteNamesAlike { path, names, .. } => Cow::Owned(format!(
+            "{} holds {}{} whose names both read '{}': they differ only in bytes that are not \
+             valid UTF-8, and tpl names each object by its text",
+            path.display(),
+            match &names.table {
+                Some(table) => format!("in table '{table}', "),
+                None => String::new(),
+            },
+            names.kind,
+            names.text
+        )),
         // The note on FR-ERR-034 for a `sqlite` entry: the path, the statement
         // and what ended it, naming a lock only on the library's word.
         Error::SqliteUnavailable {
@@ -2020,6 +2105,44 @@ fn global_flags() -> String {
         )
         .collect();
     flags.join(", ")
+}
+
+/// Where the NUL character of `FR-CONF-057` stands: after the part named, or
+/// at the start of the value. The password's part is never named
+/// (`FR-ERR-013`), so it has no position either.
+fn nul_position(before: Option<&str>) -> String {
+    match before {
+        Some("") => " at its start".to_owned(),
+        Some(before) => format!(" after '{before}'"),
+        None => String::new(),
+    }
+}
+
+/// Why `tpl` refuses a value that holds a NUL character: the interface that
+/// receives it would cut it there (`FR-CONF-057`).
+fn nul_consequence(field: NulField, before: Option<&str>) -> String {
+    let kept = before.unwrap_or_default();
+    match field {
+        NulField::Host => format!(
+            "a host name ends at its first NUL and the connection would reach '{kept}', not the \
+             host written"
+        ),
+        NulField::User => format!(
+            "the login ends a user name at its first NUL and would present '{kept}', not the user \
+             written"
+        ),
+        NulField::Password => "the login would cut the password at it, and present a password \
+                               other than the one written"
+            .to_owned(),
+        NulField::Database => format!(
+            "the login ends a database name at its first NUL and the session would select \
+             '{kept}', not the name written"
+        ),
+        NulField::Path => format!(
+            "the SQLite library ends a file name at its first NUL and would open '{kept}', not \
+             the file written"
+        ),
+    }
 }
 
 #[cfg(test)]

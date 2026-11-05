@@ -1,0 +1,14 @@
+{%- import "rust/_types.jinja" as types -%}
+{#-
+  The file stem of every table's modules, as one JSON object from the table's
+  name to the stem `rust/_types.jinja` derives for it. `run.py` renders it once
+  per read and names each file it writes by it, so a file and the `pub mod`
+  `rust/schema.jinja` writes for it are derived by one macro and agree.
+
+      tpl -d <entry> render rust/_modules
+-#}
+{
+{%- for table in database.tables %}
+  {{ table.name | json }}: {{ types.file(table, database.tables) | json }}{{ "," if not loop.last }}
+{%- endfor %}
+}

@@ -32,24 +32,47 @@
 //! with its own uid is a check nothing has watched fire.
 
 use std::io;
-use std::os::unix::fs::MetadataExt as _;
 use std::path::Path;
+
+use rustix::fd::OwnedFd;
 
 use crate::at::{self, Unread};
 use crate::error::Error;
+
+/// What the checks judged, kept for the rest of the invocation: the `.tpl`
+/// folder, held open, and the text of its `.cfg`, read on the descriptor that
+/// was judged, or [`None`] where the file is absent (`FR-PROJ-030`,
+/// `FR-CFG-041`).
+///
+/// A rewrite of `.cfg` acts on [`Trusted::folder`] and starts from
+/// [`Trusted::text`], so nothing between the checks and the rename resolves
+/// the folder's path again: a component of it swapped for a link after the
+/// checks redirects nothing.
+#[derive(Debug)]
+pub(crate) struct Trusted {
+    /// The folder `.cfg` sits in, opened once, its last component not
+    /// followed.
+    pub(crate) folder: OwnedFd,
+    /// The text of `.cfg`, or [`None`] where it is absent.
+    pub(crate) text: Option<String>,
+}
 
 /// The permission bits `FR-PROJ-011` requires to be clear: group and other.
 const GROUP_AND_OTHER: u32 = 0o077;
 
 /// Applies the checks of `FR-PROJ-030`, `FR-PROJ-010` and `FR-PROJ-011` to
 /// `file`, the `.cfg` of the `.tpl` folder `folder`, or the folder's ownership
-/// check where `file` is absent, and answers the file's text, or [`None`] where
-/// it is absent.
+/// check where `file` is absent, and answers the folder it judged, held open,
+/// with the file's text.
 ///
-/// The type is tested, the two checks are made and the text is read on one
-/// descriptor, opened relative to the folder `file` sits in without following
-/// a link and without waiting for a writer, so no other file can take the
-/// judged one's place.
+/// The folder `file` sits in is opened once, and everything after is relative
+/// to that descriptor: the type is tested, the two checks are made and the
+/// text is read on one descriptor of the file, opened without following a link
+/// and without waiting for a writer, and where the file is absent the folder's
+/// owner is read from the held descriptor with `fstat`. No other file and no
+/// other folder can take the judged one's place, and the caller keeps the
+/// descriptor so that a rewrite acts in the same folder (`FR-CFG-041`).
+/// `folder` names that folder in a refusal.
 ///
 /// # Errors
 ///
@@ -61,7 +84,7 @@ const GROUP_AND_OTHER: u32 = 0o077;
 /// belongs to another user (`FR-PROJ-028`), and
 /// [`Error::ProjectFileUnreadable`] where either cannot be read for any reason
 /// other than the file's absence.
-pub(crate) fn check(file: &Path, folder: &Path) -> Result<Option<String>, Error> {
+pub(crate) fn check(file: &Path, folder: &Path) -> Result<Trusted, Error> {
     let unreadable = |returned: io::Error| Error::ProjectFileUnreadable {
         path: file.to_owned(),
         returned,
@@ -81,13 +104,19 @@ pub(crate) fn check(file: &Path, folder: &Path) -> Result<Option<String>, Error>
             });
         }
         Err(Unread::Io(returned)) if returned.kind() == io::ErrorKind::NotFound => {
-            let owner = std::fs::metadata(folder)
-                .map_err(|returned| Error::ProjectFileUnreadable {
+            // FR-PROJ-028: the folder judged is the folder held, read with
+            // `fstat` rather than by its path, which would follow a link.
+            let owner = rustix::fs::fstat(&parent)
+                .map_err(|errno| Error::ProjectFileUnreadable {
                     path: folder.to_owned(),
-                    returned,
+                    returned: io::Error::from_raw_os_error(errno.raw_os_error()),
                 })?
-                .uid();
-            return judge_folder(folder, owner, invoking_user()).map(|()| None);
+                .st_uid;
+            judge_folder(folder, owner, invoking_user())?;
+            return Ok(Trusted {
+                folder: parent,
+                text: None,
+            });
         }
         Err(Unread::Io(returned)) => return Err(unreadable(returned)),
         Err(Unread::Oversized) => unreachable_oversized(file)?,
@@ -96,7 +125,10 @@ pub(crate) fn check(file: &Path, folder: &Path) -> Result<Option<String>, Error>
     judge(file, found.st_uid, at::permissions(&found), invoking_user())?;
 
     match at::read_open(&handle, &found, None) {
-        Ok(text) => Ok(Some(text)),
+        Ok(text) => Ok(Trusted {
+            folder: parent,
+            text: Some(text),
+        }),
         Err(Unread::Io(returned)) => Err(unreadable(returned)),
         Err(Unread::NotRegular(_) | Unread::Oversized) => unreachable_oversized(file),
     }

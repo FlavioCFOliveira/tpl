@@ -70,8 +70,11 @@ workflow, before it closes.
 - **The exit codes of a `sqlite` entry.** `74` when the path names nothing or
   the file cannot be opened or read; `78` when the path names something other
   than a regular file, the file is not a SQLite database, is damaged or holds
-  a schema `tpl` refuses, or the entry has no `path` or carries a key its
-  provider does not take; `69` when a writer keeps the database locked past
+  a schema `tpl` refuses, the entry has no `path` or carries a key its
+  provider does not take, or the file holds two tables or views — or two
+  columns, indexes or triggers of one table — whose names differ only in bytes
+  that are not valid UTF-8, which the document could not tell apart: no model
+  is presented and nothing is cached; `69` when a writer keeps the database locked past
   `core.query_timeout`; `70` when a safeguard of the read does not take
   effect.
 - **The write-ahead-log files of a SQLite database.** A read of a database in
@@ -127,7 +130,14 @@ workflow, before it closes.
   `--provider` and `--path`, with a SQLite example, and name `--path` among
   the flags each MariaDB flag excludes; the help of `--provider` names
   `mariadb`, `mysql` and `sqlite`, and `tpl help cfg database add` states that
-  a MySQL entry needs what a MariaDB entry needs; `tpl help cfg set` lists the
+  a MariaDB or a MySQL entry needs `--host` and `--schema` to connect; `tpl help`
+  says that `tpl` reads a MariaDB or MySQL database or a SQLite database file,
+  and defines a database entry, and the entry `-d/--database` selects, as a way
+  to reach either; `--host`, `--port` and
+  `--schema` name the MariaDB or MySQL server; `tpl help cfg database test`
+  names which server answered, MariaDB or MySQL; and the `78` of every command
+  that connects names a server that is not a supported version of the entry's
+  provider; `tpl help cfg set` lists the
   two new keys, the provider's three values among them;
   `tpl help cfg database test` states what its four answers mean for a
   `sqlite` entry; the exit codes of the `schema` subcommands, `tpl render`,
@@ -141,7 +151,11 @@ workflow, before it closes.
   classification of a failed server connection; `TlsHandshakeFailed` gained
   `provider`, `ReadOnlySessionNotEnforced` gained `read_back`,
   `ProviderIncoherentWrite` gained `own`, and `error::NetworkPhase` gained
-  `Login`. `tpl::model` gained `database::Provider`, with the values
+  `Login`, `ReadOnlyStatement`, `ReadOnlyReadBack` and `VersionProbe`.
+  `tpl::Error` also gained `DatabaseNameRefused`, `ValueHoldsNul` and
+  `NulValueGiven`, with the new `error::NulField` and `error::NulPlace`, and
+  `SqliteNamesAlike`, with the new `error::AlikeNames` and `error::AlikeKind`,
+  and `ProjectFileNotDurable`. `tpl::model` gained `database::Provider`, with the values
   `Mariadb`, `Mysql` and `Sqlite`, `index::PrimaryKey` and the field
   `Database::provider`; `Table::primary_key` now returns a `PrimaryKey`
   rather than an `Index`; and fields a SQLite or a MySQL read cannot fill
@@ -200,7 +214,12 @@ workflow, before it closes.
   reports; so does **every other number, and `1044` or `1049` on a connection
   that names no database**, as `tpl cfg database test` opens, with a `cause`
   stating that `tpl` does not classify the number further. `1044` and `1049`
-  on a connection naming a database keep their `77` and message.
+  on a connection naming a database keep their `77` and message. **`1102`,
+  a database name the server does not accept, exits `78`** on a connection
+  naming a database: `error: the server at <host>:<port> refused the database name, …`,
+  a `cause` naming the name between quotation marks, the key or the part of
+  `dsn` that gives it and the file, and the `hint`
+  `correct the database name: tpl cfg database update <entry> --schema <database>`.
 - **`core.connect_timeout` bounds four phases, the login included.** An
   expired connection budget is reported against the phase the connection had
   reached — DNS resolution, the TCP connect, the TLS handshake or the login —
@@ -210,9 +229,89 @@ workflow, before it closes.
   where it read `exceeded its own deadline of <value>`, and the `cause` states
   that DNS resolution, the TCP connect, the TLS handshake and the login share
   that budget. Exit `69`, unchanged.
+- **A session statement that outlives `core.query_timeout` names itself.**
+  The read-only session statement, its read-back and the version probe each
+  have their own deadline of `core.query_timeout`. An expiry of one was
+  reported as `a query reading the database structure`; it now reads
+  `error: the version probe for <host>:<port> exceeded its own deadline of <value>, …`,
+  or names the read-only session statement or its read-back, with a `cause`
+  stating that `core.query_timeout` sets that deadline and bounds each
+  statement on its own, and the `hint`
+  `raise the deadline with: tpl cfg set core.query_timeout <seconds>`. An
+  expired catalogue query's `cause` states the same. Exit `69`, unchanged,
+  for every one of them, the read-only pair included.
+- **`-v` reports each connection phase and each session statement.** For a
+  `mariadb` and a `mysql` entry, `-v` writes one `phase:` line for DNS
+  resolution, the TCP connect, the TLS handshake where the `tls` mode
+  negotiated one, the login and each of the three session statements, each
+  naming it and its time, a phase that failed or expired included. The TCP
+  connect's line no longer carries the time of the TLS handshake and the
+  login, and the session statements are no longer reported as `server
+  query`. The `query:` lines, one per catalogue query, are unchanged.
+
+- **The worked examples cover MySQL and SQLite.** Each of the four examples
+  also renders, and passes its compile gate over, the data layer of the MySQL
+  fixture's `freight` and of the SQLite fixture's main database, built from
+  `scripts/sqlite/freight.sql` on every run; each type mapping covers `json`,
+  `geomcollection`, `integer`, `real` and `numeric`. A table with no primary
+  key gets its row types and no repository, and the MariaDB output of every
+  example is unchanged.
+- **A cached `tpl render` reads a table's `foreign_keys` and
+  `referenced_by` when the template first reaches them.** A cache file whose
+  `foreign_keys` or `referenced_by` is damaged is a miss only where the
+  template reaches that part: the render is then abandoned, nothing of it is
+  written, and the result is rendered from the server, as for any file found
+  damaged during a render. A template that never reaches the part is served
+  from the cache. The eight `schema` subcommands still treat such a file as a
+  miss before they write anything.
 
 ### Fixed
 
+- **A cached `tpl render` of a large database holds about half the heap it
+  held.** Every table a render reached from the cache decoded the tables its
+  foreign keys embed, so under the default `core.render_memory_limit` a
+  whole-database render such as `rust/schema` or `go/schema` exited `65`
+  from about 2 450 tables cached, while the same render with `--direct`
+  passed. It now passes up to about 4 600 tables; past that a cached render
+  still exits `65` where `--direct` passes.
+- **A short or malformed packet from a server no longer ends `tpl` with
+  `70`.** A greeting cut before its fields, an error packet cut before its
+  number or its SQL state — in the greeting's place or in answer to the
+  login — and a one-byte `0x01` packet in a `caching_sha2_password` login
+  made the driver panic. Each now exits `69` with
+  `error: the login to <host>:<port> did not complete, …` and the `cause` of
+  an answer that is not the server's protocol. A server that sends
+  continuation packets past 1 GiB is refused the same way, where `tpl` kept
+  reading them into memory.
+- **`tpl cfg database test` reads only a privilege error as
+  `can_read_catalogue: false`.** An error packet carrying `1044`, `1142`,
+  `1143` or `1227` answers the privilege probe with `false`, exit `0`, as
+  before. Any other error packet answered it with `false` too; it now exits
+  `69`, naming the error number, and writes no document.
+- **A NUL character in an entry is refused.** A `host`, `user`, `password`
+  or `database`, a part of a `dsn`, a `sqlite` `path`, or the output of a
+  `password_command` holding a NUL character was cut at it, so a login
+  could select another database than the one written. In `.tpl/.cfg` such a
+  value now exits `78` before any connection is opened, the `cause` naming the
+  key or the part of `dsn`, the file and the text before the NUL — never any
+  part of a password — and the helper's output exits `78` naming the command.
+  Given to `tpl cfg set`, or to `--dsn`, `--host`, `--user`, `--schema` or
+  `--path` of `tpl cfg database add` and `update`, it exits `64` and writes
+  nothing.
+- **A read served from the cache needs no credential.** A `${VAR}` in `dsn`,
+  `host`, `port`, `user`, `password` or `database` is expanded, and
+  `password_command` run, only by an invocation that opens a connection: a
+  read that misses the cache or carries `--direct`, the read a render returns
+  to, `tpl cache load` and `tpl cfg database test`. A read the cache serves
+  exited `78` when such a variable was unset; it now succeeds, with
+  `"source":"cache"`, and the `78` is raised by the first invocation that
+  connects.
+- **An include suggestion names another template, or none.** A name an
+  `{% include %}`, `{% import %}` or `{% extends %}` writes that does not exist
+  is never answered with the template that holds it, and one that names a FIFO,
+  a socket or a device is answered with no suggestion, as `tpl render`,
+  `tpl template show`, `check` and `path` given such a name already were: an
+  include of a FIFO `h.jinja` from `i.jinja` suggested `'i.jinja'`.
 - **An account with no password logs in with an empty password.** A
   `mariadb` entry whose password is the empty string — `password = ""`, a DSN
   whose password part is empty, or a `password_command` that prints nothing —
@@ -223,6 +322,24 @@ workflow, before it closes.
 
 ### Security
 
+- **A rewrite of `.tpl/.cfg` acts only in the `.tpl` the trust checks
+  judged.** The five commands that rewrite the file start from the `.cfg` text
+  the ownership and mode checks read, and create the temporary file, write it,
+  give it mode `0600` and rename it over `.cfg` relative to the `.tpl` folder
+  those checks opened and held, following no link; a folder without `.cfg` is
+  judged on that same held folder. A link or a folder put in place of a
+  component of its path after the checks therefore redirects none of those
+  steps — another project's `.cfg` could be rewritten before — and a link at
+  `.cfg` is replaced rather than written through. A rewrite that cannot act in
+  that folder exits `74`, leaving the previous file in place.
+- **A rewrite of `.tpl/.cfg` survives a crash.** The temporary file is
+  `fsync`ed before it is renamed over `.cfg`, and the `.tpl` folder after the
+  rename, so a power loss leaves the previous file or the new one, whole. A
+  failure up to and including the rename exits `74` with the previous file in
+  place, as before. A failure after it exits `74` with
+  `error: .tpl/.cfg was written, and its durability could not be confirmed`, a
+  `cause` stating that the file holds the new content and what the filesystem
+  returned, and a `hint` carrying `tpl cfg list`.
 - **C1 controls and bidirectional formatting characters are escaped.** In
   the text output of the read commands and in every diagnostic, a character
   from U+0080 to U+009F, and each of the twelve characters Unicode marks

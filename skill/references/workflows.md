@@ -154,7 +154,7 @@ tpl -d shop cache clean --view v_sales   # delete one object (exit 66 if it is n
 ```
 
 - Nothing expires. `loaded_at` in `cache status` is the only staleness signal. If the schema may have changed, reload or use `--direct`.
-- **A cache hit still resolves the entry.** Every `${VAR}` it references must be defined, and `password_command` must succeed, even when no connection is opened. Otherwise the command exits 78.
+- **A cache hit reads no credential.** It expands no `${VAR}` and runs no `password_command`, so it succeeds with the variable unset. The first command that connects — a miss, `--direct`, `cache load`, `cfg database test` — needs them, and exits 78 naming an undefined variable.
 - Cleaning one object marks its collection as not whole. After that, a listing, a dump or a render needs the server again until you run `tpl -d shop cache load`. Prefer `cache load --table X` for refreshing one object.
 - Read the cache only through `tpl`. Its on-disk layout is not a contract.
 

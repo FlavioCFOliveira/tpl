@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -743,6 +743,18 @@ Out of scope: the wording of any individual message.
   it returns takes the code `FR-LITE-040` gives it, so the codes step 6 can
   end with are unchanged. The order of the steps is unchanged.
 
+  *Amended in the seventy-ninth edition,* for rmp `#310`: the `${VAR}`
+  expansion of `FR-CONF-015` and the `password_command` of `FR-CONF-024`
+  belong to step 6, on its connection branch, and to no earlier step: they
+  are performed only by an invocation that opens a connection, before its
+  first connection phase, per `FR-CONF-056`, and a read the cache serves
+  performs neither. The `78`s they raise are among the codes step 6 already
+  carries. Step 5 selects the entry and refuses what the file holds as
+  written, and no longer expands a field or obtains the password; the
+  thirtieth edition's rejected option above, which says that it does,
+  describes entry resolution as it then stood. The order of the steps is
+  unchanged.
+
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
 
@@ -867,7 +879,7 @@ Out of scope: the wording of any individual message.
   | `64` | The token rejected as written, and why it was rejected: the unknown command or flag, the value that did not conform together with the type expected, or both members of the mutually exclusive pair |
   | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or, for a document that does not match the contract, the key path of the first member in document order that fails it and what the contract expects there: the type expected, that the key is required, or, for a reference `FR-CTX-042` governs, the table named and that `tables` does not carry it. It SHALL NOT cite a file of this specification. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012`. For a render bound, which bound was exceeded, its resolved value, and the key of `FR-CONF-002` that raises it, per `FR-RND-036`, `FR-RND-037` and `FR-RND-039` |
   | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, the key space of `FR-CONF-002`, or the `--context` document and the collection of it the name was sought in |
-  | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the login of `FR-ERR-047`, the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
+  | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the login of `FR-ERR-047`, the [session statement](glossary.md#session-statement) that was running, named as `FR-ERR-027` names it, among them the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
   | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
   | `73` | The path `tpl init` could not create, and whether the obstacle was an existing `.tpl` or a failure the filesystem reported |
   | `74` | The path or stream that failed, the operation attempted on it, and what the filesystem or the stream returned |
@@ -995,6 +1007,14 @@ Out of scope: the wording of any individual message.
   `#338`*, the `77` row names the reason `FR-ERR-048` states, because that
   requirement separates five reasons a server refuses an authentication, and
   the implementation named the user name or the password for all of them.
+
+  *Amended in the seventy-ninth edition,* for rmp `#339`: the `69` row names
+  the session statement, the phase `FR-CONF-005` now gives the read-only
+  session statement, its read-back and the version probe. The version probe
+  was the row's fifth phase and is one of the three; the other two reach
+  this row only when their deadline expires, because `FR-SRV-010`, and
+  `FR-MYSQL-019` for a `mysql` entry, route every other failure of theirs to
+  `78`. No code changes.
 
 - **FR-ERR-011**: A template error SHALL carry the template name, the line, the
   column, and the chain of underlying template-engine errors.
@@ -1307,6 +1327,26 @@ Out of scope: the wording of any individual message.
   separators that join names into a command or into a key are literals — the
   space between command-path segments, the `-` or `--` that introduces a flag,
   and the `.` between key segments.
+
+  A host is not among those values, and no `hint` SHALL carry one, in its
+  command or in its prose: a `hint` that needs the address SHALL refer to the
+  host and port the `error` and `cause` lines name, in words such as "the host
+  and port named above", and SHALL carry `<host>` and `<port>` as
+  placeholders in a command that changes them. A port, being a number, is
+  within the set and MAY be written.
+
+  *Amended in the eighty-first edition,* for rmp `#344`. The examples of
+  `FR-ERR-047` and `FR-ERR-049` wrote the host into the prose of their
+  `hint`s, and the implementation followed them, testing those two `hint`s
+  apart from this requirement. The requirement governs the whole `hint`, and
+  a host is a value of `.tpl/.cfg`, which may arrive in a clone, per the
+  trust boundaries of [security.md](security.md). The examples change, and
+  this requirement does not. *Rejected: admitting a host, escaped under
+  `FR-ERR-024`.* Escaping keeps a host from forging a line, and not from
+  writing words a caller reads as advice on the one line a caller acts on;
+  the `error` and `cause` lines already name it, and the `hint` loses nothing
+  by pointing at them, as the `hint` of `FR-ERR-027` for the TCP connect
+  already does.
 
   *Amended in the twentieth edition: the requirement says what the character
   set governs, because as written it governed everything and admitted two of
@@ -1846,7 +1886,8 @@ no requirement of this file is amended.
 
 - **FR-ERR-027**: WHEN a deadline is exceeded, the system SHALL exit with the
   code of the phase: `69` for DNS resolution, TCP connect, TLS handshake, the
-  login, or a catalogue query; `78` for `password_command`; `65` for render.
+  login, a session statement, or a catalogue query; `78` for
+  `password_command`; `65` for render.
 
   WHEN the budget the four connection phases share under `FR-CONF-005`
   expires, the `error` line and the `cause` SHALL name the phase that was in
@@ -1895,6 +1936,59 @@ no requirement of this file is amended.
   through `FR-ERR-012`. The examples fix the facts named, the command
   carried and the code. The `hint`s are those the implementation prints at
   `2d652bd`, and do not change.
+
+  WHEN the deadline of a [session statement](glossary.md#session-statement)
+  or of a catalogue query expires, the `error` line and the `cause` SHALL name
+  the statement that was running, the host and port, and the deadline's
+  resolved value. A session statement SHALL be named as the statement it is
+  — the read-only session statement, the read-back of the read-only session,
+  or the version probe — and a catalogue statement, the privilege probe of
+  `FR-CFG-044` among them, as a query reading the database structure. The
+  `cause` SHALL state that `core.query_timeout` sets that deadline and that it
+  bounds that one statement, and SHALL NOT name a connection phase. The
+  `hint` SHALL carry `tpl cfg set core.query_timeout <seconds>`. WHEN the
+  overall budget of `FR-GLOB-011` expires first, the `cause` SHALL name it
+  instead, and the `hint` SHALL carry the same command with a larger
+  `--timeout <seconds>`, as for the connection phases. The expiry is `69`
+  whichever session statement it ends, the read-only session statement and
+  its read-back included: `FR-SRV-010`, and `FR-MYSQL-019` for a `mysql`
+  entry, route the other failures of those two to `78`, and a statement that
+  outlived its deadline is a server that did not answer in time, which the
+  operation, being read-only, can ask again.
+
+  ```
+  error: the version probe for db.example.com:3306 exceeded its own deadline of 30s, for database entry 'shop'
+  cause: the version probe for db.example.com:3306 had not finished when its own deadline of 30s expired; core.query_timeout sets that deadline, which bounds each statement on its own
+  hint:  raise the deadline with: tpl cfg set core.query_timeout <seconds>
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  ```
+  error: the read-only session statement for db.example.com:3306 exceeded its own deadline of 30s, for database entry 'shop'
+  cause: the read-only session statement for db.example.com:3306 had not finished when its own deadline of 30s expired; core.query_timeout sets that deadline, which bounds each statement on its own
+  hint:  raise the deadline with: tpl cfg set core.query_timeout <seconds>
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  ```
+  error: a query reading the database structure for db.example.com:3306 exceeded its own deadline of 30s, for database entry 'shop'
+  cause: a query reading the database structure for db.example.com:3306 had not finished when its own deadline of 30s expired; core.query_timeout sets that deadline, which bounds each statement on its own
+  hint:  raise the deadline with: tpl cfg set core.query_timeout <seconds>
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The examples fix the facts named, the command
+  carried and the code.
+
+  *Amended in the seventy-ninth edition,* for rmp `#339`: the session
+  statement joins the phases on `69`, and the paragraph on the deadline of a
+  statement is new. The implementation bounded each session statement by
+  `core.query_timeout`, which `FR-CONF-005` now states, and reported every
+  expiry of one — a stalled version probe included — as an expiry of a query
+  reading the database structure, a `cause` equally true of another
+  statement, which `FR-ERR-034` bans; its `cause` for a statement's deadline
+  named no key. The codes are unchanged.
 
   *Amended in the seventy-seventh edition,* for rmp `#336`. The requirement
   named four phases on `69` and nothing of the message. The login is named,
@@ -1962,21 +2056,21 @@ no requirement of this file is amended.
   ```
   error: cannot reach db.example.com:3306, for database entry 'shop'
   cause: the TCP connect to db.example.com:3306 failed: the network reports the host unreachable
-  hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host named above is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
   ```
   error: cannot reach db.example.com:3306, for database entry 'shop'
   cause: the TCP connect to db.example.com:3306 failed: the operating system reported error 13
-  hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host named above is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
   ```
   error: cannot reach db.example.com:3306, for database entry 'shop'
   cause: the TCP connect to db.example.com:3306 failed, and the operating system reported no error number
-  hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host named above is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
@@ -1984,6 +2078,10 @@ no requirement of this file is amended.
   through `FR-ERR-012`. The examples fix the facts named, the command
   carried and the code. The first is the message the implementation prints
   for `ECONNREFUSED` at `2d652bd`, and nothing in it changes.
+
+  *Amended in the eighty-first edition,* for rmp `#344`: the `hint` of the
+  last three examples refers to the host named above and no longer writes
+  it, per `FR-ERR-022`.
 
   *Observed, through `tpl`, on 2026-11-04.* A `mariadb` and a `mysql` entry
   naming port `1` of the loopback interface, where nothing listens, gave the
@@ -2137,7 +2235,20 @@ no requirement of this file is amended.
      authentication method. The `cause` SHALL state both possibilities. The
      `hint` SHALL state that the address must be that of a server of the
      entry's provider, and SHALL carry the command that repoints the entry,
-     as in the first outcome.
+     as in the first outcome. A packet of the login that is **truncated** —
+     a well-framed packet that ends before the fields the provider's
+     protocol gives a packet of its kind — or **malformed** — one holding
+     what no packet of that kind holds — is this outcome, whatever its
+     bytes, and the system SHALL NOT end the invocation with the `70` of
+     `FR-ERR-030` for it: an answer the server got wrong is not a defect of
+     `tpl`. The packets of the login are the greeting; an error packet in
+     the greeting's place or at any later step of the login, which
+     `FR-ERR-048` sends here when it cannot be read; a request to switch
+     the authentication method; and a packet that continues an
+     authentication method, such as the packet beginning with the byte
+     `0x01` that `caching_sha2_password` sends, cut to that one byte. A
+     packet cut short because the connection closed before its announced
+     length had arrived is the first outcome.
   3. **The server's RSA public key, for a `mariadb` entry.** The login, over
      a session TLS does not protect, needs the server's RSA public key, and
      the system does not request it, per the note on `FR-SEC-021`. The
@@ -2157,14 +2268,14 @@ no requirement of this file is amended.
   ```
   error: the login to db.example.com:3306 did not complete, for database entry 'shop'
   cause: the TCP connect to db.example.com:3306 succeeded, and the connection failed before the login completed: the server closed it, it was reset, or the operating system abandoned it
-  hint:  check that db.example.com:3306 is the address of a running MariaDB server, then run the command again, or change the address with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host and port named above are the address of a running MariaDB server, then run the command again, or change the address with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
   ```
   error: the login to db.example.com:3306 did not complete, for database entry 'shop'
   cause: what answered the login at db.example.com:3306 did not answer as a MariaDB server does: it does not speak the MariaDB protocol, or it asked for a step tpl does not implement, such as an authentication method
-  hint:  check that db.example.com:3306 is the address of a MariaDB server, or change it with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host and port named above are the address of a MariaDB server, or change it with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
@@ -2241,20 +2352,54 @@ no requirement of this file is amended.
 
   *Added in the seventy-seventh edition,* for rmp `#332`.
 
+  *Amended in the seventy-ninth edition,* for rmp `#342`: the second outcome
+  names a truncated and a malformed greeting, and the first a greeting cut
+  short by the connection. Both were within the outcomes as written — what
+  answered did not answer as a server of the provider does, or the
+  connection failed before the login completed — and the observation above
+  used a well-framed packet that is not a greeting at all. rmp `#342`
+  records that the driver may panic on a truncated greeting, which would end
+  the invocation with `70` and the message of `FR-ERR-032`, telling the
+  caller to report a defect of `tpl` for an answer of the server. The
+  sentences name the cases so that a test can show the outcome: a listener
+  on the loopback interface that sends a well-framed packet beginning as a
+  greeting and ending before its fields do, for which the system exits `69`
+  with the second example's four lines.
+
+  *Amended in the eightieth edition,* for rmp `#342`: the sentence on a
+  truncated or malformed greeting reaches every packet of the login. rmp
+  `#342` now covers every short packet on which the driver may panic: a
+  truncated greeting; an error packet cut short in the greeting's place or
+  during the login, which `FR-ERR-048` already sent to this outcome; and a
+  one-byte `0x01` packet during a `caching_sha2_password` login. Each was
+  the second outcome as written — what answered did not answer as a server
+  of the provider does — and each is now named, with the bar on `70`. A
+  test shows each with a listener on the loopback interface that sends the
+  packet in its place, for which the system exits `69` with the second
+  example's four lines.
+
+  *Amended in the eighty-first edition,* for rmp `#344`: the `hint` of the
+  first two examples refers to the host and port named above and no longer
+  writes them, per `FR-ERR-022`. The *Observed* note above records the
+  wording before this edition.
+
 - **FR-ERR-048**: WHEN the server of a `mariadb` or a `mysql` entry answers
   the login with an error packet, the system SHALL NOT read the catalogue,
   and SHALL classify the packet by the error number it carries, read for the
   entry's provider, as the following table states, and by nothing else the
   packet carries. A number the table does not name is its last row. WHERE
-  the connection named no database, `1044` and `1049` are the last row too,
-  because the condition of the first row is about the database the entry
-  names. WHERE the system cannot read the packet as the server's error
-  packet, and so has no number to classify, the failure is the second
-  outcome of `FR-ERR-047`.
+  the connection named no database, `1044`, `1049` and `1102` are the last
+  row too, because the conditions of their rows are about the database the
+  entry names. WHERE the system cannot read the packet as the server's error
+  packet, and so has no number to classify — a packet that ends before its
+  error number, or before the fields an error packet carries, among them —
+  the failure is the second outcome of `FR-ERR-047`, at `69`, and the system
+  SHALL NOT end the invocation with the `70` of `FR-ERR-030` for it.
 
   | `mariadb` entry | `mysql` entry | Name in the error references | What it is | Code |
   |---|---|---|---|---|
   | `1044`, `1049` | `1044`, `1049` | `ER_DBACCESS_DENIED_ERROR`, `ER_BAD_DB_ERROR` | The database the entry names, which `FR-PRIV-021` reports | `77` |
+  | `1102` | `1102` | `ER_WRONG_DB_NAME` | The database the entry names is not a name the server accepts for a database | `78` (`EX_CONFIG`) |
   | `1045`, `1698` | `1045`, `1698` | `ER_ACCESS_DENIED_ERROR`, `ER_ACCESS_DENIED_NO_PASSWORD_ERROR` | Authentication refused: the user or the password | `77` |
   | `1130` | `1130` | `ER_HOST_NOT_PRIVILEGED` | Authentication refused: the user may not connect from the client's host | `77` |
   | `1862` | `1862` | `ER_MUST_CHANGE_PASSWORD_LOGIN` | Authentication refused: the password has expired | `77` |
@@ -2268,6 +2413,16 @@ no requirement of this file is amended.
   Each class carries the following message.
 
   - **The database.** The message of `FR-PRIV-021`.
+  - **A database name the server does not accept.** The `error` line SHALL
+    state that the server refused the database name of the entry. The
+    `cause` SHALL name the host and port, the error number, the name the
+    entry gives, between quotation marks and escaped under `FR-ERR-024`, so
+    that a leading or a trailing space shows, and the key or the part of
+    `dsn` that carries it, per the `78` row of `FR-ERR-034`; and SHALL state
+    that the server does not accept that name for a database. The `hint`
+    SHALL carry `tpl cfg database update <entry> --schema <database>`, with
+    the entry name filled in, or for an entry defined by `dsn` the command of
+    `FR-ERR-045`, and SHALL NOT state that the operation can be run again.
   - **Authentication refused**, every `77` row but the first. The `error`
     line SHALL name the user and the host the server refused. The `cause`
     SHALL name them, the reason the row states, and that the refusal came
@@ -2316,6 +2471,13 @@ no requirement of this file is amended.
   ```
 
   ```
+  error: the server at db.example.com:3306 refused the database name, for database entry 'shop'
+  cause: the server at db.example.com:3306 refused the login with server error 1102: it does not accept 'freight ' as a database name, which database.shop.database gives in /home/ana/shop/.tpl/.cfg
+  hint:  correct the database name: tpl cfg database update shop --schema <database>
+  exit:  78 (EX_CONFIG)
+  ```
+
+  ```
   error: the server at db.example.com:3306 accepts only encrypted sessions, for database entry 'shop'
   cause: the server at db.example.com:3306 refused the login with server error 3159: it accepts only encrypted sessions, and the session was not encrypted under tls 'disabled'
   hint:  encrypt the session: tpl cfg database update shop --tls verify-identity
@@ -2352,7 +2514,13 @@ no requirement of this file is amended.
   `4151`, and `3118` and `3955`, different meanings: MariaDB names `3118` and
   `3955` placeholders for MySQL compatibility, and MySQL uses `4150` and
   `4151` for errors of a bulk parser. That is why the table is read for the
-  entry's provider.
+  entry's provider. `1102` was read in both references on 2026-11-05: each
+  names it `ER_WRONG_DB_NAME`, with SQLSTATE `42000` and the message
+  "Incorrect database name '%s'"; and both identifier pages state that a
+  database name cannot end with a space — "Database, table and column names
+  can't end with space characters", MariaDB's, and "Database, table, and
+  column names cannot end with space characters", MySQL's, at the pages
+  `FR-CONF-057` cites.
 
   *Observed, and bounded.* `1044`, `1045` and `1049` are observed: the tests
   of `src/mariadb/fault.rs` recorded them on 2026-09-18 against the four
@@ -2372,19 +2540,32 @@ no requirement of this file is amended.
   producing it needs the server's global `max_connections` changed, which
   the fixtures do not do. No other number is observed. This requirement
   classifies numbers; it states no observation of which number a server
-  sends in which circumstance beyond those four.
+  sends in which circumstance beyond those four. `1102` is not observed by
+  this corpus: rmp `#357` records it, from the security review of the
+  `mysql` provider, for a `database` of `freight` followed by a space, on
+  `8.4` and `9.7`; whether a MariaDB server answers the same name with the
+  same number is not observed, and the row is read alike for both because
+  both references give the number one meaning.
 
   *Rationale: the code follows the caller's next step*, as `FR-ERR-002`
   requires. `77` is for a refusal whose remedy is the account — its
   credentials, or a grant or an unlock an administrator gives — which is the
-  step the `77` row of `FR-ERR-001` states. `78` is for the one refusal whose
-  remedy is the entry's own `tls` key. `69` is for a refusal that is about
+  step the `77` row of `FR-ERR-001` states. `78` is for the two refusals
+  whose remedy is a key of the entry: its `tls`, for `3159`, and its
+  database name, for `1102`. `69` is for a refusal that is about
   the server's state or the client's host, and not about the account: a
   server at its limit admits the same login later, and an unknown error
   leaves repetition as the one step that is safe, the operation being
-  read-only. *Why `1129` is `69`.* The block concerns the client's host and
-  the connection errors from it, not the account, and the reference's own
-  message names the remedy as an administrator's flush of the host cache.
+  read-only. *Why `1102` is `78`.* The server refuses the name itself,
+  whatever the account: no grant, no unlock and no repetition makes it a
+  name the server accepts, and the next step is the entry's `database` key,
+  the step the `78` row of `FR-ERR-001` states. It is not the `77` of the
+  first row, whose two numbers concern a name the server accepts and a
+  database the reader may not see or the server does not hold, which
+  `FR-PRIV-021` cannot tell apart. *Why `1129` is `69`.* The block concerns
+  the client's host and the connection errors from it, not the account, and
+  the reference's own message names the remedy as an administrator's flush
+  of the host cache.
 
   *Rejected: classifying by SQLSTATE.* `42000` covers `1044` and `1049`,
   which `FR-PRIV-021` reports, and `1203` and `1226`, which are limits; and
@@ -2398,6 +2579,23 @@ no requirement of this file is amended.
   2026-11-04 to fix in that sprint.
 
   *Added in the seventy-seventh edition,* for rmp `#338`.
+
+  *Amended in the eightieth edition,* for rmp `#357` and `#342`. The row of
+  `1102` is new, with its message, its example and its place in the
+  rationale, which counted one refusal on `78` where there are now two. The
+  number fell to the last row, and the implementation exited `69` with a
+  `hint` that the operation can be run again, which repeats the same
+  refusal, for a fault whose fix is the entry. *Rejected: refusing a name that ends with a space
+  before connecting.* The rules a server applies to a database name — its
+  characters, its length, its last character — are the server's, and a
+  copy of them in `tpl` would differ from the server it is pointed at; the
+  server's refusal, classified, names the fault as surely. A NUL character
+  is the one character `tpl` refuses itself, under `FR-CONF-057`, because no
+  server refuses it at the login: the login cuts the name at it. The
+  sentence on a packet the system cannot read as an error packet names a
+  packet that ends early and bars the `70`, for rmp `#342`: the outcome was
+  the second of `FR-ERR-047` as written, and is now stated where an
+  implementer reads it.
 
 ## A session that opens and does not hold
 
@@ -2421,9 +2619,10 @@ no requirement of this file is amended.
   catalogue read.
 
   One more answer is routed elsewhere and is no failure: an error packet the
-  server answers the privilege probe of `FR-CFG-044` with is that
-  requirement's `false`, and `tpl cfg database test` reports it and does not
-  exit `69`.
+  server answers the privilege probe of `FR-CFG-044` with, carrying one of
+  the numbers that requirement reads as a privilege error, is its `false`,
+  and `tpl cfg database test` reports it and does not exit `69`. An error
+  packet carrying any other number is the third way below.
 
   A statement fails, for this requirement, in one of three ways, and the
   `cause` SHALL state which, with the phase and the host and port:
@@ -2515,6 +2714,12 @@ no requirement of this file is amended.
   are unchanged. The version probe's statement is named after the phase,
   and the catalogue statement in the words the implementation already uses
   for that phase.
+
+  *Amended in the seventy-ninth edition,* for rmp `#341`: the answer of the
+  privilege probe that is no failure is an error packet carrying a number
+  `FR-CFG-044` reads as a privilege error, and no longer every error packet.
+  An error packet the probe is answered with that carries another number is
+  a statement that failed, and is reported here with `69`.
 
 ## Template codes
 

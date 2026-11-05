@@ -96,8 +96,9 @@ impl fmt::Display for CatalogueObjectKind {
 
 /// The phase of a connection or a catalogue read that failed.
 ///
-/// The four are the ones `FR-ERR-034` enumerates for the `cause` line of a
-/// `69`, and the set is closed by that row.
+/// They are the ones `FR-ERR-034` enumerates for the `cause` line of a `69`,
+/// each session statement named as `FR-ERR-027` names it, and the set is
+/// closed by that row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NetworkPhase {
     /// Resolving the host name.
@@ -109,6 +110,15 @@ pub enum NetworkPhase {
     /// The login: the server's greeting and the authentication, which run
     /// before and after a TLS handshake (`FR-CONF-005`, `FR-ERR-047`).
     Login,
+    /// The read-only session statement of `FR-SRV-008` or `FR-MYSQL-018`, a
+    /// session statement of `FR-CONF-005`.
+    ReadOnlyStatement,
+    /// The read-back of the read-only session, `FR-SRV-009` or
+    /// `FR-MYSQL-018`, a session statement of `FR-CONF-005`.
+    ReadOnlyReadBack,
+    /// The version probe of `FR-SRV-002` or `FR-MYSQL-006`, a session
+    /// statement of `FR-CONF-005`.
+    VersionProbe,
     /// Reading `INFORMATION_SCHEMA`.
     CatalogueQuery,
 }
@@ -120,7 +130,10 @@ impl NetworkPhase {
     pub const fn connecting(self) -> bool {
         match self {
             Self::DnsResolution | Self::TcpConnect | Self::TlsHandshake | Self::Login => true,
-            Self::CatalogueQuery => false,
+            Self::ReadOnlyStatement
+            | Self::ReadOnlyReadBack
+            | Self::VersionProbe
+            | Self::CatalogueQuery => false,
         }
     }
 }
@@ -132,6 +145,9 @@ impl fmt::Display for NetworkPhase {
             Self::TcpConnect => "the TCP connect",
             Self::TlsHandshake => "the TLS handshake",
             Self::Login => "the login",
+            Self::ReadOnlyStatement => "the read-only session statement",
+            Self::ReadOnlyReadBack => "the read-back of the read-only session",
+            Self::VersionProbe => "the version probe",
             Self::CatalogueQuery => "a query reading the database structure",
         };
         f.write_str(name)
@@ -591,6 +607,57 @@ pub enum LoginRefusal {
     Unclassified,
 }
 
+/// A value `FR-CONF-057` refuses where it holds a NUL character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NulField {
+    /// The `host` of a `mariadb` or a `mysql` entry.
+    Host,
+    /// The `user`.
+    User,
+    /// The `password`, from the key, the `dsn` or the helper.
+    Password,
+    /// The `database`.
+    Database,
+    /// The `path` of a `sqlite` entry.
+    Path,
+}
+
+impl fmt::Display for NulField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Host => "host",
+            Self::User => "user",
+            Self::Password => "password",
+            Self::Database => "database",
+            Self::Path => "path",
+        })
+    }
+}
+
+/// Where a value `FR-CONF-057` refuses was read.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NulPlace {
+    /// A key of the entry in `.tpl/.cfg`.
+    Key {
+        /// The fully qualified key.
+        key: String,
+        /// The configuration file.
+        file: PathBuf,
+    },
+    /// A part of the entry's `dsn`, which the field names.
+    DsnPart {
+        /// The fully qualified key of the `dsn`.
+        key: String,
+        /// The configuration file.
+        file: PathBuf,
+    },
+    /// The output of the entry's `password_command`.
+    Helper {
+        /// The command as stored (`FR-CONF-017`).
+        command: Vec<String>,
+    },
+}
+
 /// The statement of an open session that failed (`FR-ERR-036`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionStatement {
@@ -797,6 +864,51 @@ pub enum SqliteEnd {
         /// [`SqliteEnd::Locked`] gives.
         report: Box<LibraryReport>,
     },
+}
+
+/// Two names of one set of `FR-LITE-043` that differ in the bytes the file
+/// holds for them and convert to one text under `FR-OUT-017`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlikeNames {
+    /// The kind of the two objects.
+    pub kind: AlikeKind,
+    /// The table that holds them, for two columns, two indexes or two
+    /// triggers.
+    pub table: Option<FileValue>,
+    /// The text both names convert to.
+    pub text: FileValue,
+}
+
+/// The kinds of the two objects of [`AlikeNames`], by the sets of
+/// `FR-LITE-043`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AlikeKind {
+    /// Two tables (the first set).
+    Tables,
+    /// Two views (the first set).
+    Views,
+    /// A table and a view (the first set).
+    TableAndView,
+    /// Two columns of one table (the second set).
+    Columns,
+    /// Two indexes of one table (the third set).
+    Indexes,
+    /// Two triggers of one table (the fourth set).
+    Triggers,
+}
+
+impl fmt::Display for AlikeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Tables => "two tables",
+            Self::Views => "two views",
+            Self::TableAndView => "a table and a view",
+            Self::Columns => "two columns",
+            Self::Indexes => "two indexes",
+            Self::Triggers => "two triggers",
+        })
+    }
 }
 
 /// A row of the schema table `main.sqlite_schema` that the check of
@@ -2067,6 +2179,21 @@ pub enum Error {
         returned: io::Error,
     },
 
+    /// A rewrite of `.tpl/.cfg` whose rename took effect and whose durability
+    /// could not then be established (`FR-CFG-041`, as amended in the
+    /// eighty-third edition): the file holds the new content, which may not
+    /// survive a crash of the machine. It is never reported as a failure that
+    /// left the previous file in place.
+    #[error(".tpl/.cfg was written, and its durability could not be confirmed")]
+    ProjectFileNotDurable {
+        /// The `.cfg` that now holds the new content.
+        path: PathBuf,
+        /// What the filesystem returned for the operation that would have
+        /// made the rename durable.
+        #[source]
+        returned: io::Error,
+    },
+
     /// Standard output could not be written (`FR-ERR-001`, the `74` row).
     #[error("standard output could not be written")]
     StdoutUnwritable {
@@ -2672,6 +2799,21 @@ pub enum Error {
         row: Box<RefusedRow>,
     },
 
+    /// The file holds two names of one set of `FR-LITE-043` that differ in
+    /// their bytes and convert to one text: the model, naming each object by
+    /// its text, cannot carry them apart. No model is presented and nothing
+    /// is written to the cache.
+    #[error("the database file holds {} tpl cannot tell apart, for database entry '{entry}'", .names.kind)]
+    SqliteNamesAlike {
+        /// The entry.
+        entry: String,
+        /// The database file, as resolved.
+        path: PathBuf,
+        /// The two names, boxed so that [`enum@Error`] stays within the size
+        /// `clippy::result_large_err` admits.
+        names: Box<AlikeNames>,
+    },
+
     /// The server is reachable and authenticated and is not MariaDB
     /// (`FR-SRV-003`). The catalogue is not read.
     #[error("the server reached by database entry '{entry}' is not MariaDB")]
@@ -2795,6 +2937,87 @@ pub enum Error {
         /// The TLS mode in force, as `FR-CONF-013` spells it.
         tls: &'static str,
     },
+
+    /// The server refused, at the login, the database name the entry gives
+    /// (`FR-ERR-048`, error `1102`).
+    ///
+    /// `78` and not `69`: no repetition makes it a name the server accepts,
+    /// and the next step is the entry's database key.
+    #[error("the server at {host}:{port} refused the database name, for database entry '{entry}'")]
+    DatabaseNameRefused {
+        /// The database entry the connection was opened for.
+        entry: String,
+        /// Whether that entry is defined by `dsn` (`FR-ERR-045`).
+        by_dsn: bool,
+        /// The host attempted.
+        host: String,
+        /// The port attempted.
+        port: u16,
+        /// The database name, as the entry gives it. The key that carries it
+        /// is `database`, or the database part of `dsn` where `by_dsn` is
+        /// set, and is derived from the entry rather than carried.
+        name: String,
+        /// The configuration file that declares it.
+        file: PathBuf,
+    },
+
+    /// A value `FR-CONF-057` names, read from `.tpl/.cfg` or printed by the
+    /// `password_command`, holds a NUL character.
+    #[error(
+        "{} holds a NUL character, for database entry '{entry}'",
+        nul_subject(*.field, .place)
+    )]
+    ValueHoldsNul {
+        /// The database entry that holds the value.
+        entry: String,
+        /// Which value it is.
+        field: NulField,
+        /// Where the value was read.
+        place: NulPlace,
+        /// The part of the value before the NUL character, for every field
+        /// but the password, which no message reproduces (`FR-ERR-013`).
+        before: Option<String>,
+    },
+
+    /// A value `FR-CONF-057` names, given on the command line, holds a NUL
+    /// character. Nothing is written.
+    #[error(
+        "{} holds a NUL character, for database entry '{entry}'",
+        nul_given_subject(.parameter, *.field, *.in_dsn)
+    )]
+    NulValueGiven {
+        /// The flag or the fully qualified key the value was given for.
+        parameter: String,
+        /// The command path the value was given to, without the program name.
+        command: String,
+        /// The database entry the value was given for.
+        entry: String,
+        /// Which value it is.
+        field: NulField,
+        /// Whether the value is a part of the `dsn` given.
+        in_dsn: bool,
+        /// The part of the value before the NUL character, for every field
+        /// but the password.
+        before: Option<String>,
+    },
+}
+
+/// The subject of the `error` line of [`Error::ValueHoldsNul`].
+fn nul_subject(field: NulField, place: &NulPlace) -> String {
+    match place {
+        NulPlace::Key { key, .. } => key.clone(),
+        NulPlace::DsnPart { key, .. } => format!("the {field} part of {key}"),
+        NulPlace::Helper { .. } => "the password the password_command printed".to_owned(),
+    }
+}
+
+/// The subject of the `error` line of [`Error::NulValueGiven`].
+fn nul_given_subject(parameter: &str, field: NulField, in_dsn: bool) -> String {
+    if in_dsn {
+        format!("the {field} part of {parameter}")
+    } else {
+        format!("the value given for {parameter}")
+    }
 }
 
 /// The bound a deadline names in its `error` line: the budget the four
@@ -3208,7 +3431,8 @@ impl Error {
             | Self::MysqlSeriesNotSupported { by_dsn, .. }
             | Self::TcpConnectFailed { by_dsn, .. }
             | Self::LoginNotCompleted { by_dsn, .. }
-            | Self::AccountRefused { by_dsn, .. } => *by_dsn = true,
+            | Self::AccountRefused { by_dsn, .. }
+            | Self::DatabaseNameRefused { by_dsn, .. } => *by_dsn = true,
             _ => {}
         }
         self
@@ -3274,6 +3498,7 @@ impl Error {
             | Self::InvalidEntryName { .. }
             | Self::InvalidReference { .. }
             | Self::EmptyValue { .. }
+            | Self::NulValueGiven { .. }
             | Self::FlagRefusedByProvider { .. }
             | Self::PathRequired { .. }
             | Self::ProviderIncoherentWrite { .. } => 64,
@@ -3327,6 +3552,7 @@ impl Error {
             | Self::ContextDocumentUnreadable { .. }
             | Self::TrustMaterialUnreadable { .. }
             | Self::ProjectFileUnwritable { .. }
+            | Self::ProjectFileNotDurable { .. }
             | Self::StdoutUnwritable { .. }
             | Self::StdoutClosedMidDocument
             | Self::SqliteFileLookup { .. }
@@ -3371,16 +3597,19 @@ impl Error {
             | Self::MysqlSeriesNotSupported { .. }
             | Self::PublicKeyRequestRefused { .. }
             | Self::SecureTransportRequired { .. }
+            | Self::DatabaseNameRefused { .. }
+            | Self::ValueHoldsNul { .. }
             | Self::ProviderRefusesKeys { .. }
             | Self::SqliteNotRegularFile { .. }
             | Self::SqliteFileRefused { .. }
-            | Self::SqliteSchemaRefused { .. } => 78,
+            | Self::SqliteSchemaRefused { .. }
+            | Self::SqliteNamesAlike { .. } => 78,
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{
         CatalogueObjectKind, ChildEnd, ContextFault, DeadlineBound, DsnFault, EntryNameGiven,
         EntryRepair, Error, KeyAbsence, NetworkPhase, PasswordCommandFault, Position,
@@ -3394,7 +3623,7 @@ mod tests {
 
     /// The number of variants of [`Error`]. Adding one without adding a sample
     /// below fails `the_sample_set_covers_every_variant`.
-    const VARIANT_COUNT: usize = 113;
+    pub(crate) const VARIANT_COUNT: usize = 118;
 
     fn path() -> PathBuf {
         PathBuf::from(".tpl/.cfg")
@@ -3880,6 +4109,13 @@ mod tests {
                 74,
             ),
             (
+                Error::ProjectFileNotDurable {
+                    path: path(),
+                    returned: io::Error::from_raw_os_error(5),
+                },
+                74,
+            ),
+            (
                 Error::StdoutUnwritable {
                     returned: io::Error::from(io::ErrorKind::StorageFull),
                 },
@@ -4346,6 +4582,52 @@ mod tests {
                 },
                 78,
             ),
+            (
+                Error::SqliteNamesAlike {
+                    entry: "ledger".to_owned(),
+                    path: PathBuf::from("/srv/ledger.sqlite"),
+                    names: Box::new(super::AlikeNames {
+                        kind: super::AlikeKind::Tables,
+                        table: None,
+                        text: super::FileValue::new("r\u{fffd}f"),
+                    }),
+                },
+                78,
+            ),
+            (
+                Error::DatabaseNameRefused {
+                    entry: "shop".to_owned(),
+                    by_dsn: false,
+                    host: "db.example.com".to_owned(),
+                    port: 3306,
+                    name: "freight ".to_owned(),
+                    file: path(),
+                },
+                78,
+            ),
+            (
+                Error::ValueHoldsNul {
+                    entry: "shop".to_owned(),
+                    field: super::NulField::Database,
+                    place: super::NulPlace::Key {
+                        key: "database.shop.database".to_owned(),
+                        file: path(),
+                    },
+                    before: Some("freight".to_owned()),
+                },
+                78,
+            ),
+            (
+                Error::NulValueGiven {
+                    parameter: "--host".to_owned(),
+                    command: "cfg database add".to_owned(),
+                    entry: "shop".to_owned(),
+                    field: super::NulField::Host,
+                    in_dsn: false,
+                    before: Some("db".to_owned()),
+                },
+                64,
+            ),
         ]
     }
 
@@ -4360,7 +4642,7 @@ mod tests {
     /// The variant's name, by an exhaustive match with no wildcard arm: a
     /// variant added to [`Error`] does not compile until it is named here too,
     /// which is what keeps `samples` honest.
-    fn variant_name(error: &Error) -> &'static str {
+    pub(crate) fn variant_name(error: &Error) -> &'static str {
         match error {
             Error::UnknownCommand { .. } => "UnknownCommand",
             Error::UnknownCommandPathSegment { .. } => "UnknownCommandPathSegment",
@@ -4415,6 +4697,7 @@ mod tests {
             Error::ProjectNotCreated { .. } => "ProjectNotCreated",
             Error::ProjectFileUnreadable { .. } => "ProjectFileUnreadable",
             Error::ProjectFileUnwritable { .. } => "ProjectFileUnwritable",
+            Error::ProjectFileNotDurable { .. } => "ProjectFileNotDurable",
             Error::StdoutUnwritable { .. } => "StdoutUnwritable",
             Error::StdoutClosedMidDocument => "StdoutClosedMidDocument",
             Error::AuthenticationRefused { .. } => "AuthenticationRefused",
@@ -4463,6 +4746,9 @@ mod tests {
             Error::StatementFailed { .. } => "StatementFailed",
             Error::AccountRefused { .. } => "AccountRefused",
             Error::SecureTransportRequired { .. } => "SecureTransportRequired",
+            Error::DatabaseNameRefused { .. } => "DatabaseNameRefused",
+            Error::ValueHoldsNul { .. } => "ValueHoldsNul",
+            Error::NulValueGiven { .. } => "NulValueGiven",
             Error::FlagRefusedByProvider { .. } => "FlagRefusedByProvider",
             Error::PathRequired { .. } => "PathRequired",
             Error::ProviderIncoherentWrite { .. } => "ProviderIncoherentWrite",
@@ -4475,6 +4761,7 @@ mod tests {
             Error::SqliteNotRegularFile { .. } => "SqliteNotRegularFile",
             Error::SqliteFileRefused { .. } => "SqliteFileRefused",
             Error::SqliteSchemaRefused { .. } => "SqliteSchemaRefused",
+            Error::SqliteNamesAlike { .. } => "SqliteNamesAlike",
         }
     }
 

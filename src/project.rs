@@ -45,6 +45,9 @@ pub(crate) mod settings;
 pub(crate) mod scratch;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use rustix::fd::OwnedFd;
 
 use crate::error::Error;
 
@@ -61,6 +64,9 @@ use config::Configuration;
 pub(crate) struct Project {
     /// The `.tpl` folder, canonical per `FR-PROJ-009`.
     root: PathBuf,
+    /// The `.tpl` folder the trust checks judged, held open, which a rewrite of
+    /// `.cfg` acts in and never reopens by path (`FR-CFG-041`).
+    folder: Arc<OwnedFd>,
     /// The text of `.tpl/.cfg`, read by the trust checks from the descriptor
     /// they judged (`FR-PROJ-030`), or [`None`] where the file is absent.
     text: Option<String>,
@@ -85,9 +91,14 @@ impl Project {
 
         // FR-PROJ-030: the type, the two checks and the read are one
         // descriptor's, so the text kept is the text of the file judged.
-        let text = trust::check(&root.join(edit::CONFIGURATION), &root)?;
+        // FR-CFG-041: the folder they judged is kept, so a rewrite acts in it.
+        let trusted = trust::check(&root.join(edit::CONFIGURATION), &root)?;
 
-        Ok(Self { root, text })
+        Ok(Self {
+            root,
+            folder: Arc::new(trusted.folder),
+            text: trusted.text,
+        })
     }
 
     /// Discovers the project from the process's own working directory.
@@ -139,11 +150,20 @@ impl Project {
 
     /// Opens `.tpl/.cfg` for writing — the path of `FR-CFG-041`.
     ///
+    /// The editor is given the folder the trust checks judged, held open, and
+    /// the text they read from the `.cfg` they judged: it reopens neither by
+    /// path, so a folder swapped for a link after the checks cannot redirect
+    /// the rewrite.
+    ///
     /// # Errors
     ///
-    /// Returns what [`edit::Editor::open`] returns.
+    /// Returns what [`edit::Editor::new`] returns.
     pub(crate) fn editor(&self) -> Result<edit::Editor, Error> {
-        edit::Editor::open(&self.root)
+        edit::Editor::new(
+            Arc::clone(&self.folder),
+            self.configuration_path(),
+            self.text.as_deref().unwrap_or_default(),
+        )
     }
 }
 
@@ -224,6 +244,82 @@ mod tests {
 
         assert!(matches!(condition, Error::ProjectDirUnusable { .. }));
         assert_eq!(condition.exit_code(), 78);
+    }
+
+    /// A project at `<side>/proj`, whose `.cfg` holds `text` where it is
+    /// given, at mode 0600.
+    fn side(scratch: &Scratch, side: &str, text: Option<&str>) -> std::path::PathBuf {
+        let root = scratch.directory(&format!("{side}/proj"));
+        scratch.directory(&format!("{side}/proj/.tpl"));
+        if let Some(text) = text {
+            let file = scratch.file(&format!("{side}/proj/.tpl/.cfg"), text);
+            scratch.chmod(&file, 0o600);
+        }
+        root
+    }
+
+    /// Opens the project under `A`, then — the seam between the checks and
+    /// the rewrite — moves `A` aside and puts a link to `B` in its place, as
+    /// rmp #313's race did, and rewrites `.cfg` through the project opened.
+    fn swapped_then_rewritten(scratch: &Scratch) {
+        let project = Project::open(None, &scratch.path("A/proj")).expect("A is trusted");
+
+        std::fs::rename(scratch.path("A"), scratch.path("A-moved")).expect("A moves");
+        scratch.link(&scratch.path("B"), &scratch.path("A"));
+
+        let mut editor = project.editor().expect("the editor opens");
+        let key = crate::project::config::keys::Key::parse("core.connect_timeout")
+            .expect("the key is in the space");
+        let item = crate::project::edit::assign(&key, "13").expect("13 is a timeout");
+        editor.set(&key, item);
+        editor
+            .save()
+            .expect("the rewrite acts in the folder judged");
+    }
+
+    #[test]
+    fn fr_cfg_041_an_ancestor_swapped_for_a_link_after_the_checks_redirects_no_rewrite() {
+        // FR-CFG-041 as amended for rmp #313, deterministically: the checks
+        // judge A's `.tpl`, the folder is swapped for a link to B, and the
+        // rewrite lands in the folder judged. B's `.cfg` — one the checks
+        // would refuse — keeps its bytes and its mode.
+        let scratch = Scratch::new();
+        side(&scratch, "A", Some("[core]\n"));
+        side(&scratch, "B", Some("# B's own\n"));
+        let other = scratch.path("B/proj/.tpl/.cfg");
+        scratch.chmod(&other, 0o644);
+
+        swapped_then_rewritten(&scratch);
+
+        assert_eq!(
+            std::fs::read_to_string(&other).expect("B's file is there"),
+            "# B's own\n"
+        );
+        assert_eq!(scratch.mode(&other), 0o644);
+        assert_eq!(
+            std::fs::read_to_string(scratch.path("A-moved/proj/.tpl/.cfg"))
+                .expect("A's file is there"),
+            "[core]\nconnect_timeout = 13\n"
+        );
+    }
+
+    #[test]
+    fn fr_cfg_041_a_folder_without_cfg_is_judged_and_written_through_the_held_descriptor() {
+        // FR-PROJ-028 and FR-CFG-041: A's `.tpl` holds no `.cfg`, so its
+        // owner is judged on the descriptor held, and the `.cfg` the rewrite
+        // creates is created there, not in B's folder through the link.
+        let scratch = Scratch::new();
+        side(&scratch, "A", None);
+        side(&scratch, "B", None);
+
+        swapped_then_rewritten(&scratch);
+
+        assert!(!scratch.path("B/proj/.tpl/.cfg").exists());
+        assert_eq!(
+            std::fs::read_to_string(scratch.path("A-moved/proj/.tpl/.cfg"))
+                .expect("the file was created in A"),
+            "[core]\nconnect_timeout = 13\n"
+        );
     }
 
     #[test]

@@ -133,7 +133,11 @@ fn fragment<W>(writer: &mut W, fragment: &str) -> io::Result<()>
 where
     W: ?Sized + Write,
 {
-    if !may_hold_past_c0(fragment) {
+    // PERF: an ASCII fragment holds no byte at or above `0x80`, so none of the
+    // three lead bytes `may_hold_past_c0` looks for; `str::is_ascii` answers a
+    // word at a time where the scan reads one byte at a time, and the catalogue
+    // is mostly ASCII (rmp `#355`: 8.5 ms of a MySQL 8.4 dump of 2 000 tables).
+    if fragment.is_ascii() || !may_hold_past_c0(fragment) {
         return writer.write_all(fragment.as_bytes());
     }
 
