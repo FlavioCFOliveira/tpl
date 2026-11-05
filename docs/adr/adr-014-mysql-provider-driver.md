@@ -61,6 +61,13 @@ part of the patch is a parameter of point 2, so this is an edit in place, and
 `decided` moves to the day it was decided. The claims re-read that day are
 those of the *Sources* rows dated 2026-11-05.
 
+**Amended in place on 2026-11-05**, for rmp `#340`, against the code of commit
+`f7c5385`: `tpl` now also reads the handle of point 6 after every poll of the
+call to `connect`, to time each phase as `FR-GLOB-017` requires. The handle,
+the three recordings and the vendored tree are unchanged; what changed is how
+often `tpl` reads its own clone, and with it the retiring condition of point 6,
+which point 7 now states in full.
+
 ## Context
 
 **The corpus names no driver for the `mysql` provider and hands the choice
@@ -306,11 +313,23 @@ options is set; the MariaDB path sets all four off
    - in `src/lib.rs`, the existing export of the options (line 45) also names
      the handle and the enumeration.
 
-   `tpl` makes the handle, passes a clone to the options through the setter,
-   and reads its own clone once the call to `connect` has ended in an expired
-   budget or an error. The read is an atomic load: it needs no `unsafe` and
-   reads no driver text. sqlx-core is not touched, so the tree of `ADR-010`
-   keeps its one statement.
+   `tpl` makes the handle and passes a clone to the options through the
+   setter. It reads its own clone at two moments, for two requirements:
+
+   - **once the call to `connect` has ended** in an expired budget or an
+     error, for `FR-CONF-005`: that reading alone names the phase the deadline
+     of `FR-ERR-027` and the classification of the failure report;
+   - **after every poll of the call**, and once more when it ends, for
+     `FR-GLOB-017`: the time between two readings is charged to the phase the
+     first one saw, and each phase seen has its line once the call has ended
+     (`src/mariadb/connect.rs`, `open_classified` and `Ledger`). The
+     recordings are made synchronously inside a poll, so a phase is seen at the
+     end of the poll that recorded it, and a phase recorded and left within one
+     poll is not seen.
+
+   Every read is an atomic load: it needs no `unsafe`, reads no driver text,
+   and never writes the handle. sqlx-core is not touched, so the tree of
+   `ADR-010` keeps its one statement.
 
    Nothing differs from the published crate but what points 3, 5, 6 and 8 name —
    no other function, file, feature or manifest entry; any other difference is
@@ -321,7 +340,9 @@ options is set; the MariaDB path sets all four off
    the request; the presentation of point 5, at the first whose `sqlx-mysql`
    sends, for an empty or an absent password, at the first response and at
    every switch, the responses point 5 sends; and the handle of point 6, at the
-   first whose `sqlx-mysql` lets a caller learn the phase a connection reached;
+   first whose `sqlx-mysql` lets a caller learn the phase a connection reached
+   and observe each change of phase while the call runs, since `tpl` reads both
+   (point 6);
    and the hardening of point 8, at the first whose `sqlx-mysql` contains
    upstream commit `4161768c9c077ea5dff6debcadeb0382d9f027df`, pull request
    `#4458`. At each, that part leaves the tree, `tpl` uses what the release offers, and
@@ -539,6 +560,18 @@ no record of the phase, and the change to the empty password sends what point 5
 does not (*Alternatives rejected*). Point 8 is a commit already on `main`, and
 it leaves the tree at the first release that contains it.
 
+**Reading the handle after every poll changes nothing the server sees, and
+the lines it yields depend on how the call yields.** The reads are in-process
+loads of a cell the driver writes; no packet and no statement follows from
+them, so the read-only promise and the count of `NFR-PERF-008` are untouched,
+and the classification still rests on the one reading at the end. The timing
+lines are diagnostics, outside the output contract under `NFR-DET-001`, and
+their durations vary from run to run. Which lines appear also rests on the
+call's polls: a TLS handshake is seen only if the call yields while the handle
+names it, which it does whenever the handshake waits on the network. Where no
+TLS is negotiated, the driver records the handshake and leaves it within one
+poll, and no line is written, as `FR-GLOB-017` requires.
+
 **Point 8 reaches every read, not the login alone.** Its checks in the rows,
 the column count, the EOF packet and the join of continuation packets run on
 every statement of both providers. A packet they refuse after the login ends
@@ -628,3 +661,5 @@ cited here, not restated.
 | No release contains it: `v0.9.0` is the latest tag | GitHub API, `transact-rs/sqlx`, `tags` | 2026-11-05 |
 | The diff applies to `vendor/sqlx-mysql-0.9.0/` as it stands with every hunk succeeding, no rejection and no fuzz, `auth.rs` at offset 21, `stream.rs` at −3 and `statement/row.rs` at −1 | `patch -p2 --verbose` over a scratch copy of the vendored tree at `a4f81c9`; not compiled | 2026-11-05 |
 | `recv_packet` refuses an empty packet with `Error::Protocol`; `src/mariadb/fault.rs` maps an error of the login phase that is not `Io` to the second outcome and an `Io` error to the first | `vendor/sqlx-mysql-0.9.0/src/connection/stream.rs` lines 160–162; `src/mariadb/fault.rs` lines 175–178, at `a4f81c9` | 2026-11-05 |
+| `tpl` reads the handle after every poll of the call to `connect` and once when it ends, charges the time between readings to the phase the first saw, and reports one line per phase seen; the classification and the deadline read the handle once the call has ended; nothing under `vendor/` changed for it | `src/mariadb/connect.rs`, `open_classified` (lines 544–644) and `Ledger` (lines 646–735), at `f7c5385`; `git diff a4f81c9 f7c5385 -- vendor/`, whose changes are point 8's and `vendor/README.md` | 2026-11-05 |
+| At `INFO`, one line per phase of `FR-CONF-005` the connection ran, the TLS handshake where the mode negotiated one, written once the connection has opened or failed | `specification/global-flags.md`, `FR-GLOB-017`, as amended in the seventy-ninth edition | 2026-11-05 |
