@@ -1654,7 +1654,24 @@ fn fr_help_038_the_fixed_statements_read_as_the_requirement_gives_them() {
     const SERVER: &str =
         "the server is not a supported version of the entry's provider, MariaDB or MySQL";
 
+    const DATABASE: &str = "Selects the database entry to use, a named database in \
+        .tpl/.cfg — a MariaDB or a MySQL server, or a SQLite database file — that tpl cfg \
+        database list lists; it overrides core.database.";
+
     let tree = document();
+
+    // The purpose of -d/--database, in the global flags of the text help and
+    // in data.global_flags (FR-HELP-038, eighty-seventh edition).
+    assert!(prose(&[]).contains(DATABASE), "{}", prose(&[]));
+    let global = tree["data"]["global_flags"]
+        .as_array()
+        .expect("data.global_flags is an array")
+        .iter()
+        .find(|flag| flag["long"] == "--database")
+        .and_then(|flag| flag["purpose"].as_str())
+        .expect("data.global_flags carries --database")
+        .to_owned();
+    assert_eq!(global, DATABASE);
     let json = |value: String| value.split_whitespace().collect::<Vec<_>>().join(" ");
 
     // The root: its description and its row of words. The JSON command tree

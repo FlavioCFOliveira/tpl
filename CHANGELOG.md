@@ -132,7 +132,8 @@ workflow, before it closes.
   `mariadb`, `mysql` and `sqlite`, and `tpl help cfg database add` states that
   a MariaDB or a MySQL entry needs `--host` and `--schema` to connect; `tpl help`
   says that `tpl` reads a MariaDB or MySQL database or a SQLite database file,
-  and defines a database entry as a way to reach either; `--host`, `--port` and
+  and defines a database entry, and the entry `-d/--database` selects, as a way
+  to reach either; `--host`, `--port` and
   `--schema` name the MariaDB or MySQL server; `tpl help cfg database test`
   names which server answered, MariaDB or MySQL; and the `78` of every command
   that connects names a server that is not a supported version of the entry's

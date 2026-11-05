@@ -853,8 +853,9 @@ const HELP_COMMAND_PATH: Documented = Documented {
 const GLOBAL_ARGUMENTS: [Documented; 7] = [
     Documented {
         name: "--database",
-        purpose: "Selects the database entry to use, a named connection in .tpl/.cfg that tpl cfg \
-                  database list lists; it overrides core.database.",
+        purpose: "Selects the database entry to use, a named database in .tpl/.cfg — a MariaDB \
+                  or a MySQL server, or a SQLite database file — that tpl cfg database list \
+                  lists; it overrides core.database.",
         excludes: &[],
     },
     Documented {
