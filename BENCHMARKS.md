@@ -7116,3 +7116,339 @@ $P/limit/probe.sh $PWD/$P/bin/tpl-head   2400 2425 2450 2475 2500 3000
 $P/limit/probe.sh $PWD/$P/bin/tpl-final2 2475 3000 3500 4000 4500 4600 4625 4650 4675 4700 5000 6000
 ./scripts/mysql/down.sh
 ```
+
+---
+
+## 2026-11-05 — The measurement set retaken on `aarch64-apple-darwin` at `a53bb33`
+
+*Task `#228`. A re-take of the `#218` campaign (the 2026-09-22 entry *The
+measurement set on `aarch64-apple-darwin`*), which stays as it was. It is not
+amended: it records what was taken that day, and this entry records what was
+taken on this one. Target of record: `aarch64-apple-darwin`, measured natively.
+Server of record: MariaDB `12.3` (`12.3.3-MariaDB-ubu2404`), the series `#218`
+read. **This entry records; it does not judge.** No figure here passes, fails or
+gates anything (`BR-PERF-008`).*
+
+### Outcome
+
+**All nine measurement points and the `WL-002` scalar were measured again**,
+under `NFR-PERF-009` (200 runs after 20 warmups; the scalar 5 times), with an A/A
+twin taken twice. The harness exited `0`.
+
+- **Point 5 now stands under five per cent:** median **2.4897 ms**, rsd
+  **1.752%**. In `#218` it was 8.294%.
+- **Point 6a, the `64` half of point 6, now stands under five per cent:** median
+  **2.0977 ms**, rsd **4.425%**. In `#218` it was 7.513%. This is below the line,
+  but not by much.
+- **Two other readings crossed five per cent this time:** point 1 at 6.031% and
+  point 4 at 7.050%. Per `NFR-PERF-011`, neither may stand as its point's
+  reference figure until it is retaken on a quiet host. In both readings the
+  outlying samples cluster in a short stretch of consecutive runs, which is a
+  host transient. See *Confounders*.
+- **The `66` half of point 6 did not measure the nearest-match refusal.**
+  Measured with the server down, as the row's posture requires, all 200 runs
+  exited `69` (`EX_UNAVAILABLE`, connection refused), not `66`. Its figure,
+  2.6338 ms, is recorded below for what it is. It is **not** a reading of the
+  path `BR-PERF-004` names, and point 6 has no valid figure from this campaign.
+  See *Point 6, both halves*.
+
+**The host was not idle, and it was not on mains power.** This departs from
+`NFR-PERF-010` on both counts, as stated in *Protocol* and *Host conditions*.
+
+### Workload
+
+The same as `#218`: `WL-001` and `WL-003`, realised by
+`scripts/mariadb/seed-bench.sql` and loaded and verified by
+`scripts/mariadb/seed-bench.sh`. Four of the ten readings have a workload of
+`none`. One binary was measured, so there are no candidates.
+
+### Environment
+
+| | |
+|---|---|
+| Host | Apple M4 (Mac16,1), 10 cores, 32 GiB |
+| System | macOS 27.2 (build 26B123), Darwin 27.2.0 `arm64` |
+| Target | `aarch64-apple-darwin`, detected by the harness, built and run natively |
+| Toolchain | `rustc` 1.99.1 (58cf8f9c3 2026-10-13), `cargo` 1.99.1 (5f94df478 2026-08-27) |
+| Crate | `tpl` 0.0.2, edition 2024, MSRV 1.94.0 |
+| Commit | `a53bb337421b7d36a603e53815ea582c024319c1`, clean working tree |
+| Release profile | `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true` |
+| Binary | `target/release/tpl`, sha256 `78016dd2854d6d8f4cb1434e08f9bf1165da4118481783a60877ec8518fa6124`, built at 16:26:45Z after the commit at 16:25:30Z; `cargo build --release` reported it fresh |
+| Instrument | `hyperfine` **2.0.0**, always `--shell=none`, through the compatibility shim described under *Protocol*; `/usr/bin/time -l` for point 9; `jq` 1.7.1-apple |
+| Server | MariaDB `12.3.3-MariaDB-ubu2404`, the project fixture, on `127.0.0.1:13309` |
+| Transport | `tls = "disabled"` |
+| Account | `root`, for the reason `#218` states |
+| Taken at | A/A 2026-11-05T18:49:08Z; campaign 18:50:17Z to 18:53:51Z |
+
+### Host conditions, as observed
+
+These were read with `pmset -g batt`, `pmset -g | rg lowpowermode`, `uptime`,
+`docker ps`, `mdutil -s /` and `ps -Ao pcpu,pmem,comm -r`.
+
+| | Before any reading, 18:48:58Z | After the last reading, 18:53:57Z |
+|---|---|---|
+| Power | **Battery**, 100%, discharging | **Battery**, 100%, discharging |
+| Low Power Mode | off (`lowpowermode 0`) | off (`lowpowermode 0`) |
+| Load average (1, 5, 15 min) | 1.79, 3.22, 3.26 (1.57, 2.84, 3.11 at campaign start, 18:50:17Z) | 2.31, 2.59, 2.94 |
+| Containers running | none | none |
+| Spotlight | indexing enabled on `/`; `mds_stores` not among the top consumers; `mdworker_shared` 0.6% | indexing enabled on `/`; `mds_stores` not among the top consumers |
+| Top CPU consumers | iTerm2 13.5%, `claude` 12.7%, `osascript` 8.4%, WindowServer 5.7%, Docker Desktop's `Virtualization.VirtualMachine` 3.0% (12.5% of memory) | `osascript` 37.2% and 7.6%, iTerm2 21.1%, `claude` 16.2%, `system_profiler` 15.4% and 6.1%, WindowServer 7.3%, `sysmond` 6.0% |
+
+**What was stopped, and when.** At the user's request, the four containers of
+other projects (`sapoteca-solr-1`, `sapoteca-zookeeper-1`, `mongodb-mongo-1` and
+`mongodb-mongo-express-1`) were stopped at about 18:46:00Z, before any reading
+of this entry. This campaign did not stop them. Docker Desktop's Linux VM stayed
+up, because the fixture runs in it. One A/A pair was taken at about 18:45Z while
+those containers were still running. It was **discarded** and is not reported,
+so that every figure here shares one set of conditions. The 1-minute load was
+then allowed to fall below 1.5 (it read 1.42 at 18:48:53Z) before the first
+reading.
+
+**Earlier the same day.** At 16:16Z the host was also on mains power, but
+`mds_stores` (Spotlight indexing) held one core at 97–99% and the four
+containers above were running, with load around 2.5–2.9. No reading was taken
+then. At 18:44 load was 4.6, 5.2 and 3.8. By the time of this campaign the user
+had declared the host quiet, and the readings were taken under the conditions
+in the table, which is what this entry claims.
+
+The `claude` and iTerm2 processes are the session that drove the campaign. No
+other terminal work ran beside it. `osascript` and `system_profiler` were not
+started by this campaign, and their source was not identified.
+
+### Protocol
+
+`NFR-PERF-009` is met: every wall-time and memory reading is the median of 200
+runs after 20 warmups, and every record says `standing: full`. The `WL-002`
+scalar was taken 5 times with no warmup, as in `#218`. The cache postures are
+`#218`'s, set by the same harness: `not reached` for points 1, 2, 3 and 7;
+`bypassed, --direct --no-cache` for points 4 and 9; `empty when each run begins`
+for point 8; and `served from` for points 5 and 6, with the server removed
+through `down.sh` and the gate asked again.
+
+| `NFR-PERF-010` clause | Met? |
+|---|---|
+| No intervening shell | **met**: `hyperfine --shell=none` on every wall-time reading |
+| Warm page cache | **met**: 20 warmup runs per reading |
+| First execution of a freshly built binary discarded | **met**: the harness's `protocol_discard_first_execution`, once, before the first sample. The binary was built at HEAD by `cargo build --release` and had already been run once (`tpl --version`) before the A/A |
+| Idle host | **departed from**: see *Host conditions*. The load average stayed between 1.57 and 2.46 throughout, and `osascript`, `system_profiler` and the driving session took CPU |
+| Mains power | **departed from**: the host ran on battery throughout (100%, discharging), with Low Power Mode off |
+
+`NFR-PERF-012` is met: every record names `aarch64-apple-darwin`, and the four
+readings that reached a server name series `12.3`.
+
+**The instrument changed since `#218`, and the harness needed a shim to read
+it.** `#218` used `hyperfine` 1.20.0. The host now has 2.0.0, whose JSON export
+no longer carries `.results[].times`. Per-run figures are now under
+`.results[].measurements[].time_wall_clock.value`. `benches/protocol.sh` reads
+`.results[0].times[]`, so the harness as committed cannot read samples from
+`hyperfine` 2.0.0. No repository file was changed. The campaign ran with a
+wrapper named `hyperfine` placed first on `PATH`. It runs the real
+`/opt/homebrew/bin/hyperfine` with the arguments unchanged. After that process
+has exited, and outside every timed region, the wrapper adds `.results[].times`
+to the export, copied from `time_wall_clock.value`. The flags the harness passes
+(`--shell=none`, `--style none`, `--warmup`, `--runs`, `--export-json`,
+`--ignore-failure`, `--prepare`) are all accepted by 2.0.0. `hyperfine` 2.0.0
+also records CPU-cycle and instruction counts for every run, even under its
+default metric preset. Whether that adds to the wall time it measures was not
+established.
+
+### The noise floor of the instrument on this host
+
+`tpl --version` against `tpl --version`, at the full protocol, taken twice.
+
+**Adjacent**, as `#218` took it: one `hyperfine` invocation with two arms.
+`hyperfine` has no interleaving option and runs all of the first arm before the
+second. The `#218` entry calls its own twin "interleaved by `hyperfine` in one
+invocation"; it was in fact taken this way.
+
+| arm | n | median | mean | stddev | min | max | rsd |
+|---|---|---|---|---|---|---|---|
+| A | 200 | 1.9516 ms | 1.9591 ms | 0.0396 ms | 1.8911 ms | 2.1674 ms | 2.023% |
+| A twin | 200 | 1.9522 ms | 1.9568 ms | 0.0386 ms | 1.8826 ms | 2.1517 ms | 1.972% |
+
+The medians differ by 0.0006 ms (0.031%).
+
+**Interleaved**: one 20-run block discarded, then 10 rounds of one 20-run block
+per arm, with the arm order alternating by round and 2 unrecorded warmup runs
+before each block. That gives 200 recorded samples per arm.
+
+| arm | n | median | mean | stddev | min | max | rsd |
+|---|---|---|---|---|---|---|---|
+| A | 200 | 2.0189 ms | 2.0426 ms | 0.1209 ms | 1.8849 ms | 2.9936 ms | **5.920%** |
+| A twin | 200 | 2.0096 ms | 2.0087 ms | 0.0493 ms | 1.8706 ms | 2.1500 ms | 2.452% |
+
+The medians differ by 0.0093 ms (0.46%). Arm A's dispersion crosses five per
+cent because of **one block**: round 4 had a block median of 2.181 ms and a
+maximum of 2.994 ms. Every other block of either arm had its median between
+1.990 and 2.047 ms. The same unchanged binary therefore gave 1.97% to 5.92% rsd
+within two minutes. As in `#218`, the dispersion moves with the host, and the
+median moves much less.
+
+**How to read it.** Within one adjacent pair the medians agree to about 0.03%.
+Across moments a few minutes apart, the same command's median moved further:
+`tpl --version` gave 1.9516 ms adjacent at 18:49Z, 2.0189 and 2.0096 ms
+interleaved at 18:50Z, and 2.0159 ms as point 1 at about 18:50:20Z, a spread of
+3.4%. Two figures of this entry taken at different moments, and differing by
+less than about 0.07 ms on a 2 ms reading, are within that spread and should not
+be read as a difference.
+
+### Results
+
+Every figure is a median. `rsd` is the relative standard deviation of the
+samples behind it. The last column answers whether it is above the five per cent
+of `NFR-PERF-011`.
+
+| # | Measurement point | target | series | n | warmups | median | mean | stddev | min | max | rsd | over 5%? |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | `tpl --version` | `aarch64-apple-darwin` | — | 200 | 20 | **2.0159 ms** | 2.0492 ms | 0.1236 ms | 1.9217 ms | 2.8280 ms | **6.031%** | **yes** |
+| 2 | `tpl --help` | `aarch64-apple-darwin` | — | 200 | 20 | **2.1600 ms** | 2.1664 ms | 0.0527 ms | 1.9660 ms | 2.3194 ms | 2.431% | no |
+| 3 | Startup to the first byte of useful work | `aarch64-apple-darwin` | — | 200 | 20 | **2.2719 ms** | 2.2674 ms | 0.0799 ms | 2.0705 ms | 2.5322 ms | 3.525% | no |
+| 4 | `tpl schema dump` | `aarch64-apple-darwin` | `12.3` | 200 | 20 | **26.594 ms** | 26.961 ms | 1.9007 ms | 25.826 ms | 45.815 ms | **7.050%** | **yes** |
+| 5 | A cache-served read of one object | `aarch64-apple-darwin` | — (server down) | 200 | 20 | **2.4897 ms** | 2.4979 ms | 0.0438 ms | 2.3970 ms | 2.7091 ms | 1.752% | no |
+| 6 | The failure path | `aarch64-apple-darwin` | — (server down) | 200 | 20 | *2.6338 ms, not a reading of this point* | 2.6315 ms | 0.0793 ms | 2.4706 ms | 2.9668 ms | 3.012% | no |
+| 7 | `tpl help --format json` | `aarch64-apple-darwin` | — | 200 | 20 | **2.4168 ms** | 2.4264 ms | 0.0861 ms | 2.2215 ms | 2.9074 ms | 3.548% | no |
+| 8 | The canonical loop of 200 invocations | `aarch64-apple-darwin` | `12.3` | 200 | 20 | **854.91 ms** | 856.06 ms | 8.0311 ms | 838.96 ms | 894.89 ms | 0.938% | no |
+| 9 | Peak resident memory | `aarch64-apple-darwin` | `12.3` | 200 | 20 | **9 437 184 B** | 9 448 899 B | 60 581 B | 9 338 880 B | 9 650 176 B | 0.641% | no |
+| — | `WL-002`, the verification scalar | `aarch64-apple-darwin` | `12.3` | 5 | 0 | **3 182 347 B** | 3 182 347 B | 0 B | 3 182 347 B | 3 182 347 B | 0.000% | no |
+
+Every run of points 1, 2, 3, 4, 5, 7 and 8 exited `0`, as `hyperfine` 2.0.0's
+per-run `exit_code` shows. Point 8's loop driver exits non-zero if any of its
+200 renders fails, so all 200 × 220 renders succeeded.
+
+The invocations are `#218`'s, unchanged: the harness is the same file.
+
+#### Points 5 and 6a, the subject of `#228`
+
+| reading | `#218` median | `#218` rsd | this entry's median | this entry's rsd | over 5% now? |
+|---|---|---|---|---|---|
+| Point 5 | 2.1152 ms | 8.294% | 2.4897 ms | 1.752% | no |
+| Point 6a, the `64` half | 1.8602 ms | 7.513% | 2.0977 ms | 4.425% | no |
+
+Both dispersions are now at or below five per cent, so on the dispersion rule of
+`NFR-PERF-011` both readings may stand as reference figures. **The medians are
+not comparable with `#218`'s**, for the reasons under *Observations*. The `64`
+half's three outlying runs (indices 92, 96 and 97 of 200) sit together, which is
+the same host-transient pattern as points 1 and 4.
+
+#### Point 6, both halves
+
+| half | n | exit code of every run | median | mean | stddev | min | max | rsd | over 5%? |
+|---|---|---|---|---|---|---|---|---|---|
+| `64`, an undeclared flag | 200 | `64` | **2.0977 ms** | 2.1146 ms | 0.0936 ms | 2.0150 ms | 2.7455 ms | 4.425% | no |
+| `66`, with nearest match | 200 | **`69`**, not `66` | 2.6338 ms | 2.6315 ms | 0.0793 ms | 2.4706 ms | 2.9668 ms | 3.012% | no |
+
+**The `66` half measured a refused connection, not a nearest-match refusal.**
+Before taking the server down, the harness ran
+`tpl -d bench_wl001 schema table accrualx` once. That run exited `66` and wrote
+`hint:  did you mean 'accrual'?` to `target/bench-work/samples/nearest.txt`. The
+point is then measured in its row's posture, *served from* the cache with the
+server down. Run that way, the same command exits `69`:
+
+```
+error: the server at 127.0.0.1:13309 refused the connection, for database entry 'bench_wl001'
+cause: the TCP connect to 127.0.0.1:13309 did not open a session: the host refused it, or nothing is listening on that port
+exit:  69 (EX_UNAVAILABLE)
+```
+
+In the same posture and the same project, `tpl -d bench_wl001 schema table
+accrual` (a name that exists) exits `0` from the cache. So an absent name is a
+cache miss, the miss reads through to the server, and the server is gone. The
+harness passes `--ignore-failure` for this point and checks the exit code only
+before the server is taken down, so it recorded the figure without complaint.
+Whether `#218`'s `66` half met the same miss cannot be told from its record,
+because `hyperfine` 1.20.0 exported no per-run exit code. Its figure must be
+read with that doubt. **Established:** the exit code and its cause,
+by direct run. **Hypothesised, not checked here:** that the read-through on a
+miss is the behaviour `specification/cache-commands.md` asks for ("read from the
+server on a miss"), so that the row's posture, and not `tpl`, no longer fits. By
+the row's own rule, the point's figure is the slower half. That half did not
+measure the point, so **point 6 has no valid figure from this campaign.**
+
+### Observations, which are not verdicts
+
+- **Every median except points 4, 8 and 9 is higher than `#218`'s, by 0.24 to
+  0.42 ms**, for example point 1 at 1.7561 → 2.0159 ms. The two campaigns differ
+  in binary (`tpl` at a much later commit), system (macOS 26.6.2 → 27.2),
+  toolchain (1.98.1 → 1.99.1) and instrument (`hyperfine` 1.20.0 → 2.0.0, which
+  now samples hardware counters for every run). None of these was isolated, so
+  the difference is **not attributed**. `NFR-PERF-012` permits comparing across
+  campaigns on one target, but no figure here is offered as a regression.
+- **Point 8 fell from 6850.70 ms to 854.91 ms**, or 4.27 ms per invocation
+  against 34.25 ms. The later entries of this register record changes to the
+  cached render and the cache read-back that act on this loop. This entry does
+  not attribute the fall to any of them.
+- **`WL-002` is 3 182 347 bytes**, against `#218`'s 3 182 326. It is 21 bytes
+  more, byte-identical across the five takes, and within that scalar's ±2% band
+  (3 118 680 to 3 245 972).
+- **Point 9 is 9 437 184 bytes**, which is 9.0 MiB, against `#218`'s 9 076 736.
+
+### Confounders — read this before the tables
+
+- **The host ran on battery, against `NFR-PERF-010`**: 100% and discharging
+  throughout, with Low Power Mode off. The user had confirmed mains power
+  earlier in the day, and at 16:16Z the host was on mains. It was on battery for
+  every reading here.
+- **The host was not idle, against `NFR-PERF-010`.** The load average stayed
+  between 1.57 and 2.46. `osascript` (up to 37%) and `system_profiler` (up to
+  15%), of unidentified origin, were active by the end, along with the session
+  that drove the campaign. Docker Desktop's VM stayed up for the fixture.
+- **Points 1 and 4 cross five per cent through clustered transients.** Point 1's
+  runs above 115% of its median are indices 37, 46, 47, 51, 54 and 56–58 of 200.
+  Point 4's are indices 32–34, with a maximum of 45.815 ms against a median of
+  26.594 ms. The medians are insensitive to those tails; the dispersions are not.
+- **The `hyperfine` 2.0.0 shim**, described under *Protocol*. It changes no
+  timing; it changes where the samples are read from.
+- **The server path crosses Docker Desktop's port proxy**, as in `#218`.
+
+### What was not measured — stated, not implied
+
+- **Three of the four targets of `NFR-PERF-018`**, as in `#218`.
+- **Three of the four MariaDB series**, and the MySQL and SQLite providers.
+  This entry retakes `#218`'s set, which reads `12.3` only.
+- **A valid figure for point 6**, for the reason under *Point 6, both halves*.
+- **Whether `hyperfine` 2.0.0's per-run hardware-counter sampling adds to the
+  wall time it reports.**
+
+### Reproduction
+
+```sh
+# 0. Host conditions, before and after.
+pmset -g batt; pmset -g | rg lowpowermode; uptime
+docker ps --format '{{.Names}}\t{{.Status}}'; mdutil -s /
+ps -Ao pcpu,pmem,comm -r | head -10
+
+# 1. The binary, at a53bb33, clean tree.
+cargo build --release
+shasum -a 256 target/release/tpl
+#   78016dd2854d6d8f4cb1434e08f9bf1165da4118481783a60877ec8518fa6124
+
+# 2. The shim, outside the repository, first on PATH: it runs the real hyperfine
+#    unchanged, then, after it exits, adds .results[].times to the export:
+#      "$REAL" "$@"; rc=$?
+#      jq '.results |= map(. + {times: [.measurements[].time_wall_clock.value]})' \
+#        "$exp" > "$exp.tmp" && mv "$exp.tmp" "$exp"; exit $rc
+export PATH="$SHIM_DIR:$PATH"
+
+# 3. The A/A twin, adjacent:
+hyperfine --shell=none --style none --warmup 20 --runs 200 \
+  -n A "$PWD/target/release/tpl --version" \
+  -n A-twin "$PWD/target/release/tpl --version" --export-json aa-adjacent.json
+#    and interleaved: one discarded block of 20 after 20 warmups, then for r in 0..9,
+#    arms in the order (A A-twin) for even r and (A-twin A) for odd r, each
+#    hyperfine --shell=none --warmup 2 --runs 20 "$PWD/target/release/tpl --version".
+
+# 4. The whole campaign, against 12.3. The harness stands the fixture up through
+#    scripts/mariadb/, loads both workloads, and leaves the fixture down.
+./benches/run.sh --series 12.3 --out readings.jsonl
+
+# 5. Per-run exit codes and where the outliers sit, from hyperfine 2.0.0's exports.
+for f in target/bench-work/hyperfine/*.json; do
+  jq -c '[.results[].measurements[].exit_code] | group_by(.) | map({code: .[0], n: length})' "$f"
+done
+
+# 6. The 66 half in its measured posture (server down, cache primed).
+(cd target/bench-work/server && ../../release/tpl -d bench_wl001 schema table accrualx; echo $?)
+
+# 7. Nothing left.
+./scripts/mariadb/status.sh --quiet 12.3   # exits 1: the server is down
+```
