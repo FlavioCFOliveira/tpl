@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty-six editions. All are in force;
+The specification has been written in eighty-seven editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6755,6 +6755,25 @@ renumbered; no open question or divergence entry is raised, and
 were read against the change, and none is amended. The fifth validation rule
 is applied: the root `README.md` quotes no help text, so
 [upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-seventh edition — where the help's provider statements live
+
+Two points the implementation of `FR-HELP-038` met, at `1639e40`. **No
+identifier is assigned, retired or renumbered**; no open question or
+divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **The root's two statements** — `FR-HELP-038` requires its statements in
+  the JSON command tree only where the tree carries their string, so the
+  description of `tpl` and its row on a database entry are required in the
+  text help alone; `FR-HELP-019` gives the root no entry, and `FR-HELP-017`'s
+  document is unchanged.
+- **The purpose of `-d/--database`** — a ninth row fixes it, naming the
+  three kinds of database an entry reaches, in the text help and in
+  `data.global_flags`.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied: the root `README.md` quotes no help
+text, so [upstream-divergences.md](upstream-divergences.md) raises no entry.
 
 ### Still out of scope
 

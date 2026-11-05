@@ -418,12 +418,15 @@ alongside the command it documents.
   `mariadb` and a `mysql` entry alike SHALL name MariaDB and MySQL both, or
   speak of the server; and none SHALL describe `tpl` as reading MariaDB
   alone. The following statements SHALL read as the table gives them, in
-  the text help and in the JSON command tree alike:
+  the text help, and in the JSON command tree WHERE the tree carries the
+  string they belong to — the `description` of a command's entry, or the
+  `purpose` of a flag, per `FR-HELP-019`, `FR-HELP-020` and `FR-HELP-018`:
 
   | Where | Statement |
   |---|---|
   | `DESCRIPTION` of `tpl`, first sentence | `tpl reads the structure of a MariaDB or MySQL database, or of a SQLite database file (its tables, views and routines), and renders MiniJinja templates with it.` |
   | The row `database entry` of the help of `tpl` | `A named way to reach one database, stored in .tpl/.cfg: a MariaDB or a MySQL server, whose --schema names the database on it and need not be the entry's name, or a SQLite database file, named by --path. Select one with -d NAME, or make one the default with tpl cfg set core.database NAME.` |
+  | The purpose of `-d/--database`, per `FR-HELP-030` | `Selects the database entry to use, a named database in .tpl/.cfg — a MariaDB or a MySQL server, or a SQLite database file — that tpl cfg database list lists; it overrides core.database.` |
   | The purpose of `--host`, per `FR-HELP-030` | `Sets the host name or IP address of the MariaDB or MySQL server.` |
   | The purpose of `--port` | `Sets the TCP port of the MariaDB or MySQL server, from 1 to 65535.` |
   | The purpose of `--schema` | `Sets the name of the database on the MariaDB or MySQL server, stored as database.<entry>.database; this is not the entry name that -d selects.` |
@@ -444,6 +447,18 @@ alongside the command it documents.
   names.
 
   *Added in the eighty-sixth edition,* for rmp `#358`.
+
+  *Amended in the eighty-seventh edition,* for rmp `#358`. The table's
+  statements were required "in the text help and in the JSON command tree
+  alike", and the first two belong to the root `tpl`, which `FR-HELP-019`
+  gives no entry in `data.commands`: they are now required in the text help,
+  and in the tree only where it carries their string, which for those two
+  it does not. *Rejected: a key of `data` for the root's description.* It
+  changes the document `FR-HELP-017` fixes, for two sentences a caller of
+  the tree reaches in `tpl --help`. The row of `-d/--database` is new: its
+  purpose called an entry "a named connection", which names no provider and
+  reads as a server; the flag's purpose is carried in `data.global_flags`,
+  so it is required there too.
 
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help
