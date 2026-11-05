@@ -36,6 +36,8 @@ workflow, before it closes.
 
 ## Unreleased
 
+## [0.1.0] - 2026-11-05
+
 ### Added
 
 - **SQLite as a second database provider.** An entry's new `provider` key is
