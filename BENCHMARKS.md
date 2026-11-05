@@ -6308,3 +6308,452 @@ TPL_DHAT=<file> <instrumented tpl> <args>   # one run per timed line
 #    the trace, `trace_v2(SQLITE_TRACE_STMT | SQLITE_TRACE_PROFILE, …)` installed
 #    on the connection in the instrumented copy and summed per statement text.
 ```
+
+## 2026-11-05 — Eight findings applied to the MySQL provider's catalogue read and fold
+
+*Sprint 28, task `#351`, phase 2. Target of record: `aarch64-apple-darwin`.
+Provider of record: `mysql`, against the `8.4.13` and `9.7.4` servers of
+`scripts/mysql/`. This entry records; it does not judge, per `BR-PERF-008`.*
+
+### What was established
+
+Phase 1 (`extreme-code-profiler`) profiled the MySQL provider at `0261bfb` over
+the surface it built in `target/mysql-profile/` and ranked its findings. Phase 2
+applied eight of them in one pass, inside `src/mysql/` and under one
+constraint: the output does not change. All eight were kept.
+
+**At 2 000 tables, every direct read fell by 15.0% to 20.0% in wall time (36.4
+to 37.9 ms), by 2.9 to 4.1 ms of CPU, by 4.2% to 14.7% in retired instructions,
+by 4.1% to 4.6% in peak resident set (2.3 to 2.6 MiB) and by 5.5% to 5.7% in
+heap peak (2.7 MB); its Rust heap allocations fell by 39.4% to 39.7%, and by
+15.4% for a whole-database render.** `tpl cache load` fell by 13.1% and 13.4%.
+At 500 tables the direct reads fell by 12.5% to 15.9%, at 50 by 3.5% to 5.3%,
+and over `freight` by 1.5% to 3.9%, the interval of `8.4`'s `schema dump`
+including zero.
+`tpl cfg database test` and every cache-served read, which issue no catalogue
+statement, moved within the floor. Every one of the 1 016 workloads produced
+byte-identical stdout, stderr, exit status and cache folder before and after,
+on both series.
+
+| # | change | where | kept |
+|---|---|---|---|
+| 1 | The column statement carries no `ORDER BY`; the fold gathers each table's columns and sorts them by the value of `ORDINAL_POSITION` (`FR-MYSQL-027`) | `statements.rs` (`COLUMNS`); `fold.rs` (`columns`, `attach`) | yes |
+| 2 | The index and key-column statements carry no `ORDER BY` and select `SEQ_IN_INDEX` and `ORDINAL_POSITION`. The index fold reads the rows as they arrive and verifies the order row by row (`in_sequence`: a run opens at sequence 1 and ascends); where it fails, every index is folded again from the rows sorted by table, index and sequence. The key-column rows go through the same verification when fetched, and are sorted where it fails, because the fold that reads them is shared with `mariadb/` and appends a key's columns in row order | `statements.rs` (`INDEXES`, `KEY_COLUMNS`); `fold.rs` (`in_sequence`, `indexes`, `fold_indexes`, `key_columns`); `catalogue.rs` (`arrived`) | yes |
+| 3 | `TABLES`, `REFERENTIAL_CONSTRAINTS`, `TABLE_CONSTRAINTS`, `CHECK_CONSTRAINTS`, `TRIGGERS` and `VIEWS` carry no `ORDER BY`: every order they fed is made by name, byte-wise, in `assemble` or `views`. `ROUTINES` keeps its clause, because a function and a procedure may share a name and the stable sort by name keeps the server's order between them; `PARAMETERS` keeps its own, because the fold appends a routine's parameters in arrival order | `statements.rs` | yes |
+| 4 | The integer accessor takes the field's raw value once and decodes it under the two compatibility tests the driver's typed asks apply, unsigned first, instead of asking for an unsigned value and, where that failed, a signed one | `row.rs` (`maybe_integer`) | yes |
+| 5 | The column and index folds reuse the previous row's table lookup while the owner repeats | `fold.rs` (`Owner`) | yes |
+| 6 | The attribute field is read through a window of three tokens over the split, with no vector of tokens per column | `expression.rs` (`Extra::parse`) | yes |
+| 7 | A table's columns are gathered in one reused run and moved into one exactly sized vector, instead of each table's vector growing by doubling | `fold.rs` (`columns`, `attach`) | yes: heap peak −3.08 MB and peak RSS −3.1 to −3.3 MiB at 2 000 tables, beyond the floor; its wall-time change is not |
+| 8 | `Catalogue.issued`, read only by tests, exists in a test build only | `catalogue.rs` | yes: one allocation of 192 B per read, no time |
+
+Before rmp `#351` the specification fixed the three orders the removed clauses
+produced — `FR-MYSQL-027`, `FR-MYSQL-032` and `FR-MYSQL-033` — and fixed no
+statement text; no requirement changed.
+
+### Workload
+
+The surface of `target/mysql-profile/`, built by phase 1 and unchanged. Four
+schemas per series, counted by phase 1 and identical on `8.4` and `9.7`:
+
+| schema | tables | views | routines | parameters | triggers | columns | `STATISTICS` rows | foreign keys | key columns | checks |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `freight` | 22 | 5 | 7 | 19 | 7 | 329 | 89 | 18 | 20 | 26 |
+| `synth50` | 50 | 5 | 4 | 10 | 5 | 686 | 278 | 74 | 111 | 25 |
+| `synth500` | 500 | 50 | 40 | 100 | 50 | 6 383 | 2 664 | 720 | 931 | 209 |
+| `synth2000` | 2 000 | 200 | 160 | 400 | 200 | 25 387 | 10 275 | 2 862 | 3 581 | 841 |
+
+`freight` is the fixture schema of `FR-MYSQL-044`; the three synthetic schemas
+are `target/mysql-profile/sql/synth{50,500,2000}.sql`, loaded through the
+harness helper `tpl_mysql_sql` of `scripts/mysql/series.env`, and hold no rows.
+The columns count includes the views' columns, which the column statement
+returns and the fold drops.
+
+**The 1 016 workloads** of `target/mysql-profile/workloads.tsv`, 508 per series:
+per schema, `cfg database test`, the `schema` reads and the renders of the four
+worked examples' templates with `--direct --no-cache`; then `cache load`; then
+the cached reads and renders.
+
+**The timed workloads.** Per change: `schema table <t> --format json --direct
+--no-cache` over `freight`, `synth500` and `synth2000`, on both series. Combined:
+direct `cfg database test`, `schema tables`, `schema table <t> --format json`,
+`schema dump` and `render go/schema`; `cache load`; cached `schema table <t>
+--format json` and `schema dump`; over all four schemas, on both series — 64.
+
+**The arrival order without `ORDER BY`, observed 2026-11-05** over `freight` and
+`synth2000` on both series: the rows of one table, of one index and of one key
+arrive together; an index's and a key's rows arrive in ascending sequence on
+both series, so `in_sequence` holds for all 10 275 and 3 581 rows; a table's
+columns arrive in position order on `8.4` and not on `9.7` (11 250 inversions
+over 25 387 rows), which is where the fold's sort works.
+
+### Candidates
+
+| arm | binary |
+|---|---|
+| `before` | `target/release/tpl` at `0261bfb`, kept by phase 1 as `target/mysql-profile/bin/tpl-head`: 6 636 656 B, sha256 `acfebf1388a798c1e7e2019156b824e301b40c3c1ebde9e7ce239566b7cf3090`. `bin/tpl-head-copy` is a byte-identical copy |
+| `after` | the phase-2 tree, built in a copy of the repository: 6 653 216 B, sha256 `8cd8bf4d1c063e9173b61a4ca40f312d80c31f1ddca92ed0f2ad706fe6901f37`. Every figure of `after` is of this binary. The repository's own release build of the same tree, after one doc-comment edit, is 6 653 216 B, sha256 `22e4d49bb46690f6bffba79512647d18f60ebdf71ca01b2fc6ec7ca7517394a0`, and differs from it in 47 bytes, the Mach-O identifier and signature |
+| `v1` … `v8` | `after` with one change reverted, built the same way (6 653 216 B, except `v2` at 6 636 656 B); sha256 `v1` `7ebccaa590fef98d66483ea10ec32a1a24e559c2577ab37e3202daad15099b3b`, `v2` `9716a94bd03f334670306642a9ebfdf6d4d6fa467c8c93b488aa0c348f414fbd`, `v3` `bb6d68f15133040dc4bdb09b2d63254a399c9fd0df8dfc4ed149b7cacb7d8843`, `v4` `fa4e87ce4295b404ec54d512be4038223813ba7d31f71b4d1efd37594c3108ff`, `v5` `a362016f9a8f1f17c344d33331613d2ae5f5c09b621e0d072d9a3104cbfaf5b0`, `v6` `eead6905f69a0c2fdc82e36ac124a6397bf37c89a8589fb2f102ba91c41fe9ff`, `v7` `78a003908cd439b15f0824d901e2f43d25e1c691c91cc61b7f1b0e483b08f859`, `v8` `78680e3f4917a4099ba280686f4ecce98792fa84d6eb8bd446987d793dc8bec2` |
+| `instr` | `before`: phase 1's `target/mysql-profile/instr/`, `dhat` 0.3.3 under the `cap` counting allocator, 8 529 944 B, sha256 `1c5df8f86ea8b3c23309b691ceff73f88b1be353a851a938c69c28c7263b66c1`. `after` and each variant: its tree with `instr/`'s `src/main.rs`, `Cargo.toml` and `Cargo.lock`, stripped as the release profile strips (`after`: 6 934 512 B, sha256 `cd98d5228fc6d08a141d8cd8fd4cd5449d4e0aa2687879397c56dd05fa13ec2c`). Used for allocation counts only, never for time |
+
+### Environment
+
+| | |
+|---|---|
+| Host | Apple M4, 10 cores, 32 GiB |
+| System | macOS 27.2 (build 26B123), Darwin 27.2.0 `arm64` |
+| Target | `aarch64-apple-darwin`, built and run natively |
+| Toolchain | `rustc` 1.99.1 (58cf8f9c3 2026-10-13), `cargo` 1.99.1 (5f94df478 2026-08-27), LLVM 23.1.1 |
+| Crate | `tpl` 0.0.2, edition 2024, release profile `opt-level = 3`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, `strip = true` |
+| Servers | `8.4.13` and `9.7.4`, the images of `scripts/mysql/`, the two alone up for every reading; Docker 29.5.2 in a `colima` 0.10.3 virtual machine of 8 CPUs and 16 GB (Ubuntu 24.04.4), on the same host; `lower_case_table_names` 0, `show_gipk_in_create_table_and_information_schema` `ON`, `sql_generate_invisible_primary_key` `OFF`, as phase 1 recorded them |
+| Instruments | `target/mysql-profile/tools/ab.py` (Python 3.15.2); `hyperfine` 2.0.0 (`--shell=none`) through `measure.sh`; `/usr/bin/time -l`; `dhat` 0.3.3 through `tools/dhat-run.sh` |
+| Power | mains, battery charged |
+| Load | 2.18 to 7.53, the server virtual machine included; see *Confounders* |
+| Taken | 2026-11-05, from 00:39Z to 00:58Z; the context-switch readings of *Reading the eight* after it |
+
+### Protocol
+
+- **Wall time and CPU.** `tools/ab.py`: per workload, 3 warm-up pairs, then 30
+  rounds alternating `A B` and `B A`, each run from the project folder with no
+  shell and its output discarded; CPU is the child's user and system time from
+  `wait4`. Recorded: each arm's median, the median of the 30 paired differences
+  `B − A` with its 95% bootstrap interval (2 000 resamples), and that median
+  over `A`'s median. A difference whose interval contains zero is not a
+  difference. Per change, `A` is the variant with that change reverted and `B`
+  is `after` — a leave-one-out reading, so each figure is the change's share
+  of the finished tree, not its share of `0261bfb`. Combined, `A` is `before`.
+- **Instructions and peak resident memory.** `measure.sh`, both arms in one
+  `hyperfine` call per workload, `A`'s runs then `B`'s: 3 warm-ups and 20 runs
+  combined, 2 and 10 per change; the median of the retired-instruction count.
+  `/usr/bin/time -l`, 10 runs per arm combined and 5 per change; the median of
+  `maximum resident set size`.
+- **Allocation.** One run per workload of each `instr` binary under `dhat`:
+  blocks and bytes allocated, and the heap at its peak (`t-gmax`). `dhat`
+  counts the Rust heap only.
+- **Output identity.** `compare.sh` reran all 1 016 workloads with `after` and
+  compared stdout, stderr, exit status and, after each `cache load`, the cache
+  folder, file by file, with `loaded_at` normalised, against phase 1's
+  baseline of `before`: 0 differences. `before` itself reproduced the baseline
+  on the fixture as loaded for this entry (0 differences), and each variant
+  matched it on the 18 direct `table-json` and `dump` and `cache load`
+  workloads of `freight`, `synth500` and `synth2000`.
+- **Departure from the protocol, stated as `NFR-PERF-020` requires.** These
+  are attribution workloads, not the measurement points of `NFR-PERF-014`.
+  `NFR-PERF-009`: 30 paired rounds after 3 warm-up pairs, and 20 or 10
+  `hyperfine` runs, where it requires the median of at least 200 runs after at
+  least 20 warm-ups. `NFR-PERF-010`: the host was not idle — it ran the server
+  virtual machine the workload reads. `NFR-PERF-011`: the `ab.py` figures carry
+  a bootstrap interval, not a relative standard deviation, which the tool does
+  not record. Of the `measure.sh` figures, three exceed 5%, each of `before` in
+  the combined run, and are readings of the host:
+  `8.4.freight.direct.render.go-schema` (6.83%),
+  `8.4.synth50.direct.tables-text` (9.03%) and
+  `9.7.synth50.direct.cfg-test-json` (8.25%); every other is at most 4.48%.
+
+### The noise floor of the instrument on this host
+
+`before` against its byte-identical copy, under the protocol above, on
+`aarch64-apple-darwin`, at the start of the campaign:
+
+| workload | A wall p50, ms | B wall p50, ms | Δ wall p50, ms [95% CI] | Δ wall | A CPU p50, ms | Δ CPU p50, ms [95% CI] | load avg |
+|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.table-json` | 17.909 | 17.793 | −0.042 [−0.177, +0.217] | −0.23% | 4.077 | −0.005 [−0.029, +0.046] | 7.53 |
+| `8.4.synth500.direct.table-json` | 60.900 | 60.636 | +0.077 [−0.195, +0.230] | +0.13% | 12.809 | +0.015 [−0.058, +0.079] | 7.09 |
+| `8.4.synth2000.direct.table-json` | 192.622 | 192.936 | +0.063 [−0.874, +1.075] | +0.03% | 39.475 | −0.013 [−0.146, +0.148] | 6.38 |
+| `9.7.freight.direct.table-json` | 22.686 | 22.600 | −0.062 [−0.148, +0.210] | −0.27% | 4.097 | −0.006 [−0.059, +0.033] | 6.38 |
+| `9.7.synth500.direct.table-json` | 64.258 | 63.925 | −0.184 [−0.415, +0.081] | −0.29% | 12.773 | −0.071 [−0.151, −0.002] | 6.67 |
+| `9.7.synth2000.direct.table-json` | 189.747 | 190.003 | −0.002 [−0.996, +0.984] | −0.00% | 39.176 | +0.043 [−0.333, +0.173] | 6.17 |
+
+**On this host, a paired wall-time difference whose interval contains zero, or
+below 1% of the median, is not a difference in this entry**; the six readings
+moved by −0.29% to +0.13%, every interval containing zero. One CPU interval
+excludes zero by 0.002 ms, the rate a 95% interval allows. Phase 1 measured the
+same instrument at ±0.65%. For `dhat`, the variants whose change allocates
+nothing — `v5` against `after` — differ by at most 8 blocks and 0.12 MB
+allocated at 2 000 tables, and by 3 B of heap peak: the read buffers' growth
+follows how the server's packets arrive. A variant that changes a statement
+moves the heap peak by up to 34 KB (`v3`) and 181 KB (`v1`) with no change to
+what the rows carry.
+
+### Results — each change
+
+On `aarch64-apple-darwin`. A negative difference is the change's gain.
+
+**Change 1 — the column statement states no order; the fold sorts each table's columns by position.** A: `after` with `ORDER BY TABLE_NAME, ORDINAL_POSITION` restored.
+
+| workload | Δ wall p50, ms [95% CI] | Δ wall | Δ CPU p50, ms [95% CI] | Δ instructions | blocks, A → B | Δ heap peak, B | max RSS, KiB, A → B |
+|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.table-json` | −0.257 [−0.476, −0.123] | −1.44% | +0.013 [−0.028, +0.050] | +0.31% | 5 703 → 5 725 | −15 853 | 6624 → 6608 |
+| `8.4.synth500.direct.table-json` | −5.125 [−5.220, −4.904] | −9.14% | +0.090 [−0.002, +0.145] | +1.44% | 43 597 → 43 607 | −32 479 | 18048 → 18032 |
+| `8.4.synth2000.direct.table-json` | −18.590 [−19.263, −17.488] | −10.67% | +1.166 [+1.119, +1.303] | +1.61% | 159 919 → 159 889 | −172 771 | 54016 → 54112 |
+| `9.7.freight.direct.table-json` | −0.230 [−0.342, −0.038] | −1.02% | +0.034 [+0.001, +0.082] | +0.50% | 5 703 → 5 727 | −7 578 | 6592 → 6624 |
+| `9.7.synth500.direct.table-json` | −5.078 [−5.322, −4.699] | −8.59% | +0.334 [+0.282, +0.440] | +2.98% | 43 591 → 43 607 | −16 555 | 18000 → 18032 |
+| `9.7.synth2000.direct.table-json` | −17.566 [−18.232, −16.286] | −10.28% | +1.493 [+1.387, +1.869] | +4.05% | 159 919 → 159 895 | −181 464 | 54016 → 54128 |
+
+**Change 2 — the index and key-column statements state no order; the fold verifies it and sorts where it fails.** A: `after` with both statements, the index fold and the key-column rows as at `0261bfb` (the owner lookup of change 5 kept).
+
+| workload | Δ wall p50, ms [95% CI] | Δ wall | Δ CPU p50, ms [95% CI] | Δ instructions | blocks, A → B | Δ heap peak, B | max RSS, KiB, A → B |
+|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.table-json` | −0.208 [−0.339, +0.046] | −1.18% | −0.017 [−0.048, +0.036] | +0.23% | 5 665 → 5 725 | −4 237 | 6592 → 6608 |
+| `8.4.synth500.direct.table-json` | −2.581 [−2.741, −2.059] | −4.82% | +0.288 [+0.267, +0.318] | +2.13% | 43 534 → 43 607 | +153 709 | 18000 → 18000 |
+| `8.4.synth2000.direct.table-json` | −7.967 [−8.938, −7.251] | −4.85% | +1.011 [+0.862, +1.124] | +2.77% | 159 779 → 159 889 | +465 413 | 52928 → 53920 |
+| `9.7.freight.direct.table-json` | −0.032 [−0.242, +0.143] | −0.14% | −0.005 [−0.040, +0.054] | +0.04% | 5 665 → 5 727 | +3 995 | 6704 → 6688 |
+| `9.7.synth500.direct.table-json` | −2.535 [−2.825, −2.213] | −4.46% | +0.257 [+0.183, +0.306] | +1.90% | 43 532 → 43 607 | +153 545 | 17712 → 18256 |
+| `9.7.synth2000.direct.table-json` | −9.311 [−9.885, −8.350] | −5.75% | +1.174 [+1.022, +1.380] | +2.34% | 159 787 → 159 895 | +473 502 | 53232 → 53872 |
+
+**Change 3 — six statements whose order the fold never reads state none.** A: `after` with the six clauses restored.
+
+| workload | Δ wall p50, ms [95% CI] | Δ wall | Δ CPU p50, ms [95% CI] | Δ instructions | blocks, A → B | Δ heap peak, B | max RSS, KiB, A → B |
+|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.table-json` | −0.136 [−0.284, +0.030] | −0.77% | −0.014 [−0.053, +0.056] | +0.16% | 5 701 → 5 725 | −7 671 | 6624 → 6624 |
+| `8.4.synth500.direct.table-json` | −0.860 [−1.054, −0.460] | −1.66% | +0.031 [−0.030, +0.090] | +0.21% | 43 583 → 43 607 | +8 704 | 17984 → 18064 |
+| `8.4.synth2000.direct.table-json` | −4.733 [−5.468, −4.021] | −2.94% | +0.212 [+0.097, +0.288] | +0.39% | 159 859 → 159 889 | +33 897 | 53712 → 53920 |
+| `9.7.freight.direct.table-json` | −0.099 [−0.226, +0.026] | −0.44% | +0.015 [−0.031, +0.042] | +0.20% | 5 697 → 5 727 | +17 131 | 6608 → 6656 |
+| `9.7.synth500.direct.table-json` | −0.848 [−1.198, −0.678] | −1.55% | +0.054 [+0.028, +0.100] | +0.23% | 43 577 → 43 607 | +25 098 | 18000 → 18208 |
+| `9.7.synth2000.direct.table-json` | −4.297 [−4.906, −3.838] | −2.72% | +0.285 [+0.205, +0.443] | +0.30% | 159 849 → 159 895 | −15 864 | 53984 → 53856 |
+
+**Change 4 — the integer accessor decodes one raw value under its declared type.** A: `after` with the accessor of `0261bfb`.
+
+| workload | Δ wall p50, ms [95% CI] | Δ wall | Δ CPU p50, ms [95% CI] | Δ instructions | blocks, A → B | Δ heap peak, B | max RSS, KiB, A → B |
+|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.table-json` | −0.023 [−0.338, +0.076] | −0.13% | −0.074 [−0.123, −0.025] | −2.40% | 6 732 → 5 725 | +3 | 6704 → 6640 |
+| `8.4.synth500.direct.table-json` | −1.158 [−1.377, −0.902] | −2.24% | −0.848 [−0.901, −0.800] | −11.60% | 63 175 → 43 607 | +3 | 18304 → 18176 |
+| `8.4.synth2000.direct.table-json` | −2.602 [−3.297, −1.990] | −1.63% | −3.307 [−3.410, −3.196] | −13.45% | 236 586 → 159 889 | +3 | 54112 → 53904 |
+| `9.7.freight.direct.table-json` | −0.066 [−0.264, +0.119] | −0.30% | −0.042 [−0.099, −0.018] | −2.52% | 6 734 → 5 727 | +3 | 6704 → 6624 |
+| `9.7.synth500.direct.table-json` | −1.183 [−1.379, −1.007] | −2.16% | −0.880 [−0.927, −0.843] | −11.22% | 63 175 → 43 607 | +3 | 18288 → 18080 |
+| `9.7.synth2000.direct.table-json` | −3.009 [−3.938, −2.430] | −1.93% | −3.044 [−3.256, −2.874] | −13.29% | 236 584 → 159 895 | +3 | 54096 → 53888 |
+
+**Change 5 — the table lookup of the previous row is reused while the owner repeats.** A: `after` with a lookup per row.
+
+| workload | Δ wall p50, ms [95% CI] | Δ wall | Δ CPU p50, ms [95% CI] | Δ instructions | blocks, A → B | Δ heap peak, B | max RSS, KiB, A → B |
+|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.table-json` | −0.016 [−0.264, +0.178] | −0.09% | −0.024 [−0.058, +0.006] | −0.11% | 5 725 → 5 725 | +3 | 6672 → 6656 |
+| `8.4.synth500.direct.table-json` | −0.325 [−0.633, −0.174] | −0.63% | −0.428 [−0.502, −0.412] | −1.94% | 43 607 → 43 607 | +3 | 18144 → 18256 |
+| `8.4.synth2000.direct.table-json` | −2.923 [−3.269, −2.494] | −1.84% | −2.283 [−2.405, −2.087] | −2.91% | 159 897 → 159 889 | +3 | 53824 → 53888 |
+| `9.7.freight.direct.table-json` | −0.057 [−0.240, +0.061] | −0.26% | −0.048 [−0.066, +0.021] | −0.24% | 5 727 → 5 727 | +3 | 6656 → 6608 |
+| `9.7.synth500.direct.table-json` | −0.628 [−0.811, −0.445] | −1.15% | −0.448 [−0.505, −0.382] | −2.16% | 43 607 → 43 607 | +3 | 18112 → 18128 |
+| `9.7.synth2000.direct.table-json` | −2.502 [−3.300, −1.376] | −1.62% | −2.089 [−2.255, −1.712] | −2.88% | 159 891 → 159 895 | +3 | 53776 → 54064 |
+
+**Change 6 — the attribute field is read through a window of three tokens.** A: `after` with the token vector of `0261bfb`.
+
+| workload | Δ wall p50, ms [95% CI] | Δ wall | Δ CPU p50, ms [95% CI] | Δ instructions | blocks, A → B | Δ heap peak, B | max RSS, KiB, A → B |
+|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.table-json` | +0.123 [−0.088, +0.260] | +0.70% | +0.009 [−0.021, +0.062] | −0.51% | 6 010 → 5 725 | +3 | 6688 → 6608 |
+| `8.4.synth500.direct.table-json` | −0.439 [−0.708, +0.022] | −0.87% | −0.192 [−0.235, −0.136] | −1.79% | 49 790 → 43 607 | +3 | 18016 → 18048 |
+| `8.4.synth2000.direct.table-json` | +0.128 [−1.054, +0.927] | +0.08% | −0.530 [−0.662, −0.430] | −2.11% | 184 484 → 159 889 | +3 | 53856 → 53920 |
+| `9.7.freight.direct.table-json` | +0.069 [−0.104, +0.263] | +0.31% | −0.003 [−0.023, +0.050] | −0.24% | 6 012 → 5 727 | +3 | 6608 → 6688 |
+| `9.7.synth500.direct.table-json` | −0.172 [−0.353, +0.088] | −0.32% | −0.093 [−0.128, −0.056] | −1.83% | 49 790 → 43 607 | +3 | 18080 → 18272 |
+| `9.7.synth2000.direct.table-json` | −0.062 [−0.674, +1.283] | −0.04% | −0.659 [−0.907, −0.315] | −2.09% | 184 478 → 159 895 | +3 | 53872 → 53856 |
+
+**Change 7 — each table's columns are gathered in a reused run and moved into one exactly sized vector.** A: `after` with each column pushed into its table's vector, grown by doubling, and every table sorted at the end.
+
+| workload | Δ wall p50, ms [95% CI] | Δ wall | Δ CPU p50, ms [95% CI] | Δ instructions | blocks, A → B | Δ heap peak, B | max RSS, KiB, A → B |
+|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.table-json` | +0.032 [−0.161, +0.139] | +0.18% | −0.006 [−0.041, +0.022] | −0.09% | 5 761 → 5 725 | −26 397 | 6640 → 6640 |
+| `8.4.synth500.direct.table-json` | −0.357 [−0.537, +0.051] | −0.70% | −0.139 [−0.165, −0.084] | −1.16% | 44 585 → 43 607 | −732 509 | 18992 → 18240 |
+| `8.4.synth2000.direct.table-json` | −0.474 [−1.135, −0.129] | −0.30% | −0.515 [−0.555, −0.395] | −1.51% | 163 832 → 159 889 | −3 083 869 | 57232 → 53872 |
+| `9.7.freight.direct.table-json` | −0.073 [−0.212, +0.129] | −0.33% | −0.008 [−0.059, +0.020] | −0.20% | 5 763 → 5 727 | −26 397 | 6656 → 6624 |
+| `9.7.synth500.direct.table-json` | −0.078 [−0.291, +0.248] | −0.14% | −0.110 [−0.147, −0.090] | −1.75% | 44 585 → 43 607 | −732 509 | 18800 → 18048 |
+| `9.7.synth2000.direct.table-json` | −0.702 [−1.268, +0.023] | −0.46% | −0.613 [−0.819, −0.252] | −1.07% | 163 830 → 159 895 | −3 083 869 | 57104 → 53904 |
+
+**Change 8 — the record of issued statements exists in a test build only.** A: `after` with the record kept and filled in production.
+
+| workload | Δ wall p50, ms [95% CI] | Δ wall | Δ CPU p50, ms [95% CI] | Δ instructions | blocks, A → B | Δ heap peak, B | max RSS, KiB, A → B |
+|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.table-json` | −0.006 [−0.175, +0.215] | −0.03% | −0.001 [−0.063, +0.040] | −0.25% | 5 726 → 5 725 | −205 | 6688 → 6656 |
+| `8.4.synth500.direct.table-json` | −0.047 [−0.236, +0.233] | −0.09% | −0.000 [−0.050, +0.033] | −0.07% | 43 608 → 43 607 | −205 | 18176 → 18048 |
+| `8.4.synth2000.direct.table-json` | −0.032 [−0.566, +1.597] | −0.02% | −0.061 [−0.176, +0.109] | −0.14% | 159 894 → 159 889 | −205 | 53888 → 53888 |
+| `9.7.freight.direct.table-json` | +0.065 [−0.136, +0.150] | +0.29% | +0.015 [−0.013, +0.037] | −0.13% | 5 728 → 5 727 | −205 | 6688 → 6656 |
+| `9.7.synth500.direct.table-json` | −0.142 [−0.271, +0.127] | −0.26% | −0.040 [−0.067, +0.010] | −0.13% | 43 608 → 43 607 | −205 | 18192 → 18080 |
+| `9.7.synth2000.direct.table-json` | +0.123 [−0.310, +0.492] | +0.08% | +0.036 [−0.068, +0.226] | −0.03% | 159 892 → 159 895 | −205 | 53856 → 53872 |
+
+**Reading the eight.** The three statement changes are server time: they cut
+the wall time by 18.6 and 17.6 ms (change 1), 8.0 and 9.3 ms (change 2) and 4.7
+and 4.3 ms (change 3) at 2 000 tables, while the client's CPU rose by 1.2 and
+1.5, 1.0 and 1.2, and 0.2 and 0.3 ms. Over `8.4`'s column rows, which arrive in
+position order and leave the sort one pass, change 1 still rose by 6.7 million
+instructions and its involuntary context switches from 209 to 316 per run
+(means of 6 runs of `/usr/bin/time -l` per arm), so the client's share is
+mostly the cost of receiving rows the server now streams instead of sorting
+first; on `9.7` it rose by 17.9 million, a difference this entry attributes,
+without a profile, to the sort of unordered runs. Change
+2's heap peak rose by 465 and 474 KB at 2 000 tables: the two order fields its
+statements now select, carried in each of the 13 856 rows the model borrows
+from — a value slot of 24 B per row and the 4 B of the field, about 388 KB,
+with the buffer they travel in; the figure is beyond the 181 KB a clause
+alone moved. Phase 1's naive sort, read against `0261bfb` rather than against
+the finished tree, cost 2.2 and 2.5 ms of CPU for 5.6 and 7.0 ms of wall time;
+this one costs 1.0 and 1.2 ms for 8.0 and 9.3 ms. Changes 4, 5 and 6 are
+client CPU: 3.3 and 3.0, 2.3 and 2.1, and 0.5 and 0.7 ms at 2 000 tables, with
+76 697 and 24 595 fewer allocations on `8.4` for changes 4 and 6; changes 4
+and 5 moved the wall time by 1.6% to 1.9%, and change 6 within the floor.
+Change 7 moved the wall time by −0.30% on `8.4`, an interval excluding zero
+below the 1% floor, and by −0.46% on `9.7`, an interval including it, so it is
+kept for its memory alone: 3 083 869 B of heap peak on both series, 3.3 and
+3.1 MiB of peak resident set, and 12.0 and 11.9 MB allocated, at 2 000 tables.
+Change 8 moved nothing beyond one block of 192 B.
+
+### Results — combined
+
+`before` against `after`, every combined workload, on `aarch64-apple-darwin`.
+Wall and CPU from `ab.py`; instructions and peak RSS from `measure.sh`;
+blocks and heap peak from `dhat`.
+
+| workload | before p50, ms | after p50, ms | Δ wall p50 [95% CI], ms | Δ wall | Δ CPU p50 [95% CI], ms | Δ instructions | max RSS, KiB | blocks | heap peak (`t-gmax`), B |
+|---|---|---|---|---|---|---|---|---|---|
+| `8.4.freight.direct.cfg-test-json` | 7.209 | 7.044 | −0.019 [−0.161, +0.052] | −0.26% | +0.019 [−0.057, +0.047] | +0.29% | 5184 → 5312 | 2 689 → 2 689 (+0.0%) | 381 146 → 381 183 |
+| `8.4.freight.direct.tables-text` | 18.173 | 17.405 | −0.701 [−0.864, −0.523] | −3.86% | −0.058 [−0.077, −0.028] | −2.46% | 6592 → 6576 | 6 933 → 5 710 (−17.6%) | 719 668 → 681 778 |
+| `8.4.freight.direct.table-json` | 17.912 | 17.322 | −0.585 [−0.715, −0.122] | −3.27% | −0.040 [−0.095, +0.029] | −2.48% | 6688 → 6680 | 6 948 → 5 725 (−17.6%) | 715 604 → 677 714 |
+| `8.4.freight.direct.dump` | 18.349 | 18.055 | −0.268 [−0.618, +0.009] | −1.46% | −0.023 [−0.067, +0.030] | −2.06% | 6688 → 6672 | 6 895 → 5 672 (−17.7%) | 715 489 → 677 599 |
+| `8.4.freight.direct.render.go-schema` | 18.643 | 18.108 | −0.450 [−0.746, −0.282] | −2.41% | −0.046 [−0.080, +0.000] | −1.75% | 7376 → 7408 | 12 204 → 10 985 (−10.0%) | 815 704 → 777 814 |
+| `8.4.freight.load.cache-load` | 18.593 | 17.928 | −0.559 [−0.895, −0.172] | −3.01% | +0.012 [−0.067, +0.070] | −1.50% | 7072 → 7152 | 7 161 → 5 942 (−17.0%) | 1 001 387 → 963 513 |
+| `8.4.freight.cached.table-json` | 3.676 | 3.612 | −0.012 [−0.121, +0.050] | −0.33% | −0.004 [−0.053, +0.025] | +0.11% | 4568 → 4640 | 2 792 → 2 792 (+0.0%) | 341 222 → 341 255 |
+| `8.4.freight.cached.dump` | 5.391 | 5.439 | +0.032 [−0.003, +0.082] | +0.59% | +0.018 [−0.010, +0.042] | +0.11% | 5776 → 5904 | 7 398 → 7 398 (+0.0%) | 1 207 576 → 1 207 584 |
+| `8.4.synth50.direct.cfg-test-json` | 7.123 | 7.050 | −0.038 [−0.122, +0.029] | −0.53% | −0.011 [−0.034, +0.038] | +0.28% | 5192 → 5264 | 2 689 → 2 689 (+0.0%) | 381 146 → 381 183 |
+| `8.4.synth50.direct.tables-text` | 20.353 | 19.308 | −0.975 [−1.041, −0.848] | −4.79% | −0.100 [−0.131, −0.056] | −4.72% | 7336 → 7328 | 11 128 → 8 278 (−25.6%) | 1 434 530 → 1 381 998 |
+| `8.4.synth50.direct.table-json` | 20.632 | 19.479 | −1.094 [−1.300, −0.789] | −5.30% | −0.073 [−0.109, −0.020] | −4.58% | 7392 → 7464 | 11 111 → 8 265 (−25.6%) | 1 424 963 → 1 372 431 |
+| `8.4.synth50.direct.dump` | 21.791 | 20.686 | −1.083 [−1.254, −0.825] | −4.97% | −0.130 [−0.156, −0.050] | −2.87% | 7328 → 7320 | 11 112 → 8 266 (−25.6%) | 1 424 844 → 1 372 312 |
+| `8.4.synth50.direct.render.go-schema` | 21.175 | 20.022 | −1.083 [−1.252, −0.933] | −5.11% | −0.103 [−0.130, −0.088] | −3.46% | 8112 → 8032 | 22 199 → 19 349 (−12.8%) | 1 547 090 → 1 494 558 |
+| `8.4.synth50.load.cache-load` | 22.113 | 20.980 | −1.058 [−1.378, −0.970] | −4.78% | −0.063 [−0.123, −0.025] | −2.45% | 7912 → 7888 | 11 656 → 8 810 (−24.4%) | 1 680 281 → 1 627 765 |
+| `8.4.synth50.cached.table-json` | 3.598 | 3.598 | −0.009 [−0.043, +0.031] | −0.25% | +0.007 [−0.018, +0.028] | +0.19% | 4584 → 4624 | 2 885 → 2 885 (+0.0%) | 341 232 → 341 265 |
+| `8.4.synth50.cached.dump` | 8.159 | 8.139 | −0.003 [−0.084, +0.101] | −0.04% | −0.012 [−0.063, +0.039] | +0.06% | 8024 → 8144 | 15 395 → 15 395 (+0.0%) | 3 239 119 → 3 239 127 |
+| `8.4.synth500.direct.cfg-test-json` | 6.977 | 6.954 | −0.045 [−0.144, +0.073] | −0.64% | −0.021 [−0.048, +0.033] | +0.22% | 5256 → 5288 | 2 692 → 2 692 (+0.0%) | 381 151 → 381 188 |
+| `8.4.synth500.direct.tables-text` | 60.300 | 50.685 | −9.562 [−9.952, −9.315] | −15.86% | −1.053 [−1.173, −1.004] | −12.78% | 18760 → 18112 | 70 684 → 44 071 (−37.7%) | 12 288 606 → 11 702 666 |
+| `8.4.synth500.direct.table-json` | 60.652 | 50.962 | −9.449 [−9.798, −9.155] | −15.58% | −1.044 [−1.112, −0.967] | −12.83% | 18744 → 18024 | 70 220 → 43 607 (−37.9%) | 12 191 849 → 11 605 909 |
+| `8.4.synth500.direct.dump` | 73.091 | 63.228 | −9.948 [−10.331, −9.764] | −13.61% | −1.183 [−1.251, −1.004] | −4.71% | 18680 → 18080 | 70 584 → 43 971 (−37.7%) | 12 191 732 → 11 605 792 |
+| `8.4.synth500.direct.render.go-schema` | 65.954 | 56.168 | −9.828 [−10.110, −9.426] | −14.90% | −1.097 [−1.136, −1.042] | −7.25% | 19832 → 19080 | 174 901 → 148 296 (−15.2%) | 12 650 217 → 12 064 277 |
+| `8.4.synth500.load.cache-load` | 82.113 | 72.147 | −9.619 [−10.020, −9.343] | −11.71% | −1.146 [−1.278, −0.878] | −4.03% | 19336 → 18712 | 77 122 → 50 513 (−34.5%) | 12 593 346 → 12 007 422 |
+| `8.4.synth500.cached.table-json` | 3.609 | 3.572 | −0.042 [−0.075, +0.034] | −1.16% | −0.003 [−0.024, +0.020] | +0.26% | 4592 → 4656 | 2 974 → 2 974 (+0.0%) | 341 227 → 341 260 |
+| `8.4.synth500.cached.dump` | 48.364 | 48.372 | −0.031 [−0.148, +0.071] | −0.06% | +0.000 [−0.092, +0.123] | −0.02% | 38704 → 38912 | 125 608 → 125 608 (+0.0%) | 30 006 860 → 30 006 868 |
+| `8.4.synth2000.direct.cfg-test-json` | 7.014 | 7.002 | +0.006 [−0.087, +0.092] | +0.09% | −0.006 [−0.042, +0.033] | +0.25% | 5272 → 5248 | 2 692 → 2 692 (+0.0%) | 381 156 → 381 193 |
+| `8.4.synth2000.direct.tables-text` | 192.988 | 156.191 | −36.778 [−37.455, −35.577] | −19.06% | −3.842 [−4.033, −3.628] | −14.74% | 56840 → 54496 | 266 946 → 161 850 (−39.4%) | 48 703 902 → 45 964 228 |
+| `8.4.synth2000.direct.table-json` | 192.591 | 155.538 | −37.496 [−38.296, −36.453] | −19.47% | −4.111 [−4.287, −3.966] | −14.54% | 56496 → 53896 | 264 973 → 159 889 (−39.7%) | 48 316 465 → 45 576 791 |
+| `8.4.synth2000.direct.dump` | 243.152 | 206.300 | −36.413 [−37.357, −35.808] | −14.98% | −3.940 [−4.071, −3.660] | −4.75% | 56416 → 53912 | 266 687 → 161 611 (−39.4%) | 48 316 346 → 45 576 672 |
+| `8.4.synth2000.direct.render.go-schema` | 212.692 | 175.527 | −36.882 [−37.837, −36.070] | −17.34% | −3.930 [−4.130, −3.710] | −7.60% | 58744 → 56072 | 681 669 → 576 585 (−15.4%) | 49 907 862 → 47 168 188 |
+| `8.4.synth2000.load.cache-load` | 281.245 | 242.976 | −37.626 [−38.767, −36.677] | −13.38% | −3.641 [−4.536, −3.033] | −4.07% | 57936 → 55392 | 293 216 → 188 124 (−35.8%) | 49 409 662 → 46 670 004 |
+| `8.4.synth2000.cached.table-json` | 3.651 | 3.646 | −0.024 [−0.077, +0.042] | −0.66% | +0.000 [−0.020, +0.041] | +0.23% | 4624 → 4720 | 3 158 → 3 158 (+0.0%) | 341 232 → 341 265 |
+| `8.4.synth2000.cached.dump` | 181.520 | 180.929 | −0.692 [−1.209, +0.136] | −0.38% | −0.134 [−1.237, +0.358] | +0.01% | 141184 → 141360 | 494 778 → 494 778 (+0.0%) | 119 535 649 → 119 535 657 |
+| `9.7.freight.direct.cfg-test-json` | 6.996 | 6.995 | −0.081 [−0.204, +0.023] | −1.16% | −0.010 [−0.043, +0.020] | +0.26% | 5256 → 5288 | 2 689 → 2 689 (+0.0%) | 381 146 → 381 183 |
+| `9.7.freight.direct.tables-text` | 22.501 | 21.973 | −0.564 [−0.789, −0.345] | −2.51% | −0.022 [−0.060, +0.026] | −2.22% | 6656 → 6576 | 6 933 → 5 712 (−17.6%) | 719 581 → 690 052 |
+| `9.7.freight.direct.table-json` | 22.862 | 22.015 | −0.832 [−0.969, −0.427] | −3.64% | −0.002 [−0.075, +0.033] | −2.20% | 6680 → 6624 | 6 948 → 5 727 (−17.6%) | 715 517 → 685 988 |
+| `9.7.freight.direct.dump` | 23.173 | 22.469 | −0.768 [−0.920, −0.519] | −3.31% | −0.066 [−0.081, −0.003] | −1.74% | 6696 → 6704 | 6 891 → 5 674 (−17.7%) | 715 402 → 685 873 |
+| `9.7.freight.direct.render.go-schema` | 23.396 | 22.783 | −0.583 [−0.902, −0.423] | −2.49% | −0.035 [−0.078, −0.016] | −1.43% | 7352 → 7328 | 12 208 → 10 987 (−10.0%) | 815 613 → 786 084 |
+| `9.7.freight.load.cache-load` | 23.447 | 22.792 | −0.615 [−0.799, −0.449] | −2.62% | −0.017 [−0.063, +0.009] | −1.35% | 7120 → 7136 | 7 165 → 5 944 (−17.0%) | 1 001 299 → 971 786 |
+| `9.7.freight.cached.table-json` | 3.580 | 3.529 | −0.061 [−0.120, +0.022] | −1.70% | +0.001 [−0.027, +0.010] | +0.20% | 4632 → 4640 | 2 792 → 2 792 (+0.0%) | 341 222 → 341 255 |
+| `9.7.freight.cached.dump` | 5.411 | 5.374 | −0.008 [−0.062, +0.057] | −0.15% | +0.005 [−0.023, +0.032] | +0.06% | 5864 → 5896 | 7 398 → 7 398 (+0.0%) | 1 207 575 → 1 207 583 |
+| `9.7.synth50.direct.cfg-test-json` | 6.986 | 6.964 | +0.019 [−0.079, +0.112] | +0.27% | −0.018 [−0.042, +0.021] | +0.12% | 5224 → 5288 | 2 689 → 2 689 (+0.0%) | 381 146 → 381 183 |
+| `9.7.synth50.direct.tables-text` | 25.092 | 23.888 | −1.143 [−1.256, −0.961] | −4.56% | −0.081 [−0.136, −0.027] | −4.13% | 7320 → 7232 | 11 126 → 8 278 (−25.6%) | 1 426 300 → 1 381 844 |
+| `9.7.synth50.direct.table-json` | 24.970 | 24.081 | −0.986 [−1.106, −0.662] | −3.95% | −0.071 [−0.109, −0.023] | −4.10% | 7352 → 7472 | 11 113 → 8 265 (−25.6%) | 1 416 733 → 1 372 277 |
+| `9.7.synth50.direct.dump` | 26.263 | 25.209 | −1.037 [−1.188, −0.842] | −3.95% | −0.058 [−0.111, −0.034] | −2.54% | 7360 → 7360 | 11 114 → 8 266 (−25.6%) | 1 416 614 → 1 372 158 |
+| `9.7.synth50.direct.render.go-schema` | 25.829 | 24.905 | −0.892 [−1.041, −0.752] | −3.45% | −0.064 [−0.116, −0.006] | −3.03% | 8080 → 8096 | 22 197 → 19 349 (−12.8%) | 1 538 852 → 1 494 396 |
+| `9.7.synth50.load.cache-load` | 27.053 | 26.048 | −1.056 [−1.264, −0.934] | −3.90% | −0.073 [−0.175, +0.011] | −2.07% | 7920 → 7824 | 11 654 → 8 810 (−24.4%) | 1 672 050 → 1 627 610 |
+| `9.7.synth50.cached.table-json` | 3.530 | 3.579 | +0.064 [−0.020, +0.132] | +1.81% | +0.018 [−0.002, +0.047] | +0.13% | 4600 → 4624 | 2 885 → 2 885 (+0.0%) | 341 232 → 341 265 |
+| `9.7.synth50.cached.dump` | 8.152 | 8.172 | +0.028 [−0.076, +0.081] | +0.34% | −0.011 [−0.042, +0.025] | +0.09% | 8144 → 8184 | 15 395 → 15 395 (+0.0%) | 3 239 118 → 3 239 126 |
+| `9.7.synth500.direct.cfg-test-json` | 6.985 | 6.963 | −0.048 [−0.130, +0.053] | −0.69% | +0.015 [−0.026, +0.070] | +0.20% | 5232 → 5312 | 2 692 → 2 692 (+0.0%) | 381 151 → 381 188 |
+| `9.7.synth500.direct.tables-text` | 64.031 | 54.158 | −10.045 [−10.267, −9.835] | −15.69% | −0.960 [−1.034, −0.859] | −11.21% | 18816 → 18144 | 70 694 → 44 071 (−37.7%) | 12 313 298 → 11 694 207 |
+| `9.7.synth500.direct.table-json` | 63.917 | 53.878 | −10.061 [−10.391, −9.805] | −15.74% | −0.909 [−0.949, −0.849] | −11.17% | 18752 → 18056 | 70 218 → 43 607 (−37.9%) | 12 216 541 → 11 597 450 |
+| `9.7.synth500.direct.dump` | 76.429 | 66.774 | −9.588 [−10.109, −9.188] | −12.54% | −0.830 [−0.892, −0.751] | −4.15% | 18736 → 18288 | 70 586 → 43 971 (−37.7%) | 12 216 424 → 11 597 333 |
+| `9.7.synth500.direct.render.go-schema` | 69.151 | 59.105 | −9.983 [−10.360, −9.737] | −14.44% | −0.866 [−0.976, −0.793] | −6.48% | 19800 → 19088 | 174 911 → 148 296 (−15.2%) | 12 674 845 → 12 055 754 |
+| `9.7.synth500.load.cache-load` | 85.441 | 75.650 | −10.023 [−10.465, −9.583] | −11.73% | −0.708 [−0.903, −0.629] | −3.48% | 19392 → 18832 | 77 120 → 50 513 (−34.5%) | 12 618 037 → 11 998 962 |
+| `9.7.synth500.cached.table-json` | 3.689 | 3.679 | +0.024 [−0.056, +0.088] | +0.65% | −0.005 [−0.022, +0.046] | +0.14% | 4600 → 4672 | 2 974 → 2 974 (+0.0%) | 341 227 → 341 260 |
+| `9.7.synth500.cached.dump` | 48.558 | 48.436 | +0.066 [−0.088, +0.254] | +0.14% | +0.157 [−0.117, +0.278] | −0.06% | 38792 → 38912 | 125 608 → 125 608 (+0.0%) | 30 006 859 → 30 006 867 |
+| `9.7.synth2000.direct.cfg-test-json` | 6.960 | 6.986 | +0.045 [−0.043, +0.096] | +0.65% | +0.015 [−0.035, +0.062] | +0.09% | 5272 → 5264 | 2 692 → 2 692 (+0.0%) | 381 156 → 381 193 |
+| `9.7.synth2000.direct.tables-text` | 190.005 | 153.220 | −36.635 [−38.176, −35.927] | −19.28% | −2.931 [−3.137, −2.696] | −12.54% | 56856 → 54296 | 266 936 → 161 852 (−39.4%) | 48 712 052 → 45 954 946 |
+| `9.7.synth2000.direct.table-json` | 189.649 | 152.278 | −37.925 [−38.402, −36.863] | −20.00% | −2.974 [−3.263, −2.899] | −12.85% | 56440 → 53880 | 264 991 → 159 895 (−39.7%) | 48 324 615 → 45 567 509 |
+| `9.7.synth2000.direct.dump` | 239.632 | 203.294 | −37.062 [−37.971, −36.017] | −15.47% | −2.931 [−3.283, −2.574] | −4.24% | 56472 → 53920 | 266 697 → 161 609 (−39.4%) | 48 324 496 → 45 567 390 |
+| `9.7.synth2000.direct.render.go-schema` | 209.440 | 171.634 | −37.801 [−38.644, −37.230] | −18.05% | −2.991 [−3.319, −2.886] | −6.72% | 58632 → 56120 | 681 671 → 576 579 (−15.4%) | 49 915 756 → 47 158 650 |
+| `9.7.synth2000.load.cache-load` | 278.321 | 240.621 | −36.493 [−38.054, −35.663] | −13.11% | −2.711 [−3.516, −2.089] | −3.42% | 57912 → 55464 | 293 210 → 188 130 (−35.8%) | 49 417 811 → 46 660 721 |
+| `9.7.synth2000.cached.table-json` | 3.635 | 3.673 | +0.026 [−0.042, +0.070] | +0.72% | −0.006 [−0.012, +0.028] | +0.18% | 4664 → 4704 | 3 158 → 3 158 (+0.0%) | 341 232 → 341 265 |
+| `9.7.synth2000.cached.dump` | 181.262 | 181.214 | −0.516 [−1.497, +0.395] | −0.28% | −0.212 [−1.329, +0.333] | +0.03% | 141288 → 141336 | 494 778 → 494 778 (+0.0%) | 119 535 648 → 119 535 656 |
+
+The direct reads and `cache load` moved on every schema, by more as the schema
+grows. `cfg database test` reads no catalogue and the cached reads issue no
+statement: both moved within the floor in wall time, by −0.06% to +0.29% in
+instructions, which is the effect of a different build, and not at all in
+allocations. Phase 1's combination of its own variants, `exp-all`, read at
+2 000 tables −32.3 and −33.2 ms of wall time and −0.7 and −0.5 ms of CPU, where
+`after` reads −37.5 and −37.9 ms and −4.1 and −3.0 ms.
+
+### What was rejected, and why
+
+- **Phase 1's sort of the index and key-column rows** (`exp_statsort`), which
+  decoded three fields of every row, sorted a vector of keys and rebuilt the
+  row vector: it is replaced by a verification made in the fold's own pass,
+  which decodes one more field per index row, and a sort only where the
+  verification fails — never, on the observed servers.
+- **Making the key-column order in the fold.** The shared fold of `mariadb/`
+  appends a key's columns in row order and the model borrows from the rows, so
+  the order is made on the rows the read keeps, as each statement's rows are
+  fetched; changing the shared fold is outside the surface of `#351`. The cost:
+  a key-column field that does not decode refuses the read at that point,
+  with the `70` the fold would raise, rather than at the fold.
+- **Sorting first, for the indexes.** Sorting the rows on every read costs a
+  key vector and a sort to produce an order the rows already arrive in; the
+  fold trusts the arrival order only as far as `in_sequence` proves it, and
+  pays a second fold only where the proof fails.
+- **Dropping `PARAMETERS`' and `ROUTINES`' clauses.** Not among the findings:
+  the parameters' order is read in arrival order, and the routines' clause
+  decides between a function and a procedure of one name
+  (`fr_mysql_036_a_function_and_a_procedure_of_one_name_keep_the_order_the_statement_states`).
+- **Positional field access and the text protocol.** Out of scope: the first
+  touches shared code, the second is an open decision.
+
+### Confounders — read this before the tables
+
+- **The host was not idle.** The load average was 6.17 to 7.53 over the noise
+  floor, which the builds and comparisons just before it raised; 2.85 to 6.17
+  over the per-change readings, falling; 2.42 to 3.34 over the combined A/B;
+  2.18 to 3.37 over the `measure.sh` readings. The servers' virtual machine,
+  which the workload drives, is counted in it.
+- **The server is part of every wall-time figure**, on the same host and in a
+  virtual machine. Changes 1 to 3 are server time, which is why they move wall
+  time far more than the client's CPU.
+- **`measure.sh` does not rotate the arms.** Within each workload's `hyperfine`
+  call `A`'s runs precede `B`'s; its instruction counts are not affected, its
+  means and peak RSS may be.
+- **`dhat` does not see the server**, and sees only the client's Rust heap.
+- **The `instr` arms were built two ways.** `before`'s is phase 1's, unstripped;
+  the others are stripped. A workload the change does not reach —
+  `cfg database test`, every cached read — allocates the same blocks under
+  both, and their totals are comparable.
+- **The synthetic schemas hold no rows**, and `tpl` reads the catalogue alone.
+
+### What was not measured — stated, not implied
+
+- **Three of the four targets.** `x86_64-unknown-linux-musl`,
+  `aarch64-unknown-linux-musl` and `x86_64-apple-darwin` carry no figure here.
+- **Each change against `0261bfb` alone.** The per-change figures are
+  leave-one-out readings of the finished tree; phase 1's single-change
+  experiments against `0261bfb` are in `target/mysql-profile/results/`.
+- **The other 952 workloads' time.** They were compared for output only.
+- **A server that returns the index or key-column rows out of sequence.** The
+  re-fold and the sort are exercised by tests over permuted fixture rows, not
+  timed.
+- **Medians at the floors of `NFR-PERF-009`.**
+
+### Reproduction
+
+The apparatus lives in `target/mysql-profile/`, which is git-ignored and not
+committed; phase 2's scripts, binaries and readings are under its `phase2/`.
+
+```sh
+M=$PWD/target/mysql-profile; P=$M/phase2
+./scripts/mysql/up.sh 8.4 9.7
+. scripts/mysql/series.env
+for s in 8.4 9.7; do for n in 50 500 2000; do tpl_mysql_sql $s < "$M/sql/synth$n.sql"; done; done
+
+# 1. The arms. `before` is $M/bin/tpl-head (target/release/tpl at 0261bfb).
+#    $P/tools/build-all.sh <variant>… copies the tree into $P/lab-var-plain and
+#    $P/lab-var-dhat, applies $P/tools/variant.py (final, or v1 … v8: final with
+#    one change reverted), the dhat copy taking $M/instr's main.rs, Cargo.toml
+#    and Cargo.lock, and writes $P/bin/tpl-<variant>[-dhat].
+$P/tools/build-all.sh final v1 v2 v3 v4 v5 v6 v7 v8
+
+# 2. Output identity: 0 differences over the 1 016 workloads.
+$M/compare.sh $M/bin/tpl-head; $M/compare.sh $P/bin/tpl-final
+
+# 3. The campaign, in this order: noise floor, the eight leave-one-out A/Bs, the
+#    combined A/B, measure.sh combined and per change, dhat per arm.
+$P/tools/measure-all.sh
+$P/tools/tables.py $P/results combined; $P/tools/tables.py $P/results loo v1 v2 v3 v4 v5 v6 v7 v8
+./scripts/mysql/down.sh
+```

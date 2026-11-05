@@ -15,8 +15,14 @@
 //!
 //! **The count is fixed before the first statement is sent**: the plan is a
 //! constant, and [`read`] issues it and nothing besides, so `NFR-PERF-001` and
-//! `NFR-PERF-002` hold by construction (`FR-MYSQL-042`); [`Catalogue`] keeps
-//! what was issued, so a test reads the execution rather than the source.
+//! `NFR-PERF-002` hold by construction (`FR-MYSQL-042`); in a test build
+//! [`Catalogue`] keeps what was issued, so a test reads the execution rather
+//! than the source. The record is the tests' alone, and a release build
+//! neither keeps nor allocates it (rmp `#351`).
+//!
+//! **One order is made as the rows are fetched**: a foreign key's columns,
+//! which the fold shared with `crate::mariadb::catalogue` appends in the order
+//! the rows stand in ([`arrived`]). Every other order is the fold's.
 //!
 //! **The model borrows the rows**, as `crate::mariadb::catalogue` explains for
 //! a `mariadb` read: [`Catalogue`] owns them, and [`Catalogue::model`] hands
@@ -68,15 +74,9 @@ pub(crate) struct Catalogue {
     schema: String,
 
     /// The statements that were issued, in order, which the assertions of
-    /// `NFR-PERF-001` and `NFR-PERF-002` read.
-    #[cfg_attr(
-        not(test),
-        allow(
-            dead_code,
-            reason = "it exists to be observed by the assertions of NFR-PERF-001 and \
-                      NFR-PERF-002, and a process that acted on it would be acting on its own plan"
-        )
-    )]
+    /// `NFR-PERF-001` and `NFR-PERF-002` read. A process that acted on it would
+    /// be acting on its own plan, so only a test build carries it.
+    #[cfg(test)]
     issued: Vec<&'static str>,
 
     /// The rows of each statement, in the slot [`Read::slot`] gives it.
@@ -133,6 +133,7 @@ pub(crate) fn read(
     schema: &str,
 ) -> Result<Catalogue, Error> {
     let plan = statements::plan();
+    #[cfg(test)]
     let mut issued = Vec::with_capacity(plan.len());
     let mut rows: [Vec<MySqlRow>; Read::COUNT] = std::array::from_fn(|_| Vec::new());
 
@@ -147,19 +148,49 @@ pub(crate) fn read(
             )
         })?;
 
+        #[cfg(test)]
         issued.push(statement.sql());
 
         if let Some(slot) = rows.get_mut(statement.slot()) {
-            *slot = fetched;
+            *slot = arrived(statement, fetched)?;
         }
     }
 
     Ok(Catalogue {
         server: session.server().clone(),
         schema: schema.to_owned(),
+        #[cfg(test)]
         issued,
         rows,
     })
+}
+
+/// The rows one statement returned, in the order the read keeps them.
+///
+/// The key-column rows are put in the order of each key's positions
+/// (`FR-MYSQL-033`), because the fold they go through appends a key's columns
+/// in the order the rows stand in and the model borrows from them; every other
+/// read is kept as it arrived, and its order is the fold's.
+///
+/// # Errors
+///
+/// Returns [`Error::InternalInvariant`] where a field the order is read from
+/// does not decode.
+fn arrived(statement: Read, rows: Vec<MySqlRow>) -> Result<Vec<MySqlRow>, Error> {
+    match statement {
+        Read::KeyColumns => fold::key_columns(rows),
+        Read::Schema
+        | Read::Tables
+        | Read::Columns
+        | Read::Indexes
+        | Read::ForeignKeyRules
+        | Read::CheckOwners
+        | Read::Checks
+        | Read::Triggers
+        | Read::Views
+        | Read::Routines
+        | Read::Parameters => Ok(rows),
+    }
 }
 
 /// Runs the privilege probe of `FR-CFG-044` over a settled session.

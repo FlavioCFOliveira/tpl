@@ -40,6 +40,27 @@
 //! is one `FR-MYSQL-025` … `FR-MYSQL-038` maps to the model or uses as a
 //! discriminant. Each field named exists by that name on both series, per the
 //! observation `FR-MYSQL-015` records.
+//!
+//! **Two statements order their rows, and ten do not.** Every other order the
+//! model carries is the fold's, made from the values the rows carry whatever
+//! order they arrive in:
+//!
+//! | Order | Made by | From |
+//! |---|---|---|
+//! | A table's columns | the fold, by the values of the position | `ORDINAL_POSITION` (`FR-MYSQL-027`) |
+//! | An index's members | the fold, by the sequence | `SEQ_IN_INDEX` (`FR-MYSQL-032`) |
+//! | A foreign key's columns | the read, before the fold, by the position | `ORDINAL_POSITION` of `KEY_COLUMN_USAGE` (`FR-MYSQL-033`) |
+//! | Every collection ordered by name | the fold, byte-wise | the name (`NFR-DET-002`) |
+//! | The routines of one name | **this statement's `ORDER BY`** | `ROUTINE_TYPE` |
+//! | A routine's parameters | **this statement's `ORDER BY`** | `ORDINAL_POSITION` of `PARAMETERS` |
+//!
+//! The routines keep the clause because a function and a procedure may share
+//! a name (`FR-CAT-018`): the fold orders the routines by name with a stable
+//! sort, so the order the type gives on the server is the order the two keep.
+//! The parameters keep it because the fold appends them in the order they
+//! arrive. *Removed for rmp `#351`:* the clause of the other nine statements
+//! that carried one, which made the server sort what the fold orders anyway
+//! or never reads in order (`BENCHMARKS.md`, 2026-11-05).
 
 /// The schema row (`FR-MYSQL-025`): the three fields the model carries.
 const SCHEMA: &str = "SELECT SCHEMA_NAME, DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME \
@@ -48,65 +69,60 @@ const SCHEMA: &str = "SELECT SCHEMA_NAME, DEFAULT_CHARACTER_SET_NAME, DEFAULT_CO
 /// The table rows (`FR-MYSQL-026`). The twelve volatile fields and the two
 /// `FR-CAT-053` names no property for are not named.
 const TABLES: &str = "SELECT TABLE_NAME, TABLE_TYPE, ENGINE, TABLE_COLLATION, TABLE_COMMENT \
-     FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME";
+     FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ?";
 
 /// The column rows (`FR-MYSQL-027`). `CHARACTER_OCTET_LENGTH`, `COLUMN_KEY`,
 /// `PRIVILEGES` and `SRS_ID` are not carried and not named.
 const COLUMNS: &str = "SELECT TABLE_NAME, COLUMN_NAME, ORDINAL_POSITION, COLUMN_DEFAULT, \
      IS_NULLABLE, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, \
      DATETIME_PRECISION, CHARACTER_SET_NAME, COLLATION_NAME, COLUMN_TYPE, EXTRA, COLUMN_COMMENT, \
-     GENERATION_EXPRESSION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? \
-     ORDER BY TABLE_NAME, ORDINAL_POSITION";
+     GENERATION_EXPRESSION FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ?";
 
 /// The index rows (`FR-MYSQL-032`). `EXPRESSION` is read as the mark of a
-/// functional key part (`FR-MYSQL-024`) and not carried; `CARDINALITY`,
-/// `PACKED`, `NULLABLE` and `COMMENT` are not named.
-const INDEXES: &str = "SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE, COLUMN_NAME, COLLATION, \
-     SUB_PART, INDEX_TYPE, INDEX_COMMENT, IS_VISIBLE, EXPRESSION \
-     FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = ? \
-     ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX";
+/// functional key part (`FR-MYSQL-024`) and not carried, and `SEQ_IN_INDEX` as
+/// the order of the members; `CARDINALITY`, `PACKED`, `NULLABLE` and `COMMENT`
+/// are not named.
+const INDEXES: &str = "SELECT TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX, NON_UNIQUE, COLUMN_NAME, \
+     COLLATION, SUB_PART, INDEX_TYPE, INDEX_COMMENT, IS_VISIBLE, EXPRESSION \
+     FROM INFORMATION_SCHEMA.STATISTICS WHERE TABLE_SCHEMA = ?";
 
 /// The rules half of a foreign key (`FR-MYSQL-033`), the fields `FR-CAT-045`
 /// reads under the same names.
 const RULES: &str = "SELECT TABLE_NAME, CONSTRAINT_NAME, UNIQUE_CONSTRAINT_NAME, MATCH_OPTION, \
      UPDATE_RULE, DELETE_RULE, REFERENCED_TABLE_NAME \
-     FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ? \
-     ORDER BY TABLE_NAME, CONSTRAINT_NAME";
+     FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ?";
 
 /// The columns half of a foreign key (`FR-MYSQL-033`), restricted to the rows
 /// that name a referenced table, as `FR-CAT-045` restricts them; the
-/// referenced schema is selected for `FR-CAT-057`.
-const KEY_COLUMNS: &str = "SELECT TABLE_NAME, CONSTRAINT_NAME, COLUMN_NAME, \
+/// referenced schema is selected for `FR-CAT-057`, and `ORDINAL_POSITION` as
+/// the order of the key's columns.
+const KEY_COLUMNS: &str = "SELECT TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION, COLUMN_NAME, \
      REFERENCED_TABLE_SCHEMA, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME \
      FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE \
-     WHERE TABLE_SCHEMA = ? AND REFERENCED_TABLE_NAME IS NOT NULL \
-     ORDER BY TABLE_NAME, CONSTRAINT_NAME, ORDINAL_POSITION";
+     WHERE TABLE_SCHEMA = ? AND REFERENCED_TABLE_NAME IS NOT NULL";
 
 /// The table of each `CHECK` constraint (`FR-MYSQL-034`): the rows of the
 /// table-constraint table whose type is `CHECK`, and no other row.
 const CHECK_OWNERS: &str = "SELECT TABLE_NAME, CONSTRAINT_NAME \
      FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS \
-     WHERE CONSTRAINT_SCHEMA = ? AND CONSTRAINT_TYPE = 'CHECK' \
-     ORDER BY TABLE_NAME, CONSTRAINT_NAME";
+     WHERE CONSTRAINT_SCHEMA = ? AND CONSTRAINT_TYPE = 'CHECK'";
 
 /// The clause of each `CHECK` constraint (`FR-MYSQL-034`).
 const CHECKS: &str = "SELECT CONSTRAINT_NAME, CHECK_CLAUSE \
-     FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ? \
-     ORDER BY CONSTRAINT_NAME";
+     FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ?";
 
 /// The trigger rows (`FR-MYSQL-038`), the fields `FR-CAT-050` reads.
 const TRIGGERS: &str = "SELECT EVENT_OBJECT_TABLE, TRIGGER_NAME, EVENT_MANIPULATION, \
      ACTION_TIMING, ACTION_ORDER, ACTION_STATEMENT, ACTION_ORIENTATION, \
      ACTION_REFERENCE_OLD_ROW, ACTION_REFERENCE_NEW_ROW, SQL_MODE, DEFINER, \
      CHARACTER_SET_CLIENT, COLLATION_CONNECTION, DATABASE_COLLATION \
-     FROM INFORMATION_SCHEMA.TRIGGERS WHERE EVENT_OBJECT_SCHEMA = ? \
-     ORDER BY EVENT_OBJECT_TABLE, TRIGGER_NAME";
+     FROM INFORMATION_SCHEMA.TRIGGERS WHERE EVENT_OBJECT_SCHEMA = ?";
 
 /// The view rows (`FR-MYSQL-035`): the eight fields that fill eight of the
 /// nine properties; MySQL's view catalogue has no algorithm field.
 const VIEWS: &str = "SELECT TABLE_NAME, VIEW_DEFINITION, CHECK_OPTION, IS_UPDATABLE, DEFINER, \
      SECURITY_TYPE, CHARACTER_SET_CLIENT, COLLATION_CONNECTION \
-     FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME";
+     FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA = ?";
 
 /// The routine rows (`FR-MYSQL-036`), the fields `FR-CAT-048` reads.
 const ROUTINES: &str = "SELECT ROUTINE_NAME, ROUTINE_TYPE, DTD_IDENTIFIER, DATA_TYPE, \
@@ -306,6 +322,33 @@ mod tests {
     fn fr_cfg_044_the_probe_is_the_schema_row_every_read_issues_first() {
         assert_eq!(probe(), Read::Schema);
         assert_eq!(plan()[0], Read::Schema);
+    }
+
+    #[test]
+    fn fr_mysql_036_037_only_the_routine_and_parameter_statements_order_their_rows() {
+        // rmp #351: every other order the model carries is the fold's, so no
+        // other statement makes the server sort.
+        for statement in plan() {
+            let ordered = statement.sql().contains("ORDER BY");
+            let owed = matches!(statement, Read::Routines | Read::Parameters);
+
+            assert_eq!(ordered, owed, "{}", statement.sql());
+        }
+        assert!(
+            Read::Routines
+                .sql()
+                .ends_with(" ORDER BY ROUTINE_NAME, ROUTINE_TYPE")
+        );
+        assert!(
+            Read::Parameters
+                .sql()
+                .ends_with(" ORDER BY SPECIFIC_NAME, ROUTINE_TYPE, ORDINAL_POSITION")
+        );
+
+        // The fields the fold orders by are named.
+        assert!(Read::Columns.sql().contains(" ORDINAL_POSITION,"));
+        assert!(Read::Indexes.sql().contains(" SEQ_IN_INDEX,"));
+        assert!(Read::KeyColumns.sql().contains(" ORDINAL_POSITION,"));
     }
 
     #[test]

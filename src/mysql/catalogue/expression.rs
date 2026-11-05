@@ -89,21 +89,25 @@ impl<'a> Extra<'a> {
     /// the requirement takes the facts of the phrases it recognises and does
     /// not fail the read, on the ground `FR-CAT-055` gives. `MASKING POLICY` is
     /// recognised and carries no fact the model has a property for.
+    ///
+    /// No phrase is longer than three tokens, so the field is read through a
+    /// window of three over the split, each token paired with the byte it
+    /// begins at, and a phrase advances the window by its length.
     pub(super) fn parse(field: &'a str) -> Self {
-        let mut tokens: Vec<(usize, &'a str)> = Vec::new();
+        // PERF: a window over the split rather than a vector of every token,
+        // which allocated once per column (rmp #351).
         let mut start = 0;
-
-        for token in field.split(' ') {
-            tokens.push((start, token));
+        let mut tokens = field.split(' ').map(|token| {
+            let begins = start;
             start += token.len() + 1;
-        }
-
+            (begins, token)
+        });
+        let mut window = [tokens.next(), tokens.next(), tokens.next()];
         let mut extra = Self::default();
-        let mut at = 0;
 
-        while let Some(&(begins, token)) = tokens.get(at) {
-            let second = tokens.get(at + 1).map_or("", |&(_, token)| token);
-            let third = tokens.get(at + 2);
+        while let [Some((begins, token)), next, third] = window {
+            let second = next.map_or("", |(_, token)| token);
+            let mut length = 1;
 
             if token.eq_ignore_ascii_case("auto_increment") {
                 extra.auto_increment = true;
@@ -113,21 +117,23 @@ impl<'a> Extra<'a> {
                 extra.default_generated = true;
             } else if phrase(token, second, ("VIRTUAL", "GENERATED")) {
                 extra.storage = Some(GeneratedStorage::Virtual);
-                at += 1;
+                length = 2;
             } else if phrase(token, second, ("STORED", "GENERATED")) {
                 extra.storage = Some(GeneratedStorage::Stored);
-                at += 1;
+                length = 2;
             } else if phrase(token, second, ("MASKING", "POLICY")) {
-                at += 1;
+                length = 2;
             } else if phrase(token, second, ("on", "update"))
-                && let Some(&(word_begins, word)) = third
+                && let Some((word_begins, word)) = third
                 && !word.is_empty()
             {
                 extra.on_update = field.get(begins..word_begins + word.len());
-                at += 2;
+                length = 3;
             }
 
-            at += 1;
+            for _ in 0..length {
+                window = [window[1], window[2], tokens.next()];
+            }
         }
 
         extra
@@ -253,5 +259,109 @@ mod tests {
         assert!(masked.default_generated && masked.invisible);
         assert_eq!(masked.storage, None);
         assert_eq!(masked.on_update, None);
+    }
+
+    /// The reading [`Extra::parse`] replaced in rmp `#351`, kept as the oracle
+    /// of its replacement: the field split into a vector of tokens, each with
+    /// the byte it begins at, read by index.
+    fn parsed_through_a_vector(field: &str) -> Extra<'_> {
+        let mut tokens: Vec<(usize, &str)> = Vec::new();
+        let mut start = 0;
+
+        for token in field.split(' ') {
+            tokens.push((start, token));
+            start += token.len() + 1;
+        }
+
+        let mut extra = Extra::default();
+        let mut at = 0;
+
+        while let Some(&(begins, token)) = tokens.get(at) {
+            let second = tokens.get(at + 1).map_or("", |&(_, token)| token);
+            let third = tokens.get(at + 2);
+
+            if token.eq_ignore_ascii_case("auto_increment") {
+                extra.auto_increment = true;
+            } else if token.eq_ignore_ascii_case("INVISIBLE") {
+                extra.invisible = true;
+            } else if token.eq_ignore_ascii_case("DEFAULT_GENERATED") {
+                extra.default_generated = true;
+            } else if super::phrase(token, second, ("VIRTUAL", "GENERATED")) {
+                extra.storage = Some(GeneratedStorage::Virtual);
+                at += 1;
+            } else if super::phrase(token, second, ("STORED", "GENERATED")) {
+                extra.storage = Some(GeneratedStorage::Stored);
+                at += 1;
+            } else if super::phrase(token, second, ("MASKING", "POLICY")) {
+                at += 1;
+            } else if super::phrase(token, second, ("on", "update"))
+                && let Some(&(word_begins, word)) = third
+                && !word.is_empty()
+            {
+                extra.on_update = field.get(begins..word_begins + word.len());
+                at += 2;
+            }
+
+            at += 1;
+        }
+
+        extra
+    }
+
+    #[test]
+    fn fr_mysql_030_the_window_reads_every_field_as_the_vector_of_tokens_did() {
+        // rmp #351: every field of up to four tokens drawn from the words of
+        // FR-MYSQL-030's phrases, in both cases, with the empty token a
+        // leading, trailing or doubled space makes and one word no phrase
+        // holds, is read alike by both: the 41 371 fields of 0 to 4 words.
+        const WORDS: [&str; 14] = [
+            "auto_increment",
+            "INVISIBLE",
+            "DEFAULT_GENERATED",
+            "VIRTUAL",
+            "STORED",
+            "GENERATED",
+            "generated",
+            "MASKING",
+            "POLICY",
+            "on",
+            "UPDATE",
+            "CURRENT_TIMESTAMP(3)",
+            "",
+            "x",
+        ];
+
+        let mut fields = vec![String::new()];
+        let mut shorter: Vec<Vec<&str>> = vec![Vec::new()];
+        for _ in 0..4 {
+            let longer: Vec<Vec<&str>> = shorter
+                .iter()
+                .flat_map(|words| {
+                    WORDS.iter().map(move |word| {
+                        let mut longer = words.clone();
+                        longer.push(word);
+                        longer
+                    })
+                })
+                .collect();
+            fields.extend(longer.iter().map(|words| words.join(" ")));
+            shorter = longer;
+        }
+        assert_eq!(fields.len(), 1 + 14 + 196 + 2_744 + 38_416);
+
+        let mut facts = 0;
+        for field in &fields {
+            let read = Extra::parse(field);
+            assert_eq!(read, parsed_through_a_vector(field), "{field:?}");
+            facts += usize::from(read != Extra::default());
+        }
+
+        // The corpus reaches every fact, so the comparison is not vacuous.
+        assert!(
+            fields
+                .iter()
+                .any(|field| Extra::parse(field).on_update.is_some())
+        );
+        assert!(facts > fields.len() / 2, "{facts} of {}", fields.len());
     }
 }

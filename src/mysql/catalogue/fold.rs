@@ -148,29 +148,94 @@ fn tables(rows: &[MySqlRow]) -> Result<Tables<'_>, Error> {
     Ok(Tables::new(parts, positions))
 }
 
-/// Attaches every column to its table, in the order of `ORDINAL_POSITION`
-/// (`FR-MYSQL-027`).
+/// The table lookup of the previous row, answered again while the owner
+/// repeats.
 ///
-/// The statement orders the rows by the values of the position, and the fold
-/// keeps that order: it assumes neither a first position of `1` nor
-/// contiguous positions, which a hidden generated invisible primary key would
-/// break. A column whose owning object is not covered is not presented, per
-/// `FR-CAT-052`, and the rest of its row is never decoded.
+/// The member rows of one table arrive together on both series, so all but the
+/// first row of a run compare one name with the last instead of searching the
+/// covered tables. Any order is still answered: an owner that differs from the
+/// last is looked up, and the answer is a function of the name alone.
+#[derive(Default)]
+struct Owner<'a> {
+    /// The last owner looked up, with where its table stands.
+    last: Option<(&'a str, Option<usize>)>,
+}
+
+impl<'a> Owner<'a> {
+    /// Where the table `owner` names stands, as [`Tables::position`] answers.
+    fn position(&mut self, tables: &Tables<'a>, owner: &'a str) -> Option<usize> {
+        if let Some((last, at)) = self.last
+            && last == owner
+        {
+            return at;
+        }
+
+        let at = tables.position(owner);
+        self.last = Some((owner, at));
+
+        at
+    }
+}
+
+/// Attaches every column to its table, in the order of the values of
+/// `ORDINAL_POSITION` (`FR-MYSQL-027`).
+///
+/// No statement orders the rows, so the fold does: each table's columns are
+/// sorted by the value of the position once its rows are attached. It assumes
+/// neither a first position of `1` nor contiguous positions, which a hidden
+/// generated invisible primary key breaks, and nothing of the order the rows
+/// arrived in. Two columns of one table never share a position, so the sort
+/// has no tie to break. A column whose owning object is not covered is not
+/// presented, per `FR-CAT-052`, and the rest of its row is never decoded.
+///
+/// *Observed on 2026-11-05, on the 2 200 tables of a schema of the profiling
+/// surface of rmp `#351`:* the rows of one table arrive together on `8.4` and
+/// `9.7`, in the order of the position on `8.4` and not on `9.7`. The rows are
+/// therefore gathered by runs, as `crate::mariadb::catalogue::fold` gathers
+/// them, and a run is sorted when it is attached; a table whose rows come back
+/// in more than one run is sorted whole each time, so any order folds to the
+/// same columns.
 fn columns<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Error> {
+    // PERF: one vector reused across runs, grown to the widest table once, and
+    // one exactly sized allocation per table, rather than every table's vector
+    // grown by doubling from empty.
+    let mut run: Vec<Column<'a>> = Vec::new();
+    let mut run_at: Option<usize> = None;
+    let mut owners = Owner::default();
+
     for row in rows {
         let owner = text(row, "TABLE_NAME")?;
 
-        let Some(at) = tables.position(owner) else {
+        let Some(at) = owners.position(tables, owner) else {
             continue;
         };
         let column = column(row, owner)?;
 
-        if let Some(table) = tables.at(at) {
-            table.columns.push(column);
+        if run_at != Some(at) {
+            attach(tables, run_at, &mut run);
+            run_at = Some(at);
         }
+        run.push(column);
     }
 
+    attach(tables, run_at, &mut run);
+
     Ok(())
+}
+
+/// Moves one run of columns into the table at `at`, sized for them, puts the
+/// table's columns in the order of their positions, and leaves `run` empty.
+fn attach<'a>(tables: &mut Tables<'a>, at: Option<usize>, run: &mut Vec<Column<'a>>) {
+    if let Some(table) = at.and_then(|at| tables.at(at)) {
+        table.columns.reserve_exact(run.len());
+        table.columns.append(run);
+        // FR-MYSQL-027: by the value of the position. The positions of one
+        // table are distinct, so an unstable sort orders them as a stable one
+        // would, and a run that arrived in order costs one pass.
+        table.columns.sort_unstable_by_key(|column| column.position);
+    } else {
+        run.clear();
+    }
 }
 
 /// One column (`FR-MYSQL-027` … `FR-MYSQL-031`).
@@ -251,27 +316,159 @@ fn functional(row: &MySqlRow) -> Result<bool, Error> {
     Ok(maybe_text(row, "COLUMN_NAME")?.is_none() && maybe_text(row, "EXPRESSION")?.is_some())
 }
 
-/// Folds the index read into one object per index (`FR-MYSQL-032`), less the
-/// indexes `FR-MYSQL-024` excludes.
+/// The sequence number the first member of an index, and the first column of a
+/// key, carries.
+const FIRST: u64 = 1;
+
+/// Whether a member row at `sequence` keeps the rows read so far in an order
+/// the fold can keep as it reads, given the sequence of the previous row
+/// where that row belonged to the same index or key.
+///
+/// A row that continues its group must come later in the sequence, and a row
+/// that opens a group must be its first member. That is enough for every
+/// group to arrive in one run, in ascending sequence, whatever else the order
+/// is: two runs of one group would both open at the first member, and the
+/// catalogue gives no two members of one group the same sequence
+/// (`FR-MYSQL-032`, `FR-MYSQL-033`). It is not necessary — a run that opens
+/// later in its sequence fails it, and is then sorted rather than trusted.
+const fn in_sequence(previous: Option<u64>, sequence: u64) -> bool {
+    match previous {
+        Some(previous) => sequence > previous,
+        None => sequence == FIRST,
+    }
+}
+
+/// The index the previous row of [`fold_indexes`] belonged to.
+#[derive(Clone, Copy)]
+struct Run<'a> {
+    /// Where its table stands.
+    at: usize,
+    /// Its name.
+    name: &'a str,
+    /// The sequence of the previous row.
+    sequence: u64,
+    /// Where the index stands in its table's collection, once a row opened it.
+    index: Option<usize>,
+}
+
+/// The order of the rows [`fold_indexes`] is given.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Arrival {
+    /// As the statement returned them, in no order it states: the fold
+    /// verifies, row by row, that it can keep the order they came in.
+    AsReturned,
+    /// Sorted by table, index and sequence.
+    Sorted,
+}
+
+/// What [`fold_indexes`] did.
+#[derive(PartialEq, Eq)]
+enum Folded {
+    /// Every row is folded, in the order of its index's sequence.
+    Whole,
+    /// A row arrived out of its index's sequence, or a second run of an index
+    /// began; the tables hold a partial fold.
+    Disordered,
+}
+
+/// Folds the index read into one object per index (`FR-MYSQL-032`), its
+/// members in the order of `SEQ_IN_INDEX`, less the indexes `FR-MYSQL-024`
+/// excludes.
+///
+/// No statement orders the rows. *Observed on 2026-11-05, on the 2 200 tables
+/// of a schema of the profiling surface of rmp `#351`, on `8.4` and `9.7`:*
+/// the rows of one index arrive together and in the order of the sequence. The
+/// fold therefore reads them as they arrive and verifies, row by row, that the
+/// order holds ([`in_sequence`]); where it does not, every index is folded
+/// again from the rows sorted by table, index and sequence, so any order folds
+/// to the same indexes. The cost of the order is one field decoded per row,
+/// and of a fold that cannot keep it, a sort.
+fn indexes<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Error> {
+    if fold_indexes(rows.iter(), tables, Arrival::AsReturned)? == Folded::Whole {
+        return Ok(());
+    }
+
+    // Nothing but this function has attached an index yet, so the partial
+    // fold is undone by emptying every table's collection.
+    let mut at = 0;
+    while let Some(table) = tables.at(at) {
+        table.indexes.clear();
+        at += 1;
+    }
+
+    let mut sorted = Vec::with_capacity(rows.len());
+    let mut owners = Owner::default();
+
+    for row in rows {
+        let Some(at) = owners.position(tables, text(row, "TABLE_NAME")?) else {
+            continue;
+        };
+
+        sorted.push((
+            (at, text(row, "INDEX_NAME")?, integer(row, "SEQ_IN_INDEX")?),
+            row,
+        ));
+    }
+
+    // No two rows of one index share a sequence, so the keys are distinct and
+    // an unstable sort orders them as a stable one would.
+    sorted.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+
+    fold_indexes(
+        sorted.into_iter().map(|(_, row)| row),
+        tables,
+        Arrival::Sorted,
+    )?;
+
+    Ok(())
+}
+
+/// Folds index rows into their tables, in the order given.
 ///
 /// An index any row of which is a functional key part is excluded whole, and
 /// nothing is read to cover it: its other rows are not presented, so an index
-/// mixing a column and an expression is absent too.
-fn indexes<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Error> {
+/// mixing a column and an expression is absent too. A member is appended to
+/// the index its run opened; the first row of a run finds the index by its
+/// **exact** name, as `crate::mariadb::catalogue::fold` finds it, so that a
+/// second run of one index, which only sorted rows may carry, joins the first.
+fn fold_indexes<'a>(
+    rows: impl Iterator<Item = &'a MySqlRow>,
+    tables: &mut Tables<'a>,
+    arrival: Arrival,
+) -> Result<Folded, Error> {
     // One entry per (table, index) to exclude, built only where the read meets
     // a functional key part.
     let mut excluded: Vec<(usize, &'a str)> = Vec::new();
+    let mut owners = Owner::default();
+    let mut run: Option<Run<'a>> = None;
 
     for row in rows {
         let owner = text(row, "TABLE_NAME")?;
         let name = text(row, "INDEX_NAME")?;
 
-        let Some(at) = tables.position(owner) else {
+        let Some(at) = owners.position(tables, owner) else {
             continue;
         };
 
+        let sequence = integer(row, "SEQ_IN_INDEX")?;
+        let continued = run.filter(|run| run.at == at && run.name == name);
+
+        if arrival == Arrival::AsReturned
+            && !in_sequence(continued.map(|run| run.sequence), sequence)
+        {
+            return Ok(Folded::Disordered);
+        }
+
+        let opened = continued.and_then(|run| run.index);
+
         if functional(row)? {
             excluded.push((at, name));
+            run = Some(Run {
+                at,
+                name,
+                sequence,
+                index: opened,
+            });
             continue;
         }
 
@@ -285,9 +482,20 @@ fn indexes<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Erro
             continue;
         };
 
-        if let Some(index) = table.indexes.iter_mut().find(|index| index.name == name) {
+        let carried = opened.or_else(|| table.indexes.iter().position(|index| index.name == name));
+
+        // A run that opens on an index already carried is a second run of it,
+        // which `in_sequence` cannot see through a functional key part.
+        if arrival == Arrival::AsReturned && continued.is_none() && carried.is_some() {
+            return Ok(Folded::Disordered);
+        }
+
+        let index = if let Some(index) = carried.and_then(|at| table.indexes.get_mut(at)) {
             index.columns.push(member);
+            carried
         } else {
+            let opening = table.indexes.len();
+
             table.indexes.push(Index {
                 name: Cow::Borrowed(name),
                 // FR-MYSQL-032: unique where the non-unique field is 0.
@@ -299,7 +507,16 @@ fn indexes<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Erro
                 // inverted onto the fact MariaDB reports as ignored.
                 ignored: text(row, "IS_VISIBLE")? == NOT_VISIBLE,
             });
-        }
+
+            Some(opening)
+        };
+
+        run = Some(Run {
+            at,
+            name,
+            sequence,
+            index,
+        });
     }
 
     for (at, name) in excluded {
@@ -308,7 +525,75 @@ fn indexes<'a>(rows: &'a [MySqlRow], tables: &mut Tables<'a>) -> Result<(), Erro
         }
     }
 
-    Ok(())
+    Ok(Folded::Whole)
+}
+
+/// The key-column rows in an order the shared fold of `FR-MYSQL-033` keeps:
+/// the rows of each key together, in the order of `ORDINAL_POSITION`.
+///
+/// The fold the keys go through is `crate::mariadb::catalogue::fold`'s, which
+/// appends a key's columns in the order the rows stand in, and the model
+/// borrows from the rows, so the order is made on the rows the read keeps,
+/// once, as they are fetched. *Observed on 2026-11-05, as for the index read
+/// in [`indexes`]:* the rows of one key arrive together and in the order of the
+/// position, which [`in_sequence`] verifies row by row; rows that do not are
+/// sorted by table, constraint and position.
+///
+/// # Errors
+///
+/// Returns [`Error::InternalInvariant`] where one of the three fields does not
+/// decode, as the fold does for any field.
+pub(super) fn key_columns(rows: Vec<MySqlRow>) -> Result<Vec<MySqlRow>, Error> {
+    let disordered = {
+        let mut previous: Option<((&str, &str), u64)> = None;
+        let mut disordered = false;
+
+        for row in &rows {
+            let key = (text(row, "TABLE_NAME")?, text(row, "CONSTRAINT_NAME")?);
+            let position = integer(row, "ORDINAL_POSITION")?;
+            let continued = previous
+                .filter(|(last, _)| *last == key)
+                .map(|(_, position)| position);
+
+            if !in_sequence(continued, position) {
+                disordered = true;
+                break;
+            }
+
+            previous = Some((key, position));
+        }
+
+        disordered
+    };
+
+    if !disordered {
+        return Ok(rows);
+    }
+
+    let order: Vec<usize> = {
+        let mut keyed = Vec::with_capacity(rows.len());
+
+        for (at, row) in rows.iter().enumerate() {
+            let key = (
+                text(row, "TABLE_NAME")?,
+                text(row, "CONSTRAINT_NAME")?,
+                integer(row, "ORDINAL_POSITION")?,
+            );
+            keyed.push((key, at));
+        }
+
+        // No two columns of one key share a position, so the keys are distinct
+        // and the place a row arrived at never decides.
+        keyed.sort_unstable();
+        keyed.into_iter().map(|(_, at)| at).collect()
+    };
+
+    let mut slots: Vec<Option<MySqlRow>> = rows.into_iter().map(Some).collect();
+
+    Ok(order
+        .into_iter()
+        .filter_map(|at| slots.get_mut(at).and_then(Option::take))
+        .collect())
 }
 
 /// Attaches every `CHECK` constraint to its table (`FR-MYSQL-034`).
@@ -531,9 +816,78 @@ fn declared_type(row: &MySqlRow) -> Result<ColumnType<'_>, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::default;
+    use super::{FIRST, default, in_sequence};
     use crate::model::column_default::ColumnDefault;
     use std::borrow::Cow;
+
+    /// Every order of `rows`, by Heap's algorithm.
+    fn orders<T: Copy>(rows: &[T]) -> Vec<Vec<T>> {
+        fn heap<T: Copy>(rows: &mut Vec<T>, length: usize, orders: &mut Vec<Vec<T>>) {
+            if length <= 1 {
+                orders.push(rows.clone());
+                return;
+            }
+            for at in 0..length {
+                heap(rows, length - 1, orders);
+                let swapped = if length.is_multiple_of(2) { at } else { 0 };
+                rows.swap(swapped, length - 1);
+            }
+        }
+        let mut rows = rows.to_vec();
+        let mut orders = Vec::new();
+        let length = rows.len();
+        heap(&mut rows, length, &mut orders);
+        orders
+    }
+
+    /// Whether every row of `order`, a group and a sequence each, passes
+    /// [`in_sequence`] against the row before it, as the fold reads them.
+    fn kept(order: &[(char, u64)]) -> bool {
+        let mut previous: Option<(char, u64)> = None;
+        order.iter().all(|&(group, sequence)| {
+            let continued = previous
+                .filter(|(last, _)| *last == group)
+                .map(|(_, sequence)| sequence);
+            previous = Some((group, sequence));
+            in_sequence(continued, sequence)
+        })
+    }
+
+    #[test]
+    fn fr_mysql_032_033_an_order_the_fold_keeps_is_one_run_per_group_in_sequence() {
+        // rmp #351: over every order of the rows of three indexes (or keys) of
+        // three, two and one members — 720 orders — an order every row of
+        // which passes is one in which each group arrived in one run, in
+        // ascending sequence; and every such order passes.
+        let rows = [('a', 1), ('a', 2), ('a', 3), ('b', 1), ('b', 2), ('c', 1)];
+        let all = orders(&rows);
+        assert_eq!(all.len(), 720);
+
+        let mut admitted = 0;
+        for order in &all {
+            let runs = order
+                .windows(2)
+                .filter(|pair| pair[0].0 != pair[1].0)
+                .count()
+                + 1;
+            let ascending = order
+                .windows(2)
+                .all(|pair| pair[0].0 != pair[1].0 || pair[0].1 < pair[1].1);
+            let grouped = runs == 3;
+
+            assert_eq!(kept(order), grouped && ascending, "{order:?}");
+            admitted += usize::from(kept(order));
+        }
+        // The three groups in any order, each whole and ascending.
+        assert_eq!(admitted, 6);
+
+        // A run that opens later in its sequence is not trusted, even where
+        // the rest of its order is ascending: it is sorted instead.
+        assert!(!in_sequence(None, FIRST + 1));
+        assert!(!kept(&[('a', 2), ('a', 3)]));
+        // A gap in a run is admitted: only the order is relied on.
+        assert!(kept(&[('a', 1), ('a', 3), ('b', 1)]));
+    }
 
     #[test]
     fn fr_mysql_029_every_row_of_the_classification_is_reached_by_its_shape() {
