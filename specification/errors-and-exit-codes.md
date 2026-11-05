@@ -1,7 +1,7 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -743,6 +743,18 @@ Out of scope: the wording of any individual message.
   it returns takes the code `FR-LITE-040` gives it, so the codes step 6 can
   end with are unchanged. The order of the steps is unchanged.
 
+  *Amended in the seventy-ninth edition,* for rmp `#310`: the `${VAR}`
+  expansion of `FR-CONF-015` and the `password_command` of `FR-CONF-024`
+  belong to step 6, on its connection branch, and to no earlier step: they
+  are performed only by an invocation that opens a connection, before its
+  first connection phase, per `FR-CONF-056`, and a read the cache serves
+  performs neither. The `78`s they raise are among the codes step 6 already
+  carries. Step 5 selects the entry and refuses what the file holds as
+  written, and no longer expands a field or obtains the password; the
+  thirtieth edition's rejected option above, which says that it does,
+  describes entry resolution as it then stood. The order of the steps is
+  unchanged.
+
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
 
@@ -867,7 +879,7 @@ Out of scope: the wording of any individual message.
   | `64` | The token rejected as written, and why it was rejected: the unknown command or flag, the value that did not conform together with the type expected, or both members of the mutually exclusive pair |
   | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or, for a document that does not match the contract, the key path of the first member in document order that fails it and what the contract expects there: the type expected, that the key is required, or, for a reference `FR-CTX-042` governs, the table named and that `tables` does not carry it. It SHALL NOT cite a file of this specification. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012`. For a render bound, which bound was exceeded, its resolved value, and the key of `FR-CONF-002` that raises it, per `FR-RND-036`, `FR-RND-037` and `FR-RND-039` |
   | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, the key space of `FR-CONF-002`, or the `--context` document and the collection of it the name was sought in |
-  | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the login of `FR-ERR-047`, the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
+  | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the login of `FR-ERR-047`, the [session statement](glossary.md#session-statement) that was running, named as `FR-ERR-027` names it, among them the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
   | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
   | `73` | The path `tpl init` could not create, and whether the obstacle was an existing `.tpl` or a failure the filesystem reported |
   | `74` | The path or stream that failed, the operation attempted on it, and what the filesystem or the stream returned |
@@ -995,6 +1007,14 @@ Out of scope: the wording of any individual message.
   `#338`*, the `77` row names the reason `FR-ERR-048` states, because that
   requirement separates five reasons a server refuses an authentication, and
   the implementation named the user name or the password for all of them.
+
+  *Amended in the seventy-ninth edition,* for rmp `#339`: the `69` row names
+  the session statement, the phase `FR-CONF-005` now gives the read-only
+  session statement, its read-back and the version probe. The version probe
+  was the row's fifth phase and is one of the three; the other two reach
+  this row only when their deadline expires, because `FR-SRV-010`, and
+  `FR-MYSQL-019` for a `mysql` entry, route every other failure of theirs to
+  `78`. No code changes.
 
 - **FR-ERR-011**: A template error SHALL carry the template name, the line, the
   column, and the chain of underlying template-engine errors.
@@ -1846,7 +1866,8 @@ no requirement of this file is amended.
 
 - **FR-ERR-027**: WHEN a deadline is exceeded, the system SHALL exit with the
   code of the phase: `69` for DNS resolution, TCP connect, TLS handshake, the
-  login, or a catalogue query; `78` for `password_command`; `65` for render.
+  login, a session statement, or a catalogue query; `78` for
+  `password_command`; `65` for render.
 
   WHEN the budget the four connection phases share under `FR-CONF-005`
   expires, the `error` line and the `cause` SHALL name the phase that was in
@@ -1895,6 +1916,59 @@ no requirement of this file is amended.
   through `FR-ERR-012`. The examples fix the facts named, the command
   carried and the code. The `hint`s are those the implementation prints at
   `2d652bd`, and do not change.
+
+  WHEN the deadline of a [session statement](glossary.md#session-statement)
+  or of a catalogue query expires, the `error` line and the `cause` SHALL name
+  the statement that was running, the host and port, and the deadline's
+  resolved value. A session statement SHALL be named as the statement it is
+  — the read-only session statement, the read-back of the read-only session,
+  or the version probe — and a catalogue statement, the privilege probe of
+  `FR-CFG-044` among them, as a query reading the database structure. The
+  `cause` SHALL state that `core.query_timeout` sets that deadline and that it
+  bounds that one statement, and SHALL NOT name a connection phase. The
+  `hint` SHALL carry `tpl cfg set core.query_timeout <seconds>`. WHEN the
+  overall budget of `FR-GLOB-011` expires first, the `cause` SHALL name it
+  instead, and the `hint` SHALL carry the same command with a larger
+  `--timeout <seconds>`, as for the connection phases. The expiry is `69`
+  whichever session statement it ends, the read-only session statement and
+  its read-back included: `FR-SRV-010`, and `FR-MYSQL-019` for a `mysql`
+  entry, route the other failures of those two to `78`, and a statement that
+  outlived its deadline is a server that did not answer in time, which the
+  operation, being read-only, can ask again.
+
+  ```
+  error: the version probe for db.example.com:3306 exceeded its own deadline of 30s, for database entry 'shop'
+  cause: the version probe for db.example.com:3306 had not finished when its own deadline of 30s expired; core.query_timeout sets that deadline, which bounds each statement on its own
+  hint:  raise the deadline with: tpl cfg set core.query_timeout <seconds>
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  ```
+  error: the read-only session statement for db.example.com:3306 exceeded its own deadline of 30s, for database entry 'shop'
+  cause: the read-only session statement for db.example.com:3306 had not finished when its own deadline of 30s expired; core.query_timeout sets that deadline, which bounds each statement on its own
+  hint:  raise the deadline with: tpl cfg set core.query_timeout <seconds>
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  ```
+  error: a query reading the database structure for db.example.com:3306 exceeded its own deadline of 30s, for database entry 'shop'
+  cause: a query reading the database structure for db.example.com:3306 had not finished when its own deadline of 30s expired; core.query_timeout sets that deadline, which bounds each statement on its own
+  hint:  raise the deadline with: tpl cfg set core.query_timeout <seconds>
+  exit:  69 (EX_UNAVAILABLE)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The examples fix the facts named, the command
+  carried and the code.
+
+  *Amended in the seventy-ninth edition,* for rmp `#339`: the session
+  statement joins the phases on `69`, and the paragraph on the deadline of a
+  statement is new. The implementation bounded each session statement by
+  `core.query_timeout`, which `FR-CONF-005` now states, and reported every
+  expiry of one — a stalled version probe included — as an expiry of a query
+  reading the database structure, a `cause` equally true of another
+  statement, which `FR-ERR-034` bans; its `cause` for a statement's deadline
+  named no key. The codes are unchanged.
 
   *Amended in the seventy-seventh edition,* for rmp `#336`. The requirement
   named four phases on `69` and nothing of the message. The login is named,
@@ -2137,7 +2211,14 @@ no requirement of this file is amended.
      authentication method. The `cause` SHALL state both possibilities. The
      `hint` SHALL state that the address must be that of a server of the
      entry's provider, and SHALL carry the command that repoints the entry,
-     as in the first outcome.
+     as in the first outcome. A greeting that is **truncated** — a packet in
+     the greeting's place that ends before the fields the provider's protocol
+     gives a greeting — or **malformed** — one holding what no greeting of
+     that protocol holds — is this outcome, whatever its bytes, and the
+     system SHALL NOT end the invocation with the `70` of `FR-ERR-030` for
+     it: an answer the server got wrong is not a defect of `tpl`. A greeting
+     cut short because the connection closed before the packet's announced
+     length had arrived is the first outcome.
   3. **The server's RSA public key, for a `mariadb` entry.** The login, over
      a session TLS does not protect, needs the server's RSA public key, and
      the system does not request it, per the note on `FR-SEC-021`. The
@@ -2240,6 +2321,20 @@ no requirement of this file is amended.
   `mariadb` entry prints while its exit code stays the same.
 
   *Added in the seventy-seventh edition,* for rmp `#332`.
+
+  *Amended in the seventy-ninth edition,* for rmp `#342`: the second outcome
+  names a truncated and a malformed greeting, and the first a greeting cut
+  short by the connection. Both were within the outcomes as written — what
+  answered did not answer as a server of the provider does, or the
+  connection failed before the login completed — and the observation above
+  used a well-framed packet that is not a greeting at all. rmp `#342`
+  records that the driver may panic on a truncated greeting, which would end
+  the invocation with `70` and the message of `FR-ERR-032`, telling the
+  caller to report a defect of `tpl` for an answer of the server. The
+  sentences name the cases so that a test can show the outcome: a listener
+  on the loopback interface that sends a well-framed packet beginning as a
+  greeting and ending before its fields do, for which the system exits `69`
+  with the second example's four lines.
 
 - **FR-ERR-048**: WHEN the server of a `mariadb` or a `mysql` entry answers
   the login with an error packet, the system SHALL NOT read the catalogue,
@@ -2421,9 +2516,10 @@ no requirement of this file is amended.
   catalogue read.
 
   One more answer is routed elsewhere and is no failure: an error packet the
-  server answers the privilege probe of `FR-CFG-044` with is that
-  requirement's `false`, and `tpl cfg database test` reports it and does not
-  exit `69`.
+  server answers the privilege probe of `FR-CFG-044` with, carrying one of
+  the numbers that requirement reads as a privilege error, is its `false`,
+  and `tpl cfg database test` reports it and does not exit `69`. An error
+  packet carrying any other number is the third way below.
 
   A statement fails, for this requirement, in one of three ways, and the
   `cause` SHALL state which, with the phase and the host and port:
@@ -2515,6 +2611,12 @@ no requirement of this file is amended.
   are unchanged. The version probe's statement is named after the phase,
   and the catalogue statement in the words the implementation already uses
   for that phase.
+
+  *Amended in the seventy-ninth edition,* for rmp `#341`: the answer of the
+  privilege probe that is no failure is an error packet carrying a number
+  `FR-CFG-044` reads as a privilege error, and no longer every error packet.
+  An error packet the probe is answered with that carries another number is
+  a statement that failed, and is reported here with `69`.
 
 ## Template codes
 

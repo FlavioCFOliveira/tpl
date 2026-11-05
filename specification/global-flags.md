@@ -1,7 +1,7 @@
 ---
 title: Global Flags
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md, project-and-discovery.md, render-command.md, sqlite-contract.md]
 ---
 
@@ -266,8 +266,8 @@ which belongs to that command's module.
 
   | Command | Blocking phases it can run | Effect of `--timeout` |
   |---|---|---|
-  | `tpl cfg database test` | the three connection phases, the catalogue query of `FR-CFG-044`, `password_command` | bounds them; `69` or `78` |
-  | The eight `tpl schema …` subcommands, `tpl cache load` | the three connection phases, catalogue queries, `password_command`, on a miss or always for `tpl cache load` | bounds them; `69` or `78`. A read served wholly from the cache runs none, and the flag has no effect |
+  | `tpl cfg database test` | the four connection phases, the session statements, the catalogue query of `FR-CFG-044`, `password_command` | bounds them; `69` or `78` |
+  | The eight `tpl schema …` subcommands, `tpl cache load` | the four connection phases, the session statements, catalogue queries, `password_command`, on a miss or always for `tpl cache load` | bounds them; `69` or `78`. A read served wholly from the cache runs none, and the flag has no effect |
   | `tpl render` | the phases of the row above, without `--context` and on a miss; the render phase always | bounds them; `69`, `78` or `65` |
   | Every other `tpl cfg` subcommand, `tpl cache clean`, `tpl cache status`, every `tpl template` subcommand, `tpl init`, `tpl help`, `tpl version` | none | none |
 
@@ -295,6 +295,14 @@ which belongs to that command's module.
   `-d/--database`.
 
   *Added in the sixty-first edition,* for rmp `#273`.
+
+  *Amended in the seventy-ninth edition,* for rmp `#339`: the first two rows
+  of the table name the session statements, which `FR-CONF-005` now makes a
+  phase, and count the connection phases as four, which they have been since
+  the seventy-seventh edition named the login; those two rows still counted
+  three. Nothing the flag bounds changes, and the `password_command` of a
+  read served from the cache, which this table already excluded, is excluded
+  by `FR-CONF-056` in its own terms.
 
 ### `-v`, `--verbose` and `-q`, `--quiet`
 
@@ -350,6 +358,37 @@ which belongs to that command's module.
 
   *Note added in the fortieth edition.* Under `FR-CACHE-038` a render's miss
   can be found during the render. It is reported when it is discovered.
+
+  WHERE an invocation opens a connection to a MariaDB or a MySQL server, the
+  phases reported at `INFO` SHALL be every phase of `FR-CONF-005` that the
+  connection ran, each on a line of its own that names it: DNS resolution,
+  the TCP connect, the TLS handshake WHERE the mode of `FR-CONF-013`
+  negotiated one, the [login](glossary.md#login), and each
+  [session statement](glossary.md#session-statement), named as `FR-ERR-027`
+  names it. The line of a phase SHALL carry the time the connection spent in
+  that phase, so that the line of the login carries the time of the greeting
+  and of the authentication together, before and after a TLS handshake. A
+  phase that failed, or in which a deadline or a budget expired, ran, and
+  SHALL have its line; a phase the connection did not reach SHALL have none.
+  The lines of the connection phases SHALL be written once the connection
+  has opened or failed, and the line of a session statement once that
+  statement has ended. A session statement's line is not the line of a
+  catalogue query, and is distinguishable from it, so that the count of
+  `NFR-PERF-008` is unchanged.
+
+  *Amended in the seventy-ninth edition,* for rmp `#340`: the paragraph above
+  is new. `FR-CONF-005` names four connection phases, and the implementation
+  wrote a line for DNS resolution and one for the TCP connect, whose time
+  included the TLS handshake and the login, and a line for each session
+  statement under the name of a catalogue query; a caller reading `-v` to
+  find why a connection was slow could not tell a slow handshake from a slow
+  login, nor a slow version probe from a slow catalogue statement, which is
+  what "which phases ran and how long each took" promises. *Rejected: one
+  line for the connection as a whole*, which reports less than the sentence
+  above promises. *Rejected: a line for each stretch of the login*, before
+  and after the handshake: `FR-CONF-005` makes the login one phase, and the
+  question a caller asks of it is how long the login took. The wording of
+  each line stays outside the contract, per `NFR-DET-001`.
 
 - **FR-GLOB-018**: The system SHALL NOT write any of the following to any
   diagnostic stream, at any verbosity level: the argument vector, the resolved

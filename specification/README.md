@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, sqlite-contract.md, mysql-contract.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in seventy-eight editions. All are in force;
+The specification has been written in seventy-nine editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6405,6 +6405,140 @@ moves, and against the requirements their new passages paraphrase —
 `FR-CONF-055`. One passage contradicted this corpus, and is `DIV-062`,
 discharged by the second reading. `DIV-036`, `DIV-037` and `DIV-050`, whose
 passages of `CLAUDE.md` sit beside the corrected lines, stand as they were.
+
+### Seventy-ninth edition — a password a cache hit never needed, three statements with no deadline of their own, and two tables that read alike
+
+Sprint 29, *Fixes and Improvements*, sets out to leave the code base with no
+known defect outstanding and to have all three providers read schemas and
+generate code without failure. This edition specifies what that requires of
+ten of its tasks, all relayed by the session coordinator in one brief: rmp
+`#310`, `#339`, `#340`, `#341`, `#349` and `#353`, and four it was asked to
+check and change only where needed, rmp `#311`, `#313`, `#342` and `#352`,
+each of which did need a change. Three decisions are the user's: for rmp
+`#310`, that a reference be expanded only when the entry is resolved for a
+connection; and, on 2026-11-05, after reading the first draft of this
+edition, that the refusal of rmp `#349` stand as written and that the worked
+examples of rmp `#353` cover all three providers, which the edition took in
+before it was committed. Every other choice between viable options is this
+edition's, and each is recorded with the options it rejected beside the
+requirement it shapes.
+
+**Six identifiers of a requirement are assigned**: `FR-CONF-056`,
+`FR-SRV-043`, `FR-MYSQL-048`, `FR-LITE-043`, `FR-EX-011` and `FR-EX-012`;
+and three divergence entries, `DIV-063`, `DIV-064` and `DIV-065`. None is
+retired and none is renumbered. No open question is raised, so the index of
+[open-questions.md](open-questions.md) stays empty. [glossary.md](glossary.md)
+gains *session statement*.
+
+- **A password a cache hit never needed** — rmp `#310`. `FR-CONF-056`, new,
+  in [configuration-model.md](configuration-model.md): the six fields of
+  `FR-CONF-015` are expanded, and `password_command` is run, only when the
+  entry is resolved for a connection — a read that misses the cache or
+  carries `--direct`, a read a render returns to, `tpl cache load` and
+  `tpl cfg database test` — and a read served from the cache does neither.
+  Every field, and not the password alone, because a hit reads none of
+  them. The conditions expansion and the helper raise, the `78` of
+  `FR-CONF-022` among them, are raised at the cache-or-connection step and
+  never on a hit. `FR-CONF-022` and `FR-CACHE-006` gain a note,
+  `FR-CONF-050` and `FR-ERR-006` an amendment that moves the refusal of an
+  empty expansion, and the expansion itself, out of entry resolution.
+- **Three statements with no deadline of their own** — rmp `#339`.
+  `FR-CONF-005`: the [session statement](glossary.md#session-statement) is a
+  phase, and each of the read-only session statement, its read-back and the
+  version probe takes the deadline of `core.query_timeout` on its own, the
+  deadline the implementation already applied. `FR-ERR-027` names the
+  statement whose deadline expired, the version probe as the version probe,
+  with three examples, and puts the expiry on `69` whichever statement it
+  ends. The `69` row of `FR-ERR-034` names the phase, `FR-SRV-010` gains a
+  note, and the table of `FR-GLOB-026` names the session statements and
+  counts the connection phases as four, which two of its rows still counted
+  as three.
+- **A line for every connection phase** — rmp `#340`. `FR-GLOB-017`, in
+  [global-flags.md](global-flags.md): at `INFO`, a line for each phase of
+  `FR-CONF-005` the connection ran — DNS resolution, the TCP connect, the
+  TLS handshake where one is negotiated, the login, whose line carries the
+  time of its two stretches together, and each session statement — written
+  once the connection has opened or failed, or the statement has ended.
+- **The errors a privilege probe reads as no privilege** — rmp `#341`.
+  `FR-CFG-044`, in [cfg-commands.md](cfg-commands.md): a privilege error is
+  an error packet carrying `1044`, `1142`, `1143` or `1227`, the denials a
+  `SELECT` can meet, named alike in MariaDB's and MySQL's error references,
+  read on 2026-11-05; any other error packet ends the command with `69`
+  under the third way of `FR-ERR-036`, whose paragraph on the probe follows.
+- **A truncated greeting** — rmp `#342`. `FR-ERR-047`: a truncated or
+  malformed greeting is the second outcome, at `69`, and never the `70` of
+  `FR-ERR-030`; a greeting cut short by the connection is the first. Both
+  were within the outcomes as written; the sentences make a test of them
+  derivable.
+- **Two tables that read alike** — rmp `#349`. `FR-LITE-043`, new, in
+  [sqlite-contract.md](sqlite-contract.md): a `sqlite` read groups rows and
+  matches names on the bytes the file holds, and refuses with `78` a file in
+  which two names of one set — the tables and views, or the columns, the
+  indexes or the triggers of one table — differ in their bytes and convert to
+  one text under `FR-OUT-017`. `FR-LITE-007` gains its row, `BR-LITE-003` and
+  `FR-OUT-017` a note, and `FR-LITE-038` three databases.
+- **A name that reaches a statement** — rmp `#352`. `FR-SRV-043`, new, in
+  [server-contract.md](server-contract.md), and `FR-MYSQL-048`, new, in
+  [mysql-contract.md](mysql-contract.md): a name the system did not write
+  itself changes no part of a catalogue statement but the value its rows are
+  compared with, whatever characters it holds. How it reaches the statement
+  is left to the technical specification, as rmp `#352` asks.
+- **The rewrite of `.tpl/.cfg`** — rmp `#313`. `FR-CFG-041`: every step of
+  the rewrite acts in the folder whose `.cfg` was checked, creates its
+  temporary file new, and is redirected by no link, the property the cache's
+  paths and the read of `.cfg` already hold. `FR-SEC-027` gains a note.
+- **A suggestion that named the template asking** — rmp `#311`.
+  `FR-TMPL-033` bars a nearest-match suggestion for an entry that exists and
+  is not a regular file, on the command line and in a template, and
+  `FR-TMPL-009` keeps the template that holds a name out of the candidates
+  of any suggestion offered for it.
+- **The worked examples over all three providers** — rmp `#353`, by the
+  user's decision. `FR-EX-011`, new, in [examples.md](examples.md): all four
+  examples also read the `freight` schema of the fixture of
+  `scripts/mysql/`, through a `mysql` entry, from one server of the most
+  recent series of `FR-MYSQL-003`, and compile its data layer. `FR-EX-012`,
+  new: they also read, through a `sqlite` entry, the main database the
+  fixture of `scripts/sqlite/` builds from `freight.sql`, and compile its
+  data layer. `FR-EX-006` gains a note; `FR-EX-007`, `FR-EX-008`, whose type
+  mappings now cover the values of `json` and `geomcollection` and the five
+  SQLite affinities, and `BR-EX-002` reach both; and `UC-013` in
+  [use-cases.md](use-cases.md) gains their preconditions, their two forms of
+  `tpl cfg database add` and an alternate flow for the file.
+- **The register** — [upstream-divergences.md](upstream-divergences.md)
+  raises `DIV-063`, `DIV-064` and `DIV-065` against the root `README.md`,
+  and its counts move.
+- **This file** — the edition count of the Scope, and this record.
+
+**What changes for a `mariadb` entry, and what does not.** `FR-CONF-056`
+changes when a `mariadb` and a `mysql` entry expand a reference and run
+their helper, and so which invocations exit `78` for an undefined variable:
+a read served from the cache no longer does. `FR-ERR-027` changes the
+message of an expired session statement, `FR-GLOB-017` the diagnostic
+lines, `FR-CFG-044` the outcome of a privilege probe answered with an error
+packet that is not a denial, from `0` to `69`, and `FR-CFG-041` where a
+rewrite acts. `FR-CONF-005` states the deadline the implementation already
+applies, `FR-ERR-047` changes no message, and `FR-SRV-043` and
+`FR-MYSQL-048` state a property and change no output where it holds. No
+requirement of a `sqlite` entry changes meaning but `FR-LITE-043`, whose
+refusal is new and whose grouping on the bytes corrects what a read
+presents. `FR-CONF-004`, `FR-CONF-049`, `FR-CACHE-002`, `FR-CACHE-038`,
+`FR-CACHE-039`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-SRV-006`, `FR-SRV-042`,
+`FR-MYSQL-015`, `FR-MYSQL-017`, `FR-MYSQL-019`, `FR-ERR-019`,
+`FR-ERR-021`, `FR-ERR-048`, `FR-TMPL-027`, `FR-PROJ-028`, `FR-PROJ-030`,
+`FR-LITE-009`, `FR-LITE-021` and `NFR-PERF-008` were read against the
+changes, and none is amended.
+
+The fifth validation rule is applied for this edition: neither root
+document has changed since `9468588`, which the seventy-eighth edition
+read in its working tree; at `b3f87a2` both were searched for every subject
+this edition amends — a reference expanded on a cache hit, a deadline of a
+session statement, the diagnostic lines of a connection, the privilege
+probe, a greeting, a SQLite name that is not valid UTF-8, a name in a
+catalogue statement, the rewrite of `.tpl/.cfg`, a suggestion for a
+template, and the worked examples. Three passages of `README.md` paraphrase
+a requirement this edition amends, and
+[upstream-divergences.md](upstream-divergences.md) raises `DIV-063`,
+`DIV-064` and `DIV-065` against them. `CLAUDE.md` paraphrases none.
 
 ### Still out of scope
 

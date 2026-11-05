@@ -1,7 +1,7 @@
 ---
 title: MySQL Contract
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [configuration-model.md, server-contract.md, sqlite-contract.md, catalogue-coverage.md, context-document.md, privileges-and-completeness.md, security.md, cfg-commands.md, performance-requirements.md, errors-and-exit-codes.md, template-environment.md, open-questions.md]
 ---
 
@@ -938,6 +938,24 @@ second.
   *Amended in the seventy-fifth edition,* for rmp `#326`: the *Pending
   observation* note is replaced by the *Observed* note above, which confirms
   it. The requirement is unchanged.
+
+- **FR-MYSQL-048**: For a `mysql` entry, `FR-SRV-043` SHALL hold, with the
+  closed list of `FR-MYSQL-015` in place of `FR-SRV-006`: a name the system
+  did not write itself — the database the entry names, or the name of a
+  table, a view or a routine a command names — changes no part of a
+  statement but the value its rows are compared with, whatever characters it
+  holds.
+
+  *Rationale.* rmp `#352` asks how a name a caller supplies reaches a MySQL
+  catalogue statement, which the technical specification records as a gap.
+  The means is the technical specification's to record; the property is the
+  one `FR-SRV-043` states for a `mariadb` entry, and a `mysql` entry's closed
+  list, which `BR-MYSQL-002` makes the part of its read-only promise that
+  prevents, rests on it as that list does. The fixture's identifiers holding
+  a space, a backtick and a double quote, item 14 of `FR-MYSQL-044`, are
+  names a test of it reads.
+
+  *Added in the seventy-ninth edition,* for rmp `#352`.
 
 - **FR-MYSQL-017**: WHEN the system opens a connection for a `mysql` entry, it
   SHALL issue the three connection-start statements of `FR-MYSQL-015` in the

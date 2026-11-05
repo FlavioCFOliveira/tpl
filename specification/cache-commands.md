@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-05
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md, security.md]
 ---
 
@@ -79,6 +79,12 @@ read from the server on a miss.
   no file it reads is a miss. An invocation that abandons a render under
   `FR-CACHE-039` is a miss, and the connection it then opens is the first and
   only one of the invocation.
+
+  *Note added in the seventy-ninth edition,* for rmp `#310`. A hit also
+  expands no `${VAR}` and runs no `password_command`, per `FR-CONF-056`: the
+  entry is resolved for a connection only by an invocation that opens one,
+  so a variable the entry references may be unset while every read is a
+  hit.
 
 - **FR-CACHE-007**: WHEN a cached read misses, the system SHALL read the server,
   SHALL write the result to the cache except for the objects `FR-CACHE-037`

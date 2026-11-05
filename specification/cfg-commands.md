@@ -1,7 +1,7 @@
 ---
 title: Configuration Commands
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -1106,6 +1106,58 @@ tpl cfg database test   <name>
   privilege error, and whether it returned at least one row. The system SHALL
   set `can_read_catalogue` to true WHEN both hold, and to false otherwise.
 
+  A **privilege error** is an error packet carrying one of the following
+  numbers, read alike for a `mariadb` and a `mysql` entry:
+
+  | Number | Name in the error references | What the server refuses |
+  |---|---|---|
+  | `1044` | `ER_DBACCESS_DENIED_ERROR` | Access to the database |
+  | `1142` | `ER_TABLEACCESS_DENIED_ERROR` | The command on the table |
+  | `1143` | `ER_COLUMNACCESS_DENIED_ERROR` | The command on a column of the table |
+  | `1227` | `ER_SPECIFIC_ACCESS_DENIED_ERROR` | The operation, for want of a privilege it names |
+
+  IF the server answers the probe with an error packet carrying any other
+  number, THEN the probe has not been answered, `can_read_catalogue` SHALL
+  NOT be reported, and the command SHALL end as a statement that fails on an
+  open session ends: with `69` (`EX_UNAVAILABLE`), by the third way of
+  `FR-ERR-036`, whose `cause` names the number. A failure of the probe that
+  is not an error packet is the first or the second way of that requirement,
+  and an expired deadline is `FR-ERR-027`'s.
+
+  *Sources.* The error references, read on 2026-11-05: MariaDB's, at
+  `https://mariadb.com/docs/server/reference/error-codes/mariadb-error-code-reference`,
+  and MySQL's, at
+  `https://dev.mysql.com/doc/mysql-errors/8.4/en/server-error-reference.html`.
+  Both name each of the four numbers as the second column names it, with
+  SQLSTATE `42000` and the same message: "Access denied for user '%s'@'%s'
+  to database '%s'", "%s command denied to user '%s'@'%s' for table '%s'",
+  "%s command denied to user '%s'@'%s' for column '%s' in table '%s'", and
+  "Access denied; you need (at least one of) the %s privilege(s) for this
+  operation". The numbers are those of the denials a `SELECT` can meet: on
+  the database, on the table, on a column, and on a privilege the operation
+  needs. *Bounded claim.* This requirement classifies numbers. No server of
+  either fixture was observed answering the probe with an error packet, and
+  it states no observation of which number, if any, a server sends.
+
+  *Why another error is not `false`.* `false` tells the caller that this
+  reader cannot see the named database, and the next step it calls for is a
+  grant. An error packet of another number — a statement the server killed,
+  a resource it ran out of, a query it interrupted — says nothing about the
+  reader, and reporting it as `false` at exit `0` would send the caller to
+  the grants when the server was the fault: a wrong diagnosis, presented as
+  a fact of the reader. Reported under `FR-ERR-036`, it carries the number and
+  the step the operation allows, which is to run it again. *Rejected:
+  `false` for every error packet*, which the implementation did, on the
+  ground that the statement's text is fixed and only the reader's standing
+  can be refused: the text is fixed, and the server's state is not. *Rejected:
+  classifying by SQLSTATE*, because `42000` also carries errors that are not
+  denials, limits on connections among them, as `FR-ERR-048` records for the
+  login.
+
+  *Amended in the seventy-ninth edition,* for rmp `#341`. The requirement
+  named a privilege error and did not say which errors are one, and the
+  implementation read every error packet as one.
+
   *What the probe proves.* That this reader, on this connection, can see the
   named database in the catalogue at all. That is the fact a caller needs from
   a connectivity check and cannot obtain any other way short of attempting the
@@ -1447,6 +1499,38 @@ tpl cfg database test   <name>
   *Amended in the forty-eighth edition: the paragraph above is new,* for rmp
   `#265`. A clone holds no `.cfg`, per `FR-PROJ-003`, so the first `cfg`
   writer creates the file rather than rewriting it.
+
+  Every step of the procedure SHALL act in the `.tpl` folder the
+  invocation's checks were made on — the folder `FR-PROJ-009` canonicalised,
+  on whose `.cfg` `FR-PROJ-010`, `FR-PROJ-011` and `FR-PROJ-030` were
+  checked, or which the second item of `FR-PROJ-028` checked — and in no
+  other: no symbolic link, and no file, folder or link put in place of a
+  component of that folder's path after it was canonicalised, SHALL redirect
+  the creation of the temporary file, its write, its mode or the rename to
+  another folder or another file. The temporary file SHALL be created as a
+  new file, so that nothing already at its path, a symbolic link included,
+  is opened or written; and the rename SHALL replace the entry named `.cfg`
+  of that folder, a symbolic link there included, and no file a link points
+  at. A rewrite that cannot act in that folder SHALL fail under the first
+  paragraph, with `74`, and SHALL NOT act elsewhere. How the folder is held
+  between the checks and the rename is not fixed by this corpus.
+
+  *Amended in the seventy-ninth edition: the paragraph above is new,* for rmp
+  `#313`. The requirement fixed the procedure and not where it acts, and the
+  implementation, as rmp `#313` records it, performs each step by path,
+  resolving the path again every time: a link put in place of a component of
+  the path between the checks of step 2 of `FR-ERR-006` and the rename would
+  send the caller's configuration, credentials included, to a folder of
+  another's choosing, or let the rename replace a file outside the project.
+  That is the check-then-use class (CWE-367) that every path of the cache is
+  held against, under `FR-SEC-026` and `FR-CACHE-044`, and that the read of
+  `.cfg` is held against, under the first item of `FR-PROJ-030`; the rewrite
+  was the one write of the project's files that no requirement bound. The
+  paragraph states the property and not the means, as those requirements
+  do. It can be shown by a test that, through the system's own test
+  configuration, replaces a component of the folder's path between the
+  checks and the rewrite, and finds the file the replacement points at
+  untouched.
 
   *Rationale.* This is the rule `FR-CACHE-030` already applies to the other
   thing `tpl` writes, and it matters more here: a truncated `.cfg` is a `78` on

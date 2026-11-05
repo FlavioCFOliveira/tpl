@@ -1,7 +1,7 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -210,6 +210,14 @@ states the rule that answers it.
   unbounded data.
 
   *Added in the sixty-third edition,* for rmp `#307`.
+
+  *Note added in the seventy-ninth edition,* for rmp `#313`. A `cfg` command
+  that rewrites `.tpl/.cfg` acts in the folder whose `.cfg` was checked and in
+  no other, and writes through no link, as `FR-CFG-041` requires.
+  *Threat closed.* A link put in place of a component of the project's path
+  between the checks and the rewrite must not send the configuration,
+  credentials included, outside the project, nor let the rename replace a
+  file there.
 
   *Note added in the forty-eighth edition.* `--tpl-dir` SHALL name a directory
   whose last segment is `.tpl`, per `FR-PROJ-027`, so that the flag names no

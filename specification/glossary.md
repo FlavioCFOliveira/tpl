@@ -1,7 +1,7 @@
 ---
 title: Glossary
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -750,6 +750,22 @@ what it holds for the account. `FR-CONF-055` forbids computing one from an
 empty password.
 
 *Added in the seventy-seventh edition.*
+
+## session statement
+
+One of the three statements a connection to a MariaDB or a MySQL server
+issues on its session once the [login](#login) has opened it and before any
+catalogue statement: the read-only session statement, its read-back, and the
+version probe, in the order `FR-SRV-042` fixes for a `mariadb` entry and
+`FR-MYSQL-017` for a `mysql` entry. None of the three reads a schema, so none
+is a catalogue query and none counts toward `NFR-PERF-001` and
+`NFR-PERF-002`. `FR-CONF-005` makes the session statement a phase and bounds
+each of the three by `core.query_timeout` on its own; `FR-ERR-027` names the
+one whose deadline expires, and `FR-GLOB-017` reports each on a line of its
+own. A `sqlite` entry has none: its version probe and its controls run under
+`FR-LITE-009`.
+
+*Added in the seventy-ninth edition.*
 
 ## source
 

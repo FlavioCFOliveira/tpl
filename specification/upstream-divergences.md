@@ -1,7 +1,7 @@
 ---
 title: Upstream Divergences
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [README.md, global-flags.md, cfg-commands.md, template-environment.md, server-contract.md, performance-requirements.md, mysql-contract.md]
 ---
 
@@ -20,10 +20,25 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Sixty-two entries are recorded. As of 2026-11-04, three are due in full,
-fifty-five are discharged, and four are partly discharged.** Seven entries
-still owe something: five owe it to `CLAUDE.md` and two to `README.md`, and
+**Sixty-five entries are recorded. As of 2026-11-05, six are due in full,
+fifty-five are discharged, and four are partly discharged.** Ten entries
+still owe something: five owe it to `CLAUDE.md` and five to `README.md`, and
 no entry is in both counts.
+
+*The counts moved in the seventy-ninth edition, and three entries moved
+them.* The edition makes the session statement a phase bounded by
+`core.query_timeout`, places the `${VAR}` expansion and `password_command`
+at the resolution of an entry for a connection, and has the worked examples
+also read a schema through a `mysql` entry and a database through a `sqlite`
+entry. The root `README.md` paraphrases
+all three, in its sections *Deadlines*, *Keeping a password off disk* and
+*Worked examples*. Both files were read at `b3f87a2`, unchanged since
+`9468588`, against every requirement the edition writes and amends.
+`DIV-063`, `DIV-064` and `DIV-065` are raised against `README.md`; they join
+the **due** count and that file's count, and each was raised by an amendment
+to this corpus rather than by an edit to the target. `CLAUDE.md` paraphrases
+none of them. No other entry was re-read for status. The counts restated in
+`DIV-032` and `DIV-041` move with this paragraph.
 
 *The counts moved in the seventy-eighth edition, and four entries moved them,
 the last of them twice.* The documentation effort of rmp `#330` corrected both
@@ -506,6 +521,9 @@ register was opened, and `DIV-025` cites it for a search of the history.
 | [DIV-060](#div-060) | `CLAUDE.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | MariaDB and SQLite as the only providers, and no contract or catalogue rule for a `mysql` entry |
 | [DIV-061](#div-061) | `README.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | `connect_timeout` shared by three connection phases, where the login is a fourth |
 | [DIV-062](#div-062) | `README.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | A MySQL reader's restricted views and routines said to be marked, where one requested by name exits `77` |
+| [DIV-063](#div-063) | `README.md` | Contradiction | Due | `query_timeout` said to bound catalogue queries, where it also bounds each session statement |
+| [DIV-064](#div-064) | `README.md` | Contradiction | Due | The `schema` subcommands said to resolve the configuration for a connection, where a read served from the cache does not |
+| [DIV-065](#div-065) | `README.md` | Contradiction | Due | The worked examples said to read three schemas from one server, where they also read one through a `mysql` entry and one through a `sqlite` entry |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -1194,9 +1212,9 @@ is the one stated above and nothing more.
 in *Estrutura do Projecto*, below the project tree and unchanged since
 `3f65b5f`, through every commit that has touched `CLAUDE.md` since — the three
 most recent of them `3a360d6`, `6a66d14` and `9562fb2`, none of which reaches
-this passage. It is one of the seven entries this register still owes
+this passage. It is one of the ten entries this register still owes
 something on, and one of the five owed to that file, as counted in the
-seventy-eighth edition. Re-read on 2026-09-25 at
+seventy-ninth edition. Re-read on 2026-09-25 at
 `c360c80`: `6bc8513`, `390c6c6` and `70661da` touched `CLAUDE.md` since and
 none reaches this passage.
 
@@ -1611,8 +1629,8 @@ sentence.
 **Status**: **due**, re-read on 2026-09-22 at `9562fb2`. The deferral stands
 verbatim under *Plataformas Suportadas*, unmoved by `3a360d6`, `6a66d14` or
 `9562fb2`, and the two rules beside it still restate what `NFR-PERF-018` and
-`NFR-PERF-012` carry. It is one of the seven entries this register still
-owes something on, as counted in the seventy-eighth edition. Re-read on
+`NFR-PERF-012` carry. It is one of the ten entries this register still
+owes something on, as counted in the seventy-ninth edition. Re-read on
 2026-09-25 at `c360c80`: the deferral stands, unmoved by `6bc8513`,
 `390c6c6` and `70661da`.
 
@@ -3151,6 +3169,102 @@ yields. The rest of the row stands.
 corpus.* The row is new; it states the marking alone, which is half of what
 `FR-MYSQL-041` makes of a short read, and a caller who requests such a view
 by name meets the other half, the `77`, with nothing in the row to say so.
+
+## DIV-063
+
+**Target**: `README.md`, the section *Deadlines*. **Kind**: contradiction.
+
+**Status**: **due**, on 2026-11-05 at `b3f87a2`. No commit has discharged any
+part of it.
+
+*Says*: "Four `[core]` keys supply them: `connect_timeout`, shared by DNS
+resolution, the TCP connect, the TLS handshake and the login;
+`query_timeout`, per catalogue query; `password_timeout`, for
+`password_command`; and `render_timeout`, for one render." and, two
+paragraphs below, "The four connection phases and the catalogue query bound
+a read that misses the cache".
+*Specification*: `FR-CONF-005` as amended in the seventy-ninth edition, under
+which the [session statement](glossary.md#session-statement) is a blocking
+phase, and each of the three — the read-only session statement, its
+read-back and the version probe — has a deadline of `core.query_timeout` of
+its own; and `FR-ERR-027`, which names the statement whose deadline
+expired.
+*Correction*: name the session statements among what `query_timeout` bounds
+— "`query_timeout`, per catalogue query and per session statement" — and
+among what bounds a read that misses the cache, or point at `FR-CONF-005`
+for the phases. The rest of both paragraphs stands.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+The sentence was an exact summary of `FR-CONF-005` when it was written; the
+session statements ran under `query_timeout` then, unnamed.
+
+## DIV-064
+
+**Target**: `README.md`, the section *Keeping a password off disk*. **Kind**:
+contradiction.
+
+**Status**: **due**, on 2026-11-05 at `b3f87a2`. No commit has discharged any
+part of it.
+
+*Says*: "Both take effect when the configuration is **resolved for a
+connection** — which is what every command that opens one does: the
+`schema` subcommands, `tpl cache load`, `tpl cfg database test`, and
+`tpl render` when its context comes from the database rather than from
+`--context`."
+*Specification*: `FR-CONF-056`, under which the fields `FR-CONF-015` names
+are expanded, and `password_command` is run, only by an invocation that opens
+a connection — a read that misses the cache or carries `--direct`,
+`tpl cache load` and `tpl cfg database test` — and a read served from the
+cache expands no variable and runs no `password_command`.
+*Correction*: qualify the `schema` subcommands and `tpl render` by the read
+that opens a connection — they resolve the configuration for one on a read
+that misses the cache or carries `--direct` — and state that a read served
+from the cache expands no variable and runs no `password_command`, or point
+at `FR-CONF-056`. The first sentence of the paragraph, and the sentence on
+the commands that only read or write `.tpl/.cfg`, stand.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+The passage names the `schema` subcommands among the commands that open a
+connection, which each of them does on a miss and none does on a hit; until
+`FR-CONF-056` the corpus did not say when the expansion happens, and the
+implementation expanded on a hit, which is rmp `#310`.
+
+## DIV-065
+
+**Target**: `README.md`, the section *Worked examples*. **Kind**:
+contradiction.
+
+**Status**: **due**, on 2026-11-05 at `b3f87a2`. No commit has discharged any
+part of it.
+
+*Says*: "All four read the same three schemas — `sakila`, `world` and
+`freight`, **36 tables and 362 columns** — from one server of the most recent
+supported series", and "each example carries its own macro, covering all
+**39 `data_type` values** the three schemas declare".
+*Specification*: `FR-EX-011`, under which all four examples also read the
+`freight` schema of the fixture of `scripts/mysql/` through a `mysql` entry,
+from one server of the most recent series of `FR-MYSQL-003`, and render and
+compile its data layer; `FR-EX-012`, under which they also read, through a
+`sqlite` entry, the main database the fixture of `scripts/sqlite/` builds
+from `freight.sql`, and render and compile its data layer; and `FR-EX-008`
+as amended in the same edition, under which each macro covers the values of
+`data_type` of both, `json` and `geomcollection` among the first and the
+five affinities of `FR-LITE-026` for the second.
+*Correction*: state that the examples read their schemas through all three
+providers — the three MariaDB schemas, the `freight` schema of the MySQL
+fixture through a `mysql` entry, and the main database of the SQLite fixture
+through a `sqlite` entry — and restate the counts of tables, columns, files
+and `data_type` values from the examples as they then stand. **The
+correction is owed with the implementation of `FR-EX-011` and `FR-EX-012`,
+and not before it**: until the examples render those schemas the passage is
+true of the repository, which the root documentation is obliged to describe
+faithfully, and a passage written ahead of the examples would be false of
+them; it may be made in two parts, one per requirement, the status then
+reading partly discharged.
+
+*Raised by an amendment to this corpus, and not by an edit to the target.*
+The passage was an exact summary of `FR-EX-006` and of the examples when it
+was written.
 
 ## A candidate read, and not recorded
 

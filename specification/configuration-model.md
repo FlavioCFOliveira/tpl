@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-05
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -131,9 +131,9 @@ tls      = "verify-identity"
   points at it rather than implying a key per phase.
 
 - **FR-CONF-005**: The system SHALL apply a deadline to every blocking phase:
-  DNS resolution, TCP connect, TLS handshake, the login, catalogue query,
-  `password_command`, and render. Each phase SHALL take its deadline from the
-  key named beside it:
+  DNS resolution, TCP connect, TLS handshake, the login, session statement,
+  catalogue query, `password_command`, and render. Each phase SHALL take its
+  deadline from the key named beside it:
 
   | Phase | Key of `FR-CONF-002` |
   |---|---|
@@ -141,6 +141,7 @@ tls      = "verify-identity"
   | TCP connect | `core.connect_timeout` |
   | TLS handshake | `core.connect_timeout` |
   | The [login](glossary.md#login) | `core.connect_timeout` |
+  | A [session statement](glossary.md#session-statement) | `core.query_timeout` |
   | Catalogue query | `core.query_timeout` |
   | `password_command` | `core.password_timeout` |
   | Render | `core.render_timeout` |
@@ -148,10 +149,13 @@ tls      = "verify-identity"
   The four connection phases SHALL share **one** budget of the resolved value
   of `core.connect_timeout`, measured from the start of the first of them that
   runs and consumed by them in the order they run. The system SHALL NOT give
-  each of the four a budget of that value. The other three phases each have a
-  budget of their own. IF the shared budget expires, THEN the system SHALL
-  report the failure against the phase that was in progress when it expired,
-  per `FR-ERR-034` and `FR-ERR-027`.
+  each of the four a budget of that value. The other phases each have a budget
+  of their own, and each session statement and each catalogue query SHALL
+  have a deadline of the resolved value of `core.query_timeout`, measured from
+  its own start: the session statements do not share one deadline, and none
+  of them shares the budget of the connection phases. IF the shared budget
+  expires, THEN the system SHALL report the failure against the phase that was
+  in progress when it expired, per `FR-ERR-034` and `FR-ERR-027`.
 
   The connection phases run in this order: DNS resolution, the TCP connect,
   the server's greeting, the TLS handshake where the mode of `FR-CONF-013`
@@ -217,6 +221,37 @@ tls      = "verify-identity"
   `connect_timeout = 10` states how long connecting may take, as the ninth
   edition reasoned, and a login is part of connecting; a second budget would
   let connecting take longer than the value written.
+
+  *Amended in the seventy-ninth edition,* for rmp `#339`: the session
+  statement is a phase, and each of the three takes the deadline of
+  `core.query_timeout` on its own. The read-only session statement, its
+  read-back and the version probe, which `FR-SRV-042` orders for a `mariadb`
+  entry and `FR-MYSQL-017` for a `mysql` entry, are issued on a session that
+  has opened, after the four connection phases, and the requirement named no
+  deadline for them. The implementation bounded each by `core.query_timeout`,
+  as it bounds a catalogue query, and reported an expiry of the version
+  probe as an expiry of a query reading the database structure. The
+  deadline is the one the implementation applies; what is new is that this
+  requirement states it, and that `FR-ERR-027` names the statement whose
+  deadline expired.
+
+  *Why `core.query_timeout`, and not the connection budget.* The connection
+  phases end when the session opens, as the
+  [login](glossary.md#login) is defined, and a session statement is a
+  statement on that session: it fails as a catalogue query fails, under
+  `FR-ERR-036`, and is repeated as one is, the operation being read-only. A
+  server slow to answer a statement is the condition `core.query_timeout`
+  describes, and it is the key a caller raises for it. *Rejected: the
+  connection budget.* It would spend on a statement the time the caller set
+  for reaching the server, and report a slow statement as a slow
+  connection. *Rejected: a key of its own.* It would grow the key space of
+  `FR-CONF-002` for three statements whose bound the existing key already
+  describes.
+
+  For a `sqlite` entry neither the login nor a session statement of this
+  requirement runs, and the note of the sixty-fifth edition above stands:
+  every statement on the file, its version probe included, runs under the
+  catalogue-query deadline, per `FR-LITE-009`.
 
 - **FR-CONF-045**: The system SHALL resolve the render fuel of `FR-RND-036`
   from `core.render_fuel`, the render output limit of `FR-RND-037` from
@@ -874,6 +909,13 @@ describes a `mysql` entry as it describes a `mariadb` one, per
 
   *Added in the forty-ninth edition,* for rmp `#281`.
 
+  *Amended in the seventy-ninth edition,* for rmp `#310`. The refusal of a
+  value that is empty after expansion is made where the field is expanded,
+  which `FR-CONF-056` places at the resolution of the entry for a connection,
+  and still before any connection is opened; a value empty as written is
+  refused at entry resolution, as the second item states. A read served from
+  the cache expands neither key, and an empty expansion does not refuse it.
+
   *Amended in the fiftieth edition,* for rmp `#282`. `--host '   '` was
   stored with exit `0`, and the next read exited `69` with "host '   ' could
   not be resolved", per finding X-08 of the seventh re-audit of rmp `#263`.
@@ -1379,6 +1421,64 @@ describes a `mysql` entry as it describes a `mariadb` one, per
   `FR-CONF-048`, and `FR-CONF-049` fixes the form of a reference in the six
   fields.
 
+- **FR-CONF-056**: The system SHALL expand the fields `FR-CONF-015` names,
+  and SHALL run the `password_command` of `FR-CONF-024`, only WHEN it
+  resolves the selected entry for a connection — that is, once the
+  invocation is to open one: a read of `FR-CACHE-009` that misses the cache
+  or carries `--direct`, a read that a render returns to under
+  `FR-CACHE-039`, `tpl cache load`, and `tpl cfg database test` — and before
+  the first connection phase of `FR-CONF-005`. WHERE an invocation opens no
+  connection — a read served wholly from the cache under `FR-CACHE-006`, a
+  render with `--context`, and every command that contacts no database — the
+  system SHALL expand no field and SHALL run no `password_command`.
+
+  The conditions that expansion and the helper raise are therefore raised
+  only by an invocation that opens a connection, at the cache-or-connection
+  step of `FR-ERR-006`, and never by one served from the cache: the
+  undefined variable of `FR-CONF-022`, the unclosed reference of
+  `FR-CONF-021`, the invalid name of the second item of `FR-CONF-049`, the
+  value that expands to the empty string of the second item of
+  `FR-CONF-050`, and the failures of the helper of `FR-CONF-028`,
+  `FR-CONF-031`, `FR-CONF-033`, `FR-CONF-042` and `FR-CONF-043`. A
+  condition of the file as written — a key the provider refuses, an absent
+  host or database, `password` beside `password_command` — is not one of
+  them, and stays where its own requirement places it.
+
+  *Demonstrable.* With the cache of an entry filled and the variable its
+  `password` references unset, `tpl -d <entry> schema dump` exits `0` and its
+  document carries the `source` of a cached read, per `FR-CDOC-009`;
+  `tpl -d <entry> schema dump --direct` and `tpl cfg database test <entry>`
+  exit `78` under `FR-CONF-022`, naming the variable.
+
+  *Rationale.* A read served from the cache opens no connection, per
+  `FR-CACHE-006`, and the cache is keyed by the entry's name and by nothing
+  else, per `FR-CACHE-002`, so nothing a hit does reads the value of any of
+  the six fields. The implementation expanded them when it resolved the entry,
+  before it consulted the cache, so `tpl -d world schema dump` exited `78`
+  from a warm cache when the entry's password was `"${FIXTURE_PW}"` and the
+  variable was unset: a caller was refused a read that needed no credential.
+  This is rmp `#310`, of sprint 29, and the user chose, among the options it
+  recorded, that a reference be expanded only when the entry is resolved for
+  a connection.
+
+  *Why every field, and not the password alone.* The user's choice names a
+  credential, and the ground it rests on — that a hit reads no value of the
+  entry — holds of all six fields alike: a `user` or a `database` written as
+  `${…}` with its variable unset would refuse a hit exactly as the password
+  did. *Rejected: deferring the password alone*, or the two credentials, which
+  would leave the same refusal on the other fields. *Why the helper with
+  them.* `FR-GLOB-026` already runs `password_command` on a miss alone, and
+  the two ways of keeping a password off disk take effect at one moment, so
+  that a caller learns one rule for both.
+
+  *Accepted cost.* A reference that is malformed, or names a variable never
+  defined, is not reported while every read is served from the cache; it is
+  reported by the first read that opens a connection, and by
+  `tpl cfg database test`, which always does. The fault is met where the
+  field is expanded, which is where `FR-CONF-049` already places it.
+
+  *Added in the seventy-ninth edition,* for rmp `#310`.
+
 - **FR-CONF-016**: The system SHALL NOT expand `${VAR}` in `tls`.
 
   *Rationale.* An injected `TLS_MODE=disabled` must not be able to turn off
@@ -1537,6 +1637,11 @@ describes a `mysql` entry as it describes a `mariadb` one, per
 
 - **FR-CONF-022**: IF a referenced environment variable is undefined, THEN the
   system SHALL exit `78`.
+
+  *Note added in the seventy-ninth edition,* for rmp `#310`. The condition is
+  raised only where the field is expanded, which `FR-CONF-056` places at the
+  resolution of the entry for a connection. A read served from the cache
+  expands nothing, and an undefined variable does not refuse it.
 
 - **BR-CONF-002**: An undefined variable is never a silent empty substitution.
 
