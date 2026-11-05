@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty-one editions. All are in force;
+The specification has been written in eighty-two editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6635,6 +6635,29 @@ entry is raised or discharged, and [glossary.md](glossary.md) is unchanged.
 The fifth validation rule is applied for this edition: neither root
 document paraphrases a `dsn` part's decoding or the prose of a `hint`, so
 [upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-second edition — two parts of a cached table decoded when they are reached
+
+rmp `#347`, of sprint 29, found that a cached render decodes each table's
+embedded neighbours whether or not the template reads them, so that a render
+the direct path performs is refused at the render memory limit. **No
+identifier is assigned, retired or renumbered**; no open question or
+divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **The deferred parts** — [cache-commands.md](cache-commands.md).
+  `FR-CACHE-038` admits deferring the decoding of a table's `foreign_keys`
+  and `referenced_by` until the template first reaches each, validates the
+  part then, makes a faulty part a miss answered by `FR-CACHE-039`, and keeps
+  the document, and so the output, that of an up-front read. Every other
+  command that reads the cache decodes everything before its first byte of
+  output. `FR-CACHE-039` gains a note.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-CACHE-033`, `FR-CTX-006`, `FR-RND-034`, `FR-RND-039`, `FR-ERR-006` and
+`NFR-PERF-003` were read against the change, and none is amended. The fifth
+validation rule is applied: neither root document states when a cached file
+is decoded, so [upstream-divergences.md](upstream-divergences.md) raises no
+entry.
 
 ### Still out of scope
 
