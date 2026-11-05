@@ -18,10 +18,15 @@ Accepted, 2026-11-05, for rmp `#352`.
 The decision is the user's, of 2026-11-05, relayed by the session coordinator:
 the MySQL reader moves from Prepare+Execute to the text protocol **only if**
 `security-researcher` certified a conveyance rule. It did, the same day, and
-the rule it certified is Decision point 2. The user's condition has a second
-half that is not yet met: a test showing that a name holding a quotation mark,
-a backslash and a backtick reads that database and no other (rmp `#352`,
-comment 1635). *Consequences* states what follows if that test fails.
+the rule it certified is Decision point 2. The user's condition had a second
+half: a test showing that a name holding a quotation mark, a backslash and a
+backtick reads that database and no other (rmp `#352`, comment 1635). **It was
+met on 2026-11-05**, at `2d3facf`, on MySQL `8.4` and `9.7`, and the record
+stands (*Consequences*).
+
+**Brought in step with the code on 2026-11-05**, at `09afd0d`: the
+implementation evidence, the post-code review and the measured effect are
+added. No decision changed.
 
 ## Context
 
@@ -155,16 +160,42 @@ every move of `ADR-003`'s pin**, because either can change how the server
 reads a literal or what the driver sends for a statement without arguments,
 and this record is amended in place with the reading.
 
-**The user's second condition is owed by the implementation.** The test of
-`FR-MYSQL-048` reads the target database of item 17 of `FR-MYSQL-044` and its
-four decoys, on `8.4` and `9.7`. If it shows the target read as any other
-database, or any other database read in its place, the condition is not met:
-the reader keeps binding, and this record is withdrawn.
+**The user's second condition is met.** The test of `FR-MYSQL-048`
+(`tests/mysql_provider.rs`) reads the target database of item 17 of
+`FR-MYSQL-044`, `tpl_q'b\s`k`, and its four decoys, on `8.4` and `9.7`: the
+target is read whole and no decoy with it, by the root account and by the
+reduced reader; the table whose name holds `%` reads only itself; and a
+missing database named with the same characters ends in `77`. The read is
+also unchanged under `NO_BACKSLASH_ESCAPES,ANSI_QUOTES` and under
+`SET NAMES gbk`. The test runs in the battery from then on; a failure of it is
+a defect against `FR-MYSQL-048`, not a reason the record was kept.
+
+**The code keeps the rule, as the post-code review certified.** At `2d3facf`
+`src/mysql/catalogue.rs` holds `literal` (line 262), the one composition site;
+`compose` (line 289) requires exactly one `?` after ` = ` and otherwise ends in
+`70`; the one `AssertSqlSafe` of the reader is at line 349, handed to
+`raw_sql`; the probe of `FR-CFG-044` takes the same path; and no statement
+holds `COLLATE`, `CONVERT`, `LIKE`, `REGEXP` or `;`. `security-researcher`
+reviewed the committed code and certified it on 2026-11-05, end to end against
+both series with the server's log: 72 logged statements, each the constant
+with only the literal in place of `?`; the target and each decoy read exactly
+their own objects; and the injection names and `freight\0x` end in `78`, the
+server refusing the name (`1102`). The unit tests of `src/mysql/catalogue/tests.rs`
+also hand composed texts to the driver through `AssertSqlSafe`; they are not
+the reader, and point 2's one site is the reader's.
+
+**The effect measured.** On `aarch64-apple-darwin`, a direct read of `freight`
+fell by 18.2% on `8.4` and 15.4% on `9.7` (`schema tables`, −3.3 and −3.2 ms),
+and every direct read by 3.0 to 3.8 ms on both series, a constant in the
+schema's size: the gain is the round trips, and at 2 000 tables the
+text-format decode costs what the binary one saved (`BENCHMARKS.md`, sprint 29
+entry, `#352`). By `BR-PERF-008` the reading fails nothing.
 
 **The text protocol changes what the reader decodes.** Every value arrives in
-the text format rather than the binary one, so the decoding of
-`src/mysql/catalogue/row.rs` is re-verified against both series; the twelve
-tables' fields reach the read as before, under `FR-MYSQL-015`.
+the text format rather than the binary one. The decoding of
+`src/mysql/catalogue/row.rs` was re-checked against both series, and the
+output of all 1 016 workloads of the MySQL profiling surface is byte-identical
+to the bound reader's.
 
 **The statement is no longer a constant of the crate.** Its text is composed
 at the one site of point 2, from a constant and the literal. The technical
@@ -203,3 +234,7 @@ scope, the rejected alternatives and their evidence. The property is
 | The fixture the proving test needs; the row format changes | rmp `#352` work log, `FINDING` entry (comment 1689); `specification/mysql-contract.md`, `FR-MYSQL-044` item 17 (comment 1696) | 2026-11-05 |
 | MariaDB recorded only, nothing run | rmp `#352` work log, `NOTE` entry (comment 1690) | 2026-11-05 |
 | A statement with arguments is prepared and executed and decoded in the binary format; one with none is sent as `COM_QUERY` and decoded in the text format; `raw_sql` takes no arguments; `AssertSqlSafe` wraps a text the caller vouches for | `vendor/sqlx-mysql-0.9.0/src/connection/executor.rs` lines 123–179; `vendor/sqlx-core-0.9.0/src/raw_sql.rs` lines 119 and 132–138, `src/sql_str.rs` lines 52–114 | 2026-11-05 |
+| The text protocol and the literal are implemented: `literal` at line 262, `compose` at line 289, the one `AssertSqlSafe` at line 349 through `raw_sql`, the probe on the same path | `src/mysql/catalogue.rs` at `2d3facf`; rmp `#352` work log, `TEST` entry (comment 1781) | 2026-11-05 |
+| The item-17 test: the target read whole and no decoy, by both accounts, on `8.4` and `9.7`; the `%` table only itself; a missing name `77`; unchanged under `NO_BACKSLASH_ESCAPES,ANSI_QUOTES` and `gbk` | `tests/mysql_provider.rs` (from line 1377) at `2d3facf`; rmp `#352` work log, `TEST` entry (comment 1781); `BENCHMARKS.md`, sprint 29 entry, `#352` | 2026-11-05 |
+| Post-code review certified: one composition site, one `AssertSqlSafe`, 72 logged statements each the constant with only the literal; injection names and `freight\0x` end in `78` (`1102`) | rmp `#352` work log, `TEST` entry of `security-researcher` (comment 1787) | 2026-11-05 |
+| `freight` `schema tables` −18.2% (`8.4`) and −15.4% (`9.7`); direct reads −3.0 to −3.8 ms; byte identity over 1 016 MySQL workloads | `BENCHMARKS.md`, *2026-11-05 — Sprint 29*, `#352`; rmp `#352` work log, `TEST` entries (comments 1770 and 1781) | 2026-11-05 |

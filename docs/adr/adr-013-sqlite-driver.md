@@ -52,6 +52,11 @@ parameter moved. The driver, its features, the release carried and points 1,
 3 and 4 are unchanged; the claims re-read that day are those of the *Sources*
 rows dated 2026-11-05.
 
+**Brought in step with the code on 2026-11-05**, at `09afd0d`: the option is
+set at `2d3facf`, a test confirms it, and its effect has been measured; the
+account of what the root coordination document cites is corrected. No decision
+changed.
+
 ## Context
 
 **Two requirements in force name this register, by role, as the home of a fact
@@ -386,11 +391,18 @@ counts 36.3 ms of `pthread_mutex` leaves over the 20 runs of the
 (48.7%) and `sqlite3DbFreeNN` its largest callers (`BENCHMARKS.md`, finding 7
 of phase 1's list). That this is the memory mutex was phase 1's report; the
 amalgamation confirms it, because `sqlite3Malloc` and `sqlite3_free` enter
-`mem0.mutex` only while memory statistics are on. No reading of the option's
-effect exists on 2026-11-05: the 1.8 ms is the cost observed, not a saving
-measured, and it is not repeated as one. rmp `#350` owes a before-and-after
-reading in `BENCHMARKS.md`, which, by `BR-PERF-008`, fails nothing whatever it
-shows.
+`mem0.mutex` only while memory statistics are on. The 1.8 ms is the cost the
+profile observed, not the saving.
+
+**The saving measured.** With the option set at `2d3facf`, on
+`aarch64-apple-darwin`, `synth2000` `schema dump` fell by 3.983 ms at the
+median, 95% interval −4.540 to −3.429 ms, −3.2%; `freight` `schema tables`
+moved −0.080 ms, an interval that includes zero, so within noise
+(`BENCHMARKS.md`, sprint 29 entry, `#350`). The reading identifies its target,
+and by `BR-PERF-008` it fails nothing. The test
+`adr_013_the_library_is_built_with_its_memory_statistics_off`
+(`tests/sqlite_library.rs`) confirms that `PRAGMA compile_options` lists
+`DEFAULT_MEMSTATUS=0`.
 
 **The binary changes; the MariaDB driver it links does not.** Over the shipped
 graph, `cargo tree -e normal,build` with features, taken once per target of
@@ -476,10 +488,13 @@ history and vulnerability page before every release of `tpl`.
 
 **Under R3, these facts live here alone.** The driver, its features, the
 release carried, the build options and the judgement of `FR-LITE-039` are cited
-as `ADR-013` from `docs/spec-technical/`. Neither the root coordination document
-nor the root `README.md` names the SQLite driver at `229edc8`, so neither cites
-this record; that citation is owed by the owners of those documents, not by
-this register. The form in which the MariaDB driver is consumed is `ADR-003`'s.
+as `ADR-013` from `docs/spec-technical/`. At `09afd0d` the root coordination
+document names the driver in its *Stack* table and cites this record for the
+driver, the release, the build options and the alternatives; its row describes
+the library as built with extension loading compiled out and does not mention
+memory statistics, which is accurate as far as it goes, the options being
+cited here. The root `README.md` names SQLite as a provider and not the
+driver, so it cites nothing here. The form in which the MariaDB driver is consumed is `ADR-003`'s.
 
 ## Sources
 
@@ -520,10 +535,13 @@ this register. The form in which the MariaDB driver is consumed is `ADR-003`'s.
 | Over `Cargo.lock` at `229edc8`, no vulnerability and no warning is reported | `cargo audit` 0.22.2, `--no-fetch`, over the local advisory database holding 1403 advisories | 2026-11-04 |
 | Declared floors: `pkg-config` 0.3.34 → 1.63; `fallible-iterator` 0.3.0, `fallible-streaming-iterator` 0.1.9 and `vcpkg` 0.2.15 declare none | crates.io API, one request per crate | 2026-11-03 |
 | The workflows invoke Cargo at the repository root and run `cargo test` for each of the four targets | `.github/workflows/ci.yml` and `.github/workflows/release.yml` at `833bc35` | 2026-11-03 |
-| `docs/spec-technical/` cites `ADR-013`; neither `CLAUDE.md` nor `README.md` names SQLite | `rg ADR-013 docs/spec-technical/` and `rg -i sqlite README.md CLAUDE.md`, at `229edc8` | 2026-11-04 |
+| `docs/spec-technical/` cites `ADR-013` | `rg ADR-013 docs/spec-technical/`, at `229edc8` | 2026-11-04 |
 | The user accepted `SQLITE_DEFAULT_MEMSTATUS=0`, to be dropped only if the code uses SQLite's memory statistics; keeping the build unchanged refused | rmp `#350` work log, `DECISION` entry of 2026-11-05 (comment 1634) | 2026-11-05 |
 | `SQLITE_DEFAULT_MEMSTATUS=0` disables the `sqlite3_status()` interfaces that track memory usage and makes `sqlite3_malloc()` faster; the default is `1`; `sqlite3_memory_used()`, `sqlite3_memory_highwater()` and `SQLITE_MAX_MEMORY` are non-functional without memory tracking. With statistics disabled, `sqlite3_hard_heap_limit64()`, `sqlite3_memory_used()`, `sqlite3_memory_highwater()`, `sqlite3_soft_heap_limit64()` and `sqlite3_status64()` become non-operational | `https://sqlite.org/compile.html`; `https://sqlite.org/c3ref/c_config_covering_index_scan.html`, `SQLITE_CONFIG_MEMSTATUS` | 2026-11-05 |
 | The build script defines no `SQLITE_DEFAULT_MEMSTATUS`, passes each `-D`/`-U` token of `LIBSQLITE3_FLAGS` after its own flags, and reruns when the variable changes; the amalgamation defines the default `1` where the macro is undefined, lists `DEFAULT_MEMSTATUS=` in `PRAGMA compile_options` where it is not `1`, and has `sqlite3Malloc` and `sqlite3_free` enter `mem0.mutex` only while `bMemstat` is set | The published `libsqlite3-sys` 0.39.1 `.crate`, sha256 `14a5f01b…f9a2b3`: `build.rs` lines 170–188 and 340–351; `sqlite3/sqlite3.c` lines 15287–15289, 23441–23445, 32118–32132 and 32216–32229 | 2026-11-05 |
 | `rusqlite` 0.41.1 calls none of the five interfaces; its one memory interface is `Connection::release_memory`, over `sqlite3_db_release_memory`; its one call of `sqlite3_config` sets `SQLITE_CONFIG_LOG` | The published `.crate`, sha256 `da9bba6f…d91a594`: `rg` over `src/` for the five names, `sqlite3_status`, `heap_limit`, `CONFIG_MEMSTATUS` and `sqlite3_config`; `src/lib.rs` 648–651, `src/trace.rs` 38–45 | 2026-11-05 |
 | `tpl` uses no SQLite memory statistic, heap limit or `release_memory` | `rg -i "memory_used\|memory_highwater\|sqlite3_status\|status64\|soft_heap\|hard_heap\|heap_limit\|MEMSTATUS\|release_memory\|SQLITE_STATUS\|SQLITE_DBSTATUS\|MAX_MEMORY"` over `src/`, `tests/` and `benches/`, working tree over `a4f81c9`: no match | 2026-11-05 |
 | 36.3 ms of `pthread_mutex` leaves over 20 runs of `synth2000.direct.tables-text`, callers `sqlite3Malloc` (48.7%) and `sqlite3DbFreeNN`; the attribution to memory statistics was phase 1's report; the option's effect was unmeasured | `BENCHMARKS.md`, the SQLite read entry, *Outside the surface*, finding 7, measured at `aa62d4c` on `aarch64-apple-darwin` | 2026-11-05 |
+| `.cargo/config.toml` carries `-DSQLITE_DEFAULT_MEMSTATUS=0` in `LIBSQLITE3_FLAGS`; the test `adr_013_the_library_is_built_with_its_memory_statistics_off` asserts `PRAGMA compile_options` lists `DEFAULT_MEMSTATUS=0` | `.cargo/config.toml` and `tests/sqlite_library.rs` line 42, at `09afd0d` (since `2d3facf`) | 2026-11-05 |
+| `synth2000` `schema dump`: −3.983 ms [−4.540, −3.429], −3.2%; `freight` `schema tables`: −0.080 ms [−0.156, +0.021], −2.1%, interval including zero; `aarch64-apple-darwin` | `BENCHMARKS.md`, *2026-11-05 — Sprint 29*, `#350` | 2026-11-05 |
+| `CLAUDE.md` names `rusqlite` in its *Stack* table and cites `ADR-013`; `README.md` names neither | `rg -n "rusqlite\|ADR-013" README.md CLAUDE.md`, at `09afd0d` | 2026-11-05 |

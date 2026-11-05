@@ -68,6 +68,13 @@ the three recordings and the vendored tree are unchanged; what changed is how
 often `tpl` reads its own clone, and with it the retiring condition of point 6,
 which point 7 now states in full.
 
+**Brought in step with the code on 2026-11-05**, at `09afd0d`, against the
+eighty-fourth edition: since `20d81a5` a connection that opened under
+`required`, `verify-ca` or `verify-identity` has its TLS handshake line even
+where no reading fell inside it, and `FR-GLOB-017` now states where the
+attribution of time stops. Point 6's account of the readings and its
+consequence follow; no decision changed.
+
 ## Context
 
 **The corpus names no driver for the `mysql` provider and hands the choice
@@ -325,7 +332,10 @@ options is set; the MariaDB path sets all four off
      (`src/mariadb/connect.rs`, `open_classified` and `Ledger`). The
      recordings are made synchronously inside a poll, so a phase is seen at the
      end of the poll that recorded it, and a phase recorded and left within one
-     poll is not seen.
+     poll is not seen. Under `required`, `verify-ca` and `verify-identity`,
+     which always negotiate TLS, a connection that opened has its handshake
+     line whether or not a reading saw it (`Ledger::negotiated_tls`); under
+     `preferred`, an unseen handshake has none.
 
    Every read is an atomic load: it needs no `unsafe`, reads no driver text,
    and never writes the handle. sqlx-core is not touched, so the tree of
@@ -566,11 +576,16 @@ loads of a cell the driver writes; no packet and no statement follows from
 them, so the read-only promise and the count of `NFR-PERF-008` are untouched,
 and the classification still rests on the one reading at the end. The timing
 lines are diagnostics, outside the output contract under `NFR-DET-001`, and
-their durations vary from run to run. Which lines appear also rests on the
-call's polls: a TLS handshake is seen only if the call yields while the handle
-names it, which it does whenever the handshake waits on the network. Where no
-TLS is negotiated, the driver records the handshake and leaves it within one
-poll, and no line is written, as `FR-GLOB-017` requires.
+their durations vary from run to run. A handshake whose replies are already
+buffered can begin and end within one poll, and no reading then falls inside
+it. Under the three modes that always negotiate TLS its line is still written,
+with the time the readings charged to it, zero where none; under `preferred`
+it may have no line. Where no TLS is negotiated, the driver records the
+handshake and leaves it within one poll, and no line is written. What a caller
+may and may not rely on in these lines is `FR-GLOB-017`'s, as the
+eighty-fourth edition states it, and is not restated here; it names a driver
+that reports each phase as it begins and ends as what would lift the limit,
+which is the condition point 7 gives point 6.
 
 **Point 8 reaches every read, not the login alone.** Its checks in the rows,
 the column count, the EOF packet and the join of continuation packets run on
@@ -661,5 +676,7 @@ cited here, not restated.
 | No release contains it: `v0.9.0` is the latest tag | GitHub API, `transact-rs/sqlx`, `tags` | 2026-11-05 |
 | The diff applies to `vendor/sqlx-mysql-0.9.0/` as it stands with every hunk succeeding, no rejection and no fuzz, `auth.rs` at offset 21, `stream.rs` at −3 and `statement/row.rs` at −1 | `patch -p2 --verbose` over a scratch copy of the vendored tree at `a4f81c9`; not compiled | 2026-11-05 |
 | `recv_packet` refuses an empty packet with `Error::Protocol`; `src/mariadb/fault.rs` maps an error of the login phase that is not `Io` to the second outcome and an `Io` error to the first | `vendor/sqlx-mysql-0.9.0/src/connection/stream.rs` lines 160–162; `src/mariadb/fault.rs` lines 175–178, at `a4f81c9` | 2026-11-05 |
-| `tpl` reads the handle after every poll of the call to `connect` and once when it ends, charges the time between readings to the phase the first saw, and reports one line per phase seen; the classification and the deadline read the handle once the call has ended; nothing under `vendor/` changed for it | `src/mariadb/connect.rs`, `open_classified` (lines 544–644) and `Ledger` (lines 646–735), at `f7c5385`; `git diff a4f81c9 f7c5385 -- vendor/`, whose changes are point 8's and `vendor/README.md` | 2026-11-05 |
+| `tpl` reads the handle after every poll of the call to `connect` and once when it ends, charges the time between readings to the phase the first saw, and reports one line per phase seen; the classification and the deadline read the handle once the call has ended; nothing under `vendor/` changed for it | `src/mariadb/connect.rs`, `open_classified` (lines 544–650), `requires_tls` and `Ledger` (lines 665–771), at `09afd0d`; `git diff a4f81c9 f7c5385 -- vendor/`, whose changes are point 8's and `vendor/README.md` | 2026-11-05 |
 | At `INFO`, one line per phase of `FR-CONF-005` the connection ran, the TLS handshake where the mode negotiated one, written once the connection has opened or failed | `specification/global-flags.md`, `FR-GLOB-017`, as amended in the seventy-ninth edition | 2026-11-05 |
+| A connection that opened under `required`, `verify-ca` or `verify-identity` has its handshake line even where no reading saw the handshake; `preferred` is not among those modes | `src/mariadb/connect.rs`, `open_classified` lines 628–632, `requires_tls` from line 652, `Ledger::negotiated_tls` lines 739–750, at `09afd0d` (since `20d81a5`) | 2026-11-05 |
+| Where the attribution of time stops: under the three modes the handshake has its line, possibly with zero time; under `preferred` an unseen handshake may have no line; a caller relies on the set of lines and their sum, not on one line's time | `specification/global-flags.md`, `FR-GLOB-017`, *Where the attribution of time stops*, eighty-fourth edition at `09afd0d` | 2026-11-05 |
