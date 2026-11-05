@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty-four editions. All are in force;
+The specification has been written in eighty-five editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6706,6 +6706,30 @@ against the change, and none is amended. The fifth validation rule is
 applied: the root `README.md` says only that stderr carries phase timings
 outside the contract, which stays true, so
 [upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-fifth edition — three divergences discharged
+
+`536f836` corrected the three passages of the root `README.md` against
+which the seventy-ninth edition raised `DIV-063`, `DIV-064` and `DIV-065`.
+This edition reads the file at that commit and records what it found; no
+requirement changes. **No identifier is assigned, retired or renumbered**;
+no open question is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **Three entries discharged** — each part of each correction was found
+  made, and each entry's status names `536f836` and keeps the status it was
+  raised with. `DIV-065`'s correction was owed with the implementation of
+  `FR-EX-011` and `FR-EX-012`, and the commit follows it.
+- **The counts** — the Overview of
+  [upstream-divergences.md](upstream-divergences.md) counts sixty-five
+  entries: three due in full, fifty-eight discharged and four partly
+  discharged; seven still owe something, five to `CLAUDE.md` and two to
+  `README.md`. `DIV-032` and `DIV-041` restate the count.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied: the corrected sections were read
+against `FR-CONF-005`, `FR-CONF-056`, `FR-EX-006`, `FR-EX-011`, `FR-EX-012`
+and `FR-EX-008`, and agree with them; the rest of the file was not re-read
+for status.
 
 ### Still out of scope
 

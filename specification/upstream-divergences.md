@@ -20,10 +20,18 @@ whether it is still owed.
 specification never edits them.** It is a work list for whoever holds the pen on
 those two files.
 
-**Sixty-five entries are recorded. As of 2026-11-05, six are due in full,
-fifty-five are discharged, and four are partly discharged.** Ten entries
-still owe something: five owe it to `CLAUDE.md` and five to `README.md`, and
+**Sixty-five entries are recorded. As of 2026-11-05, three are due in full,
+fifty-eight are discharged, and four are partly discharged.** Seven entries
+still owe something: five owe it to `CLAUDE.md` and two to `README.md`, and
 no entry is in both counts.
+
+*The counts moved in the eighty-fifth edition, and three entries moved
+them.* `536f836` corrected the three passages of the root `README.md` the
+seventy-ninth edition raised entries against, and the file was read at that
+commit on 2026-11-05. `DIV-063`, `DIV-064` and `DIV-065` are discharged in
+full: they leave the **due** count and that file's count, and join the
+discharged one. No other entry was re-read for status. The counts restated
+in `DIV-032` and `DIV-041` move with this paragraph.
 
 *The counts moved in the seventy-ninth edition, and three entries moved
 them.* The edition makes the session statement a phase bounded by
@@ -521,9 +529,9 @@ register was opened, and `DIV-025` cites it for a search of the history.
 | [DIV-060](#div-060) | `CLAUDE.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | MariaDB and SQLite as the only providers, and no contract or catalogue rule for a `mysql` entry |
 | [DIV-061](#div-061) | `README.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | `connect_timeout` shared by three connection phases, where the login is a fourth |
 | [DIV-062](#div-062) | `README.md` | Contradiction | Discharged, rmp `#330`'s commit over `cc511e2` | A MySQL reader's restricted views and routines said to be marked, where one requested by name exits `77` |
-| [DIV-063](#div-063) | `README.md` | Contradiction | Due | `query_timeout` said to bound catalogue queries, where it also bounds each session statement |
-| [DIV-064](#div-064) | `README.md` | Contradiction | Due | The `schema` subcommands said to resolve the configuration for a connection, where a read served from the cache does not |
-| [DIV-065](#div-065) | `README.md` | Contradiction | Due | The worked examples said to read three schemas from one server, where they also read one through a `mysql` entry and one through a `sqlite` entry |
+| [DIV-063](#div-063) | `README.md` | Contradiction | Discharged, `536f836` | `query_timeout` said to bound catalogue queries, where it also bounds each session statement |
+| [DIV-064](#div-064) | `README.md` | Contradiction | Discharged, `536f836` | The `schema` subcommands said to resolve the configuration for a connection, where a read served from the cache does not |
+| [DIV-065](#div-065) | `README.md` | Contradiction | Discharged, `536f836` | The worked examples said to read three schemas from one server, where they also read one through a `mysql` entry and one through a `sqlite` entry |
 
 One passage of `CLAUDE.md` was read and found not to be a divergence, so it
 has no entry and no row above. The reading and its grounds are at
@@ -1212,9 +1220,9 @@ is the one stated above and nothing more.
 in *Estrutura do Projecto*, below the project tree and unchanged since
 `3f65b5f`, through every commit that has touched `CLAUDE.md` since — the three
 most recent of them `3a360d6`, `6a66d14` and `9562fb2`, none of which reaches
-this passage. It is one of the ten entries this register still owes
+this passage. It is one of the seven entries this register still owes
 something on, and one of the five owed to that file, as counted in the
-seventy-ninth edition. Re-read on 2026-09-25 at
+eighty-fifth edition. Re-read on 2026-09-25 at
 `c360c80`: `6bc8513`, `390c6c6` and `70661da` touched `CLAUDE.md` since and
 none reaches this passage.
 
@@ -1629,8 +1637,8 @@ sentence.
 **Status**: **due**, re-read on 2026-09-22 at `9562fb2`. The deferral stands
 verbatim under *Plataformas Suportadas*, unmoved by `3a360d6`, `6a66d14` or
 `9562fb2`, and the two rules beside it still restate what `NFR-PERF-018` and
-`NFR-PERF-012` carry. It is one of the ten entries this register still
-owes something on, as counted in the seventy-ninth edition. Re-read on
+`NFR-PERF-012` carry. It is one of the seven entries this register still
+owes something on, as counted in the eighty-fifth edition. Re-read on
 2026-09-25 at `c360c80`: the deferral stands, unmoved by `6bc8513`,
 `390c6c6` and `70661da`.
 
@@ -3174,8 +3182,16 @@ by name meets the other half, the `77`, with nothing in the row to say so.
 
 **Target**: `README.md`, the section *Deadlines*. **Kind**: contradiction.
 
-**Status**: **due**, on 2026-11-05 at `b3f87a2`. No commit has discharged any
-part of it.
+**Status**: **discharged** by `536f836`, re-read on 2026-11-05 against
+`README.md` at that commit. The paragraph now reads "`query_timeout`, per
+catalogue query and per session statement — the read-only statement, its
+read-back and the version probe, each with a deadline of its own", and the
+paragraph two below names "the three session statements" among what bounds
+a read that misses the cache, citing `FR-CONF-005`: the correction's first
+form, in both places. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-05 at `b3f87a2`. No commit had
+discharged any part of it.
 
 *Says*: "Four `[core]` keys supply them: `connect_timeout`, shared by DNS
 resolution, the TCP connect, the TLS handshake and the login;
@@ -3203,8 +3219,17 @@ session statements ran under `query_timeout` then, unnamed.
 **Target**: `README.md`, the section *Keeping a password off disk*. **Kind**:
 contradiction.
 
-**Status**: **due**, on 2026-11-05 at `b3f87a2`. No commit has discharged any
-part of it.
+**Status**: **discharged** by `536f836`, re-read on 2026-11-05 against
+`README.md` at that commit. The passage now names `tpl cache load`,
+`tpl cfg database test`, "and a `schema` subcommand or a `tpl render` whose
+context comes from the database, on a read that misses the cache or carries
+`--direct`", and adds "A read served from the cache expands no variable and
+runs no `password_command`", citing `FR-CONF-056`; the first sentence and the
+sentence on the commands that only read or write `.tpl/.cfg` stand. Nothing
+is owed.
+
+*Status when raised*: **due**, on 2026-11-05 at `b3f87a2`. No commit had
+discharged any part of it.
 
 *Says*: "Both take effect when the configuration is **resolved for a
 connection** — which is what every command that opens one does: the
@@ -3234,8 +3259,20 @@ implementation expanded on a hit, which is rmp `#310`.
 **Target**: `README.md`, the section *Worked examples*. **Kind**:
 contradiction.
 
-**Status**: **due**, on 2026-11-05 at `b3f87a2`. No commit has discharged any
-part of it.
+**Status**: **discharged** by `536f836`, re-read on 2026-11-05 against
+`README.md` at that commit, which follows the implementation of
+`FR-EX-011` and `FR-EX-012`, as the correction required. The section states
+that all four examples make "the same five reads, through all three
+providers" — the three MariaDB schemas, the `freight` schema of the MySQL
+fixture through a `mysql` entry, and the main database the SQLite fixture
+builds from `scripts/sqlite/freight.sql` through a `sqlite` entry — and
+restates the counts, 82 tables and 755 columns, 247 to 252 files, and 44
+values of `data_type`, `json`, `geomcollection` and the three SQLite
+affinities no server read produces among them. The counts are the
+examples' own, which this register does not check. Nothing is owed.
+
+*Status when raised*: **due**, on 2026-11-05 at `b3f87a2`. No commit had
+discharged any part of it.
 
 *Says*: "All four read the same three schemas — `sakila`, `world` and
 `freight`, **36 tables and 362 columns** — from one server of the most recent
