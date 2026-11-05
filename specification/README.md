@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty editions. All are in force;
+The specification has been written in eighty-one editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6609,6 +6609,31 @@ document has changed since `9468588`; at `5b1a568` both were searched for
 an error packet of the login, a database name, a NUL character, the
 contents of the MySQL fixture and a short packet. Neither paraphrases a
 requirement this edition amends, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-first edition — a decoding no requirement asked for, and a host in a hint
+
+Two conflicts the implementation of the eightieth edition met, at `f7c5385`
+and `e2260b8`, and the session coordinator relayed. **No identifier is
+assigned, retired or renumbered**; no open question is raised, no divergence
+entry is raised or discharged, and [glossary.md](glossary.md) is unchanged.
+
+- **A `dsn` part as written** — rmp `#357`. `FR-CONF-057` read a part of a
+  `dsn` after a percent-decoding that no requirement states: `FR-CONF-009`
+  fixes the grammar and `FR-CONF-018` the order of parsing, expansion and
+  encoding, and neither decodes. The requirement now reads each part as the
+  `dsn` holds it, so a `%00` is three characters, and it states that a Unix
+  argument vector carries no NUL character, so the refusal on the command
+  line is a guard verified in process.
+- **A host in a hint** — rmp `#344`. `FR-ERR-022` governs the whole of a
+  `hint` and admits no host; the examples of `FR-ERR-047` and `FR-ERR-049`
+  wrote one into the prose. The requirement stands and says so, and the five
+  examples refer to "the host and port named above", as the `hint` of
+  `FR-ERR-027` for the TCP connect already did.
+- **This file** — the edition count of the Scope, and this record.
+
+The fifth validation rule is applied for this edition: neither root
+document paraphrases a `dsn` part's decoding or the prose of a `hint`, so
 [upstream-divergences.md](upstream-divergences.md) raises no entry.
 
 ### Still out of scope

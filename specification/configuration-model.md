@@ -2141,13 +2141,22 @@ describes a `mysql` entry as it describes a `mariadb` one, per
 - **FR-CONF-057**: The following values SHALL NOT hold a NUL character
   (U+0000): the `host`, `user`, `password` and `database` of a `mariadb` or a
   `mysql` entry; each of the four parts of a `dsn` that carries one of them,
-  read after the percent-decoding through which the URL carries it; the
-  `path` of a `sqlite` entry; and the password a `password_command` prints.
+  as the `dsn` holds it; the `path` of a `sqlite` entry; and the password a
+  `password_command` prints. No requirement of this corpus decodes a part of
+  a `dsn`, so a `%00` in one is the three characters it is written as, and
+  not a NUL character.
+
+  The argument vector of a Unix process ends each argument at its first NUL
+  character, so no value given on the command line can hold one. The
+  refusal of the first item below is a guard on the validation every value
+  of these keys passes, which no invocation of the binary can reach, and it
+  is verified in process; a NUL character reaches `tpl` only through
+  `.tpl/.cfg`, whose TOML string escape writes one, and through the output of
+  a `password_command`.
 
   1. **On the command line.** IF a value given to `tpl cfg set` for one of
      those keys, or to `--dsn`, `--host`, `--user`, `--schema` or `--path`
-     under `FR-CFG-027`, holds a NUL character — the value of `--dsn`, and of
-     the `dsn` key, once each part is decoded — THEN the system SHALL exit
+     under `FR-CFG-027`, holds a NUL character, THEN the system SHALL exit
      `64` (`EX_USAGE`), as `FR-CFG-010` does for a value that does not
      conform to its type, and SHALL write nothing to `.tpl/.cfg`.
   2. **In the file.** IF the entry an invocation selects holds such a value,
@@ -2171,7 +2180,7 @@ describes a `mysql` entry as it describes a `mariadb` one, per
   must print the password alone.
   `${VAR}` cannot introduce a NUL character: every target of `NFR-PERF-018`
   is a Unix, whose environment strings end at their first NUL, so the rule
-  reaches the value as written, the parts of a `dsn` as decoded, and the
+  reaches the value as written, the parts of a `dsn` as written, and the
   helper's output.
 
   ```
@@ -2229,6 +2238,17 @@ describes a `mysql` entry as it describes a `mariadb` one, per
   declines for whitespace on the same ground.
 
   *Added in the eightieth edition,* for rmp `#357`.
+
+  *Amended in the eighty-first edition,* for rmp `#357`. The requirement
+  read a part of a `dsn` "after the percent-decoding through which the URL
+  carries it", and refused a NUL character in `--dsn` "once each part is
+  decoded". No requirement decodes a part — `FR-CONF-009` fixes the grammar
+  and `FR-CONF-018` the order of parsing, expansion and encoding, and
+  neither decodes — and the implementation passes each part to the driver
+  as written, so the wording presupposed a step that does not exist. It now
+  reads each part as the `dsn` holds it. The paragraph on the argument
+  vector is new: the first item read as an outcome of an invocation, and an
+  invocation cannot carry a NUL character to it.
 
 ## Precedence
 

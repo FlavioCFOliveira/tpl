@@ -1328,6 +1328,26 @@ Out of scope: the wording of any individual message.
   space between command-path segments, the `-` or `--` that introduces a flag,
   and the `.` between key segments.
 
+  A host is not among those values, and no `hint` SHALL carry one, in its
+  command or in its prose: a `hint` that needs the address SHALL refer to the
+  host and port the `error` and `cause` lines name, in words such as "the host
+  and port named above", and SHALL carry `<host>` and `<port>` as
+  placeholders in a command that changes them. A port, being a number, is
+  within the set and MAY be written.
+
+  *Amended in the eighty-first edition,* for rmp `#344`. The examples of
+  `FR-ERR-047` and `FR-ERR-049` wrote the host into the prose of their
+  `hint`s, and the implementation followed them, testing those two `hint`s
+  apart from this requirement. The requirement governs the whole `hint`, and
+  a host is a value of `.tpl/.cfg`, which may arrive in a clone, per the
+  trust boundaries of [security.md](security.md). The examples change, and
+  this requirement does not. *Rejected: admitting a host, escaped under
+  `FR-ERR-024`.* Escaping keeps a host from forging a line, and not from
+  writing words a caller reads as advice on the one line a caller acts on;
+  the `error` and `cause` lines already name it, and the `hint` loses nothing
+  by pointing at them, as the `hint` of `FR-ERR-027` for the TCP connect
+  already does.
+
   *Amended in the twentieth edition: the requirement says what the character
   set governs, because as written it governed everything and admitted two of
   the eight populations of `FR-ERR-021` nowhere.* No key of `FR-CONF-002`
@@ -2036,21 +2056,21 @@ no requirement of this file is amended.
   ```
   error: cannot reach db.example.com:3306, for database entry 'shop'
   cause: the TCP connect to db.example.com:3306 failed: the network reports the host unreachable
-  hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host named above is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
   ```
   error: cannot reach db.example.com:3306, for database entry 'shop'
   cause: the TCP connect to db.example.com:3306 failed: the operating system reported error 13
-  hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host named above is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
   ```
   error: cannot reach db.example.com:3306, for database entry 'shop'
   cause: the TCP connect to db.example.com:3306 failed, and the operating system reported no error number
-  hint:  check that db.example.com is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host named above is reachable from here — its address, a route, a VPN or a firewall — or change the address with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
@@ -2058,6 +2078,10 @@ no requirement of this file is amended.
   through `FR-ERR-012`. The examples fix the facts named, the command
   carried and the code. The first is the message the implementation prints
   for `ECONNREFUSED` at `2d652bd`, and nothing in it changes.
+
+  *Amended in the eighty-first edition,* for rmp `#344`: the `hint` of the
+  last three examples refers to the host named above and no longer writes
+  it, per `FR-ERR-022`.
 
   *Observed, through `tpl`, on 2026-11-04.* A `mariadb` and a `mysql` entry
   naming port `1` of the loopback interface, where nothing listens, gave the
@@ -2244,14 +2268,14 @@ no requirement of this file is amended.
   ```
   error: the login to db.example.com:3306 did not complete, for database entry 'shop'
   cause: the TCP connect to db.example.com:3306 succeeded, and the connection failed before the login completed: the server closed it, it was reset, or the operating system abandoned it
-  hint:  check that db.example.com:3306 is the address of a running MariaDB server, then run the command again, or change the address with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host and port named above are the address of a running MariaDB server, then run the command again, or change the address with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
   ```
   error: the login to db.example.com:3306 did not complete, for database entry 'shop'
   cause: what answered the login at db.example.com:3306 did not answer as a MariaDB server does: it does not speak the MariaDB protocol, or it asked for a step tpl does not implement, such as an authentication method
-  hint:  check that db.example.com:3306 is the address of a MariaDB server, or change it with: tpl cfg database update shop --host <host> --port <port>
+  hint:  check that the host and port named above are the address of a MariaDB server, or change it with: tpl cfg database update shop --host <host> --port <port>
   exit:  69 (EX_UNAVAILABLE)
   ```
 
@@ -2353,6 +2377,11 @@ no requirement of this file is amended.
   test shows each with a listener on the loopback interface that sends the
   packet in its place, for which the system exits `69` with the second
   example's four lines.
+
+  *Amended in the eighty-first edition,* for rmp `#344`: the `hint` of the
+  first two examples refers to the host and port named above and no longer
+  writes them, per `FR-ERR-022`. The *Observed* note above records the
+  wording before this edition.
 
 - **FR-ERR-048**: WHEN the server of a `mariadb` or a `mysql` entry answers
   the login with an error packet, the system SHALL NOT read the catalogue,
