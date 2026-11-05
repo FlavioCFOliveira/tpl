@@ -20,9 +20,9 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 
 ---
 
-> ## Status: implemented, released (latest v0.0.2)
+> ## Status: implemented, released (latest v0.1.0)
 >
-> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 was the first release of `tpl` and v0.0.2 is the latest; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds. The SQLite and MySQL providers are in no release yet: both are recorded under *Unreleased* in that file, and a build from source carries them.
+> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 was the first release of `tpl` and v0.1.0 is the latest; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds. The SQLite and MySQL providers ship from v0.1.0.
 >
 > | Command | State |
 > |---|---|
