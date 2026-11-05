@@ -10,7 +10,9 @@
 //! The server is scripted and not a database: it speaks exactly the part of
 //! the client-server protocol these bodies reach — a greeting naming
 //! `mysql_native_password` with neither TLS nor `CLIENT_DEPRECATE_EOF`, an OK
-//! packet for any login, and per statement the answer the body scripts — so
+//! packet for any login, and per statement the answer the body scripts, a
+//! catalogue statement alike as a prepared statement or over the text
+//! protocol — so
 //! that the statement a body is about is the one that stalls or fails, and
 //! the outcome does not depend on a fixture. Both providers are run, because
 //! a `mariadb` and a `mysql` entry issue the same three session statements
@@ -52,21 +54,22 @@ struct Script {
     read_back: Answer,
     /// The version probe.
     probe: Answer,
-    /// Any statement prepared after them: the privilege probe of
-    /// `FR-CFG-044` and the catalogue statements, which travel as prepared
-    /// statements because they carry a bind parameter.
-    prepared: Answer,
+    /// Any statement after them: the privilege probe of `FR-CFG-044` and the
+    /// catalogue statements. A `mariadb` entry sends them as prepared
+    /// statements, because they carry a bind parameter; a `mysql` entry sends
+    /// them over the text protocol, the name as a literal (`ADR-015`).
+    catalogue: Answer,
 }
 
 impl Script {
-    /// A session that opens and settles for `provider`, whose prepared
-    /// statements are answered with `prepared`.
-    const fn settled(provider: &str, prepared: Answer) -> Self {
+    /// A session that opens and settles for `provider`, whose catalogue
+    /// statements are answered with `catalogue`.
+    const fn settled(provider: &str, catalogue: Answer) -> Self {
         Self {
             read_only: Answer::Ok,
             read_back: Answer::Integer("1"),
             probe: Answer::Text(version(provider)),
-            prepared,
+            catalogue,
         }
     }
 }
@@ -219,7 +222,9 @@ fn server(script: Script) -> (u16, JoinHandle<()>) {
                 Some(0x03) if text.starts_with("SET SESSION TRANSACTION") => script.read_only,
                 Some(0x03) if text.contains("read_only") => script.read_back,
                 Some(0x03) if text.contains("VERSION()") => script.probe,
-                Some(0x16) => script.prepared,
+                // COM_STMT_PREPARE, or any other COM_QUERY: a catalogue
+                // statement, whichever protocol the provider sends it by.
+                Some(0x16 | 0x03) => script.catalogue,
                 // COM_QUIT, or anything this server does not script.
                 _ => return,
             };
