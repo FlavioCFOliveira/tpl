@@ -26,15 +26,19 @@
 //! the concurrency story: two processes yield one whole file or the other, and
 //! a killed process leaves nothing locked and nothing half-written.
 //!
-//! **Every step acts in the `.tpl` the file was read from** (`FR-CFG-041`,
-//! `FR-SEC-027`). [`Editor::open`] opens that folder once, without following a
-//! link, and keeps the descriptor; the read, the creation of the temporary,
-//! its write, its mode and the rename are each made relative to it by
-//! [`crate::at`], so a link or a folder put in place of a component of the
-//! path after the checks redirects none of them.
+//! **Every step acts in the `.tpl` the trust checks judged** (`FR-CFG-041`,
+//! `FR-SEC-027`). The checks of [`super::trust`] open that folder once, judge
+//! `.cfg` on a descriptor relative to it and read its text there, and the
+//! project keeps the folder's descriptor; [`Editor::new`] is handed both, and
+//! the creation of the temporary, its write, its mode, its `fsync`, the rename
+//! and the folder's `fsync` are each made relative to that descriptor by
+//! [`crate::at`]. Nothing on the rewrite path resolves the folder's path again,
+//! so a link or a folder put in place of a component of it after the checks
+//! redirects none of those steps.
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use rustix::fd::OwnedFd;
 use rustix::fs::Mode;
@@ -65,9 +69,9 @@ const DATABASE: &str = "database";
 /// One `.tpl/.cfg` open for writing.
 #[derive(Debug)]
 pub(crate) struct Editor {
-    /// The `.tpl` folder the file was read from and the temporary file is
-    /// written inside, held open, per `FR-CFG-041`.
-    folder: OwnedFd,
+    /// The `.tpl` folder the trust checks judged, the file was read from and
+    /// the temporary file is written inside, held open, per `FR-CFG-041`.
+    folder: Arc<OwnedFd>,
     /// The file the temporary one is renamed over.
     file: PathBuf,
     /// The document, with its comments and its key order intact.
@@ -75,54 +79,22 @@ pub(crate) struct Editor {
 }
 
 impl Editor {
-    /// Opens the `.cfg` of the `.tpl` folder `directory`.
+    /// An editor over `text`, the `.cfg` the trust checks read from `folder`,
+    /// the `.tpl` folder they judged and hold open; `file` is the path of that
+    /// `.cfg`, for a message.
     ///
-    /// A file that does not exist opens as an empty document, which is what
-    /// lets `tpl cfg set` write the first key of a project whose file was
-    /// removed by hand.
+    /// Nothing is opened or read here: the rewrite starts from the text the
+    /// checks judged, and acts in the folder they judged (`FR-CFG-041`). An
+    /// absent file is the empty text, which is what lets `tpl cfg set` write
+    /// the first key of a project whose file was removed by hand.
     ///
     /// # Errors
     ///
-    /// Returns [`Error::ProjectFileUnreadable`] where the file exists and
-    /// cannot be read, and [`Error::ConfigurationMalformed`] where it is not
-    /// TOML — which the reader of [`super::config`] has already refused for
-    /// every command that reaches this one, and which is refused again here
-    /// rather than assumed.
-    pub(crate) fn open(directory: &Path) -> Result<Self, Error> {
-        let file = directory.join(CONFIGURATION);
-
-        // FR-PROJ-030 and FR-SEC-027: the file the rewrite starts from is read
-        // on a descriptor opened relative to `.tpl` without following a link
-        // and without waiting for a writer, and typed on that descriptor, so a
-        // FIFO swapped in after the trust checks cannot hang the command.
-        let unreadable = |returned: std::io::Error| Error::ProjectFileUnreadable {
-            path: file.clone(),
-            returned,
-        };
-        let folder = crate::at::directory(directory, directory)
-            .map_err(|fault| unreadable(fault.into_io()))?;
-        let text = match crate::at::read_checked(&folder, std::ffi::OsStr::new(CONFIGURATION), None)
-        {
-            Ok(text) => text,
-            Err(crate::at::Unread::NotRegular(kind)) => {
-                return Err(Error::ConfigurationNotRegular {
-                    path: file,
-                    kind: crate::at::kind_name(kind),
-                });
-            }
-            Err(crate::at::Unread::Io(returned))
-                if returned.kind() == std::io::ErrorKind::NotFound =>
-            {
-                String::new()
-            }
-            Err(crate::at::Unread::Io(returned)) => return Err(unreadable(returned)),
-            Err(crate::at::Unread::Oversized) => {
-                return Err(unreadable(std::io::Error::from(
-                    std::io::ErrorKind::InvalidData,
-                )));
-            }
-        };
-
+    /// Returns [`Error::ConfigurationMalformed`] where `text` is not TOML —
+    /// which the reader of [`super::config`] has already refused for every
+    /// command that reaches this one, and which is refused again here rather
+    /// than assumed.
+    pub(crate) fn new(folder: Arc<OwnedFd>, file: PathBuf, text: &str) -> Result<Self, Error> {
         let document =
             text.parse::<DocumentMut>()
                 .map_err(|refused| Error::ConfigurationMalformed {
@@ -146,6 +118,44 @@ impl Editor {
             file,
             document,
         })
+    }
+
+    /// Opens the `.cfg` of the `.tpl` folder `directory`, for the tests of the
+    /// write path that start from a folder rather than from a project.
+    ///
+    /// The production path never comes here: [`crate::project::Project::editor`]
+    /// hands [`Editor::new`] the folder and the text the trust checks judged.
+    #[cfg(test)]
+    pub(crate) fn open(directory: &Path) -> Result<Self, Error> {
+        let file = directory.join(CONFIGURATION);
+        let unreadable = |returned: std::io::Error| Error::ProjectFileUnreadable {
+            path: file.clone(),
+            returned,
+        };
+        let folder = crate::at::directory(directory, directory)
+            .map_err(|fault| unreadable(fault.into_io()))?;
+        let text = match crate::at::read_checked(&folder, OsStr::new(CONFIGURATION), None) {
+            Ok(text) => text,
+            Err(crate::at::Unread::Io(returned))
+                if returned.kind() == std::io::ErrorKind::NotFound =>
+            {
+                String::new()
+            }
+            Err(crate::at::Unread::NotRegular(kind)) => {
+                return Err(Error::ConfigurationNotRegular {
+                    path: file,
+                    kind: crate::at::kind_name(kind),
+                });
+            }
+            Err(crate::at::Unread::Io(returned)) => return Err(unreadable(returned)),
+            Err(crate::at::Unread::Oversized) => {
+                return Err(unreadable(std::io::Error::from(
+                    std::io::ErrorKind::InvalidData,
+                )));
+            }
+        };
+
+        Self::new(Arc::new(folder), file, &text)
     }
 
     /// The file this editor writes.

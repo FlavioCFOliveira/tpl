@@ -473,22 +473,36 @@ pub(crate) fn write_in(
 }
 
 /// Replaces `name` under `folder` with `bytes`, through the temporary
-/// `temporary` in the same folder, given `mode` on its descriptor and renamed
-/// over the target (`FR-CFG-041`).
+/// `temporary` in the same folder, given `mode` on its descriptor, made
+/// durable, and renamed over the target (`FR-CFG-041`).
 ///
 /// It is [`write_in`] for a file whose failure is a condition rather than a
-/// missed optimisation: whatever stands at the temporary's name is removed
-/// first, as itself where it is a link, the temporary is created exclusively
-/// with `O_NOFOLLOW`, written, `fchmod`ed to `mode` — the umask applies to
-/// `openat`'s mode and not to `fchmod`'s — and `renameat` replaces the entry
-/// `name` of `folder`, a link there included, and no file a link points at.
+/// missed optimisation. The steps, in order:
+///
+/// 1. whatever stands at the temporary's name is removed, as itself where it
+///    is a link;
+/// 2. the temporary is created exclusively, with `O_NOFOLLOW`;
+/// 3. it is written;
+/// 4. it is `fchmod`ed to `mode` — the umask applies to `openat`'s mode and not
+///    to `fchmod`'s;
+/// 5. it is `fsync`ed, so its bytes are on the device before any name points
+///    at them;
+/// 6. `renameat` replaces the entry `name` of `folder`, a link there included,
+///    and no file a link points at;
+/// 7. `folder` is `fsync`ed, so the rename itself survives a crash.
+///
 /// Every step acts on `folder`'s descriptor, so no component of its path
-/// resolved again can redirect one of them.
+/// resolved again can redirect one of them. On macOS `fsync` hands the data to
+/// the device without asking it to flush its own cache, which `F_FULLFSYNC`
+/// would; the requirement names `fsync`, and it is what is issued.
 ///
 /// # Errors
 ///
-/// Returns what the filesystem returned for the first step that failed. The
-/// target is then untouched, and the temporary removed.
+/// Returns what the filesystem returned for the first step that failed. A
+/// failure up to the rename leaves the target untouched and removes the
+/// temporary; a failure of the folder's `fsync` comes after the rename, so the
+/// target then holds the new bytes, whose durability the call could not
+/// establish.
 pub(crate) fn replace_in(
     folder: &OwnedFd,
     name: &OsStr,
@@ -500,17 +514,62 @@ pub(crate) fn replace_in(
 
     let replaced = (|| -> Result<(), Errno> {
         let handle = rfs::openat(folder, temporary.as_bytes(), CREATE, mode)?;
+        step(Step::Create);
         write_all(&handle, bytes)?;
+        step(Step::Write);
         rfs::fchmod(&handle, mode)?;
+        step(Step::Mode);
+        rfs::fsync(&handle)?;
+        step(Step::SyncFile);
         drop(handle);
 
-        rfs::renameat(folder, temporary.as_bytes(), folder, name.as_bytes())
+        rfs::renameat(folder, temporary.as_bytes(), folder, name.as_bytes())?;
+        step(Step::Rename);
+        Ok(())
     })();
 
-    replaced.map_err(|errno| {
+    if let Err(errno) = replaced {
         let _ = rfs::unlinkat(folder, temporary.as_bytes(), AtFlags::empty());
-        io_error(errno)
-    })
+        return Err(io_error(errno));
+    }
+
+    rfs::fsync(folder).map_err(io_error)?;
+    step(Step::SyncFolder);
+
+    Ok(())
+}
+
+/// One step of [`replace_in`], as the test configuration records it.
+#[cfg_attr(
+    not(test),
+    allow(dead_code, reason = "recorded under the test configuration alone")
+)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Step {
+    /// The temporary was created.
+    Create,
+    /// Its bytes were written.
+    Write,
+    /// Its mode was set.
+    Mode,
+    /// It was `fsync`ed.
+    SyncFile,
+    /// It was renamed over the target.
+    Rename,
+    /// The folder was `fsync`ed.
+    SyncFolder,
+}
+
+/// Records `step` under the test configuration, and does nothing otherwise.
+#[cfg_attr(
+    not(test),
+    allow(clippy::missing_const_for_fn, reason = "a no-op outside the tests")
+)]
+fn step(step: Step) {
+    #[cfg(test)]
+    steps::record(step);
+    #[cfg(not(test))]
+    let _ = step;
 }
 
 /// Writes all of `bytes` to `handle`, retrying an interrupted write.
@@ -599,5 +658,103 @@ pub(crate) fn unlink(folder: &OwnedFd, name: &OsStr, flags: AtFlags) -> io::Resu
     match rfs::unlinkat(folder, name.as_bytes(), flags) {
         Ok(()) | Err(Errno::NOENT) => Ok(()),
         Err(errno) => Err(io_error(errno)),
+    }
+}
+
+/// A seam of the test configuration alone: the steps [`replace_in`] took on
+/// this thread, in order. It is compiled into no other build.
+#[cfg(test)]
+pub(crate) mod steps {
+    use std::cell::RefCell;
+
+    use super::Step;
+
+    thread_local! {
+        /// The steps taken on this thread since the last [`take`].
+        static TAKEN: RefCell<Vec<Step>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// Records one step.
+    pub(super) fn record(step: Step) {
+        TAKEN.with(|taken| taken.borrow_mut().push(step));
+    }
+
+    /// The steps taken on this thread since the last call, which are cleared.
+    pub(crate) fn take() -> Vec<Step> {
+        TAKEN.with(|taken| std::mem::take(&mut *taken.borrow_mut()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+
+    use rustix::fs::Mode;
+
+    use super::{Step, directory, replace_in, steps};
+    use crate::project::scratch::Scratch;
+
+    #[test]
+    fn fr_cfg_041_a_replacement_syncs_the_file_before_the_rename_and_the_folder_after() {
+        // FR-CFG-041, and the durability #313 adds: the temporary is synced
+        // before any name points at it, and the folder after the rename, so
+        // that the rename itself survives a crash.
+        let scratch = Scratch::new();
+        let folder_path = scratch.directory(".tpl");
+        let folder = directory(&folder_path, &folder_path).expect("the folder opens");
+        let _ = steps::take();
+
+        replace_in(
+            &folder,
+            OsStr::new(".cfg"),
+            OsStr::new(".cfg.tmp"),
+            Mode::RUSR | Mode::WUSR,
+            b"[core]\n",
+        )
+        .expect("the replacement lands");
+
+        assert_eq!(
+            steps::take(),
+            [
+                Step::Create,
+                Step::Write,
+                Step::Mode,
+                Step::SyncFile,
+                Step::Rename,
+                Step::SyncFolder,
+            ]
+        );
+        assert_eq!(
+            std::fs::read_to_string(folder_path.join(".cfg")).expect("the file is there"),
+            "[core]\n"
+        );
+    }
+
+    #[test]
+    fn fr_cfg_041_a_replacement_that_fails_before_the_rename_renames_and_syncs_nothing() {
+        // A temporary that cannot be created — a directory stands at its name
+        // — ends the sequence at once: nothing is renamed, and the target is
+        // untouched.
+        let scratch = Scratch::new();
+        let folder_path = scratch.directory(".tpl");
+        scratch.directory(".tpl/.cfg.tmp");
+        let target = scratch.file(".tpl/.cfg", "before\n");
+        let folder = directory(&folder_path, &folder_path).expect("the folder opens");
+        let _ = steps::take();
+
+        replace_in(
+            &folder,
+            OsStr::new(".cfg"),
+            OsStr::new(".cfg.tmp"),
+            Mode::RUSR | Mode::WUSR,
+            b"after\n",
+        )
+        .expect_err("a directory stands at the temporary's name");
+
+        assert!(steps::take().is_empty());
+        assert_eq!(
+            std::fs::read_to_string(target).expect("the file is there"),
+            "before\n"
+        );
     }
 }

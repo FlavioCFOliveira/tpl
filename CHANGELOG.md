@@ -314,13 +314,20 @@ workflow, before it closes.
 
 ### Security
 
-- **A rewrite of `.tpl/.cfg` acts only in the `.tpl` it read.** The five
-  commands that rewrite the file create the temporary file, write it, give it
-  mode `0600` and rename it over `.cfg` relative to the `.tpl` folder they
-  opened, following no link, so a link or a folder put in place of a component
-  of its path after the checks redirects none of those steps, and a link at
+- **A rewrite of `.tpl/.cfg` acts only in the `.tpl` the trust checks
+  judged.** The five commands that rewrite the file start from the `.cfg` text
+  the ownership and mode checks read, and create the temporary file, write it,
+  give it mode `0600` and rename it over `.cfg` relative to the `.tpl` folder
+  those checks opened and held, following no link; a folder without `.cfg` is
+  judged on that same held folder. A link or a folder put in place of a
+  component of its path after the checks therefore redirects none of those
+  steps — another project's `.cfg` could be rewritten before — and a link at
   `.cfg` is replaced rather than written through. A rewrite that cannot act in
   that folder exits `74`, leaving the previous file in place.
+- **A rewrite of `.tpl/.cfg` survives a crash.** The temporary file is
+  `fsync`ed before it is renamed over `.cfg`, and the `.tpl` folder after the
+  rename, so a power loss leaves the previous file or the new one, whole. An
+  `fsync` that fails exits `74`.
 - **C1 controls and bidirectional formatting characters are escaped.** In
   the text output of the read commands and in every diagnostic, a character
   from U+0080 to U+009F, and each of the twelve characters Unicode marks
