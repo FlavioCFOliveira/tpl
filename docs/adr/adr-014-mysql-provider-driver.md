@@ -2,9 +2,9 @@
 id: ADR-014
 title: The driver of the mysql provider
 status: accepted
-decided: 2026-11-04
-last-reviewed: 2026-11-04
-requirements: [FR-MYSQL-045, FR-MYSQL-022, FR-MYSQL-021, FR-MYSQL-020, FR-CONF-036, FR-CONF-055, FR-MYSQL-047, FR-CONF-005, FR-ERR-027, FR-ERR-047, FR-ERR-049]
+decided: 2026-11-05
+last-reviewed: 2026-11-05
+requirements: [FR-MYSQL-045, FR-MYSQL-022, FR-MYSQL-021, FR-MYSQL-020, FR-CONF-036, FR-CONF-055, FR-MYSQL-047, FR-CONF-005, FR-ERR-027, FR-ERR-047, FR-ERR-048, FR-ERR-049]
 supersedes: []
 superseded-by: null
 ---
@@ -51,6 +51,16 @@ did not change; the record's subject — the driver and the patch it carries —
 is the same, and the new parts were decided the same day, so this is an edit in
 place, as `ADR-013` was for its test-only feature, and `decided` is unchanged.
 
+**Amended in place on 2026-11-05**, for rmp `#342`, by the user's decision of
+that day: the patch also carries the whole of upstream pull request `#4458`,
+point 8, so that a short or malformed packet from the server ends in an
+`Error::Protocol` and not in a panic, as `FR-ERR-047` and `FR-ERR-048` require.
+Point 7 gains that part's retiring condition. The driver, the vendored form
+and points 3 to 6 are unchanged; the record's subject is the same, and a new
+part of the patch is a parameter of point 2, so this is an edit in place, and
+`decided` moves to the day it was decided. The claims re-read that day are
+those of the *Sources* rows dated 2026-11-05.
+
 ## Context
 
 **The corpus names no driver for the `mysql` provider and hands the choice
@@ -58,7 +68,7 @@ out.** The scope of `specification/mysql-contract.md` excludes "the choice of
 the database driver, which is an architecture decision under `FR-CONF-036` and
 `FR-MYSQL-022`", and names no home for it. The record is admitted under rule
 R4's second limb: the choice changes what the package is built against, and its
-alternatives must survive it, because the patch it carries has no upstream end
+alternatives must survive it, because three parts of the patch it carries have no upstream end
 in sight and the question returns at every move of `ADR-003`'s pin.
 
 **Five requirements constrain the driver.** `FR-CONF-036` disqualifies a driver
@@ -197,7 +207,7 @@ options is set; the MariaDB path sets all four off
 2. **The package patches the driver rather than living with what it does.** The
    root manifest's `[patch.crates-io]` table redirects `sqlx-mysql` to
    `vendor/sqlx-mysql-0.9.0/`, which holds the published 0.9.0 source with the
-   changes of points 3, 5 and 6 and nothing else. Everything else about the
+   changes of points 3, 5, 6 and 8 and nothing else. Everything else about the
    form is `ADR-010`'s, applied to a second tree and not restated: a tracked copy
    redirected by path, the version in the directory name, maintained by hand,
    excluded from the workspace, its provenance in `vendor/README.md`. The
@@ -208,7 +218,8 @@ options is set; the MariaDB path sets all four off
 
 3. **The refusal of the key request, in full.** Two guards and one type in
    `src/connection/auth.rs`, and the two lines that export the type. Line
-   numbers in points 3, 5 and 6 are those of the published files:
+   numbers in points 3, 5 and 6 are those of the published files, and point 8's
+   those of the vendored tree before it is applied:
 
    - in `AuthPlugin::handle`, the arm for `perform_full_authentication`
      (`0x04`, lines 52–59): before `encrypt_rsa` is called, the arm returns the
@@ -301,7 +312,7 @@ options is set; the MariaDB path sets all four off
    reads no driver text. sqlx-core is not touched, so the tree of `ADR-010`
    keeps its one statement.
 
-   Nothing differs from the published crate but what points 3, 5 and 6 name —
+   Nothing differs from the published crate but what points 3, 5, 6 and 8 name —
    no other function, file, feature or manifest entry; any other difference is
    a defect in the tree.
 
@@ -310,14 +321,65 @@ options is set; the MariaDB path sets all four off
    the request; the presentation of point 5, at the first whose `sqlx-mysql`
    sends, for an empty or an absent password, at the first response and at
    every switch, the responses point 5 sends; and the handle of point 6, at the
-   first whose `sqlx-mysql` lets a caller learn the phase a connection reached.
-   At each, that part leaves the tree, `tpl` uses what the release offers, and
+   first whose `sqlx-mysql` lets a caller learn the phase a connection reached;
+   and the hardening of point 8, at the first whose `sqlx-mysql` contains
+   upstream commit `4161768c9c077ea5dff6debcadeb0382d9f027df`, pull request
+   `#4458`. At each, that part leaves the tree, `tpl` uses what the release offers, and
    its point is amended in place; the tree and its patch entry go with the last
-   part. None was met on 2026-11-04. Until then the patch is carried across
+   part. None of the first three was met on 2026-11-04, and the fourth was not
+   met on 2026-11-05: `#4458` is on `main` and in no release. Until then the patch is carried across
    every move of `ADR-003`'s pin: the tree is vendored again at the release
    moved to, and every remaining part is re-applied and checked against that
    release's published source. `main` already edits both functions points 3
    and 5 touch, so the re-application will not be mechanical.
+
+8. **The hardening against short and malformed packets, in full: upstream pull
+   request `#4458`, carried whole.** Commit
+   `4161768c9c077ea5dff6debcadeb0382d9f027df` of `transact-rs/sqlx`, merged on
+   `main` on 2026-10-16, "fix(mysql): harden protocol decoders against
+   malformed packets from hostile servers". Its 19 hunks are applied to the
+   vendored tree verbatim, context, error texts and unit tests included, and
+   nothing of the commit is left out or added to. They touch nine files under
+   `src/`:
+
+   - `connection/auth.rs`: in `AuthPlugin::handle`, a packet beginning with
+     `0x01` shorter than 2 bytes is refused before `packet[1]` is read
+     (1 hunk);
+   - `connection/executor.rs`: a result-set column count is bounded before it
+     sizes an allocation (1 hunk);
+   - `connection/stream.rs`: `MAX_PACKET_PAYLOAD_LEN`, 1 GiB, and its check in
+     the loop of `recv_packet` that joins continuation packets (2 hunks);
+   - `io/buf.rs`: length-encoded reads bounded by the bytes remaining
+     (2 hunks);
+   - `protocol/connect/handshake.rs`: every fixed-width read of the greeting,
+     and the length of the second part of the scramble, checked against the
+     bytes remaining, an empty packet first (4 hunks);
+   - `protocol/response/eof.rs`: a short EOF packet (1 hunk);
+   - `protocol/response/err.rs`: an error packet that ends before its error
+     number or its SQL state (3 hunks);
+   - `protocol/statement/row.rs`: the binary row — the null bitmap, the length
+     byte of a temporal value, fixed-width and length-encoded values, and a
+     `NULL`-typed column that reached an `unreachable!()` (3 hunks);
+   - `protocol/text/row.rs`: a text row whose field count does not match its
+     columns (2 hunks).
+
+   Every check returns `Error::Protocol`, the remedy class of
+   `protocol/response/ok.rs:30–35`, which the commit extends to the rest of the
+   protocol. In the login, `src/mariadb/fault.rs` maps it to the second outcome
+   of `FR-ERR-047`, exit `69` (line 178), where an `Error::Io` would map to the
+   first (line 175).
+
+   The commit applies to the tree as it stands after points 3, 5 and 6 with no
+   rejected hunk and no fuzz: `auth.rs` at an offset of 21 lines, because of
+   point 5's lines above it; `stream.rs` and `statement/row.rs` at offsets of
+   3 and 1 lines; every other hunk at its own line. The guards of point 3 and
+   the first return of point 5 are untouched by it, and it touches none of the
+   files of point 6.
+
+   **The continuation-packet limit enters with the commit**, as one of its
+   hunks, and is not a choice of this record. Whether an unbounded join of
+   continuation packets is reachable is tested and recorded on rmp `#342`
+   either way; the result moves nothing in this point.
 
 ## Alternatives rejected
 
@@ -416,6 +478,24 @@ options is set; the MariaDB path sets all four off
   `with_socket` is that mark, and the tree of `sqlx-core` is `ADR-010`'s, whose
   divergence is one statement by its own rule.
 
+- **For short packets, only the hunks of `#4458` at the sites confirmed on rmp
+  `#342`** — the greeting, the error packet and the one-byte `0x01` packet.
+  Refused by the user on 2026-11-05: a part of the commit is a divergence from
+  the release that will carry all of it, so its retirement would have to be
+  re-derived hunk by hunk, and it would leave the short EOF packet
+  (`eof.rs:31–32`), the rows and the column count panicking, which the commit
+  already closes.
+
+- **For short packets, a local minimal patch**: after the server version,
+  refuse fewer than the 31 bytes every branch of the greeting consumes; before
+  the second part of the scramble, fewer than its length plus one; and the
+  checks of the error packet and of `handle`, each written for this tree.
+  Refused by the user on 2026-11-05 on the ground `ADR-010` gives for the same
+  choice: a fix upstream has written disappears at the release that carries
+  it, and a fix of this project's own has to be carried, re-applied and
+  re-justified at every move of `ADR-003`'s pin. It also closes fewer
+  panics.
+
 - **For the phase reached, a thread-local or static cell** in place of a handle
   on the options. Refused: a global the connection does not own, correct only
   while the runtime runs the connection on the thread that reads it.
@@ -453,10 +533,18 @@ One bound remains. The driver hands the host name, not an address, to
 resolves it again after `tpl`'s own resolution has completed, so a budget that
 expires during that second resolution is reported against the TCP connect.
 
-**No part of the patch has an upstream end in sight.** On `main` at `7908fe79`
-the options still offer no refusal of the key request and no record of the
-phase, and the change to the empty password sends what point 5 does not
-(*Alternatives rejected*).
+**Three parts of the patch have no upstream end in sight; point 8 has one.** On
+`main` at `7908fe79` the options still offer no refusal of the key request and
+no record of the phase, and the change to the empty password sends what point 5
+does not (*Alternatives rejected*). Point 8 is a commit already on `main`, and
+it leaves the tree at the first release that contains it.
+
+**Point 8 reaches every read, not the login alone.** Its checks in the rows,
+the column count, the EOF packet and the join of continuation packets run on
+every statement of both providers. A packet they refuse after the login ends
+the statement with `Error::Protocol`, where the published crate panicked.
+Which outcome that error is after the login is the specification's, and is not
+restated here.
 
 **The reader needs the runtime, and `ADR-005` covers it.** A reader of a
 `mysql` entry built on this driver is asynchronous. It lives in `mysql/`, a
@@ -533,3 +621,10 @@ cited here, not restated.
 | The published `sqlx-mysql` 0.9.0 carries `LICENSE-APACHE` and `LICENSE-MIT` as 17- and 14-byte stubs reading `../LICENSE-APACHE` and `../LICENSE-MIT`, and declares `MIT OR Apache-2.0` and `rust-version` 1.94.0 | The published `.crate` above | 2026-11-04 |
 | The advisory database holds no directory for `sqlx-mysql` | `rustsec/advisory-db`, `crates/sqlx-mysql`: absent, HTTP 404 from the GitHub contents API | 2026-11-04 |
 | Where the runtime is built, for a `mariadb` and for a `mysql` entry | `ADR-005`, *Decision*, as amended in place on 2026-11-04 | 2026-11-04 |
+| The user's decision for rmp `#342`: carry the whole of upstream `#4458`, retiring at the first `sqlx` release containing it; the confirmed sites alone, and a local minimal patch, refused | The user's decision of 2026-11-05, relayed by the session coordinator | 2026-11-05 |
+| The panics confirmed: a truncated greeting exits `70` in 34 of 44 runs; a short error packet and a one-byte `0x01` packet panic by code reading; the continuation join untested | rmp `#342` work log, `TEST` and `FINDING` entries of 2026-11-05 (comments 1683, 1684 and 1685) | 2026-11-05 |
+| A truncated or malformed packet of the login is the second outcome, exit `69`, never `70`; an error packet that cannot be read is the same | `specification/errors-and-exit-codes.md`, `FR-ERR-047` and `FR-ERR-048`, eightieth edition at `a4f81c9` | 2026-11-05 |
+| Commit `4161768c9c077ea5dff6debcadeb0382d9f027df`, parent `39eff06a`, merged to `main` on 2026-10-16 as pull request `#4458`, title as quoted; its 19 hunks over the nine files of point 8, with the per-file counts given there; `MAX_PACKET_PAYLOAD_LEN` is 1 GiB; the result-set column count is capped at 4096; every check returns `err_protocol!` | GitHub API, `transact-rs/sqlx`, `commits/4161768c9c` and `pulls/4458`; the commit's diff, sha256 `e14d5e11…930ec5`, 618 lines | 2026-11-05 |
+| No release contains it: `v0.9.0` is the latest tag | GitHub API, `transact-rs/sqlx`, `tags` | 2026-11-05 |
+| The diff applies to `vendor/sqlx-mysql-0.9.0/` as it stands with every hunk succeeding, no rejection and no fuzz, `auth.rs` at offset 21, `stream.rs` at −3 and `statement/row.rs` at −1 | `patch -p2 --verbose` over a scratch copy of the vendored tree at `a4f81c9`; not compiled | 2026-11-05 |
+| `recv_packet` refuses an empty packet with `Error::Protocol`; `src/mariadb/fault.rs` maps an error of the login phase that is not `Io` to the second outcome and an `Io` error to the first | `vendor/sqlx-mysql-0.9.0/src/connection/stream.rs` lines 160–162; `src/mariadb/fault.rs` lines 175–178, at `a4f81c9` | 2026-11-05 |

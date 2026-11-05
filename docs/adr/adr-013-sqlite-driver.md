@@ -2,8 +2,8 @@
 id: ADR-013
 title: The SQLite driver and the library it carries
 status: accepted
-decided: 2026-11-03
-last-reviewed: 2026-11-04
+decided: 2026-11-05
+last-reviewed: 2026-11-05
 requirements: [FR-LITE-001, FR-LITE-004, FR-LITE-010, FR-LITE-011, FR-LITE-018, FR-LITE-039]
 supersedes: []
 superseded-by: null
@@ -40,6 +40,17 @@ fixture run and of the documents that cite this record are brought to commit
 `229edc8`. The driver, its release, the library carried and every decision
 point are unchanged, so `decided` is unchanged; the claims re-read that day are
 those of the *Sources* rows dated 2026-11-04.
+
+**Amended in place on 2026-11-05**, for rmp `#350`, by the user's decision of
+that day: the carried library is also built with `SQLITE_DEFAULT_MEMSTATUS=0`,
+on the condition that the code does not use SQLite's memory statistics. The
+condition was verified the same day and holds (point 2). A build option is a
+parameter of point 2, whose decision — the library is the source
+`libsqlite3-sys` bundles, built with the options this record names — did not
+change, so this is an edit in place and `decided` moves to the day the
+parameter moved. The driver, its features, the release carried and points 1,
+3 and 4 are unchanged; the claims re-read that day are those of the *Sources*
+rows dated 2026-11-05.
 
 ## Context
 
@@ -163,18 +174,42 @@ requires; the newest `rusqlite` that resolved beside it, 0.39.0, bundles 3.51.3.
    choice among survivors remains for this register.
 
 2. **The library carried is SQLite 3.54.1**, the source `libsqlite3-sys` 0.39.1
-   bundles, built with extension loading omitted. `.cargo/config.toml` carries
-   the build options:
+   bundles, built with extension loading omitted and memory statistics off.
+   `.cargo/config.toml` carries the build options, one value of one key:
 
    ```toml
    [env]
-   LIBSQLITE3_FLAGS = { value = "-USQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_OMIT_LOAD_EXTENSION", force = true }
+   LIBSQLITE3_FLAGS = { value = "-USQLITE_ENABLE_LOAD_EXTENSION -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_DEFAULT_MEMSTATUS=0", force = true }
    ```
 
    The build script of `libsqlite3-sys` appends these tokens after its own
    flags, so the `-U` undoes the `SQLITE_ENABLE_LOAD_EXTENSION=1` it defines and
-   the `-D` omits the mechanism; `force` makes the value win over one already in
-   the environment.
+   the first `-D` omits the mechanism; `force` makes the value win over one
+   already in the environment. The script reruns when the variable changes.
+
+   **Memory statistics are off.** The build script defines no
+   `SQLITE_DEFAULT_MEMSTATUS`, so the amalgamation's default `1` applies
+   without the third token. With it, the library starts with the collection of
+   memory-allocation statistics disabled, and `sqlite3Malloc` and
+   `sqlite3_free` call the allocator directly instead of entering the global
+   memory mutex around each call — the mutex the profile of rmp `#323` found
+   under `sqlite3Malloc` and `sqlite3DbFreeNN` (*Consequences*). SQLite's
+   documentation states what this costs: `sqlite3_memory_used()`,
+   `sqlite3_memory_highwater()`, `sqlite3_status64()`,
+   `sqlite3_soft_heap_limit64()` and `sqlite3_hard_heap_limit64()` become
+   non-operational, and `SQLITE_MAX_MEMORY` non-functional.
+
+   **The condition the user set holds: `tpl` uses none of them.** On
+   2026-11-05 no file under `src/`, `tests/` or `benches/` names any of the
+   five interfaces, a `sqlite3_status` or `SQLITE_STATUS_*` counter, a
+   `soft_heap_limit` or `hard_heap_limit` pragma, or `SQLITE_MAX_MEMORY`; the
+   crate forbids `unsafe`, so it could reach them only through a safe wrapper,
+   and `rusqlite` 0.41.1 wraps none of them — its one memory interface,
+   `Connection::release_memory`, calls `sqlite3_db_release_memory`, which is
+   not among them, and `tpl` does not call it either. The render memory limit
+   of `ADR-011` counts Rust's global allocator and reads nothing from SQLite.
+   A later change that needs one of the five reverses this option, and is an
+   edit to this point.
 
    **The file is a means, not the guarantee.** Cargo reads it only where it
    discovers the project's configuration, and SQLite's page on compile-time
@@ -183,6 +218,13 @@ requires; the newest `rusqlite` that resolved beside it, 0.39.0, bundles 3.51.3.
    `libsqlite3-sys` bundles. The guarantee is the read-back `FR-LITE-010`
    requires at every open: a binary built without the option ends every
    `sqlite` read in `70`, and reads nothing from the file.
+
+   **Memory statistics need no guarantee.** No requirement makes them a
+   control, and `FR-LITE-010` reads back no row for them. A binary built where
+   Cargo does not read the file keeps them on, takes the mutex on every
+   allocation, and reads exactly what this build reads. The option is
+   observable: the amalgamation lists `DEFAULT_MEMSTATUS=0` in
+   `PRAGMA compile_options` wherever the value is not `1`.
 
    **The build sets no `SQLITE_TEMP_STORE`, and the temporary-storage control
    needs none.** The build script of `libsqlite3-sys` defines it only under its
@@ -292,6 +334,18 @@ requires; the newest `rusqlite` that resolved beside it, 0.39.0, bundles 3.51.3.
 - **A literal release asserted by the test.** It fails a compliant upgrade and
   proves nothing the version comparison of point 3 does not.
 
+- **Memory statistics left on**, the build before 2026-11-05. Refused by the
+  user on 2026-11-05: `tpl` reads none of them, and every allocation the
+  library makes pays the mutex that collects them.
+
+- **Memory statistics switched off at start-up**, through
+  `sqlite3_config(SQLITE_CONFIG_MEMSTATUS, 0)`, rather than at build time.
+  Unavailable: `rusqlite` 0.41.1 offers no safe interface to
+  `SQLITE_CONFIG_MEMSTATUS` — its one call of `sqlite3_config` sets the error
+  log (`src/trace.rs`) — and `tpl` forbids `unsafe`. The build option also
+  holds in every process that links the library, with no call to order before
+  the first connection.
+
 ## Consequences
 
 **The SQLite path needs no asynchronous runtime, and `ADR-005` is kept by
@@ -324,6 +378,19 @@ test of point 3 runs in the battery that `ADR-012`'s workflows run on all four
 targets of `NFR-PERF-018`. The `musl` readings were taken with zig 0.17.0, not
 the zig 0.16.0 `ADR-008` records for the build path; they are readings of the
 option's effect, and no figure is taken from them.
+
+**What turning memory statistics off is expected to save, and what is
+measured.** The profile of rmp `#323`, on `aarch64-apple-darwin` at `aa62d4c`,
+counts 36.3 ms of `pthread_mutex` leaves over the 20 runs of the
+`synth2000.direct.tables-text` workload, 1.8 ms per run, with `sqlite3Malloc`
+(48.7%) and `sqlite3DbFreeNN` its largest callers (`BENCHMARKS.md`, finding 7
+of phase 1's list). That this is the memory mutex was phase 1's report; the
+amalgamation confirms it, because `sqlite3Malloc` and `sqlite3_free` enter
+`mem0.mutex` only while memory statistics are on. No reading of the option's
+effect exists on 2026-11-05: the 1.8 ms is the cost observed, not a saving
+measured, and it is not repeated as one. rmp `#350` owes a before-and-after
+reading in `BENCHMARKS.md`, which, by `BR-PERF-008`, fails nothing whatever it
+shows.
 
 **The binary changes; the MariaDB driver it links does not.** Over the shipped
 graph, `cargo tree -e normal,build` with features, taken once per target of
@@ -408,7 +475,7 @@ separately requires the choice to be re-verified against SQLite's release
 history and vulnerability page before every release of `tpl`.
 
 **Under R3, these facts live here alone.** The driver, its features, the
-release carried, the build option and the judgement of `FR-LITE-039` are cited
+release carried, the build options and the judgement of `FR-LITE-039` are cited
 as `ADR-013` from `docs/spec-technical/`. Neither the root coordination document
 nor the root `README.md` names the SQLite driver at `229edc8`, so neither cites
 this record; that citation is owed by the owners of those documents, not by
@@ -454,3 +521,9 @@ this register. The form in which the MariaDB driver is consumed is `ADR-003`'s.
 | Declared floors: `pkg-config` 0.3.34 → 1.63; `fallible-iterator` 0.3.0, `fallible-streaming-iterator` 0.1.9 and `vcpkg` 0.2.15 declare none | crates.io API, one request per crate | 2026-11-03 |
 | The workflows invoke Cargo at the repository root and run `cargo test` for each of the four targets | `.github/workflows/ci.yml` and `.github/workflows/release.yml` at `833bc35` | 2026-11-03 |
 | `docs/spec-technical/` cites `ADR-013`; neither `CLAUDE.md` nor `README.md` names SQLite | `rg ADR-013 docs/spec-technical/` and `rg -i sqlite README.md CLAUDE.md`, at `229edc8` | 2026-11-04 |
+| The user accepted `SQLITE_DEFAULT_MEMSTATUS=0`, to be dropped only if the code uses SQLite's memory statistics; keeping the build unchanged refused | rmp `#350` work log, `DECISION` entry of 2026-11-05 (comment 1634) | 2026-11-05 |
+| `SQLITE_DEFAULT_MEMSTATUS=0` disables the `sqlite3_status()` interfaces that track memory usage and makes `sqlite3_malloc()` faster; the default is `1`; `sqlite3_memory_used()`, `sqlite3_memory_highwater()` and `SQLITE_MAX_MEMORY` are non-functional without memory tracking. With statistics disabled, `sqlite3_hard_heap_limit64()`, `sqlite3_memory_used()`, `sqlite3_memory_highwater()`, `sqlite3_soft_heap_limit64()` and `sqlite3_status64()` become non-operational | `https://sqlite.org/compile.html`; `https://sqlite.org/c3ref/c_config_covering_index_scan.html`, `SQLITE_CONFIG_MEMSTATUS` | 2026-11-05 |
+| The build script defines no `SQLITE_DEFAULT_MEMSTATUS`, passes each `-D`/`-U` token of `LIBSQLITE3_FLAGS` after its own flags, and reruns when the variable changes; the amalgamation defines the default `1` where the macro is undefined, lists `DEFAULT_MEMSTATUS=` in `PRAGMA compile_options` where it is not `1`, and has `sqlite3Malloc` and `sqlite3_free` enter `mem0.mutex` only while `bMemstat` is set | The published `libsqlite3-sys` 0.39.1 `.crate`, sha256 `14a5f01b…f9a2b3`: `build.rs` lines 170–188 and 340–351; `sqlite3/sqlite3.c` lines 15287–15289, 23441–23445, 32118–32132 and 32216–32229 | 2026-11-05 |
+| `rusqlite` 0.41.1 calls none of the five interfaces; its one memory interface is `Connection::release_memory`, over `sqlite3_db_release_memory`; its one call of `sqlite3_config` sets `SQLITE_CONFIG_LOG` | The published `.crate`, sha256 `da9bba6f…d91a594`: `rg` over `src/` for the five names, `sqlite3_status`, `heap_limit`, `CONFIG_MEMSTATUS` and `sqlite3_config`; `src/lib.rs` 648–651, `src/trace.rs` 38–45 | 2026-11-05 |
+| `tpl` uses no SQLite memory statistic, heap limit or `release_memory` | `rg -i "memory_used\|memory_highwater\|sqlite3_status\|status64\|soft_heap\|hard_heap\|heap_limit\|MEMSTATUS\|release_memory\|SQLITE_STATUS\|SQLITE_DBSTATUS\|MAX_MEMORY"` over `src/`, `tests/` and `benches/`, working tree over `a4f81c9`: no match | 2026-11-05 |
+| 36.3 ms of `pthread_mutex` leaves over 20 runs of `synth2000.direct.tables-text`, callers `sqlite3Malloc` (48.7%) and `sqlite3DbFreeNN`; the attribution to memory statistics was phase 1's report; the option's effect was unmeasured | `BENCHMARKS.md`, the SQLite read entry, *Outside the surface*, finding 7, measured at `aa62d4c` on `aarch64-apple-darwin` | 2026-11-05 |
