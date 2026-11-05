@@ -141,7 +141,9 @@ workflow, before it closes.
   classification of a failed server connection; `TlsHandshakeFailed` gained
   `provider`, `ReadOnlySessionNotEnforced` gained `read_back`,
   `ProviderIncoherentWrite` gained `own`, and `error::NetworkPhase` gained
-  `Login`. `tpl::model` gained `database::Provider`, with the values
+  `Login`, `ReadOnlyStatement`, `ReadOnlyReadBack` and `VersionProbe`.
+  `tpl::Error` also gained `DatabaseNameRefused`, `ValueHoldsNul` and
+  `NulValueGiven`, with the new `error::NulField` and `error::NulPlace`. `tpl::model` gained `database::Provider`, with the values
   `Mariadb`, `Mysql` and `Sqlite`, `index::PrimaryKey` and the field
   `Database::provider`; `Table::primary_key` now returns a `PrimaryKey`
   rather than an `Index`; and fields a SQLite or a MySQL read cannot fill
@@ -200,7 +202,12 @@ workflow, before it closes.
   reports; so does **every other number, and `1044` or `1049` on a connection
   that names no database**, as `tpl cfg database test` opens, with a `cause`
   stating that `tpl` does not classify the number further. `1044` and `1049`
-  on a connection naming a database keep their `77` and message.
+  on a connection naming a database keep their `77` and message. **`1102`,
+  a database name the server does not accept, exits `78`** on a connection
+  naming a database: `error: the server at <host>:<port> refused the database name, …`,
+  a `cause` naming the name between quotation marks, the key or the part of
+  `dsn` that gives it and the file, and the `hint`
+  `correct the database name: tpl cfg database update <entry> --schema <database>`.
 - **`core.connect_timeout` bounds four phases, the login included.** An
   expired connection budget is reported against the phase the connection had
   reached — DNS resolution, the TCP connect, the TLS handshake or the login —
@@ -210,9 +217,52 @@ workflow, before it closes.
   where it read `exceeded its own deadline of <value>`, and the `cause` states
   that DNS resolution, the TCP connect, the TLS handshake and the login share
   that budget. Exit `69`, unchanged.
+- **A session statement that outlives `core.query_timeout` names itself.**
+  The read-only session statement, its read-back and the version probe each
+  have their own deadline of `core.query_timeout`. An expiry of one was
+  reported as `a query reading the database structure`; it now reads
+  `error: the version probe for <host>:<port> exceeded its own deadline of <value>, …`,
+  or names the read-only session statement or its read-back, with a `cause`
+  stating that `core.query_timeout` sets that deadline and bounds each
+  statement on its own, and the `hint`
+  `raise the deadline with: tpl cfg set core.query_timeout <seconds>`. An
+  expired catalogue query's `cause` states the same. Exit `69`, unchanged,
+  for every one of them, the read-only pair included.
+- **`-v` reports each connection phase and each session statement.** For a
+  `mariadb` and a `mysql` entry, `-v` writes one `phase:` line for DNS
+  resolution, the TCP connect, the TLS handshake where the `tls` mode
+  negotiated one, the login and each of the three session statements, each
+  naming it and its time, a phase that failed or expired included. The TCP
+  connect's line no longer carries the time of the TLS handshake and the
+  login, and the session statements are no longer reported as `server
+  query`. The `query:` lines, one per catalogue query, are unchanged.
 
 ### Fixed
 
+- **A short or malformed packet from a server no longer ends `tpl` with
+  `70`.** A greeting cut before its fields, an error packet cut before its
+  number or its SQL state — in the greeting's place or in answer to the
+  login — and a one-byte `0x01` packet in a `caching_sha2_password` login
+  made the driver panic. Each now exits `69` with
+  `error: the login to <host>:<port> did not complete, …` and the `cause` of
+  an answer that is not the server's protocol. A server that sends
+  continuation packets past 1 GiB is refused the same way, where `tpl` kept
+  reading them into memory.
+- **`tpl cfg database test` reads only a privilege error as
+  `can_read_catalogue: false`.** An error packet carrying `1044`, `1142`,
+  `1143` or `1227` answers the privilege probe with `false`, exit `0`, as
+  before. Any other error packet answered it with `false` too; it now exits
+  `69`, naming the error number, and writes no document.
+- **A NUL character in an entry is refused.** A `host`, `user`, `password`
+  or `database`, a part of a `dsn`, a `sqlite` `path`, or the output of a
+  `password_command` holding a NUL character was cut at it, so a login
+  could select another database than the one written. In `.tpl/.cfg` such a
+  value now exits `78` before any connection is opened, the `cause` naming the
+  key or the part of `dsn`, the file and the text before the NUL — never any
+  part of a password — and the helper's output exits `78` naming the command.
+  Given to `tpl cfg set`, or to `--dsn`, `--host`, `--user`, `--schema` or
+  `--path` of `tpl cfg database add` and `update`, it exits `64` and writes
+  nothing.
 - **An account with no password logs in with an empty password.** A
   `mariadb` entry whose password is the empty string — `password = ""`, a DSN
   whose password part is empty, or a `password_command` that prints nothing —

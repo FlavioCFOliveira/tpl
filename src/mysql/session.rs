@@ -32,11 +32,11 @@ use sqlx_mysql::{MySqlConnection, MySqlRow};
 use tokio::runtime::Runtime;
 
 use super::window;
-use crate::deadline::{Clock, Phase};
+use crate::deadline::Clock;
 use crate::error::{Error, ReadOnlyFault, SessionStatement};
 use crate::mariadb::connect::Target;
 use crate::mariadb::fault;
-use crate::mariadb::session::{Attempt, run};
+use crate::mariadb::session::{Attempt, Statement, run};
 use crate::mariadb::window::Series;
 use crate::model::server::{Server, series_of};
 
@@ -107,20 +107,21 @@ fn enforce(
     clock: &Clock,
 ) -> Result<(), Error> {
     let entry = target.entry();
-    let bound = || clock.bound(target.deadlines().of(Phase::CatalogueQuery));
 
     run(
         runtime,
-        bound(),
+        clock,
         target,
+        Statement::ReadOnly,
         sqlx_core::raw_sql::raw_sql(READ_ONLY).execute(&mut *connection),
     )
     .map_err(|attempt| unenforced(attempt, entry, ReadOnlyFault::NotApplied))?;
 
     let answer: Option<MySqlRow> = run(
         runtime,
-        bound(),
+        clock,
         target,
+        Statement::ReadBack,
         sqlx_core::raw_sql::raw_sql(READ_BACK).fetch_optional(&mut *connection),
     )
     .map_err(|attempt| unenforced(attempt, entry, ReadOnlyFault::ReadBackDisagreed))?;
@@ -156,12 +157,11 @@ fn probe(
     target: &Target<'_>,
     clock: &Clock,
 ) -> Result<Server<'static>, Error> {
-    let bound = clock.bound(target.deadlines().of(Phase::CatalogueQuery));
-
     let answer: Option<MySqlRow> = run(
         runtime,
-        bound,
+        clock,
         target,
+        Statement::VersionProbe,
         sqlx_core::raw_sql::raw_sql(PROBE).fetch_optional(&mut *connection),
     )
     .map_err(|attempt| match attempt {

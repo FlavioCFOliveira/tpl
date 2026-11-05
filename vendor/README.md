@@ -94,13 +94,19 @@ tree goes on its own condition.
 | Upstream revision | `003b698e99e024f3621b8043a2426fde5b741171`, per the crate's own `.cargo_vcs_info.json` — the revision `sqlx-core-0.9.0/` was packaged from |
 | Upstream repository | `https://github.com/transact-rs/sqlx` |
 | Licence | `MIT OR Apache-2.0`, per the published manifest |
-| Why it is here | `ADR-014` — three changes the published crate does not offer: it requests the server's RSA public key over a session TLS does not protect, which `FR-MYSQL-045` forbids (point 3); it sends a scramble of an empty password, and for an entry with no password an empty first response whatever the method, where `FR-CONF-055` requires the response the servers' own clients send (point 5); and it does not let a caller learn the phase a connection reached, which `FR-CONF-005` decides by (point 6) |
+| Why it is here | `ADR-014` — four changes the published crate does not offer: it requests the server's RSA public key over a session TLS does not protect, which `FR-MYSQL-045` forbids (point 3); it sends a scramble of an empty password, and for an entry with no password an empty first response whatever the method, where `FR-CONF-055` requires the response the servers' own clients send (point 5); it does not let a caller learn the phase a connection reached, which `FR-CONF-005` decides by (point 6); and it panics on a short or malformed packet from the server, where `FR-ERR-047` and `FR-ERR-048` require the second outcome, exit `69` (point 8) |
 
 ### The divergence, in full
 
-Five files differ from the published crate, and nothing else:
-`src/connection/auth.rs`, `src/connection/establish.rs`,
-`src/connection/mod.rs`, `src/options/mod.rs` and `src/lib.rs`.
+Thirteen files differ from the published crate, and nothing else: the five of
+points 3, 5 and 6 — `src/connection/auth.rs`, `src/connection/establish.rs`,
+`src/connection/mod.rs`, `src/options/mod.rs` and `src/lib.rs` — and the nine of
+point 8, which share `src/connection/auth.rs` with them:
+`src/connection/auth.rs`, `src/connection/executor.rs`,
+`src/connection/stream.rs`, `src/io/buf.rs`,
+`src/protocol/connect/handshake.rs`, `src/protocol/response/eof.rs`,
+`src/protocol/response/err.rs`, `src/protocol/statement/row.rs` and
+`src/protocol/text/row.rs`.
 
 **Point 3 — the refusal of the key request.** Two guards and one typed error,
 in `src/connection/auth.rs`:
@@ -158,10 +164,29 @@ already presents an absent password as the empty string, so the change to
 - in `src/lib.rs`, the existing export of the options also names
   `ConnectPhase` and `ConnectPhaseHandle`.
 
+**Point 8 — the hardening against short and malformed packets.** Upstream
+commit `4161768c9c077ea5dff6debcadeb0382d9f027df` of `transact-rs/sqlx`,
+pull request **#4458**, merged on `main` on 2026-10-16, "fix(mysql): harden
+protocol decoders against malformed packets from hostile servers", carried
+whole: its 19 hunks are applied verbatim — context, error texts and unit tests
+included — to the nine files named above, and nothing of the commit is left
+out or added to. Its diff, as the GitHub API serves it for the commit, is 618
+lines with sha256
+`e14d5e1169de3a4939c11481b7f83f1f3c04cd5fef8019e8492427367e930ec5`. It was
+applied with `patch -p2` over the tree as points 3, 5 and 6 leave it, every hunk
+succeeding with no rejection and no fuzz: `auth.rs` at an offset of 21 lines,
+`stream.rs` at −3 and `statement/row.rs` at −1, every other hunk at its own
+line. The lines it adds and removes are exactly the commit's: the sorted `+`
+and `-` lines of `git diff` over the nine files equal those of the upstream
+diff. Every check it adds returns `Error::Protocol`; among them is
+`MAX_PACKET_PAYLOAD_LEN`, 1 GiB, which bounds the join of continuation packets
+in `recv_packet`. The guards of point 3 and the first return of point 5 are
+untouched by it, and it touches none of the files of point 6.
+
 Nothing else in this tree differs from the published crate; any other
 difference is a defect in it. The check is a recursive `diff` of this
 directory against the published artefact, unpacked after its sha256 is
-verified, which names exactly the five files above.
+verified, which names exactly the thirteen files above.
 
 ### Licence files
 
@@ -180,7 +205,9 @@ from the same upstream revision, so those texts carry its notices too.
   password, at the first response and at every switch, the responses point 5
   sends;
 - point 6, at the first whose `sqlx-mysql` lets a caller learn the phase a
-  connection reached.
+  connection reached;
+- point 8, at the first whose `sqlx-mysql` contains upstream commit
+  `4161768c9c077ea5dff6debcadeb0382d9f027df`, pull request `#4458`.
 
 At each, that part leaves this tree and `tpl` uses what the release offers.
 The directory is deleted with the last part, along with the `sqlx-mysql` entry

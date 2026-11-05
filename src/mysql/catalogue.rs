@@ -196,10 +196,12 @@ fn arrived(statement: Read, rows: Vec<MySqlRow>) -> Result<Vec<MySqlRow>, Error>
 /// Runs the privilege probe of `FR-CFG-044` over a settled session.
 ///
 /// One `SELECT` against `SCHEMATA`, restricted to `schema` by a bind
-/// parameter; the answer is true where it was answered without an error
-/// packet and returned at least one row. No row is read into the model, and a
-/// privilege refusal is an answer rather than a condition (`FR-CFG-045`), as
-/// `crate::mariadb::catalogue::probe` records.
+/// parameter; the answer is true where it was answered without a privilege
+/// error and returned at least one row. No row is read into the model, and a
+/// privilege refusal — one of the four numbers of `FR-CFG-044` — is an answer
+/// rather than a condition (`FR-CFG-045`), as
+/// `crate::mariadb::catalogue::probe` records; any other error packet is the
+/// third way of `FR-ERR-036`.
 ///
 /// # Errors
 ///
@@ -215,7 +217,9 @@ pub(crate) fn probe(
 ) -> Result<bool, Error> {
     match issue(session, target, clock, statements::probe(), schema)? {
         Ok(rows) => Ok(!rows.is_empty()),
-        Err(driver) if driver.as_database_error().is_some() => Ok(false),
+        // FR-CFG-044: only the four privilege errors are its `false`; any
+        // other error packet is the third way of FR-ERR-036.
+        Err(driver) if fault::is_privilege_error(&driver) => Ok(false),
         Err(driver) => Err(fault::speaking(
             target.entry(),
             &driver,

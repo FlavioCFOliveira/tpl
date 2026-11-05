@@ -1582,6 +1582,32 @@ mod tests {
                 series: hostile(),
                 supported: &[HOSTILE],
             },
+            // FR-ERR-048, error 1102, and FR-CONF-057.
+            Error::DatabaseNameRefused {
+                entry: hostile(),
+                by_dsn: false,
+                host: hostile(),
+                port: 3306,
+                name: hostile(),
+                file: hostile_path(),
+            },
+            Error::ValueHoldsNul {
+                entry: hostile(),
+                field: crate::error::NulField::Database,
+                place: crate::error::NulPlace::Key {
+                    key: hostile(),
+                    file: hostile_path(),
+                },
+                before: Some(hostile()),
+            },
+            Error::NulValueGiven {
+                parameter: hostile(),
+                command: hostile(),
+                entry: hostile(),
+                field: crate::error::NulField::Host,
+                in_dsn: false,
+                before: Some(hostile()),
+            },
         ]
     }
 
@@ -1644,7 +1670,7 @@ mod tests {
         let codes: BTreeSet<u8> = samples().iter().map(Error::exit_code).collect();
 
         assert_eq!(codes, BTreeSet::from([64, 65, 66, 69, 70, 73, 74, 77, 78]));
-        assert_eq!(samples().len(), 84, "every variant of Error is sampled");
+        assert_eq!(samples().len(), 87, "every variant of Error is sampled");
     }
 
     #[test]
@@ -2392,6 +2418,235 @@ mod tests {
                 "exit:  69 (EX_UNAVAILABLE)",
             ])
         );
+    }
+
+    #[test]
+    fn fr_err_027_the_three_statement_deadline_examples_render_word_for_word() {
+        // FR-ERR-027, amended in the seventy-ninth edition for rmp #339: a
+        // session statement is named as the statement it is, the cause names
+        // core.query_timeout and that it bounds the statement on its own, and
+        // names no connection phase.
+        use crate::error::DeadlineBound;
+
+        let deadline = |phase, bound, seconds| Error::NetworkDeadlineExceeded {
+            by_dsn: false,
+            entry: "shop".to_owned(),
+            phase,
+            host: EXAMPLE_HOST.to_owned(),
+            port: 3306,
+            bound,
+            limit: Duration::from_secs(seconds),
+        };
+
+        assert_eq!(
+            render(&deadline(
+                NetworkPhase::VersionProbe,
+                DeadlineBound::Phase,
+                30
+            )),
+            example([
+                "error: the version probe for db.example.com:3306 exceeded its own deadline of 30s, for database entry 'shop'",
+                "cause: the version probe for db.example.com:3306 had not finished when its own deadline of 30s expired; core.query_timeout sets that deadline, which bounds each statement on its own",
+                "hint:  raise the deadline with: tpl cfg set core.query_timeout <seconds>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&deadline(
+                NetworkPhase::ReadOnlyStatement,
+                DeadlineBound::Phase,
+                30
+            )),
+            example([
+                "error: the read-only session statement for db.example.com:3306 exceeded its own deadline of 30s, for database entry 'shop'",
+                "cause: the read-only session statement for db.example.com:3306 had not finished when its own deadline of 30s expired; core.query_timeout sets that deadline, which bounds each statement on its own",
+                "hint:  raise the deadline with: tpl cfg set core.query_timeout <seconds>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+        assert_eq!(
+            render(&deadline(
+                NetworkPhase::CatalogueQuery,
+                DeadlineBound::Phase,
+                30
+            )),
+            example([
+                "error: a query reading the database structure for db.example.com:3306 exceeded its own deadline of 30s, for database entry 'shop'",
+                "cause: a query reading the database structure for db.example.com:3306 had not finished when its own deadline of 30s expired; core.query_timeout sets that deadline, which bounds each statement on its own",
+                "hint:  raise the deadline with: tpl cfg set core.query_timeout <seconds>",
+                "exit:  69 (EX_UNAVAILABLE)",
+            ])
+        );
+
+        // The read-back is named as the statement it is, and the overall
+        // budget, where it expires first, is named instead.
+        let read_back = render(&deadline(
+            NetworkPhase::ReadOnlyReadBack,
+            DeadlineBound::Phase,
+            30,
+        ));
+        assert!(
+            read_back.starts_with(
+                "error: the read-back of the read-only session for db.example.com:3306 exceeded \
+                 its own deadline of 30s"
+            ),
+            "{read_back}"
+        );
+        let overall = render(&deadline(
+            NetworkPhase::VersionProbe,
+            DeadlineBound::Overall,
+            5,
+        ));
+        assert!(
+            overall.contains(
+                "cause: the version probe for db.example.com:3306 had not finished when the \
+                 overall budget of 5s expired"
+            ),
+            "{overall}"
+        );
+        assert!(
+            overall.contains("run the same command again with a larger --timeout <seconds>"),
+            "{overall}"
+        );
+        for phase in [
+            "DNS resolution",
+            "TCP connect",
+            "TLS handshake",
+            "the login",
+        ] {
+            assert!(!read_back.contains(phase), "{phase}: {read_back}");
+        }
+    }
+
+    #[test]
+    fn fr_err_048_the_example_of_a_refused_database_name_renders_word_for_word() {
+        // FR-ERR-048, error 1102, of the eightieth edition: 78, the name
+        // between quotation marks so that its trailing space shows, the key
+        // and the file, and never that the operation can be run again.
+        let refused = |by_dsn| Error::DatabaseNameRefused {
+            entry: "shop".to_owned(),
+            by_dsn,
+            host: EXAMPLE_HOST.to_owned(),
+            port: 3306,
+            name: "freight ".to_owned(),
+            file: PathBuf::from("/home/ana/shop/.tpl/.cfg"),
+        };
+
+        assert_eq!(
+            render(&refused(false)),
+            example([
+                "error: the server at db.example.com:3306 refused the database name, for database entry 'shop'",
+                "cause: the server at db.example.com:3306 refused the login with server error 1102: it does not accept 'freight ' as a database name, which database.shop.database gives in /home/ana/shop/.tpl/.cfg",
+                "hint:  correct the database name: tpl cfg database update shop --schema <database>",
+                "exit:  78 (EX_CONFIG)",
+            ])
+        );
+
+        let by_dsn = render(&refused(true));
+        assert!(
+            by_dsn.contains("which the database part of database.shop.dsn gives in"),
+            "{by_dsn}"
+        );
+        assert!(
+            by_dsn.contains("tpl cfg database update shop --dsn <url>"),
+            "{by_dsn}"
+        );
+        assert!(!by_dsn.contains("run again"), "{by_dsn}");
+    }
+
+    #[test]
+    fn fr_conf_057_the_example_of_a_nul_in_the_database_renders_word_for_word() {
+        // FR-CONF-057, item 2: the key and the file, the part before the NUL,
+        // why tpl refuses it, and the flag with a placeholder.
+        use crate::error::{NulField, NulPlace};
+
+        assert_eq!(
+            render(&Error::ValueHoldsNul {
+                entry: "shop".to_owned(),
+                field: NulField::Database,
+                place: NulPlace::Key {
+                    key: "database.shop.database".to_owned(),
+                    file: PathBuf::from("/home/ana/shop/.tpl/.cfg"),
+                },
+                before: Some("freight".to_owned()),
+            }),
+            example([
+                "error: database.shop.database holds a NUL character, for database entry 'shop'",
+                "cause: database.shop.database in /home/ana/shop/.tpl/.cfg holds a NUL character (U+0000) after 'freight'; tpl refuses it, because the login ends a database name at its first NUL and the session would select 'freight', not the name written",
+                "hint:  write the database without it: tpl cfg database update shop --schema <database>",
+                "exit:  78 (EX_CONFIG)",
+            ])
+        );
+    }
+
+    #[test]
+    fn fr_conf_057_a_password_and_a_helper_output_are_never_reproduced() {
+        // FR-CONF-057 with FR-ERR-013: no part of a password, or of the
+        // helper's output, reaches the message; the helper's command is named
+        // as stored, and the hint says it must print the password alone.
+        use crate::error::{NulField, NulPlace};
+
+        let file = || PathBuf::from("/home/ana/shop/.tpl/.cfg");
+        let key = render(&Error::ValueHoldsNul {
+            entry: "shop".to_owned(),
+            field: NulField::Password,
+            place: NulPlace::Key {
+                key: "database.shop.password".to_owned(),
+                file: file(),
+            },
+            before: None,
+        });
+        assert!(key.contains("database.shop.password in /home/ana/shop/.tpl/.cfg holds a NUL character (U+0000); tpl refuses it"), "{key}");
+        assert!(
+            key.contains("tpl cfg set database.shop.password <password>"),
+            "{key}"
+        );
+        assert!(key.ends_with("exit:  78 (EX_CONFIG)\n"), "{key}");
+
+        let dsn = render(&Error::ValueHoldsNul {
+            entry: "shop".to_owned(),
+            field: NulField::User,
+            place: NulPlace::DsnPart {
+                key: "database.shop.dsn".to_owned(),
+                file: file(),
+            },
+            before: Some("rea".to_owned()),
+        });
+        assert!(
+            dsn.starts_with("error: the user part of database.shop.dsn holds a NUL character"),
+            "{dsn}"
+        );
+        assert!(dsn.contains("after 'rea'"), "{dsn}");
+        assert!(dsn.contains("--dsn <url>"), "{dsn}");
+
+        let helper = render(&Error::ValueHoldsNul {
+            entry: "shop".to_owned(),
+            field: NulField::Password,
+            place: NulPlace::Helper {
+                command: vec!["pass".to_owned(), "show".to_owned(), "db/shop".to_owned()],
+            },
+            before: None,
+        });
+        assert!(
+            helper.contains(r#"password_command ["pass", "show", "db/shop"] printed"#),
+            "{helper}"
+        );
+        assert!(helper.contains("print the password alone"), "{helper}");
+
+        let given = render(&Error::NulValueGiven {
+            parameter: "--host".to_owned(),
+            command: "cfg database add".to_owned(),
+            entry: "shop".to_owned(),
+            field: NulField::Host,
+            in_dsn: false,
+            before: Some("db".to_owned()),
+        });
+        assert!(given.contains("after 'db'"), "{given}");
+        assert!(
+            given.contains("tpl cfg database add shop --host <host>"),
+            "{given}"
+        );
+        assert!(given.ends_with("exit:  64 (EX_USAGE)\n"), "{given}");
     }
 
     #[test]

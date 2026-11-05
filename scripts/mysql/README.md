@@ -427,15 +427,34 @@ it reproduces is the material's meaning.
 |---|---|---|---|
 | `root` | `%` | `tpl-root` | Everything. Created by the entrypoint from `MYSQL_ROOT_PASSWORD`; the privileged reader a test reaches over TCP |
 | `root` | `localhost` | `tpl-root` | The same account name for the Unix socket, which is how the harness reaches a server |
-| `tpl_reader` | `%` | `tpl-reader-pw` | `SELECT, EXECUTE ON freight.*` and nothing more: the reduced-grant reader of `FR-MYSQL-044` item 16 |
+| `tpl_reader` | `%` | `tpl-reader-pw` | `SELECT, EXECUTE ON freight.*` and on the target database of item 17, ``tpl_q'b\s`k``, and nothing more: the reduced-grant reader of `FR-MYSQL-044` item 16 |
 | `tpl_nopass` | `%` | none | `SELECT, EXECUTE ON freight.*`: an account with an empty credential, for `FR-CONF-055` and `FR-MYSQL-047` |
 | `tpl_limited` | `%` | `tpl-limited-pw` | `SELECT ON freight.*`, `MAX_USER_CONNECTIONS 1`: the second simultaneous login is refused with a limit on connections, for `FR-ERR-048` |
+
+The names and passwords of `root` and `tpl_reader` are the variables
+`TPL_MYSQL_ROOT_USER`, `TPL_MYSQL_ROOT_PASSWORD`, `TPL_MYSQL_READER_USER` and
+`TPL_MYSQL_READER_PASSWORD` of `series.env`, which `tests/support/mysql.rs`
+reads; no test writes an account name of its own.
 
 `setup.sql` creates `tpl_reader` without naming an authentication plugin, so the
 account takes the server's default, which is the method `FR-MYSQL-022` requires
 `tpl` to authenticate with. `mysql.user` reports `caching_sha2_password` for all
 three accounts on `8.4`, `9.7` and `8.0`. The reader sees 27 objects in
 `freight` — its 22 tables and 5 views — on every server.
+
+`SHOW DATABASES`, as `tpl_reader`, lists `freight`, `information_schema`,
+`performance_schema` and ``tpl_q'b\s`k`` and nothing else, on `8.4`, `9.7`
+and `8.0`; `mysql.db` holds the grant's database part as ``tpl\_q'b\\s`k``,
+bytes `74706C5C5F7127625C5C73606B`. Observed on 2026-11-05.
+
+The five databases of item 17 are not counted by `up.sh`, whose figures are
+those of the three schemas above. As root, `information_schema.SCHEMATA`
+holds twelve rows on each server, and the five names are distinct byte
+sequences under `lower_case_table_names` `0`: the target
+`74706C5F7127625C73606B`, ``tpl_q'bs`k`` `74706C5F71276273606B`,
+``tpl_q'b\\s`k`` `74706C5F7127625C5C73606B`, `tpl_q_b_s_k`
+`74706C5F715F625F735F6B` and ``TPL_Q'B\S`K`` `54504C5F5127425C53604B`.
+Observed on 2026-11-05 on `8.4`, `9.7` and `8.0`.
 
 ### The cache, and `auth-cache.sh`
 
@@ -661,8 +680,9 @@ item of `FR-MYSQL-044` to the objects that realise it:
 | 13 | Comments on tables, columns, indexes and routines, one outside the basic multilingual plane | throughout; the column comment of `port.local_name` is written with `𠮷` (U+20BB7) — see [Observed while building the fixture](#observed-while-building-the-fixture) |
 | 14 | Identifiers with a space, a backtick and a double quote | `legacy_edi_field`: `` `space in name` ``, `` `back``tick` ``, `` `double"quote` ``, and the index names `` `uq segment tag` `` and `` `idx``backtick` `` |
 | 15 | A scheduled event and a partitioned table | `ev_purge_edi_staging`, created `DISABLE` so that the data does not move under a test; `vessel_position`, four `RANGE COLUMNS` partitions |
-| 16 | A reduced-grant reader, and a schema declaring no collation of its own | `tpl_reader`; `masterdata`, which inherits `utf8mb4_0900_ai_ci` |
-| — | The two cases `FR-MYSQL-044` lists apart from its sixteen items: a generated invisible primary key, and a foreign key declared `ON DELETE SET DEFAULT ON UPDATE SET DEFAULT` | `equipment_survey`, created with `sql_generate_invisible_primary_key` `ON` for that one statement, so the server adds `my_row_id` and `PRIMARY` on it; its `fk_survey_container_type` is the `SET DEFAULT` key, which both series accept and report and neither performs |
+| 16 | A reduced-grant reader, and a schema declaring no collation of its own | `tpl_reader`, with `SELECT` and `EXECUTE` on `freight` and on the target of item 17 alone; `masterdata`, which inherits `utf8mb4_0900_ai_ci` |
+| 17 | A target database whose name holds a quotation mark, a backslash and a backtick, and four decoys | the target ``tpl_q'b\s`k``, holding `consignee`, the view `v_consignee_by_place`, ``tariff'line`%`` and ``tariff'line`2026``, which the first matches as a `LIKE` pattern; the decoys ``tpl_q'bs`k`` (`decoy_escape_consumed`), ``tpl_q'b\\s`k`` (`decoy_backslash_doubled`), `tpl_q_b_s_k` (`decoy_like_pattern`) and ``TPL_Q'B\S`K`` (`decoy_letter_case`). `tpl_reader` holds no grant on a decoy: the `GRANT` escapes the target's `_` and `\`, because the database part of a `GRANT` is a pattern |
+| — | The two cases `FR-MYSQL-044` lists apart from its seventeen items: a generated invisible primary key, and a foreign key declared `ON DELETE SET DEFAULT ON UPDATE SET DEFAULT` | `equipment_survey`, created with `sql_generate_invisible_primary_key` `ON` for that one statement, so the server adds `my_row_id` and `PRIMARY` on it; its `fk_survey_container_type` is the `SET DEFAULT` key, which both series accept and report and neither performs |
 
 `seed.sql` ends by booking a consignment through `sp_book_consignment`, which
 draws `BKG-000480001` from `reference_counter` and fires both `BEFORE INSERT`
@@ -673,7 +693,7 @@ the time the container reports itself ready.
 ## Deliberate omissions
 
 Anything a supported series refuses is absent, rather than hidden behind a
-conditional, as `FR-MYSQL-044` requires; so is anything its sixteen items do
+conditional, as `FR-MYSQL-044` requires; so is anything its seventeen items do
 not ask for.
 
 | Left out | Why |

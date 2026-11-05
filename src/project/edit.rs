@@ -335,7 +335,14 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
         expected: expects.expected(),
     };
 
-    if let Key::Entry { field, .. } = key {
+    if let Key::Entry { entry, field } = key {
+        // FR-CONF-057, item 1: a value the login, the connection or the
+        // library would cut at a NUL character is refused where the caller
+        // wrote it, and nothing is written.
+        if let Some(refused) = nul_given(&key.to_string(), "cfg set", entry, *field, supplied) {
+            return Err(refused);
+        }
+
         // FR-CONF-049: a value the next expansion would refuse is refused
         // where the caller wrote it. The port keeps its own refusal, since
         // this command takes it as a number only.
@@ -468,6 +475,63 @@ pub(crate) fn assign(key: &Key, supplied: &str) -> Result<Item, Error> {
     };
 
     Ok(item)
+}
+
+/// The refusal of `FR-CONF-057`, item 1, where `supplied` — given to
+/// `parameter` of `command` for `field` of `entry` — holds a NUL character.
+///
+/// For `dsn` the value is the whole URL, and the part named is the first of
+/// its four parts that carries one, as `tpl` reads them; a NUL elsewhere in it
+/// is left to the grammar, which refuses what is not a part.
+pub(crate) fn nul_given(
+    parameter: &str,
+    command: &str,
+    entry: &str,
+    field: EntryKey,
+    supplied: &str,
+) -> Option<Error> {
+    use crate::error::NulField;
+
+    let refused = |field: NulField, in_dsn: bool, before: &str| Error::NulValueGiven {
+        parameter: parameter.to_owned(),
+        command: command.to_owned(),
+        entry: entry.to_owned(),
+        field,
+        in_dsn,
+        before: (field != NulField::Password).then(|| before.to_owned()),
+    };
+    let before_nul = super::settings::before_nul;
+
+    let field = match field {
+        EntryKey::Host => NulField::Host,
+        EntryKey::User => NulField::User,
+        EntryKey::Password => NulField::Password,
+        EntryKey::Database => NulField::Database,
+        EntryKey::Path => NulField::Path,
+        EntryKey::Dsn => {
+            before_nul(supplied)?;
+            let parsed = super::config::dsn::parse(supplied, parameter, Path::new("")).ok()?;
+            return [
+                (NulField::Host, Some(parsed.host())),
+                (NulField::User, parsed.user()),
+                (NulField::Password, parsed.password()),
+                (NulField::Database, Some(parsed.database())),
+            ]
+            .into_iter()
+            .find_map(|(field, part)| {
+                part.and_then(|part| before_nul(part.raw()))
+                    .map(|before| refused(field, true, before))
+            });
+        }
+        EntryKey::Port
+        | EntryKey::PasswordCommand
+        | EntryKey::Tls
+        | EntryKey::CaFile
+        | EntryKey::CaPath
+        | EntryKey::Provider => return None,
+    };
+
+    before_nul(supplied).map(|before| refused(field, false, before))
 }
 
 /// `arguments` as a TOML array.
@@ -732,6 +796,86 @@ mod tests {
         assign(&key("database.shop.password"), "$${1X}").expect("a doubled dollar");
         assign(&key("database.shop.password_command"), "echo ${PW}")
             .expect("FR-CONF-017: password_command passes a reference through");
+    }
+
+    #[test]
+    fn fr_conf_057_a_value_holding_a_nul_is_refused_on_write() {
+        // FR-CONF-057, item 1: the five keys of the rule, and each part of a
+        // dsn; a key outside the rule is not this condition.
+        use crate::error::NulField;
+
+        for (spelling, supplied, field, in_dsn, before) in [
+            (
+                "database.shop.host",
+                "db\0.example.com",
+                NulField::Host,
+                false,
+                Some("db"),
+            ),
+            (
+                "database.shop.user",
+                "\0alice",
+                NulField::User,
+                false,
+                Some(""),
+            ),
+            (
+                "database.shop.password",
+                "hun\0ter2",
+                NulField::Password,
+                false,
+                None,
+            ),
+            (
+                "database.shop.database",
+                "freight\0x",
+                NulField::Database,
+                false,
+                Some("freight"),
+            ),
+            (
+                "database.ledger.path",
+                "a\0b.sqlite",
+                NulField::Path,
+                false,
+                Some("a"),
+            ),
+            (
+                "database.shop.dsn",
+                "mysql://ali\0ce@db.example.com/freight",
+                NulField::User,
+                true,
+                Some("ali"),
+            ),
+            (
+                "database.shop.dsn",
+                "mysql://alice@db\0x/freight",
+                NulField::Host,
+                true,
+                Some("db"),
+            ),
+        ] {
+            let condition = assign(&key(spelling), supplied).expect_err("the value holds a NUL");
+
+            assert_eq!(condition.exit_code(), 64, "{spelling}");
+            match condition {
+                Error::NulValueGiven {
+                    parameter,
+                    command,
+                    field: refused,
+                    in_dsn: part,
+                    before: kept,
+                    ..
+                } => {
+                    assert_eq!(parameter, spelling);
+                    assert_eq!(command, "cfg set");
+                    assert_eq!(refused, field, "{spelling}");
+                    assert_eq!(part, in_dsn, "{spelling}");
+                    assert_eq!(kept.as_deref(), before, "{spelling}");
+                }
+                other => panic!("{spelling}: {other:?}"),
+            }
+        }
     }
 
     #[test]

@@ -112,7 +112,7 @@ pub(crate) fn catalogue_query(source: CatalogueSource) {
 /// report a caller diagnosing a slow invocation is looking for.
 ///
 /// The two arguments are typed, per `OD-17`, and neither can carry anything
-/// `FR-GLOB-018` bars: a [`Phase`] is one of six discriminants this crate
+/// `FR-GLOB-018` bars: a [`Phase`] is one of the discriminants this crate
 /// declares, and a [`Duration`] is a number. There is no host, no user, no
 /// statement and no driver message on this line, and no argument through which
 /// one could be passed.
@@ -523,12 +523,18 @@ mod tests {
 
     #[test]
     fn fr_glob_017_every_phase_of_the_closed_set_reports_under_a_name_of_its_own() {
-        // FR-CONF-005 closes the set at six, and a report that named two of
-        // them alike would make the two indistinguishable on the stream.
+        // FR-CONF-005 closes the set, and a report that named two of them
+        // alike would make the two indistinguishable on the stream: the
+        // seventy-ninth edition of FR-GLOB-017 names the login and each
+        // session statement apart.
         let named: Vec<&str> = [
             Phase::DnsResolution,
             Phase::TcpConnect,
             Phase::TlsHandshake,
+            Phase::Login,
+            Phase::ReadOnlyStatement,
+            Phase::ReadOnlyReadBack,
+            Phase::VersionProbe,
             Phase::CatalogueQuery,
             Phase::PasswordCommand,
             Phase::Render,

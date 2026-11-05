@@ -37,7 +37,7 @@ use super::config::{Configuration, dsn, expand};
 use super::password;
 use super::secret::Secret;
 use crate::deadline::{Clock, Deadlines, Phase, Seconds};
-use crate::error::{Error, KeyAbsence};
+use crate::error::{Error, KeyAbsence, NulField, NulPlace};
 use crate::model::database::Provider;
 use crate::render::RenderBounds;
 
@@ -149,6 +149,9 @@ pub(crate) struct Settings {
     ca_path: Option<PathBuf>,
     /// The four phase deadlines of `FR-CONF-004`.
     deadlines: Deadlines,
+    /// The `.tpl/.cfg` the entry was read from, which the `cause` of a refused
+    /// database name names (`FR-ERR-048`, error `1102`).
+    file: PathBuf,
 }
 
 impl Settings {
@@ -216,6 +219,11 @@ impl Settings {
     /// The four phase deadlines.
     pub(crate) const fn deadlines(&self) -> Deadlines {
         self.deadlines
+    }
+
+    /// The `.tpl/.cfg` the entry was read from.
+    pub(crate) fn file(&self) -> &std::path::Path {
+        &self.file
     }
 }
 
@@ -429,6 +437,19 @@ fn resolve_file(
         return Err(missing(KeyAbsence::Empty));
     }
 
+    // FR-CONF-057, item 2: before the file the path names is opened.
+    if let Some(before) = written.to_str().and_then(before_nul) {
+        return Err(nul_refused(
+            name,
+            NulField::Path,
+            NulPlace::Key {
+                key: format!("database.{name}.{}", EntryKey::Path),
+                file: file.to_owned(),
+            },
+            before,
+        ));
+    }
+
     Ok(FileSettings {
         entry: name.to_owned(),
         path: project_directory(file).join(written),
@@ -486,6 +507,7 @@ where
         ca_file: entry.ca_file.clone(),
         ca_path: entry.ca_path.clone(),
         deadlines,
+        file: file.to_owned(),
     };
 
     let mut from_dsn: Option<String> = None;
@@ -551,6 +573,36 @@ where
         )?;
     }
 
+    // FR-CONF-057, item 2: a value the login or the connection would cut at a
+    // NUL character is refused here, at entry resolution, before any
+    // connection is opened. The parts of a dsn are read as `tpl` carries them
+    // to the driver.
+    for (field, value, key) in [
+        (NulField::Host, settings.host.as_deref(), EntryKey::Host),
+        (NulField::User, settings.user.as_deref(), EntryKey::User),
+        (NulField::Password, from_dsn.as_deref(), EntryKey::Password),
+        (
+            NulField::Database,
+            settings.database.as_deref(),
+            EntryKey::Database,
+        ),
+    ] {
+        if let Some(before) = value.and_then(before_nul) {
+            let place = if settings.by_dsn {
+                NulPlace::DsnPart {
+                    key: qualified(EntryKey::Dsn),
+                    file: file.to_owned(),
+                }
+            } else {
+                NulPlace::Key {
+                    key: qualified(key),
+                    file: file.to_owned(),
+                }
+            };
+            return Err(nul_refused(name, field, place, before));
+        }
+    }
+
     settings.password = match entry.password_command.as_ref() {
         // FR-CONF-007 has already refused an entry carrying two password
         // sources, so the child is reached only where it is the one source.
@@ -563,6 +615,25 @@ where
     };
 
     Ok(settings)
+}
+
+/// The part of `value` before its first NUL character, where it holds one
+/// (`FR-CONF-057`).
+pub(crate) fn before_nul(value: &str) -> Option<&str> {
+    value.split_once('\0').map(|(before, _)| before)
+}
+
+/// The refusal of `FR-CONF-057`, items 2 and 3, for `field` of entry `name`.
+///
+/// The part before the NUL is carried for every field but the password, which
+/// no message reproduces any part of (`FR-ERR-013`).
+pub(crate) fn nul_refused(name: &str, field: NulField, place: NulPlace, before: &str) -> Error {
+    Error::ValueHoldsNul {
+        entry: name.to_owned(),
+        field,
+        place,
+        before: (field != NulField::Password).then(|| before.to_owned()),
+    }
 }
 
 /// `value` expanded, where `FR-CONF-015` expands the field it belongs to.
@@ -888,5 +959,130 @@ mod tests {
 
         assert_eq!(settings.host(), Some("db.example.com"));
         assert_eq!(settings.entry(), "shop");
+    }
+
+    /// What resolving entry `shop` of `text` refused.
+    fn refused(scratch: &Scratch, text: &str) -> Error {
+        let configuration = document(scratch, text);
+
+        resolve(&configuration, Some("shop"), &clock(None), &table)
+            .expect_err("the entry is refused")
+    }
+
+    #[test]
+    fn fr_conf_057_a_value_in_the_file_holding_a_nul_is_refused_at_entry_resolution() {
+        // FR-CONF-057, item 2: host, user, password and database of a server
+        // entry, each part of its dsn, and the path of a sqlite entry; 78,
+        // naming the key or the part and the file, and the part before the NUL
+        // for every field but the password.
+        use crate::error::{NulField, NulPlace};
+
+        let scratch = Scratch::new();
+        for (text, field, part, before) in [
+            (
+                "[database.shop]\nhost = \"db\\u0000x\"\n",
+                NulField::Host,
+                false,
+                Some("db"),
+            ),
+            (
+                "[database.shop]\nhost = \"db\"\nuser = \"rea\\u0000der\"\n",
+                NulField::User,
+                false,
+                Some("rea"),
+            ),
+            (
+                "[database.shop]\nhost = \"db\"\npassword = \"hun\\u0000ter2\"\n",
+                NulField::Password,
+                false,
+                None,
+            ),
+            (
+                "[database.shop]\nhost = \"db\"\ndatabase = \"freight\\u0000x\"\n",
+                NulField::Database,
+                false,
+                Some("freight"),
+            ),
+            (
+                "[database.shop]\ndsn = \"mysql://alice:hun\\u0000ter2@db/freight\"\n",
+                NulField::Password,
+                true,
+                None,
+            ),
+            (
+                "[database.shop]\ndsn = \"mysql://alice@db/freight\\u0000x\"\n",
+                NulField::Database,
+                true,
+                Some("freight"),
+            ),
+            (
+                "[database.shop]\nprovider = \"sqlite\"\npath = \"data/led\\u0000ger.sqlite\"\n",
+                NulField::Path,
+                false,
+                Some("data/led"),
+            ),
+        ] {
+            let condition = refused(&scratch, text);
+
+            assert_eq!(condition.exit_code(), 78, "{text}");
+            match condition {
+                Error::ValueHoldsNul {
+                    ref entry,
+                    field: found,
+                    ref place,
+                    before: ref kept,
+                } => {
+                    assert_eq!(entry, "shop");
+                    assert_eq!(found, field, "{text}");
+                    assert_eq!(kept.as_deref(), before, "{text}");
+                    match place {
+                        NulPlace::DsnPart { key, .. } => {
+                            assert!(part, "{text}");
+                            assert_eq!(key, "database.shop.dsn");
+                        }
+                        NulPlace::Key { key, file } => {
+                            assert!(!part, "{text}");
+                            assert_eq!(key, &format!("database.shop.{field}"));
+                            assert!(file.ends_with(".cfg"), "{}", file.display());
+                        }
+                        NulPlace::Helper { .. } => panic!("{text}: {place:?}"),
+                    }
+                }
+                ref other => panic!("{text}: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn fr_conf_057_a_password_command_that_prints_a_nul_is_refused_and_not_reproduced() {
+        // FR-CONF-057, item 3: 78, naming the command as stored and nothing of
+        // what it printed.
+        use crate::error::{NulField, NulPlace};
+
+        let printf = ["/usr/bin/printf", "/bin/printf"]
+            .into_iter()
+            .find(|path| PathBuf::from(path).exists())
+            .expect("the system has printf");
+        let scratch = Scratch::new();
+        let condition = refused(
+            &scratch,
+            &format!(
+                "[database.shop]\nhost = \"db\"\npassword_command = [\"{printf}\", \"hun\\\\000ter2\"]\n"
+            ),
+        );
+
+        assert_eq!(condition.exit_code(), 78);
+        assert!(
+            matches!(
+                condition,
+                Error::ValueHoldsNul {
+                    field: NulField::Password,
+                    place: NulPlace::Helper { ref command },
+                    before: None,
+                    ..
+                } if command.first().map(String::as_str) == Some(printf)
+            ),
+            "{condition:?}"
+        );
     }
 }

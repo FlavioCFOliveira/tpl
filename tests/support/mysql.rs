@@ -461,19 +461,28 @@ fn role_names(role: Role) -> Vec<(String, String)> {
 /// The accounts and schemas, from `series.env`'s own variables.
 fn read_names() -> Names {
     let printed = sourced(
-        "printf '%s\\n' \"$TPL_MYSQL_ROOT_PASSWORD\" \"$TPL_MYSQL_READER_USER\" \
-         \"$TPL_MYSQL_READER_PASSWORD\" \"$TPL_MYSQL_SCHEMA\" \"$TPL_MYSQL_EMPTY_SCHEMA\"",
+        "printf '%s\\n' \"$TPL_MYSQL_ROOT_USER\" \"$TPL_MYSQL_ROOT_PASSWORD\" \
+         \"$TPL_MYSQL_READER_USER\" \"$TPL_MYSQL_READER_PASSWORD\" \"$TPL_MYSQL_SCHEMA\" \
+         \"$TPL_MYSQL_EMPTY_SCHEMA\"",
     );
     let lines: Vec<String> = printed.lines().map(str::to_owned).collect();
-    let [root_password, reader, reader_password, schema, empty_schema] = lines.as_slice() else {
+    let [
+        root,
+        root_password,
+        reader,
+        reader_password,
+        schema,
+        empty_schema,
+    ] = lines.as_slice()
+    else {
         panic!(
-            "series.env stated {} values, expected 5: {printed:?}",
+            "series.env stated {} values, expected 6: {printed:?}",
             lines.len()
         );
     };
 
     Names {
-        root: ("root".to_owned(), root_password.clone()),
+        root: (root.clone(), root_password.clone()),
         reader: (reader.clone(), reader_password.clone()),
         schema: schema.clone(),
         empty_schema: empty_schema.clone(),

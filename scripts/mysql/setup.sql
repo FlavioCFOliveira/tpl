@@ -8,7 +8,7 @@
 -- This file has one job: present the `mysql` provider's catalogue reader with
 -- every case `specification/mysql-contract.md` states, in a domain realistic
 -- enough that the output of a render is worth looking at. The cases are the
--- sixteen items of FR-MYSQL-044; the comment above each object names the items
+-- seventeen items of FR-MYSQL-044; the comment above each object names the items
 -- it carries, and README.md maps every item to the objects that realise it.
 --
 -- Every statement below is accepted, unchanged, by every series of
@@ -46,6 +46,11 @@ SET NAMES utf8mb4;
 DROP DATABASE IF EXISTS freight;
 DROP DATABASE IF EXISTS masterdata;
 DROP DATABASE IF EXISTS freight_empty;
+DROP DATABASE IF EXISTS `tpl_q'b\s``k`;
+DROP DATABASE IF EXISTS `tpl_q'bs``k`;
+DROP DATABASE IF EXISTS `tpl_q'b\\s``k`;
+DROP DATABASE IF EXISTS tpl_q_b_s_k;
+DROP DATABASE IF EXISTS `TPL_Q'B\S``K`;
 
 CREATE DATABASE masterdata;
 
@@ -1260,10 +1265,89 @@ CREATE EVENT ev_purge_edi_staging
 DELIMITER ;
 
 -- =============================================================================
+-- Item 17: a database name the catalogue compares and never parses
+-- =============================================================================
+-- FR-SRV-043, by way of FR-MYSQL-048: a name the caller supplies reaches a
+-- catalogue statement as a compared value, never as syntax or as a pattern.
+-- The target's name holds a quotation mark, a backslash and a backtick; each
+-- of the four decoys is a database a mistaken conveyance of that name would
+-- read instead — the name with its backslash consumed as an escape, with its
+-- backslash doubled, read as a LIKE pattern, and compared without regard to
+-- letter case, which the servers' lower_case_table_names 0 keeps apart. Every
+-- decoy holds objects named after it alone, so a read that reached one shows
+-- which.
+--
+-- Inside a backquoted identifier a backslash is an ordinary character and a
+-- backtick is written twice; nothing else is escaped.
+
+-- The target: a table, a view, and a table whose name holds a quotation mark,
+-- a backtick and a `%`, beside one that name matches as a LIKE pattern.
+CREATE DATABASE `tpl_q'b\s``k`
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_520_ci;
+
+CREATE TABLE `tpl_q'b\s``k`.consignee (
+  consignee_id    INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  legal_name      VARCHAR(120) NOT NULL COMMENT 'Registered name of the receiving party',
+  un_locode       CHAR(5) CHARACTER SET ascii NOT NULL COMMENT 'UN/LOCODE of the place of delivery',
+  PRIMARY KEY (consignee_id)
+) ENGINE=InnoDB COMMENT='Parties a consignment is delivered to';
+
+CREATE VIEW `tpl_q'b\s``k`.v_consignee_by_place AS
+  SELECT un_locode, COUNT(*) AS consignees
+  FROM `tpl_q'b\s``k`.consignee
+  GROUP BY un_locode;
+
+CREATE TABLE `tpl_q'b\s``k`.`tariff'line``%` (
+  tariff_code     VARCHAR(16) NOT NULL COMMENT 'Code of the tariff line, as the carrier files it',
+  rate_eur        DECIMAL(12,2) NOT NULL COMMENT 'Rate per TEU, in euro',
+  PRIMARY KEY (tariff_code)
+) ENGINE=InnoDB COMMENT='Tariff lines whose name holds a quotation mark, a backtick and a percent sign';
+
+CREATE TABLE `tpl_q'b\s``k`.`tariff'line``2026` (
+  tariff_code     VARCHAR(16) NOT NULL COMMENT 'Code of the tariff line, as the carrier files it',
+  rate_eur        DECIMAL(12,2) NOT NULL COMMENT 'Rate per TEU, in euro, for 2026',
+  PRIMARY KEY (tariff_code)
+) ENGINE=InnoDB COMMENT='The table the name above matches when it is read as a LIKE pattern';
+
+-- Decoy 1: the target's name without the backslash, as an escape would leave it.
+CREATE DATABASE `tpl_q'bs``k`;
+
+CREATE TABLE `tpl_q'bs``k`.decoy_escape_consumed (
+  booking_ref     CHAR(10) NOT NULL COMMENT 'Booking reference of a decoy row',
+  PRIMARY KEY (booking_ref)
+) ENGINE=InnoDB COMMENT='Read only where the backslash of the target was consumed as an escape';
+
+-- Decoy 2: the target's name with the backslash doubled.
+CREATE DATABASE `tpl_q'b\\s``k`;
+
+CREATE TABLE `tpl_q'b\\s``k`.decoy_backslash_doubled (
+  booking_ref     CHAR(10) NOT NULL COMMENT 'Booking reference of a decoy row',
+  PRIMARY KEY (booking_ref)
+) ENGINE=InnoDB COMMENT='Read only where the backslash of the target was doubled';
+
+-- Decoy 3: a name the LIKE pattern tpl_q_b_s_k matches, the pattern itself.
+CREATE DATABASE tpl_q_b_s_k;
+
+CREATE TABLE tpl_q_b_s_k.decoy_like_pattern (
+  booking_ref     CHAR(10) NOT NULL COMMENT 'Booking reference of a decoy row',
+  PRIMARY KEY (booking_ref)
+) ENGINE=InnoDB COMMENT='Read only where the target was compared as a LIKE pattern';
+
+-- Decoy 4: the target's name in upper case, a database of its own under
+-- lower_case_table_names 0.
+CREATE DATABASE `TPL_Q'B\S``K`;
+
+CREATE TABLE `TPL_Q'B\S``K`.decoy_letter_case (
+  booking_ref     CHAR(10) NOT NULL COMMENT 'Booking reference of a decoy row',
+  PRIMARY KEY (booking_ref)
+) ENGINE=InnoDB COMMENT='Read only where the target was compared without regard to letter case';
+
+-- =============================================================================
 -- Users
 -- =============================================================================
 -- Item 16: the reduced-grant reader, holding SELECT and EXECUTE on the main
--- schema and nothing more. root, created by the entrypoint from
+-- schema and on the target database of item 17, and nothing more. root, created by the entrypoint from
 -- MYSQL_ROOT_PASSWORD and reachable from any host, is the privileged reader.
 --
 -- No authentication plugin is named: the account takes the server's default,
@@ -1277,6 +1361,14 @@ DELIMITER ;
 
 CREATE USER 'tpl_reader'@'%' IDENTIFIED BY 'tpl-reader-pw';
 GRANT SELECT, EXECUTE ON freight.* TO 'tpl_reader'@'%';
+
+-- Item 16, as item 17 extends it: the same grant on the target database of
+-- item 17, and none on a decoy. The database part of a GRANT is a pattern in
+-- which `_` and `%` are wildcards and a backslash escapes, so the underscore
+-- and the backslash of the target's name are each escaped: `\_` and `\\`.
+-- Unescaped, `tpl_q'b\s``k` would read as the pattern tpl?q'bs`k and grant
+-- the first decoy too.
+GRANT SELECT, EXECUTE ON `tpl\_q'b\\s``k`.* TO 'tpl_reader'@'%';
 
 -- The same grant on an account with no password, which an entry with
 -- `password = ""` or with no password source reaches: FR-CONF-055 and
