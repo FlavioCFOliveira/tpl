@@ -673,7 +673,9 @@ mod tests {
     #[test]
     fn fr_cfg_034_the_mode_the_rewrite_passes_is_six_hundred() {
         // FR-CFG-034: the mode handed to `fchmod` is the one the file keeps.
-        assert_eq!(u32::from(super::FILE_MODE.bits()), MODE);
+        // `mode_t` is `u32` on Linux and `u16` on macOS; widening both sides to
+        // `u64` is a real conversion on every target, so no lint fires anywhere.
+        assert_eq!(u64::from(super::FILE_MODE.bits()), u64::from(MODE));
     }
 
     /// An editor over `directory` that sets `core.database` to `shop`.
