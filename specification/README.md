@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty-two editions. All are in force;
+The specification has been written in eighty-three editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6658,6 +6658,29 @@ divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
 validation rule is applied: neither root document states when a cached file
 is decoded, so [upstream-divergences.md](upstream-divergences.md) raises no
 entry.
+
+### Eighty-third edition — a rewrite of `.tpl/.cfg` made durable
+
+rmp `#313`, of sprint 29: the user decided that the rewrite of `.tpl/.cfg`
+be made durable, and the implementation does it at `401b6f1`. **No
+identifier is assigned, retired or renumbered**; no open question or
+divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
+
+- **Durability, and a failure after the rename** —
+  [cfg-commands.md](cfg-commands.md). `FR-CFG-041` states that the new
+  content is on the device before the rename names it, and the rename
+  before the command exits `0`, without naming the calls; that a failure up
+  to the rename leaves the previous file; and that a failure to make the
+  rename durable exits `74` with a message stating that the file holds the
+  new content, whose durability is not confirmed, and a `hint` carrying
+  `tpl cfg list`.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-CFG-042`, `FR-PROJ-028`, `FR-ERR-001` and `FR-ERR-034` were read
+against the change, and none is amended. The fifth validation rule is
+applied: the root `README.md` describes the rewrite as atomic, which stays
+true, and says nothing of a failure after the rename, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
 
 ### Still out of scope
 

@@ -1515,6 +1515,53 @@ tpl cfg database test   <name>
   paragraph, with `74`, and SHALL NOT act elsewhere. How the folder is held
   between the checks and the rename is not fixed by this corpus.
 
+  The rewrite SHALL make its result durable before the command reports
+  success: the content of the temporary file SHALL be on the storage device
+  before the rename gives it the name `.cfg`, and the rename SHALL be on the
+  device before the command exits `0`, so that a crash at any moment leaves
+  either the previous file or the new one whole under the name `.cfg`. The
+  means is not fixed by this corpus. A failure up to and including the
+  rename is the failure of the first paragraph: the previous `.cfg`, or no
+  `.cfg` where there was none, stays in place. IF the rename has taken
+  effect and the system then cannot establish that it is durable, THEN the
+  system SHALL exit `74` (`EX_IOERR`), and SHALL NOT state that the previous
+  file is in place: the `error` line SHALL state that `.tpl/.cfg` was
+  written and its durability could not be confirmed; the `cause` SHALL name
+  the path, state that the file holds the new content, and name the
+  operation that failed and what the filesystem returned, per the `74` row
+  of `FR-ERR-034`; and the `hint` SHALL state that the change is in the file
+  and may not survive a crash of the machine, and SHALL carry
+  `tpl cfg list`, which shows the file as it stands.
+
+  ```
+  tpl cfg set core.query_timeout 60
+  error: .tpl/.cfg was written, and its durability could not be confirmed
+  cause: /home/ana/shop/.tpl/.cfg holds the new content; making the rename durable failed: the filesystem returned EIO
+  hint:  the change is in the file and may not survive a crash of this machine; check the filesystem, and see the file with: tpl cfg list
+  exit:  74 (EX_IOERR)
+  ```
+
+  The wording of each line is the implementation's, under `FR-ERR-008`
+  through `FR-ERR-012`. The example fixes the facts named, the command
+  carried and the code.
+
+  *Amended in the eighty-third edition: the paragraph above is new,* for rmp
+  `#313`. The user decided that the rewrite be made durable, and the
+  implementation does it; the requirement stated atomicity and not
+  durability, and its first paragraph promised the previous `.cfg` after any
+  failure, which cannot hold once the rename has taken effect. The code `74`
+  is the one the first paragraph already gives a failed step, and the
+  caller's next step is the one its row of `FR-ERR-001` states, the
+  filesystem; what changes is what the caller is told, because a message
+  that the previous file stands would be false, and the caller would set
+  again a value already written. *Why the property and not the calls.* The
+  calls that make a write durable differ by system and are the technical
+  specification's to record, as every other means of this corpus is; the
+  property — either file whole after a crash, and success only once the new
+  one is durable — is what a caller relies on. *Rejected: undoing the rename
+  after the failure.* The undo is a second write subject to the same
+  failure, and the content written is the content the caller asked for.
+
   *Amended in the seventy-ninth edition: the paragraph above is new,* for rmp
   `#313`. The requirement fixed the procedure and not where it acts, and the
   implementation, as rmp `#313` records it, performs each step by path,
