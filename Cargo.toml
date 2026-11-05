@@ -55,7 +55,11 @@ minijinja-contrib = "~2.24.0"
 rusqlite = { version = "0.41.1", default-features = false, features = ["bundled", "limits"] }
 rustix = { version = "1.1.4", default-features = false, features = ["fs", "process"] }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+# `raw_value` keeps the members of a table's `foreign_keys` and
+# `referenced_by` as the bytes a cache file holds until a render reaches them
+# (`FR-CACHE-038`). It adds no crate: `sqlx-core`'s `json` feature already
+# enables it, and it is named here so the cache does not depend on that.
+serde_json = { version = "1.0.151", features = ["raw_value"] }
 # The MariaDB driver of `ADR-003`, taken as its two crates rather than through
 # the `sqlx` facade. The facade's optional `sqlx-sqlite` requires
 # `libsqlite3-sys` below 0.38, Cargo resolves optional dependencies into the

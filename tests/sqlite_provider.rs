@@ -34,6 +34,7 @@
 //! | `FR-LITE-033`, `FR-LITE-036` | Naming a view that does not compile exits `0` with its nine properties, and a dump marks nothing |
 //! | `FR-LITE-043` | Two tables, or two columns of one table, whose names differ only in a byte that is not UTF-8 are `78`, with no model and no cache write; a key whose parent differs from a table's name in such a byte is excluded as dangling, and the read succeeds |
 //! | `NFR-PERF-003` | A cache hit on a `sqlite` entry reaches no file: the database removed, the hit answers the same bytes |
+//! | `FR-CACHE-038`, `FR-CACHE-039` | A cached render decodes a table's `foreign_keys` and `referenced_by` when it reaches them: a malformed part reached is a miss answered with the direct result, one never reached is no miss; `schema dump` finds the same part a miss before it writes |
 //! | `NFR-PERF-004` | A `sqlite` invocation opens the database file once, observed by the syscall trace on Linux |
 
 #[path = "support/fixture.rs"]
@@ -1944,5 +1945,175 @@ fn fr_lite_043_a_key_whose_parent_differs_only_in_an_invalid_byte_is_excluded_as
     assert!(
         sandbox.path(&format!(".tpl/.cache/{ENTRY}")).exists(),
         "the read that succeeded wrote no cache"
+    );
+}
+
+// ------------------------------------------------------------ FR-CACHE-038 ---
+
+/// A template that reaches both deferred parts of every table.
+const REACHES_KEYS: &str = "{% for table in database.tables %}{{ table.name }} \
+                            {{ table.foreign_keys | length }} {{ table.referenced_by | length }}\n\
+                            {% for key in table.foreign_keys %}  -> {{ key.referenced_table.name }}\n\
+                            {% endfor %}{% endfor %}";
+
+/// A template that reaches every table and neither deferred part.
+const SKIPS_KEYS: &str = "{% for table in database.tables %}{{ table.name }} \
+                          {{ table.columns | length }} {{ table.indexes | length }}\n{% endfor %}";
+
+/// A project over the main fixture database, less `émbarque`, its cache
+/// loaded, carrying [`REACHES_KEYS`] and [`SKIPS_KEYS`].
+///
+/// `Émbarque` and `émbarque` share one cache file on a volume that folds
+/// letter case, which records the tables as not whole and sends every cached
+/// read to the database; one of the two is dropped so that the render below is
+/// served from the cache on every host.
+fn loaded() -> Sandbox {
+    let sandbox = project("data/freight.sqlite");
+    let connection = rusqlite::Connection::open(sandbox.path("data/freight.sqlite"))
+        .expect("the database opens");
+    connection
+        .execute_batch("DROP TABLE \"émbarque\";")
+        .expect("the table drops");
+    connection.close().expect("the database closes");
+    sandbox.write(".tpl/templates/keys.jinja", REACHES_KEYS);
+    sandbox.write(".tpl/templates/skips.jinja", SKIPS_KEYS);
+    succeeded(&sandbox.run(&["cache", "load"]), "cache load");
+
+    sandbox
+}
+
+/// The cache file of a table whose `part` holds at least one member.
+fn holding(sandbox: &Sandbox, part: &str) -> PathBuf {
+    let tables = sandbox.path(&format!(".tpl/.cache/{ENTRY}/tables"));
+    let mut files: Vec<PathBuf> = std::fs::read_dir(&tables)
+        .expect("the cache holds its tables")
+        .map(|entry| entry.expect("the entry reads").path())
+        .collect();
+    files.sort();
+
+    files
+        .into_iter()
+        .find(|file| {
+            let table: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(file).expect("the file reads"))
+                    .expect("a file tpl wrote is JSON");
+            table[part]
+                .as_array()
+                .is_some_and(|members| !members.is_empty())
+        })
+        .unwrap_or_else(|| panic!("no table of the fixture holds a member of {part}"))
+}
+
+/// Replaces the first member of each of `parts` in `file` with an object the
+/// member's type refuses, leaving the file valid JSON whose every other part
+/// decodes, and answers the bytes it held.
+fn malform(file: &Path, parts: &[&str]) -> Vec<u8> {
+    let held = std::fs::read(file).expect("the file reads");
+    let mut table: serde_json::Value = serde_json::from_slice(&held).expect("the file is JSON");
+    for part in parts {
+        table[*part][0] = serde_json::json!({ "name": 5 });
+    }
+    std::fs::write(file, format!("{table}\n")).expect("the cache is ours");
+
+    held
+}
+
+#[test]
+fn fr_cache_038_a_malformed_deferred_part_a_render_reaches_is_a_miss_answered_from_the_database() {
+    // FR-CACHE-038, eighty-second edition: the part is decoded when the
+    // template first reaches it, and a fault in it makes the file a miss under
+    // FR-CACHE-039 — the render abandoned, nothing of it on stdout, and the
+    // invocation rendered again from the database's document and written to
+    // the cache.
+    for part in ["foreign_keys", "referenced_by"] {
+        let sandbox = loaded();
+        let direct = succeeded(
+            &sandbox.run(&["render", "keys", "--direct", "--no-cache"]),
+            "the direct render",
+        );
+        let file = holding(&sandbox, part);
+        let held = malform(&file, &[part]);
+
+        let printed = sandbox.run(&["render", "keys"]);
+
+        assert_eq!(succeeded(&printed, part), direct, "{part}");
+        assert_eq!(stderr(&printed), "", "{part}: FR-CACHE-033 reports nothing");
+        assert_eq!(
+            std::fs::read(&file).expect("the file reads"),
+            held,
+            "{part}: FR-CACHE-007 rewrote the file the miss was found in"
+        );
+    }
+}
+
+#[test]
+fn fr_cache_038_a_malformed_deferred_part_a_render_never_reaches_is_no_miss() {
+    // FR-CACHE-038: a deferred part the template never reaches is never
+    // decoded, and a fault in it is no miss of that invocation. The database
+    // is moved away, so a miss would end in 74 rather than be served.
+    let sandbox = loaded();
+    let direct = succeeded(
+        &sandbox.run(&["render", "skips", "--direct", "--no-cache"]),
+        "the direct render",
+    );
+    let files = [
+        holding(&sandbox, "foreign_keys"),
+        holding(&sandbox, "referenced_by"),
+    ];
+    malform(&files[0], &["foreign_keys"]);
+    malform(&files[1], &["referenced_by"]);
+    let damaged = files
+        .each_ref()
+        .map(|file| std::fs::read(file).expect("the file reads"));
+    std::fs::rename(
+        sandbox.path("data/freight.sqlite"),
+        sandbox.path("data/moved.sqlite"),
+    )
+    .expect("the database moves");
+
+    let printed = sandbox.run(&["render", "skips"]);
+
+    assert_eq!(succeeded(&printed, "the cached render"), direct);
+    assert_eq!(
+        files
+            .each_ref()
+            .map(|file| std::fs::read(file).expect("the file reads")),
+        damaged,
+        "a file that was no miss is left as it is"
+    );
+}
+
+#[test]
+fn fr_cache_038_schema_dump_decodes_every_part_before_it_writes_so_the_same_part_is_a_miss() {
+    // FR-CACHE-038: the deferral is the render's alone. `tpl schema dump` over
+    // the same malformed part finds the file a miss before its first byte:
+    // with the database moved away the miss reads it and ends in 74, with
+    // nothing on stdout; with the database back it answers the direct
+    // document and rewrites the file.
+    let sandbox = loaded();
+    let direct = succeeded(
+        &sandbox.run(&["schema", "dump", "--direct", "--no-cache"]),
+        "the direct dump",
+    );
+    let file = holding(&sandbox, "foreign_keys");
+    let held = malform(&file, &["foreign_keys"]);
+    let database = sandbox.path("data/freight.sqlite");
+    let moved = sandbox.path("data/moved.sqlite");
+
+    std::fs::rename(&database, &moved).expect("the database moves");
+    refused(
+        &sandbox.run(&["schema", "dump"]),
+        74,
+        "a dump whose cache file is a miss, with no database",
+    );
+    std::fs::rename(&moved, &database).expect("the database moves back");
+
+    let printed = sandbox.run(&["schema", "dump"]);
+
+    assert_eq!(succeeded(&printed, "the dump"), direct);
+    assert_eq!(
+        std::fs::read(&file).expect("the file reads"),
+        held,
+        "FR-CACHE-007 rewrote the file the miss was found in"
     );
 }

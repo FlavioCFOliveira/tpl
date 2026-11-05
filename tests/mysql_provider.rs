@@ -24,6 +24,7 @@
 //! | `FR-PROJ-021` | The starter template renders against every table, on both series |
 //! | `FR-MYSQL-008`, `FR-MYSQL-012` | A `mysql` entry on MariaDB, and a `mariadb` entry on MySQL, both `78` |
 //! | `FR-CFG-024`, `FR-CTX-043`, `FR-ENV-049` | `cfg database test`, a `--context` render, and the `textual` family of `json` |
+//! | `FR-MYSQL-048`, `FR-SRV-043`, `FR-PRIV-021`, `ADR-015` | The target of item 17 read whole and no decoy with it, by both accounts; a missing name of the same characters `77`; each statement received as its constant with the literal in its placeholder |
 
 #[path = "support/fixture.rs"]
 mod mariadb_fixture;
@@ -1369,4 +1370,195 @@ fn fr_ctx_043_and_fr_env_049_a_mysql_dump_renders_through_context_and_json_is_te
         ],
     );
     assert_eq!(from_document, live);
+}
+
+// ------------------------------------------- FR-MYSQL-048 and ADR-015 ---
+
+/// The target database of item 17 of `FR-MYSQL-044`, as the server names it.
+const QUOTED_TARGET: &str = "tpl_q'b\\s`k";
+
+/// [`QUOTED_TARGET`] as a TOML basic string holds it, for `.tpl/.cfg`.
+const QUOTED_TARGET_TOML: &str = "tpl_q'b\\\\s`k";
+
+/// The literal of `ADR-015` that stands for [`QUOTED_TARGET`]: its bytes, as
+/// `scripts/mysql/README.md` lists them.
+const QUOTED_TARGET_LITERAL: &str = "_utf8mb4 X'74706C5F7127625C73606B'";
+
+/// The tables and the view of the target, and nothing else.
+const QUOTED_TABLES: [&str; 3] = ["consignee", "tariff'line`%", "tariff'line`2026"];
+const QUOTED_VIEWS: [&str; 1] = ["v_consignee_by_place"];
+
+/// The one table of each of the four decoys of item 17.
+const DECOY_TABLES: [&str; 4] = [
+    "decoy_escape_consumed",
+    "decoy_backslash_doubled",
+    "decoy_like_pattern",
+    "decoy_letter_case",
+];
+
+/// A set of the names in `names`.
+fn set_of(names: &[&str]) -> BTreeSet<String> {
+    names.iter().map(|name| (*name).to_owned()).collect()
+}
+
+#[test]
+fn fr_mysql_048_a_name_holding_a_quote_a_backslash_and_a_backtick_reads_that_database_alone() {
+    // FR-MYSQL-048 applies FR-SRV-043, and ADR-015 owes this test: the target of
+    // item 17 reads whole, as the privileged account and as the reduced-grant
+    // reader, with not one object of the four decoys whose names an escape, a
+    // doubled backslash, a pattern or a letter case would have read instead;
+    // `cfg database test` reaches it; and the table whose name holds `%` reads
+    // as itself, not as the table its name matches as a pattern.
+    let _exclusive = mysql::exclusive();
+    let Some(series) = mysql::series(
+        "fr_mysql_048_a_name_holding_a_quote_a_backslash_and_a_backtick_reads_that_database_alone",
+    ) else {
+        return;
+    };
+
+    for server in &series {
+        let name = server.name();
+        for account in [root(), reader()] {
+            let who = account.0;
+            let sandbox = project(server, account, QUOTED_TARGET_TOML, "verify-identity");
+            let database = dump(&sandbox);
+            let written = database.to_string();
+
+            assert_eq!(database["name"], QUOTED_TARGET, "{name} {who}");
+            assert_eq!(
+                names_of(&database["tables"]),
+                set_of(&QUOTED_TABLES),
+                "{name} {who}"
+            );
+            assert_eq!(
+                names_of(&database["views"]),
+                set_of(&QUOTED_VIEWS),
+                "{name} {who}"
+            );
+            assert_eq!(
+                names_of(&database["routines"]),
+                BTreeSet::new(),
+                "{name} {who}"
+            );
+            for decoy in DECOY_TABLES {
+                assert!(!written.contains(decoy), "{name} {who}: {decoy} was read");
+            }
+
+            let printed = succeeds(
+                &sandbox,
+                &["cfg", "database", "test", ENTRY, "--format", "json"],
+            );
+            let report: Value = serde_json::from_str(&printed).expect("a JSON document");
+            assert_eq!(
+                report["data"]["can_read_catalogue"], true,
+                "{name} {who}: {printed}"
+            );
+
+            let printed = succeeds(
+                &sandbox,
+                &[
+                    "schema",
+                    "table",
+                    "tariff'line`%",
+                    "--format",
+                    "json",
+                    "--direct",
+                    "--no-cache",
+                ],
+            );
+            let table: Value = serde_json::from_str(&printed).expect("a JSON document");
+            let table = &table["data"]["table"];
+            assert_eq!(table["name"], "tariff'line`%", "{name} {who}");
+            assert!(
+                table["comment"]
+                    .as_str()
+                    .is_some_and(|comment| comment.contains("percent sign")),
+                "{name} {who}: {table}"
+            );
+            assert!(!printed.contains("2026"), "{name} {who}: {printed}");
+        }
+    }
+}
+
+#[test]
+fn fr_priv_021_a_missing_name_holding_a_quote_a_backslash_and_a_percent_ends_with_77() {
+    // FR-PRIV-021 through FR-SRV-043: a name no database carries returns no
+    // schema row, whatever its characters would mean as syntax or as a
+    // pattern, and `tpl_q'b\s%` matches the target as a LIKE pattern would.
+    let _exclusive = mysql::exclusive();
+    let Some(series) = mysql::series(
+        "fr_priv_021_a_missing_name_holding_a_quote_a_backslash_and_a_percent_ends_with_77",
+    ) else {
+        return;
+    };
+
+    for server in &series {
+        for account in [root(), reader()] {
+            let sandbox = project(server, account, "tpl_q'b\\\\s%", "verify-identity");
+            let outcome = run(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+
+            assert_eq!(
+                outcome.code,
+                Some(77),
+                "{} {}: {}",
+                server.name(),
+                account.0,
+                outcome.err
+            );
+            assert_eq!(outcome.out, "", "{} {}", server.name(), account.0);
+        }
+    }
+}
+
+#[test]
+fn fr_mysql_048_each_statement_reaches_the_server_with_the_literal_in_its_placeholder() {
+    // ADR-015, from the server's own record: a full read of the target is the
+    // twelve statements, each one `Query` of the text protocol — no Prepare and
+    // no Execute — each carrying the literal of the target's bytes once, and
+    // each, with the literal put back as `?`, one of twelve distinct texts whose
+    // one placeholder is the right-hand side of `=`.
+    let _exclusive = mysql::exclusive();
+    let Some(series) = mysql::series(
+        "fr_mysql_048_each_statement_reaches_the_server_with_the_literal_in_its_placeholder",
+    ) else {
+        return;
+    };
+
+    for server in &series {
+        let name = server.name();
+        let sandbox = project(server, root(), QUOTED_TARGET_TOML, "verify-identity");
+
+        mysql::statements_on(server);
+        succeeds(&sandbox, &["schema", "dump", "--direct", "--no-cache"]);
+        mysql::statements_off(server);
+
+        let rows = mysql::received(server, root().0);
+        let catalogue: Vec<&(String, String)> = rows
+            .iter()
+            .filter(|(_, statement)| statement.contains("INFORMATION_SCHEMA"))
+            .collect();
+        let mut templates = BTreeSet::new();
+
+        for (kind, statement) in &catalogue {
+            assert_eq!(kind, "Query", "{name}: {statement}");
+            assert_eq!(
+                statement.matches(QUOTED_TARGET_LITERAL).count(),
+                1,
+                "{name}: {statement}"
+            );
+            let template = statement.replace(QUOTED_TARGET_LITERAL, "?");
+            assert_eq!(template.matches('?').count(), 1, "{name}: {template}");
+            assert!(template.contains(" = ?"), "{name}: {template}");
+            assert!(!statement.contains(';'), "{name}: {statement}");
+            templates.insert(template);
+        }
+
+        assert_eq!(i64::try_from(catalogue.len()), Ok(FULL_READ), "{name}");
+        assert_eq!(i64::try_from(templates.len()), Ok(FULL_READ), "{name}");
+        assert_eq!(
+            mysql::statements_count(server, &["--user", root().0, "--catalogue"]),
+            FULL_READ,
+            "{name}"
+        );
+    }
 }

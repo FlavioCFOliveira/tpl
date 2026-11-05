@@ -95,7 +95,13 @@ fn adr_014_every_field_of_the_twelve_tables_decodes_through_the_driver_on_every_
         let clock = settings::clock(None);
         let mut session = crate::mysql::open(&target, &clock).expect("the session opens");
 
-        for read in Read::ALL {
+        // ADR-015: the reader now takes its rows in the text format, so every
+        // field is decoded from both formats, the bound statement's binary
+        // rows and the composed statement's text rows.
+        for (read, text) in Read::ALL
+            .into_iter()
+            .flat_map(|read| [(read, false), (read, true)])
+        {
             let sql = format!(
                 "SELECT * FROM INFORMATION_SCHEMA.{} WHERE {} = ?",
                 read.table(),
@@ -103,21 +109,28 @@ fn adr_014_every_field_of_the_twelve_tables_decodes_through_the_driver_on_every_
             );
             let (runtime, connection) = session.parts();
             let connection = connection.expect("the session is open");
-            let rows: Vec<MySqlRow> = runtime
-                .block_on(
+            let fetched = if text {
+                let composed = sql.replace('?', &super::literal(&schema));
+                runtime.block_on(
+                    sqlx_core::raw_sql::raw_sql(sqlx_core::sql_str::AssertSqlSafe(composed))
+                        .fetch_all(connection),
+                )
+            } else {
+                runtime.block_on(
                     sqlx_core::query::query::<sqlx_mysql::MySql>(
                         sqlx_core::sql_str::AssertSqlSafe(sql),
                     )
                     .bind(schema.as_str())
                     .fetch_all(connection),
                 )
-                .unwrap_or_else(|failure| {
-                    panic!(
-                        "{}: {} did not decode: {failure}",
-                        server.name(),
-                        read.table()
-                    )
-                });
+            };
+            let rows: Vec<MySqlRow> = fetched.unwrap_or_else(|failure| {
+                panic!(
+                    "{}: {} did not decode: {failure}",
+                    server.name(),
+                    read.table()
+                )
+            });
 
             assert!(
                 !rows.is_empty(),
@@ -520,6 +533,20 @@ fn fetched(session: &mut Session, sql: String, schema: &str, binds: usize) -> Ve
         .unwrap_or_else(|failure| panic!("{sql}: {failure}"))
 }
 
+/// The rows `sql` returns over the text protocol, with no argument, on
+/// `session`'s connection (`ADR-015`).
+fn texted(session: &mut Session, sql: String) -> Vec<MySqlRow> {
+    let (runtime, connection) = session.parts();
+    let connection = connection.expect("the session is open");
+
+    runtime
+        .block_on(
+            sqlx_core::raw_sql::raw_sql(sqlx_core::sql_str::AssertSqlSafe(sql.clone()))
+                .fetch_all(connection),
+        )
+        .unwrap_or_else(|failure| panic!("{sql}: {failure}"))
+}
+
 /// The catalogue the plan's statements return under the clauses each carried
 /// before rmp `#351`: the rows in the orders the server used to give.
 fn as_before(session: &mut Session, schema: &str) -> Catalogue {
@@ -884,15 +911,200 @@ fn adr_014_the_integer_accessor_answers_every_field_as_the_two_typed_asks_did() 
             }
         };
 
+        // ADR-015: the reader's rows arrive in the text format now, so both
+        // formats are compared, field by field.
         for read in Read::ALL {
             answered(&fetched(&mut session, read.sql().to_owned(), &schema, 1));
+            answered(&texted(
+                &mut session,
+                super::compose(read, &schema).expect("the constant composes"),
+            ));
         }
         answered(&fetched(&mut session, edges.to_owned(), &schema, 1));
+        answered(&texted(
+            &mut session,
+            edges.replace('?', &super::literal(&schema)),
+        ));
         session.close();
 
         assert!(
             integers > 0 && compared > integers,
             "{name}: {integers} of {compared}"
         );
+    }
+}
+
+// ------------------------------------------------------------- ADR-015 ---
+
+/// The target database of item 17 of `FR-MYSQL-044`, as the server names it.
+const QUOTED_TARGET: &str = "tpl_q'b\\s`k";
+
+/// [`QUOTED_TARGET`] as a TOML basic string holds it, for `.tpl/.cfg`.
+const QUOTED_TARGET_TOML: &str = "tpl_q'b\\\\s`k";
+
+/// Names a literal must carry intact: empty, a NUL, every character the
+/// server's quoting or a pattern could read, a comment opener, and multibyte
+/// characters of two, three and four bytes.
+const EDGE_NAMES: [&str; 16] = [
+    "",
+    "\0",
+    "'",
+    "\\",
+    "`",
+    "\"",
+    "%",
+    "_",
+    ";",
+    "-- ",
+    "a'; DROP DATABASE freight; -- ",
+    "\\'",
+    "é",
+    "€",
+    "𠮷",
+    QUOTED_TARGET,
+];
+
+/// The bytes a literal written by [`super::literal`] stands for, or [`None`]
+/// where it is not `_utf8mb4 X'`, pairs of uppercase hexadecimal digits, and
+/// `'`: the pattern `^_utf8mb4 X'([0-9A-F]{2})*'$`.
+fn decoded(literal: &str) -> Option<Vec<u8>> {
+    let digits = literal.strip_prefix("_utf8mb4 X'")?.strip_suffix('\'')?;
+    let value = |digit: u8| match digit {
+        b'0'..=b'9' => Some(digit - b'0'),
+        b'A'..=b'F' => Some(digit - b'A' + 10),
+        _ => None,
+    };
+    if digits.len() % 2 != 0 {
+        return None;
+    }
+
+    digits
+        .as_bytes()
+        .chunks(2)
+        .map(|pair| Some(value(pair[0])? << 4 | value(pair[1])?))
+        .collect()
+}
+
+#[test]
+fn adr_015_the_literal_is_hexadecimal_utf8mb4_and_stands_for_the_name_s_bytes() {
+    // ADR-015, point 2: `_utf8mb4 X'`, two uppercase hexadecimal digits per
+    // byte, `'`, and nothing else, whatever the name holds.
+    for name in EDGE_NAMES {
+        let written = super::literal(name);
+
+        assert_eq!(
+            decoded(&written).as_deref(),
+            Some(name.as_bytes()),
+            "{name:?} was written {written:?}"
+        );
+        assert!(written.is_ascii(), "{written:?}");
+        for barred in ["\\", "\"", "|", ";", "--", "`", "%"] {
+            assert!(!written[1..].contains(barred), "{barred} in {written:?}");
+        }
+    }
+    assert_eq!(super::literal(""), "_utf8mb4 X''");
+    assert_eq!(super::literal("a'\\"), "_utf8mb4 X'61275C'");
+}
+
+#[test]
+fn adr_015_each_statement_is_its_constant_with_the_literal_in_place_of_its_one_placeholder() {
+    // ADR-015, point 2: the literal replaces the single `?`, only as the
+    // right-hand side of `<INFORMATION_SCHEMA column> =`, never beside
+    // COLLATE, CONVERT, LIKE or REGEXP; and no composed text holds a `;`.
+    for name in EDGE_NAMES {
+        let written = super::literal(name);
+
+        for read in Read::ALL {
+            let composed = super::compose(read, name).expect("every constant composes");
+            let (before, after) = read.sql().split_once('?').expect("one placeholder");
+
+            assert_eq!(composed, format!("{before}{written}{after}"), "{name:?}");
+            assert!(before.ends_with(" = "), "{}", read.sql());
+            assert_eq!(composed.matches(&written).count(), 1, "{composed}");
+            assert!(!composed.contains(';'), "{composed}");
+            assert!(!composed.contains('?'), "{composed}");
+            for barred in ["COLLATE", "CONVERT", "LIKE", "REGEXP"] {
+                assert!(!composed.contains(barred), "{barred} in {composed}");
+            }
+        }
+    }
+}
+
+#[test]
+fn fr_srv_043_a_read_is_the_same_under_sessions_that_change_how_text_is_read() {
+    // FR-SRV-043 by way of FR-MYSQL-048, and ADR-015's claim that the rule needs
+    // no session precondition: under NO_BACKSLASH_ESCAPES with ANSI_QUOTES, and
+    // under a client character set whose trail bytes include 0x5c, the read of
+    // the target of item 17 returns, statement by statement, the rows a bound
+    // value returns on the same session, and folds to the model the default
+    // session folds to.
+    let Some(series) = fixture::series(
+        "fr_srv_043_a_read_is_the_same_under_sessions_that_change_how_text_is_read",
+    ) else {
+        return;
+    };
+    let _exclusive = fixture::exclusive();
+
+    for server in &series {
+        let name = server.name();
+        for schema in [QUOTED_TARGET, fixture::names().schema.as_str()] {
+            let scratch = Scratch::new();
+            let written = if schema == QUOTED_TARGET {
+                QUOTED_TARGET_TOML
+            } else {
+                schema
+            };
+            let resolved = reaching(&scratch, server, written, "verify-identity");
+            let target = Target::of(&resolved).expect("the entry names a host");
+            let clock = settings::clock(None);
+
+            let mut session = crate::mysql::open(&target, &clock).expect("the session opens");
+            let plain = super::read(&mut session, &target, &clock, schema)
+                .expect("the default session reads");
+            session.close();
+            let plain_model = plain.model().expect("the rows fold");
+            assert!(
+                !plain_model.tables.is_empty(),
+                "{name} {schema}: the read found no table"
+            );
+
+            for settings in [
+                &["SET SESSION sql_mode = 'NO_BACKSLASH_ESCAPES,ANSI_QUOTES'"][..],
+                &[
+                    "SET NAMES gbk",
+                    "SET SESSION character_set_results = utf8mb4",
+                ][..],
+            ] {
+                let mut session = crate::mysql::open(&target, &clock).expect("the session opens");
+                for setting in settings {
+                    let (runtime, connection) = session.parts();
+                    runtime
+                        .block_on(
+                            sqlx_core::raw_sql::raw_sql(*setting)
+                                .execute(connection.expect("the session is open")),
+                        )
+                        .unwrap_or_else(|failure| panic!("{name}: {setting}: {failure}"));
+                }
+
+                let read = super::read(&mut session, &target, &clock, schema)
+                    .unwrap_or_else(|failure| panic!("{name} {schema} {settings:?}: {failure}"));
+                for statement in Read::ALL {
+                    let bound = fetched(&mut session, statement.sql().to_owned(), schema, 1);
+                    assert_eq!(
+                        read.rows(statement).len(),
+                        bound.len(),
+                        "{name} {schema} {settings:?}: {}",
+                        statement.table()
+                    );
+                }
+                session.close();
+
+                assert_eq!(
+                    read.model().expect("the rows fold"),
+                    plain_model,
+                    "{name} {schema} {settings:?}"
+                );
+            }
+        }
     }
 }

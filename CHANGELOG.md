@@ -248,9 +248,24 @@ workflow, before it closes.
   `geomcollection`, `integer`, `real` and `numeric`. A table with no primary
   key gets its row types and no repository, and the MariaDB output of every
   example is unchanged.
+- **A cached `tpl render` reads a table's `foreign_keys` and
+  `referenced_by` when the template first reaches them.** A cache file whose
+  `foreign_keys` or `referenced_by` is damaged is a miss only where the
+  template reaches that part: the render is then abandoned, nothing of it is
+  written, and the result is rendered from the server, as for any file found
+  damaged during a render. A template that never reaches the part is served
+  from the cache. The eight `schema` subcommands still treat such a file as a
+  miss before they write anything.
 
 ### Fixed
 
+- **A cached `tpl render` of a large database holds about half the heap it
+  held.** Every table a render reached from the cache decoded the tables its
+  foreign keys embed, so under the default `core.render_memory_limit` a
+  whole-database render such as `rust/schema` or `go/schema` exited `65`
+  from about 2 450 tables cached, while the same render with `--direct`
+  passed. It now passes up to about 4 600 tables; past that a cached render
+  still exits `65` where `--direct` passes.
 - **A short or malformed packet from a server no longer ends `tpl` with
   `70`.** A greeting cut before its fields, an error packet cut before its
   number or its SQL state — in the greeting's place or in answer to the

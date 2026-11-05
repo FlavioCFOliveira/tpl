@@ -39,6 +39,20 @@ fn fr_lite_001_the_library_is_built_without_extension_loading() {
 }
 
 #[test]
+fn adr_013_the_library_is_built_with_its_memory_statistics_off() {
+    // ADR-013, point 2, amended for rmp #350: `.cargo/config.toml` adds
+    // `-DSQLITE_DEFAULT_MEMSTATUS=0`, and the amalgamation lists the option in
+    // `PRAGMA compile_options` wherever its value is not the default `1`.
+    let connection = Connection::open_in_memory().expect("an in-memory database opens");
+    let options = compile_options(&connection);
+
+    assert!(
+        options.iter().any(|option| option == "DEFAULT_MEMSTATUS=0"),
+        "DEFAULT_MEMSTATUS=0 is not among {options:?}"
+    );
+}
+
+#[test]
 fn fr_lite_001_the_library_that_answers_is_the_bundled_one() {
     let connection = Connection::open_in_memory().expect("an in-memory database opens");
     let answered: String = connection

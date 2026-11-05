@@ -390,6 +390,13 @@ fn read_all(handle: &OwnedFd, expected: usize, limit: u64) -> Option<Vec<u8>> {
 ///
 /// The type, the mode and the length are the descriptor's own, so the file
 /// compared is the file examined.
+///
+/// **One read, of one byte more than the length, straight into `held`.** A
+/// file that grew after the `fstat` fills the extra byte, and one that shrank
+/// or answers short returns fewer bytes than `encoded`: either is an answer of
+/// `false`, and the object is written, which is the answer `FR-CACHE-030`
+/// gives anything short of certainty. Only a read of exactly `encoded.len()`
+/// bytes is compared.
 pub(crate) fn holds_bytes(
     folder: &OwnedFd,
     name: &OsStr,
@@ -411,11 +418,24 @@ pub(crate) fn holds_bytes(
         return false;
     }
 
-    let Some(bytes) = read_all(&handle, encoded.len(), expected.saturating_add(1)) else {
+    // PERF: `read_all` read through an 8 KiB stack chunk into a fresh buffer,
+    // copied it into `held`, and asked once more for the end of the file: an
+    // allocation, a copy and a second `read` per object of a `cache load`
+    // (rmp `#348`). `held` is sized in place — growing it fills only the bytes
+    // past its previous length, and shrinking it fills none — and the one read
+    // overwrites every byte compared.
+    let Some(asked) = encoded.len().checked_add(1) else {
         return false;
     };
-    held.clear();
-    held.extend_from_slice(&bytes);
+    held.resize(asked, 0);
+    let read = loop {
+        match rustix::io::read(&handle, held.as_mut_slice()) {
+            Ok(read) => break read,
+            Err(Errno::INTR) => {}
+            Err(_) => return false,
+        }
+    };
+    held.truncate(read);
 
     held.as_slice() == encoded
 }
