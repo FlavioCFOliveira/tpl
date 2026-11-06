@@ -1,7 +1,7 @@
 ---
 title: Render Command (Third Arm)
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-06
 related: [schema-commands.md, template-commands.md, cache-commands.md, output-formats.md, configuration-model.md, context-document.md]
 ---
 
@@ -325,18 +325,20 @@ tpl render <template> --routine <name>      binds routine
 - **FR-RND-041**: IF `--context` and `--direct` are both supplied to
   `tpl render`, THEN the system SHALL exit `64` (`EX_USAGE`) at argument
   parsing, step 1 of `FR-ERR-006`, before any project is discovered, and SHALL
-  read neither the document nor the server. The `cause` SHALL name both flags
-  and state why they contradict each other, per the `64` row of `FR-ERR-034`:
-  `--context` supplies the context from a document and reads no server, per
-  `FR-RND-022`, and `--direct` requires a read from the server, per
-  `FR-CACHE-013`. The `hint` SHALL say which flag to remove for each outcome:
-  remove `--direct` to render from the document, or remove `--context` to read
-  the server. It SHALL NOT reproduce the path given to `--context`.
+  read neither the document nor the database. The `cause` SHALL name both
+  flags and state why they contradict each other, per the `64` row of
+  `FR-ERR-034`: `--context` supplies the context from a document and reads no
+  database, per `FR-RND-022`, and `--direct` requires a read of the database,
+  per `FR-CACHE-013`. The `hint` SHALL say which flag to remove for each
+  outcome: remove `--direct` to render from the document, or remove
+  `--context` to read the database. It SHALL NOT reproduce the path given to
+  `--context`. The `cause` and the `hint` SHALL read exactly as the example
+  gives them.
 
   ```
   error: --direct cannot be used with --context
-  cause: --context reads the context from a document and contacts no server; --direct demands a read from the server
-  hint:  remove --direct to render from the document, or remove --context to read the server
+  cause: --context reads the context from a document and reads no database; --direct demands a read of the database
+  hint:  remove --direct to render from the document, or remove --context to read the database
   exit:  64 (EX_USAGE)
   ```
 
@@ -362,11 +364,25 @@ tpl render <template> --routine <name>      binds routine
   calling agent that it did.
 
   *Rejected: letting `--direct` win and ignoring `--context`.* It reads a
-  server the caller told `tpl` not to read, and it would need an entry the
+  database the caller told `tpl` not to read, and it would need an entry the
   invocation did not select, per `FR-RND-019`.
 
   *Added in the forty-sixth edition,* for rmp `#274`, from finding S-11 of the
   second re-audit.
+
+  *Amended in the eighty-ninth edition,* for rmp `#367`. The `cause` said that
+  `--context` "contacts no server" and that `--direct` "demands a read from
+  the server", and the `hint` offered to "read the server". `--direct`
+  demands a read of the selected entry's database whatever its provider, and
+  for a `sqlite` entry that read opens a file and contacts no server, so both
+  lines stated a fact of MariaDB and MySQL for one that holds for every
+  provider, which `FR-ERR-051` now forbids. The two lines speak of the
+  database, as the purpose of `--direct` does under `FR-HELP-038`, and are
+  fixed word for word so that a test can assert them.
+  *Rejected: "contacts no database".* "Contact" reads as a network act, the
+  ground on which `FR-HELP-031` rejects it. *Rejected: "reads no server or
+  database file".* It names the providers to state a fact none of them
+  qualifies, and lengthens a line the caller reads in full.
 
 - **FR-RND-026**: WHEN no `--context` is supplied, `tpl render` SHALL read the
   catalogue through the cache, per `FR-CACHE-006`.
@@ -375,19 +391,25 @@ tpl render <template> --routine <name>      binds routine
   let a stale catalogue produce wrong code that then gets committed; caching
   both keeps the two consistent.
 
-- **FR-RND-040**: WHEN `tpl render` reads the server — a read under `--direct`
-  or `--no-cache`, a cache miss under `FR-CACHE-007`, or the read of
-  `FR-CACHE-039` after an abandoned render — the system SHALL close the
-  connection that read the catalogue, ending the session with the server and
-  closing the socket, and SHALL shut down every runtime the database driver
-  started, before the render starts. No connection SHALL be open, and no
-  runtime of the driver SHALL be alive, while a template is evaluated.
+- **FR-RND-040**: WHEN `tpl render` reads the database — a read under
+  `--direct` or `--no-cache`, a cache miss under `FR-CACHE-007`, or the read
+  of `FR-CACHE-039` after an abandoned render — the system SHALL close the
+  connection that read the catalogue before the render starts. For a
+  `mariadb` or a `mysql` entry, closing it SHALL end the session with the
+  server, close the socket, and shut down every runtime the database driver
+  started. For a `sqlite` entry, it SHALL close the connection of the library
+  to the database file and end everything the read started to enforce the
+  deadlines of `FR-GLOB-012`. No connection SHALL be open, and nothing the
+  read started SHALL be alive, while a template is evaluated.
 
-  *Verification.* Two observations, both required. From the server side,
-  through the fixture harness, the fixture's server SHALL record the session
-  as ended before the first byte of the render reaches stdout. In process, the
-  suite SHALL assert, at the moment the template begins to evaluate, that no
-  connection is open and no runtime of the driver is alive.
+  *Verification.* For a `mariadb` or a `mysql` entry, two observations, both
+  required. From the server side, through the fixture harness, the fixture's
+  server SHALL record the session as ended before the first byte of the render
+  reaches stdout. In process, the suite SHALL assert, at the moment the
+  template begins to evaluate, that no connection is open and no runtime of
+  the driver is alive. For a `sqlite` entry, which has no server side, the
+  in-process observation alone: no connection to the file is open, and nothing
+  the read started to enforce a deadline is alive.
 
   *Added in the forty-second edition, as decided for rmp `#258`.* The render
   is separated completely from the catalogue read: nothing of the read is
@@ -397,6 +419,17 @@ tpl render <template> --routine <name>      binds routine
   and neither conflicts: the one connection an invocation may open is closed
   before the render, and the read of `FR-CACHE-039` opens it only after the
   abandoned render has ended. Each carries a note citing this requirement.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`. The requirement was
+  worded for a server read alone, while a `sqlite` read is closed in the same
+  place, before the render: the implementation read at `aed18a3` on
+  2026-11-06 closes the connection to the file and stops the watch on its
+  statements (`src/sqlite.rs`, `Session::close`), and the render refuses to
+  start, as a violated invariant, unless the readers of all three providers
+  report nothing alive (`src/provider.rs`, `quiescent`, checked from
+  `src/cli/render.rs`). The requirement now states that for every provider,
+  and the verification states the observation a `sqlite` entry admits. No
+  behaviour changes.
 
 - **FR-RND-027**: `tpl render` SHALL NOT declare `--format` or `--pretty`. Its
   result is the rendered text, which has no alternative representation.

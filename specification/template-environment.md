@@ -1,7 +1,7 @@
 ---
 title: The Template Environment
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-06
 related: [render-semantics.md, render-command.md, context-document.md, help-and-version.md, catalogue-coverage.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -376,12 +376,17 @@ row is a case the implementation SHALL satisfy.
   5. An empty word SHALL be discarded.
 
 - **FR-ENV-031**: Each word of the list SHALL be case-folded over ASCII `A-Z`
-  and `a-z` only, independently of the server, the database collation, and the
-  locale. A character outside that range SHALL pass through unchanged.
+  and `a-z` only, independently of the provider, the server, the database
+  collation, and the locale. A character outside that range SHALL pass
+  through unchanged.
 
   *Rationale.* The same rule `FR-SCH-014` applies to `--pattern`, for the same
   reason: a case transformation that depended on the locale would produce
   different generated code on two machines and break `NFR-DET-001`.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the provider is
+  named beside the server, which a `sqlite` entry does not have, as
+  `FR-SCH-014` names it. No behaviour changes.
 
 - **FR-ENV-032**: The word list SHALL be these values for these operands:
 

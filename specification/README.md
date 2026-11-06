@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty-eight editions. All are in force;
+The specification has been written in eighty-nine editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6807,6 +6807,84 @@ no open question or divergence entry is raised, and
 validation rule is applied: neither the root `README.md` nor `CLAUDE.md`
 quotes a help string this edition changes, so
 [upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-ninth edition — error lines that read a database, and three passages in the words of every provider
+
+rmp `#367` and `#368`, sprint 34, joined as one effort: the error and
+warning lines of `tpl` kept the server wording the eighty-eighth edition took
+out of the help, and four passages of this corpus still named a server, or
+MariaDB, for a fact that holds for every provider. **One identifier is
+assigned**: `FR-ERR-051`, in
+[errors-and-exit-codes.md](errors-and-exit-codes.md). None is retired and
+none is renumbered, and no open question or divergence entry is raised.
+No behaviour changes but the words of the lines named below.
+
+- **The rule for messages** — `FR-ERR-051`: the `error`, `cause` and `hint`
+  lines and every warning line name a provider by the rule `FR-HELP-038`
+  sets for the help. Server, connection, session, login, TLS and
+  `INFORMATION_SCHEMA` name MariaDB and MySQL; a fact of every provider
+  speaks of the database and of reading it. The Scope of
+  [errors-and-exit-codes.md](errors-and-exit-codes.md) now places those
+  words, and every line a requirement fixes word for word, in scope.
+- **Lines fixed in the words of every provider** — the `cause` and the
+  `hint` of `FR-RND-041` speak of reading the database, and are fixed word
+  for word; the `cause` of `FR-CFG-020` and the five warning lines of
+  `FR-CFG-051` say that `-d/--database` selects the entry "for commands that
+  use one", not "for commands that connect"; the `66` row of `FR-ERR-034`
+  names the database read through the entry, on the server or as the schema
+  of a database file, in place of the server-side database.
+- **Passages harmonised** — `FR-CACHE-010` and `FR-CACHE-022`, and the
+  Scope of [cache-commands.md](cache-commands.md), speak of reading the
+  database. A sweep of that file and of
+  [schema-commands.md](schema-commands.md) for the same kind of passage
+  brought the same change to the Overview of each file, the actor *Database
+  entry* of the second, `FR-CACHE-007`, `FR-CACHE-018`, `FR-CACHE-028`,
+  `FR-CACHE-033`, `FR-CACHE-038`, `FR-CACHE-039`, `BR-CACHE-003`,
+  `FR-SCH-013`, `FR-SCH-014` and `FR-SCH-018`, and to the rationales of
+  `FR-CACHE-030`, `FR-CACHE-040`, `FR-CACHE-043`, `FR-CACHE-044` and
+  `FR-SCH-008`; each carries its own note. The `source` value `server` of
+  `FR-SCH-035`, a contract value, and the passages that state a fact of the
+  server providers alone — `FR-CACHE-032`, on an unreachable server, and the
+  routine namespaces of `FR-SCH-008`, among them — are unchanged, as are the
+  edition notes that record what an earlier text said. A sweep of the
+  technical specification, made for the same task, found passages of the
+  same kind in five more files, and they are harmonised in the same way, each
+  with its own note: `NFR-DET-002` in [cli-contract.md](cli-contract.md);
+  `FR-CFG-005` and `FR-CFG-035` in [cfg-commands.md](cfg-commands.md), the
+  second keeping the contract value `server` of `FR-OUT-026`; the Scope,
+  `FR-CTX-001`, `FR-CTX-023` and `FR-CTX-033` in
+  [context-document.md](context-document.md), the last now stating the
+  series of all three providers that two of its notes supplied;
+  `FR-ENV-031` in [template-environment.md](template-environment.md); and
+  the entry *context* of [glossary.md](glossary.md). `FR-RND-040` now
+  states for every provider that the read is closed before the render, and
+  what a `sqlite` entry's verification observes, as the implementation read
+  at `aed18a3` already does. `FR-SCH-012` states the syntax of `--pattern` in a table that
+  names no provider, and states what a backslash before any other character,
+  and every other character, match, as the implementation already does; the
+  Scope of [help-and-version.md](help-and-version.md) no longer places the
+  wording `FR-HELP-031`, `FR-HELP-037` and `FR-HELP-038` fix out of scope.
+  `FR-HELP-038` carries a note pointing at `FR-ERR-051`.
+- **This file** — the edition count of the Scope, and this record.
+
+rmp `#371` asked whether this corpus fixes the example of `tpl version` the
+help gives, `such as tpl 0.1.0`. It does not: `FR-HELP-005` fixes the output
+of the command, and its example of version `0.1.0` is this file's own; the
+sentence of the help is the implementation's, under `BR-HELP-002`, and
+nothing here changes for it.
+
+`FR-RND-022`, `FR-CACHE-011`, `FR-CACHE-013`, `FR-CACHE-019`,
+`FR-CFG-016`, `FR-CFG-053`, `FR-CFG-056`, `BR-SCH-001`, `FR-HELP-031` and
+`FR-OUT-020` were read against the change, and none is amended. The word
+*connection* is left where this corpus uses it, because
+[glossary.md](glossary.md) defines it for all three providers, the opening
+of a SQLite database file included. The fifth validation rule is applied: the
+root `README.md` says that `tpl cfg database test` is the one `cfg`
+subcommand that opens a connection, and uses "connection" of a SQLite
+database file as of a server in the same section, so it states nothing the
+amended `FR-CACHE-010` contradicts; neither it nor `CLAUDE.md` quotes a line
+this edition changes, so [upstream-divergences.md](upstream-divergences.md)
+raises no entry.
 
 ### Still out of scope
 
