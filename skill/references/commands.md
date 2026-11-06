@@ -27,7 +27,7 @@ No other flag has a short form. A flag value that begins with `-` must be writte
 
 ## Database exploration: `tpl schema`
 
-All `schema` subcommands read through the cache and declare `--direct` (read the server and replace the cached copy) and `--no-cache` (store nothing). Every one except `dump` also declares `--format text|json` and `--pretty`.
+All `schema` subcommands read through the cache and declare `--direct` (read the database live and replace the cached copy) and `--no-cache` (store nothing). Every one except `dump` also declares `--format text|json` and `--pretty`.
 
 | Command | Alias | Purpose | Needs | JSON `data` |
 |---|---|---|---|---|
@@ -66,7 +66,7 @@ These never connect and never run a template. A template name has no `.jinja` ex
 | Command | Alias | Purpose | Needs | JSON `data` |
 |---|---|---|---|---|
 | `tpl cache` | | Group: manages `.tpl/.cache/` | | |
-| `tpl cache load` | | Reads from the server and replaces the cached copy: the whole database, or one `--table`, `--view` or `--routine`. `--no-cache` is exit 64. `--direct` has no effect | P E S (always) W | none (prints nothing) |
+| `tpl cache load` | | Reads the database live and replaces the cached copy: the whole database, or one `--table`, `--view` or `--routine`. `--no-cache` is exit 64. `--direct` has no effect | P E S (always) W | none (prints nothing) |
 | `tpl cache clean` | | Deletes the entry's cached data, or one object's. Also removes the cache left behind by a removed entry | P E W | none (prints nothing) |
 | `tpl cache status` | | When the cache was loaded, and per-collection counts and completeness | P E | `entry`, `loaded_at`, `collections` |
 
