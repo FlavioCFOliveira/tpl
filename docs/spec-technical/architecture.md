@@ -1,7 +1,7 @@
 ---
 title: Architecture
 status: draft
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [README.md, traceability.md, open-decisions.md, overview.md, interfaces.md, data-model.md, quality-attributes.md]
 ---
 
@@ -154,7 +154,7 @@ commit `243c4d6`.
 | `schema.rs`, `template.rs`, `cache.rs`, `cfg.rs` | The nodes, positional arguments and local flags of each group, taken from the module of `/specification` that owns the command | `FR-CLI-010`, `FR-CLI-008` |
 | `schema/named.rs`, `schema/pattern.rs`, `schema/text.rs` | Naming one object — the qualified routine form, the lookup shared by the first arm, two `cache` subcommands and `render`, the `66` a name that reaches nothing produces and the `77` a short object owes; the `LIKE` filter evaluated in memory; and the `text` half of the first arm | `FR-SCH-005`, `FR-SCH-008`, `FR-SCH-010`, `FR-CACHE-024`, `FR-RND-003`, `FR-PRIV-003`; `FR-SCH-011` … `FR-SCH-015`, `BR-SCH-001`; `FR-SCH-026`, `FR-SCH-027` |
 | `cfg/keys.rs`, `cfg/entries.rs`, `cfg/coherence.rs` | The dotted-key arm; the entry arm; and the one refusal the three writing subcommands share, applied before any of them touches the file | `FR-CFG-007` … `FR-CFG-012`, `FR-ERR-035`; `BR-CFG-001`, `FR-CFG-015` … `FR-CFG-029`; `FR-CFG-048`, `FR-CONF-007` |
-| `source.rs` | Where a catalogue read comes from — the cache first, the server on a miss — for the eight `schema` subcommands and for `tpl cache load`, which is the same pipeline with the lookup skipped. The read on a miss is to go through `provider.rs`, which reaches the server or the database file ([The provider dispatch](#the-provider-dispatch)) | `FR-CACHE-006`, `FR-CACHE-007`, `FR-SCH-025`, `FR-ERR-006`, `FR-CONF-051` |
+| `source.rs` | Where a catalogue read comes from — the cache first, the database on a miss — for the eight `schema` subcommands and for `tpl cache load`, which is the same pipeline with the lookup skipped. The read on a miss is to go through `provider.rs`, which reaches the server or the database file ([The provider dispatch](#the-provider-dispatch)) | `FR-CACHE-006`, `FR-CACHE-007`, `FR-SCH-025`, `FR-ERR-006`, `FR-CONF-051` |
 | `layout.rs` | The `text` cells and the multi-part payload two arms share; it composes no line, and every cell is escaped by `output/` on the way out | `FR-OUT-006`, `FR-OUT-018`, `FR-OUT-019`, `FR-OUT-034` |
 | `render.rs`, with `render/context.rs` | The third arm's own step 1, the choice between the two context sources, and the assembly of the five context variables from four sources | `FR-RND-005`, `FR-RND-011` … `FR-RND-018`, `FR-RND-023`, `FR-RND-024`, `FR-RND-026` |
 | `rules.rs` | The refusals `tpl` makes itself — the repeated single-value flag, the verbosity pair, `--pretty` without `--format json` — and the diagnostic level the two verbosity flags resolve to | `FR-CLI-014`, `FR-CLI-015`, `FR-OUT-009`, `FR-GLOB-014`, [`OD-17`](open-decisions.md#od-17--observability) |
@@ -818,8 +818,8 @@ Two consequences are architectural:
 - **A per-object query is a defect of the reader, not of a caller's pattern.**
   Coverage is applied by the reader before any filtering, to the object read and
   to the column read alike (`FR-CAT-052`, `FR-CAT-028`), and the pattern is
-  matched in memory afterwards and never sent to the server (`FR-SCH-012`,
-  `FR-SCH-015`).
+  matched in memory afterwards and passed to the database in no statement
+  (`FR-SCH-012`, `FR-SCH-013`, `FR-SCH-015`).
 - **The count is observable without reading the source.** One diagnostic line
   per catalogue query carries a fixed leading token (`FR-GLOB-017`,
   `NFR-PERF-008`), which is what lets `NFR-PERF-007` be satisfied from outside
@@ -841,8 +841,8 @@ subcommand reads through it, and so does a render that has no supplied context
 | Path | What happens | Forced by |
 |---|---|---|
 | Hit | Served from disk; no connection opened, no catalogue query issued | `FR-CACHE-006`, `NFR-PERF-003` |
-| Miss | The server is read, the result is written, **then** the answer is produced | `FR-CACHE-007` |
-| Unreadable file, or a version the binary does not know | A **silent** miss: read from the server, rewrite, report nothing | `FR-CACHE-033`, `FR-CDOC-004` |
+| Miss | The database is read, the result is written, **then** the answer is produced | `FR-CACHE-007` |
+| Unreadable file, or a version the binary does not know | A **silent** miss: read the database, rewrite, report nothing | `FR-CACHE-033`, `FR-CDOC-004` |
 | An object file that is not a regular file, or a named read whose file holds another object | The same silent miss; a link is never read through | `FR-CACHE-033`, `FR-CDOC-008`, with [data-model.md](data-model.md#tplcache) |
 | The write fails | A **silent** success: the answer stands, the exit code and stdout are unchanged | `FR-CACHE-036` |
 
@@ -861,7 +861,7 @@ this is the component that knows which served the read
 `cli/render/context/lazy.rs` decodes a part, validating it as an up-front read
 would, the first time the template reaches it. A part that fails then is a
 miss found during the render, answered by `FR-CACHE-039`: the render is
-abandoned, nothing of it is written, and the server is read. Every other
+abandoned, nothing of it is written, and the database is read. Every other
 command that reads the cache decodes everything before its first byte of
 output. The members of one collection are read relative to the collection's
 folder, opened once at step 6 with no link followed and held for the render,
@@ -1023,7 +1023,7 @@ is an omission. Every other requirement of
 | Coverage applied before `--pattern`, and applied to the column read as well as the object read | `FR-CAT-028`, `FR-CAT-052` | The reader, `mariadb/` or `sqlite/` ([interfaces.md](interfaces.md#the-catalogue-reader)) |
 | The document's obedience to the four transport rules | `FR-CTX-002` | The envelope and the emitter, `output/` |
 | What a cache-served document does not promise | `FR-CTX-024`, `FR-CTX-025`, `BR-CTX-004` | `cache/` ([data-model.md](data-model.md#what-a-cached-document-does-not-promise)) |
-| The three context variables that come from no server | `FR-CTX-026` … `FR-CTX-030`, `BR-CTX-005` | [Context assembly](#context-assembly), in `cli/` and `render/` |
+| The three context variables that do not come from the database | `FR-CTX-026` … `FR-CTX-030`, `BR-CTX-005` | [Context assembly](#context-assembly), in `cli/` and `render/` |
 
 Two groups are answered here **by absence** rather than by a part, and are
 named so that the absence is not read as a gap: the five features excluded
@@ -1208,10 +1208,10 @@ Five properties of the built arrangement follow.
 - **An abandoned render keeps all four bounds until it returns** (`FR-RND-038`,
   `FR-CACHE-039`). The watchdog does not stand down at a miss. Fuel and the
   output limit crossed by an abandoned render are returned as conditions and
-  end the invocation with `65` and no server read; the deadline and the memory
-  limit end it from the watchdog. A render that returned within every bound has
-  its values dropped, not leaked, before the server read, so the render that
-  follows is not charged for them under the memory limit.
+  end the invocation with `65` and no read of the database; the deadline and
+  the memory limit end it from the watchdog. A render that returned within
+  every bound has its values dropped, not leaked, before the database is read,
+  so the render that follows is not charged for them under the memory limit.
 - **A render refuses to start while anything of a catalogue read is alive.**
   `bounded()` checks `provider::quiescent()` first and returns the `70` of a
   violated invariant otherwise (`FR-RND-040`, `FR-ERR-030`); every caller reaches

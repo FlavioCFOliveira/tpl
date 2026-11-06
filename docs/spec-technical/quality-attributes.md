@@ -1,7 +1,7 @@
 ---
 title: Quality Attributes
 status: draft
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-06
 related: [README.md, traceability.md, open-decisions.md, overview.md]
 ---
 
@@ -146,7 +146,7 @@ documents; this folder cites it and does not restate it.
 
 | Consequence for the built system | Forced by | Described in |
 |---|---|---|
-| Every ordering is applied by the emitter and none is inherited from the server or the filesystem: one default and six named exceptions, three of which the default would silently corrupt | `NFR-DET-002` | `interfaces.md` |
+| Every ordering is applied by the emitter and none is inherited from the database or the filesystem: one default and six named exceptions, three of which the default would silently corrupt | `NFR-DET-002` | `interfaces.md` |
 | No terminal detection on any path, and no colour or ANSI byte on either stream — which also lets the argument parser be built with its colour support off | `NFR-DET-003`, `NFR-DET-004` | `technology-stack.md` |
 | The environment is not an input; `${VAR}` inside the configuration file is the single exception | `FR-CLI-021`, `FR-CLI-023` | `security.md` |
 | No load time in the output of a read: `loaded_at` appears in `meta.json` and in `tpl cache status` and nowhere else, because a load time in a read would make two identical invocations against an unchanged project differ | `FR-CDOC-012`, `FR-CDOC-013`, `BR-CDOC-003` | `data-model.md` |
@@ -369,7 +369,7 @@ under `NFR-PERF-020`. Neither gates anything (`BR-PERF-008`).
 | An interrupted load loses nothing already stored | An unreachable server during `tpl cache load` exits `69` and leaves stored objects unchanged | `FR-CACHE-032` |
 | A database file that cannot be read is never an empty database | Every failure to read it ends the invocation with the code of its condition; a fault that prevents the schema from loading fails the whole read, a schema table the check refuses ends it with `78` before any statement reads through a pragma function, and no object is presented marked: a view that does not compile is read whole (`FR-LITE-035` is withdrawn) | `FR-LITE-007`, `FR-LITE-033`, `FR-LITE-036`, `FR-LITE-041` |
 | Each distinct condition has its own exit code, and the code is sufficient on its own to choose the next step | The classification is stated with the condition: a `69` is repeatable precisely because the operation is read-only | `FR-ERR-001`, `FR-ERR-002` |
-| Referential integrity is promised where it can be, and a snapshot is never promised | A server-read document contains every object referenced from another object in it; it does not promise to be point-in-time, and a cache-served document promises neither | `FR-CTX-023`, `FR-CTX-024`, `FR-CDOC-015` |
+| Referential integrity is promised where it can be, and a snapshot is never promised | A document produced by a read of the database contains every object referenced from another object in it; it does not promise to be point-in-time, and a cache-served document promises neither | `FR-CTX-023`, `FR-CTX-024`, `FR-CDOC-015` |
 
 The stance behind these rows — fail loudly rather than produce plausible output
 quietly — is stated once, in [overview.md](overview.md#the-stance-the-artefact-is-built-with).
