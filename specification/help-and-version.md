@@ -1,8 +1,8 @@
 ---
 title: Help and Version
 status: approved
-last-reviewed: 2026-11-05
-related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md, context-document.md, render-command.md, project-and-discovery.md]
+last-reviewed: 2026-11-06
+related: [cli-contract.md, global-flags.md, output-formats.md, errors-and-exit-codes.md, template-environment.md, context-document.md, render-command.md, project-and-discovery.md, cache-commands.md, configuration-model.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Help and Version
@@ -241,8 +241,10 @@ alongside the command it documents.
 - **FR-HELP-031**: The `DESCRIPTION` section of every leaf SHALL end with four
   statements, in plain words and in this order:
 
-  1. Whether the command connects to a database server: never, always, or only
-     on a cache miss, per the requirement that owns the command.
+  1. Whether the command reads a database: never, always, or only on a cache
+     miss, per the requirement that owns the command. A `mariadb` or a `mysql`
+     entry is read over a connection to its server, and a `sqlite` entry by
+     opening its database file.
   2. Whether it requires a `[database.<name>]` entry of `.tpl/.cfg`, selected
      by `-d/--database` or by `core.database`, per `FR-GLOB-025`.
   3. Whether it writes files, and if it does, which: `.tpl/.cfg`, the cache
@@ -250,19 +252,43 @@ alongside the command it documents.
      `tpl init`, or a path the invocation names.
   4. What it writes to stdout.
 
+  The first statement SHALL take one of three forms:
+
+  | Answer | Form |
+  |---|---|
+  | Never | Exactly `Reads no database.` |
+  | Always | Exactly `Always reads the database.` |
+  | Only on a cache miss | A sentence that opens with exactly `Reads the database only when .tpl/.cache/ does not already hold`, and states the rest of the condition the owning requirement fixes |
+
+  WHERE the answer is *always* or *only on a cache miss*, the sentence that
+  carries the first statement SHALL be followed immediately by exactly this
+  sentence, which says what a read is for each provider:
+
   ```
-  Connects to the server only when .tpl/.cache/ does not hold the tables.
+  Reading the database connects to the server of a MariaDB or a MySQL entry,
+  or opens the database file of a SQLite entry.
+  ```
+
+  Any other sentence a leaf places before the second statement, such as the
+  one on the cache's expiry, SHALL follow that sentence.
+
+  ```
+  Reads the database only when .tpl/.cache/ does not already hold the data,
+  and always with --direct. Reading the database connects to the server of a
+  MariaDB or a MySQL entry, or opens the database file of a SQLite entry.
   Needs a database entry (-d or core.database). Writes what it read to the
   entry's folder under .tpl/.cache/. Prints the tables, one row each.
   ```
 
   Each statement SHALL be true of the command as the requirement that owns its
   behaviour states it, and SHALL NOT name that requirement, per `FR-HELP-014`.
-  Two statements MAY be joined in one sentence WHERE the order above is kept.
-  A statement SHALL NOT be omitted because its answer is no:
-  `Does not contact the server.` and `Writes no file.` are statements of this
-  requirement. The same four statements SHALL end the `description` of the
-  leaf's entry in the JSON command tree, per `FR-HELP-019`.
+  Two statements MAY be joined in one sentence WHERE the order above is kept;
+  the first statement's form, and the sentence that follows it, SHALL NOT be
+  joined to another. A statement SHALL NOT be omitted because its answer is
+  no: `Reads no database.` and `Writes no file.` are statements of this
+  requirement. The same four statements, and the sentence that follows the
+  first, SHALL end the `description` of the leaf's entry in the JSON command
+  tree, per `FR-HELP-019`.
 
   *Rationale.* A caller reading one leaf's help must learn from it alone
   whether the command can run where it stands — with no server, with no entry,
@@ -282,6 +308,26 @@ alongside the command it documents.
 
   *Added in the forty-third edition,* for rmp `#260`, from finding H-10 of the
   audit of rmp `#259`.
+
+  *Amended in the eighty-eighth edition,* for rmp `#362`. The first statement
+  asked whether the command "connects to a database server", and the example
+  and the named statement `Does not contact the server.` fixed server wording
+  for a fact that holds for every provider of `FR-CONF-051`. Under it the help
+  of `tpl cache load` said `Always connects to the server` of a SQLite file,
+  which `FR-CACHE-010` and `FR-CFG-056` open and do not connect to. The
+  statement now asks whether the command reads a database, in three fixed
+  forms, and one fixed sentence states what a read is for each provider, so
+  a caller learns from one leaf that a `sqlite` entry needs no network. The
+  sentence is written once per leaf that reads, not once per provider.
+
+  *Rejected: keeping "connects to the server" with a SQLite clause.* The
+  *always* form stays false for a file whatever follows it. *Rejected:
+  "contacts the database", the word of `FR-CACHE-011`.* "Contact" reads as a
+  network act, and a file is opened. *Rejected: "opens the database".* True
+  of both, but it does not carry that nothing is written, and the corpus
+  calls the act a read, per `FR-CACHE-013`. *Rejected: two per-provider
+  sentences in every leaf.* It doubles the cost in every leaf for a fact one
+  sentence states.
 
 - **FR-HELP-033**: The `DESCRIPTION` section of `tpl render` SHALL state,
   before the four statements of `FR-HELP-031`:
@@ -417,10 +463,19 @@ alongside the command it documents.
   `FR-CONF-051` SHALL name all three, or none; one that holds for a
   `mariadb` and a `mysql` entry alike SHALL name MariaDB and MySQL both, or
   speak of the server; and none SHALL describe `tpl` as reading MariaDB
-  alone. The following statements SHALL read as the table gives them, in
-  the text help, and in the JSON command tree WHERE the tree carries the
-  string they belong to — the `description` of a command's entry, or the
-  `purpose` of a flag, per `FR-HELP-019`, `FR-HELP-020` and `FR-HELP-018`:
+  alone. A statement that speaks of a server, a connection, a session, a
+  login, TLS or `INFORMATION_SCHEMA` names MariaDB and MySQL, and SHALL
+  therefore hold of a `mariadb` and a `mysql` entry alone, or state beside it
+  what holds for a `sqlite` entry; one that speaks of a database file or of
+  the SQLite library names SQLite. A statement that holds for every provider
+  SHALL speak of the database, and of reading it, as the first statement of
+  `FR-HELP-031` does. The following statements SHALL read as the table gives
+  them, in the text help, and in the JSON command tree WHERE the tree carries
+  the string they belong to — the `description` of a command's entry, the
+  `purpose` of a flag or an argument, the caption of an example, or the line
+  of an exit code, per `FR-HELP-019`, `FR-HELP-020`, `FR-HELP-018` and
+  `FR-HELP-022`. The summary of a child in `ARGUMENTS`, per `FR-HELP-008`,
+  is carried by the text help alone:
 
   | Where | Statement |
   |---|---|
@@ -433,6 +488,29 @@ alongside the command it documents.
   | `DESCRIPTION` of `tpl cfg database add`, the sentence on connecting | `To connect, a MariaDB or a MySQL entry needs --host and --schema, or a --dsn that names both; --port defaults to 3306 and --user is optional.` |
   | `DESCRIPTION` of `tpl cfg database test`, the third answer | `which server answered, MariaDB or MySQL,` |
   | The `78` outcome of every command that opens a connection, the clause on the server | `the server is not a supported version of the entry's provider, MariaDB or MySQL` |
+  | The row `cache` of the help of `tpl`, first sentence | `Copies of what tpl read from a database, kept under .tpl/.cache/ so that later commands need not read it again.` |
+  | `ARGUMENTS` of `tpl`, the summary of `cache` | `Manages the local copy of what tpl read from a database` |
+  | `DESCRIPTION` of `tpl schema` | `Reads the structure of the selected database: its tables, views and routines, and the server that holds it or, for a SQLite entry, the SQLite library that reads it. It only reads: for a MariaDB or a MySQL entry, the session is made read-only first, and every query is a SELECT, against INFORMATION_SCHEMA for the structure; for a SQLite entry, the database file is opened read-only, and the structure is read with SELECT from sqlite_schema and SQLite's pragma functions. What it reads is kept in .tpl/.cache/, so a second read of the same data does not read the database again.` |
+  | `ARGUMENTS` of `tpl schema`, the summary of `info` | `Reports the selected database, and the server or SQLite library that reads it` |
+  | `DESCRIPTION` of `tpl schema info`, first sentence | `Reports the selected database: its name, character set and collation, the server that holds it or, for a SQLite entry, the SQLite library that reads it, and how many tables, views and routines it holds.` |
+  | `EXAMPLES` of `tpl schema info`, the caption of the example that reads the version | `Read the version of the server, or of the SQLite library for a SQLite entry, from the JSON document; this needs jq, an external JSON tool.` |
+  | The purpose of `--direct`, on every command that reads through the cache | `Reads the database even when the cache holds the data, and replaces the cached copy with what it read; add --no-cache to leave the cache untouched.` |
+  | `DESCRIPTION` of `tpl schema dump`, the sentence on `tpl render --context` | `tpl render --context reads this document back and renders without reading the database.` |
+  | `EXAMPLES` of `tpl schema dump`, the caption of the example that renders from a dump | `Render from a dump; the render itself reads no database. rust/struct stands for a template of your own.` |
+  | `DESCRIPTION` of `tpl template`, second sentence | `No subcommand reads a database, runs a template, or reads a template outside .tpl/templates/.` |
+  | `DESCRIPTION` of `tpl template check`, first sentence | `Checks the syntax of templates without running them: no expression is evaluated, no filter is called and no database is read, so it is safe on a template you have not read.` |
+  | The purpose of `--context` of `tpl render` | `Reads the data from this JSON file, written by tpl schema dump, or from stdin when the path is -, so that no database is read and no database entry is used.` |
+  | `DESCRIPTION` of `tpl cache`, first two sentences | `Manages the cache under .tpl/.cache/: copies of what tpl read from a database, one folder per database entry. The schema commands and render read the cache first and read the database only for what it lacks, storing what they read.` |
+  | `ARGUMENTS` of `tpl cache`, the summary of `load` | `Reads the database and stores the result in the cache` |
+  | `DESCRIPTION` of `tpl cache load`, first sentence | `Reads the database of the selected entry and stores the result in .tpl/.cache/, replacing what was stored before.` |
+  | The purpose of `--direct` of `tpl cache load` | `Accepted and has no effect: this command always reads the database.` |
+  | The `0` outcome of `tpl cache load` | `The data was read from the database and stored in .tpl/.cache/.` |
+  | `DESCRIPTION` of `tpl cache clean`, the sentence that names `tpl cfg database update` | `Nothing else removes cached data: after pointing entry NAME at another server or another database file with tpl cfg database update NAME, run tpl -d NAME cache clean.` |
+  | `DESCRIPTION` of `tpl cfg`, last sentence | `Only cfg database test reads a database.` |
+  | `DESCRIPTION` of `tpl cfg database`, first sentence | `Manages the database entries of .tpl/.cfg, each a named way to reach one database — a MariaDB or a MySQL server, or a SQLite database file — that -d/--database selects.` |
+  | `ARGUMENTS` of `tpl cfg database`, the summary of `test` | `Reads the database of one entry and reports the outcome` |
+  | `DESCRIPTION` of `tpl cfg database test`, first two sentences | `Reads the database of one entry and reports four answers. For a MariaDB or a MySQL entry they are whether it connected and logged in, whether the session was made read-only, which server answered, MariaDB or MySQL, and whether the database user may read the database structure (can_read_catalogue).` |
+  | The purpose of `<NAME>` of `tpl cfg database test` | `Names the database entry to test.` |
 
   The rest of each text is the implementation's, under `BR-HELP-002`.
 
@@ -459,6 +537,33 @@ alongside the command it documents.
   purpose called an entry "a named connection", which names no provider and
   reads as a server; the flag's purpose is carried in `data.global_flags`,
   so it is required there too.
+
+  *Amended in the eighty-eighth edition,* for rmp `#362`. The rule above the
+  table permitted speaking of the server for a statement of MariaDB and
+  MySQL, and did not say that speaking of a server is naming them; the help
+  of `tpl` 0.1.0 therefore kept "copies of what tpl read from the server",
+  "needs no connection", "the named connections" and "every query is a
+  SELECT, against INFORMATION_SCHEMA" on facts that hold for a `sqlite` entry
+  too, which reads a file under `FR-LITE-015` and is cached the same way,
+  per `FR-CACHE-010`. The rule now says which words name the two server
+  providers and how a statement of every provider speaks, and twenty-three
+  rows fix the statements the audit of rmp `#362` found. The row of
+  `tpl cfg database test` keeps the third answer the table already fixes,
+  and the sentences after the two it fixes, which state the answers for a
+  `sqlite` entry, are unchanged. The rows on `tpl schema` and
+  `tpl schema info` say "the server that holds it or the SQLite library that
+  reads it", because the `server` object describes the library for a
+  `sqlite` entry, per `FR-LITE-002`.
+
+  *Rejected: leaving the server words to the rule alone.* The eighty-sixth
+  edition did that for every line no row named, and the help still spoke of
+  a server in twenty-three places; a fixed string is what a test can assert.
+  *Rejected: rewording the provider-specific strings too* — `--host`,
+  `--port`, `--schema`, `--user`, `--dsn`, `--tls`, the keys `host`, `port`,
+  `database`, `tls` and `core.connect_timeout` of `tpl cfg set`, the example
+  captions of `tpl cfg database add` and the exit-code lines. Each states a
+  fact of a `mariadb` or `mysql` entry alone, or already states the `sqlite`
+  case beside it, and the rule permits it as it stands.
 
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help

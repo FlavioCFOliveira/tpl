@@ -464,7 +464,7 @@ pub(crate) enum DatabaseCommand {
         name: String,
     },
 
-    /// Opens a connection with one database entry and reports the outcome.
+    /// Reads the database of one entry and reports the outcome.
     Test {
         /// The entry to test, over the four steps of `FR-CFG-024`.
         #[arg(value_name = "NAME")]

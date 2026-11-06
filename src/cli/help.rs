@@ -250,8 +250,10 @@ pub(crate) struct Row {
 /// entry that omits one fail to build.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Touches {
-    /// Whether the command connects to a database server.
-    pub(crate) server: &'static str,
+    /// Whether the command reads a database: never, always, or on a miss,
+    /// followed, where it reads, by the sentence that says what a read is for
+    /// each provider.
+    pub(crate) reads: &'static str,
 
     /// Whether it needs a `[database.<name>]` entry of `.tpl/.cfg`.
     pub(crate) entry: &'static str,
@@ -266,7 +268,7 @@ pub(crate) struct Touches {
 impl Touches {
     /// The four statements, in their order, as one paragraph.
     pub(crate) fn sentence(&self) -> String {
-        [self.server, self.entry, self.files, self.stdout].join(" ")
+        [self.reads, self.entry, self.files, self.stdout].join(" ")
     }
 }
 
@@ -503,7 +505,7 @@ const PRETTY: Documented = Documented {
 /// `--direct`, as every node that declares it states it.
 const DIRECT: Documented = Documented {
     name: "--direct",
-    purpose: "Reads from the server even when the cache holds the data, and replaces the cached \
+    purpose: "Reads the database even when the cache holds the data, and replaces the cached \
               copy with what it read; add --no-cache to leave the cache untouched.",
     excludes: &[],
 };
@@ -517,7 +519,7 @@ const NO_CACHE: Documented = Documented {
 /// `--direct` on `tpl render`, which `FR-RND-041` refuses with `--context`.
 const RENDER_DIRECT: Documented = Documented {
     name: "--direct",
-    purpose: "Reads from the server even when the cache holds the data, and replaces the cached \
+    purpose: "Reads the database even when the cache holds the data, and replaces the cached \
               copy with what it read; add --no-cache to leave the cache untouched.",
     excludes: &["--context"],
 };
@@ -541,7 +543,7 @@ const SET: Documented = Documented {
 const CONTEXT: Documented = Documented {
     name: "--context",
     purpose: "Reads the data from this JSON file, written by tpl schema dump, or from stdin when \
-              the path is -, so that no server is contacted and no database entry is used.",
+              the path is -, so that no database is read and no database entry is used.",
     excludes: &["--database", "--direct"],
 };
 /// `--dsn`, as every node that declares it states it.
@@ -652,7 +654,7 @@ const PATH: Documented = Documented {
 /// `--direct`, as `tpl cache load` states it.
 const CACHE_LOAD_DIRECT: Documented = Documented {
     name: "--direct",
-    purpose: "Accepted and has no effect: this command always reads from the server.",
+    purpose: "Accepted and has no effect: this command always reads the database.",
     excludes: &[],
 };
 /// `--no-cache`, as `tpl cache load` states it.
@@ -827,7 +829,7 @@ const ENTRY_REMOVE_NAME: Documented = Documented {
 /// `NAME`, as the node that declares it states it.
 const ENTRY_TEST_NAME: Documented = Documented {
     name: "NAME",
-    purpose: "Names the database entry to connect with.",
+    purpose: "Names the database entry to test.",
     excludes: &[],
 };
 /// `PATH`, as the node that declares it states it.
@@ -1588,7 +1590,7 @@ const TEMPLATE_CHECK: &[Outcome] = &[
 const CACHE_LOAD: &[Outcome] = &[
     outcome(
         Code::Ok,
-        "The data was read from the server and stored in .tpl/.cache/.",
+        "The data was read from the database and stored in .tpl/.cache/.",
     ),
     outcome(
         Code::Usage,
@@ -1604,12 +1606,14 @@ const CACHE_LOAD: &[Outcome] = &[
     ),
     outcome(
         Code::Unavailable,
-        "The server could not be reached, or a connection step took longer than its time limit. \
+        "The server could not be reached, or a connection step took longer than its time limit; \
+         for a sqlite entry, the database file stayed locked or busy past core.query_timeout. \
          What was already stored is left unchanged.",
     ),
     outcome(
         Code::IoError,
-        "A file under .tpl, or the entry's ca_file or ca_path, could not be read or written.",
+        "A file under .tpl, the entry's ca_file or ca_path, or the database file of a sqlite \
+         entry could not be read or written.",
     ),
     outcome(
         Code::NoPermission,
@@ -1955,8 +1959,19 @@ const fn row(label: &'static str, text: &'static str) -> Row {
 // written once where it is true of every leaf that uses it, so that two leaves
 // cannot drift apart on one fact.
 
-/// A command that never opens a connection.
-const NO_SERVER: &str = "Does not contact the server.";
+/// A command that reads no database, of any provider.
+const NO_READ: &str = "Reads no database.";
+
+/// What a read is for each provider, in the same words after the first
+/// statement of every command that reads: a server provider is read over a
+/// connection, and a SQLite entry by opening its file, so a caller learns from
+/// one leaf that a `sqlite` entry needs no network.
+macro_rules! reading_is {
+    () => {
+        "Reading the database connects to the server of a MariaDB or a MySQL entry, or opens \
+         the database file of a SQLite entry."
+    };
+}
 
 /// A command that works without a `[database.<name>]` entry.
 const NO_ENTRY: &str = "Needs no database entry.";
@@ -1988,9 +2003,11 @@ macro_rules! no_expiry {
 /// `FR-CACHE-015`: only its output differs from one leaf to the next.
 const fn reads_catalogue(stdout: &'static str) -> Touches {
     Touches {
-        server: concat!(
-            "Connects to the server only when .tpl/.cache/ does not already hold the data, and \
-             always with --direct. ",
+        reads: concat!(
+            "Reads the database only when .tpl/.cache/ does not already hold the data, and always \
+             with --direct. ",
+            reading_is!(),
+            " ",
             no_expiry!()
         ),
         entry: NEEDS_ENTRY,
@@ -2003,7 +2020,7 @@ const fn reads_catalogue(stdout: &'static str) -> Touches {
 /// The four statements of a command that reads only the project.
 const fn local_only(entry: &'static str, files: &'static str, stdout: &'static str) -> Touches {
     Touches {
-        server: NO_SERVER,
+        reads: NO_READ,
         entry,
         files,
         stdout,
@@ -2037,8 +2054,8 @@ const ENTRIES: [Entry; 35] = [
                     row(
                         "cache",
                         concat!(
-                            "Copies of what tpl read from the server, kept under .tpl/.cache/ \
-                             so that later commands need no connection. ",
+                            "Copies of what tpl read from a database, kept under .tpl/.cache/ \
+                             so that later commands need not read it again. ",
                             no_expiry!()
                         ),
                     ),
@@ -2106,11 +2123,15 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["schema"],
-        description: "Reads the structure of the selected database: its tables, views, routines \
-                      and server. It only reads: the session is made read-only first, and every \
-                      query is a SELECT, against INFORMATION_SCHEMA for the structure. What it \
-                      reads is kept in .tpl/.cache/, so a second read of the same data needs no \
-                      connection.",
+        description: "Reads the structure of the selected database: its tables, views and \
+                      routines, and the server that holds it or, for a SQLite entry, the SQLite \
+                      library that reads it. It only reads: for a MariaDB or a MySQL entry, the \
+                      session is made read-only first, and every query is a SELECT, against \
+                      INFORMATION_SCHEMA for the structure; for a SQLite entry, the database file \
+                      is opened read-only, and the structure is read with SELECT from \
+                      sqlite_schema and SQLite's pragma functions. What it reads is kept in \
+                      .tpl/.cache/, so a second read of the same data does not read the database \
+                      again.",
         blocks: &[],
         touches: None,
         examples: &[
@@ -2129,7 +2150,8 @@ const ENTRIES: [Entry; 35] = [
     Entry {
         path: &["schema", "info"],
         description: "Reports the selected database: its name, character set and collation, the \
-                      server it runs on, and how many tables, views and routines it holds.",
+                      server that holds it or, for a SQLite entry, the SQLite library that reads \
+                      it, and how many tables, views and routines it holds.",
         blocks: &[],
         touches: Some(reads_catalogue("Prints that report.")),
         examples: &[
@@ -2138,8 +2160,8 @@ const ENTRIES: [Entry; 35] = [
                 lines: &[run(&["tpl", "-d", "shop", "schema", "info"])],
             },
             Example {
-                caption: "Read the server version from the JSON document; this needs jq, \
-                          an external JSON tool.",
+                caption: "Read the version of the server, or of the SQLite library for a SQLite \
+                          entry, from the JSON document; this needs jq, an external JSON tool.",
                 lines: &[
                     run_in(
                         "",
@@ -2347,7 +2369,8 @@ const ENTRIES: [Entry; 35] = [
         path: &["schema", "dump"],
         description: "Writes the whole selected database as one JSON document; the output is \
                       always JSON, and --format is refused. tpl render --context reads this \
-                      document back and renders without a server. The document holds what a \
+                      document back and renders without reading the database. The document holds \
+                      what a \
                       template sees as database; tpl render adds vars, tpl and now itself.",
         blocks: &[],
         touches: Some(reads_catalogue("Prints the JSON document.")),
@@ -2361,7 +2384,7 @@ const ENTRIES: [Entry; 35] = [
                 )],
             },
             Example {
-                caption: "Render from a dump; the render itself contacts no server. rust/struct \
+                caption: "Render from a dump; the render itself reads no database. rust/struct \
                           stands for a template of your own.",
                 lines: &[
                     run_in("", &["tpl", "-d", "shop", "schema", "dump"], " |"),
@@ -2387,7 +2410,7 @@ const ENTRIES: [Entry; 35] = [
     Entry {
         path: &["template"],
         description: "Reads the templates of the project, under .tpl/templates/. No subcommand \
-                      connects to a server, runs a template, or reads a template outside \
+                      reads a database, runs a template, or reads a template outside \
                       .tpl/templates/.",
         blocks: &[],
         touches: None,
@@ -2456,7 +2479,7 @@ const ENTRIES: [Entry; 35] = [
     Entry {
         path: &["template", "check"],
         description: "Checks the syntax of templates without running them: no expression is \
-                      evaluated, no filter is called and no server is contacted, so it is safe on \
+                      evaluated, no filter is called and no database is read, so it is safe on \
                       a template you have not read. With no NAME, it checks every template of the \
                       project.",
         blocks: &[],
@@ -2515,9 +2538,11 @@ const ENTRIES: [Entry; 35] = [
             ),
         ],
         touches: Some(Touches {
-            server: concat!(
-                "Connects to the server only when .tpl/.cache/ does not already hold what the \
+            reads: concat!(
+                "Reads the database only when .tpl/.cache/ does not already hold what the \
                  template reads, always with --direct, and never with --context. ",
+                reading_is!(),
+                " ",
                 no_expiry!()
             ),
             entry: "Needs a database entry (-d or core.database), except with --context, which \
@@ -2635,9 +2660,10 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cache"],
-        description: "Manages the cache under .tpl/.cache/: copies of what tpl read from the \
-                      server, one folder per database entry. The schema commands and render read \
-                      the cache first and connect only for what it lacks, storing what they read. \
+        description: "Manages the cache under .tpl/.cache/: copies of what tpl read from a \
+                      database, one folder per database entry. The schema commands and render read \
+                      the cache first and read the database only for what it lacks, storing what \
+                      they read. \
                       Nothing in the cache expires; only cache load, cache clean and --direct \
                       replace or remove what it holds.",
         blocks: &[],
@@ -2657,12 +2683,12 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cache", "load"],
-        description: "Reads from the server and stores the result in .tpl/.cache/, replacing what \
-                      was stored before. With no --table, --view or --routine, it loads the whole \
+        description: "Reads the database of the selected entry and stores the result in \
+                      .tpl/.cache/, replacing what was stored before. With no --table, --view or --routine, it loads the whole \
                       database of the selected entry.",
         blocks: &[],
         touches: Some(Touches {
-            server: "Always connects to the server.",
+            reads: concat!("Always reads the database. ", reading_is!()),
             entry: NEEDS_ENTRY,
             files: "Writes what it read to the entry's folder under .tpl/.cache/.",
             stdout: PRINTS_NOTHING,
@@ -2686,8 +2712,8 @@ const ENTRIES: [Entry; 35] = [
         path: &["cache", "clean"],
         description: "Deletes the cached data of the selected entry. With no --table, --view or \
                       --routine, it deletes all of it. Nothing else removes cached data: after \
-                      pointing entry NAME at another server with tpl cfg database update NAME, \
-                      run tpl -d NAME cache clean.",
+                      pointing entry NAME at another server or another database file with tpl cfg \
+                      database update NAME, run tpl -d NAME cache clean.",
         blocks: &[Block::Prose(
             "Without an object flag, it also removes the data cached for a name that no entry \
              of .tpl/.cfg declares any more, such as an entry deleted with tpl cfg database \
@@ -2750,7 +2776,7 @@ const ENTRIES: [Entry; 35] = [
         path: &["cfg"],
         description: "Reads and writes .tpl/.cfg, the configuration file of the project. Use get, \
                       set, unset and list for single keys, and cfg database for whole database \
-                      entries. Only cfg database test connects to a server.",
+                      entries. Only cfg database test reads a database.",
         blocks: &[],
         touches: None,
         examples: &[
@@ -2989,7 +3015,8 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "database"],
-        description: "Manages the database entries of .tpl/.cfg: the named connections that \
+        description: "Manages the database entries of .tpl/.cfg, each a named way to reach one \
+                      database — a MariaDB or a MySQL server, or a SQLite database file — that \
                       -d/--database selects. db is an alias of database: tpl cfg db list is tpl \
                       cfg database list.",
         blocks: &[],
@@ -3242,17 +3269,18 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["cfg", "database", "test"],
-        description: "Connects with one database entry and reports four answers: whether it \
-                      connected and logged in, whether the session was made read-only, which \
-                      server answered, MariaDB or MySQL, and whether the database user may read the database \
-                      structure (can_read_catalogue). Exit 0 means the four checks ran, not that \
+        description: "Reads the database of one entry and reports four answers. For a MariaDB or \
+                      a MySQL entry they are whether it connected and logged in, whether the \
+                      session was made read-only, which server answered, MariaDB or MySQL, and \
+                      whether the database user may read the database structure \
+                      (can_read_catalogue). Exit 0 means the four checks ran, not that \
                       all of them passed: read can_read_catalogue. For a sqlite entry the four \
                       answers are whether the file opened read-only, whether every safeguard of \
                       the read took effect, which SQLite library answered, and whether the \
                       schema could be read, which is true whenever the command exits 0.",
         blocks: &[],
         touches: Some(Touches {
-            server: "Always connects to the server the entry describes.",
+            reads: concat!("Always reads the database. ", reading_is!()),
             entry: "Needs the entry that NAME names; -d and core.database are not used.",
             files: "Writes no file, and neither reads nor writes the cache.",
             stdout: "Prints the four answers.",
@@ -3927,7 +3955,7 @@ mod tests {
             );
 
             if let Some(touches) = entry.touches {
-                for statement in [touches.server, touches.entry, touches.files, touches.stdout] {
+                for statement in [touches.reads, touches.entry, touches.files, touches.stdout] {
                     assert!(
                         statement.ends_with('.') && !statement.contains("  "),
                         "{} states {statement:?}",

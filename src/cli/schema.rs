@@ -91,7 +91,7 @@ pub(crate) struct Pattern {
 /// The eight children of `tpl schema`.
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 pub(crate) enum Command {
-    /// Reports the server and the selected database.
+    /// Reports the selected database, and the server or SQLite library that reads it.
     Info {
         /// `--format` and `--pretty`, per `FR-SCH-023`.
         #[command(flatten)]
