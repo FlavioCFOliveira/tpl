@@ -263,7 +263,7 @@ pub(crate) enum Command {
         caching: local::Caching,
     },
 
-    /// Manages the local copy of what tpl read from the server.
+    /// Manages the local copy of what tpl read from a database.
     Cache(Cache),
 
     /// Reads and writes the configuration file `.tpl/.cfg`.

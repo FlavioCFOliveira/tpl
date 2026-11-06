@@ -68,7 +68,7 @@ pub(crate) struct Cache {
 /// The three children of `tpl cache`, and `FR-CACHE-021` admits no fourth.
 #[derive(Debug, Clone, PartialEq, Eq, Subcommand)]
 pub(crate) enum Command {
-    /// Reads from the server and stores the result in the cache.
+    /// Reads the database and stores the result in the cache.
     Load {
         /// `--table`, `--view` and `--routine`, per `FR-CACHE-024`.
         #[command(flatten)]

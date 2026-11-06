@@ -36,6 +36,15 @@ workflow, before it closes.
 
 ## Unreleased
 
+### Changed
+
+- **The help states what each command reads, for every provider.** The text
+  help and `tpl help --format json` say whether a command reads no database,
+  always reads it, or reads it only on a cache miss, and that a read connects
+  to the server of a `mariadb` or `mysql` entry or opens the file of a `sqlite`
+  entry; no help text speaks of a server for a fact that also holds for a
+  `sqlite` entry.
+
 ## [0.1.0] - 2026-11-05
 
 ### Added
