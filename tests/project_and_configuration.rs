@@ -5420,8 +5420,8 @@ fn fr_help_036_each_description_states_the_cache_fact_with_d_name() {
         .join(" ");
     assert!(
         help.contains(
-            "after pointing entry NAME at another server with tpl cfg database update NAME, run \
-             tpl -d NAME cache clean."
+            "after pointing entry NAME at another server or another database file with tpl cfg \
+             database update NAME, run tpl -d NAME cache clean."
         ),
         "{help}"
     );
