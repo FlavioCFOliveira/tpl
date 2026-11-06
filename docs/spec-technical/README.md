@@ -33,6 +33,31 @@ entry is settled. `OD-30`,
 the one entry that was settled and **interim**, was discharged on 2026-09-22,
 when the last leaf of the tree was implemented.
 
+**Changes of 2026-11-06, second pass**, for rmp `#373` and `#374`, joined as
+one effort — against the ninetieth edition of `/specification` and the code
+at `22ba263`. Wording only; no decision changes and no code is owed.
+
+- **One meaning of connection (`#373`).** *Connection* and *connect* now name
+  a MariaDB or a MySQL server alone; a `sqlite` entry opens the database file,
+  and a fact of every provider speaks of reading the database. Contract
+  values, the code's names and dated records keep their words.
+  `architecture.md`: the invocation table, the resolution's database-read
+  branch, [The read lifecycle](architecture.md#the-read-lifecycle) (renamed
+  from *The connection lifecycle*), the SQLite reader's route, stages, read
+  transaction and close, the cache's hit, the check command, the phase table
+  and lazy initialisation. `interfaces.md`, `security.md`, `data-model.md`,
+  `quality-attributes.md`, `verification.md` and `OD-36` and `OD-37` follow;
+  `OD-36` is retitled
+  [*The deadline of a statement on an open SQLite database
+  file*](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file),
+  and every link to either renamed heading is repaired.
+- **`traceability.md` current with the ninetieth edition (`#374`).** The
+  eighty-fifth to the eighty-eighth and the ninetieth editions are harvested:
+  section 4 gains the rows of `FR-HELP-031` and `FR-HELP-038`, section 26
+  records the discharge of `DIV-063` … `DIV-065`, and rows of sections 6, 7,
+  8, 11, 14, 15, 23, 24 and 27 move to the ninetieth edition's words. The
+  coverage count is 1001 of 1001 identifiers.
+
 **Changes of 2026-11-06**, for rmp `#368` — against the eighty-ninth edition
 of `/specification` (`FR-HELP-038`, `FR-ERR-051`, and the amended
 `FR-CACHE-007`, `FR-CACHE-010`, `FR-CACHE-022`, `FR-CACHE-039`, `FR-SCH-012`
@@ -50,8 +75,7 @@ referential integrity in `data-model.md`, `interfaces.md` and
 `quality-attributes.md`, and three providers for `--provider` in
 `interfaces.md`. `OD-20` states the six rows of the amended `FR-SCH-012`.
 `traceability.md` harvests the eighty-ninth edition, `FR-ERR-051` mapped in
-section 14 and `FR-RND-040` covering a `sqlite` entry; the eighty-fifth to
-the eighty-eighth are not yet harvested.
+section 14 and `FR-RND-040` covering a `sqlite` entry.
 
 **Changes of 2026-11-05**, for rmp `#343` and `#312` and sprint 29 — against the
 seventy-eighth to eighty-fourth editions of `/specification`,
@@ -476,8 +500,9 @@ requirement text.
 commands that skip two of them. Step 1 in its three parts, and the division of
 `cli/` by subject rather than by command. Project discovery, its mount-point
 boundary, and the trust checks. Configuration resolution across two layers and
-a built-in default. The connection lifecycle: at most one, opened late, five
-ordered stages in the order `FR-SRV-042` fixes, closed when the read ends. The
+a built-in default. The read lifecycle: at most one connection or one open of
+the database file, opened late; for a server, five ordered stages in the order
+`FR-SRV-042` fixes, closed when the read ends. The
 catalogue reader and the query-count invariants. The cache as a read-through layer. The model as
 the single junction of three sources and three consumers. The render component:
 engine construction, loader, undefined behaviour, the output formatter,
@@ -488,8 +513,8 @@ render bounds, their composition, and the poll interval of the memory limit.
 Lazy initialisation. The
 synchronous process and the runtime boundary inside the two server readers.
 The provider dispatch over three providers; the MySQL reader, its parts and
-what it shares with `mariadb/`; and the SQLite reader: its submodules, its six connection stages, its
-fixed plan, the check that opens it, the read transaction that holds both, the
+what it shares with `mariadb/`; and the SQLite reader: its submodules, the six
+stages that open the file, its fixed plan, the check that opens it, the read transaction that holds both, the
 fold's indexing and its close. The
 module map
 and the layout conventions. The division inside `project/` and the four

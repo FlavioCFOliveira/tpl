@@ -1,7 +1,7 @@
 ---
 title: Operations
 status: draft
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, technology-stack.md, data-model.md, quality-attributes.md]
 ---
 
@@ -466,7 +466,7 @@ picture.
 |---|---|---|
 | Two streams, one contract | stdout alone is contract; stderr is neither deterministic nor contract, and cannot be, because the timings `FR-GLOB-017` requires differ on every run. The extent of the contract is [quality-attributes.md](quality-attributes.md#determinism)'s | `NFR-DET-001`, `FR-GLOB-017`, `DIV-039` |
 | Four levels, selected by two flags | `-v` raises and saturates, `-q` lowers to errors only, and neither alters stdout | `FR-GLOB-014`, `FR-GLOB-015`, `FR-GLOB-016` |
-| What each level reports | At `INFO`, one line per phase that ran with its duration — for a server connection, DNS resolution, the TCP connect, the TLS handshake where one was negotiated, the login, and each session statement — and one line per catalogue query; cache hits and misses at `DEBUG`; internal detail permitted at `TRACE`. A connection phase's time is attributed from readings taken while the connection runs, so the set of lines and their sum are what a reader may rely on, not one phase's time ([architecture.md](architecture.md#the-connection-lifecycle)) | `FR-GLOB-017` |
+| What each level reports | At `INFO`, one line per phase that ran with its duration — for a server connection, DNS resolution, the TCP connect, the TLS handshake where one was negotiated, the login, and each session statement — and one line per catalogue query; cache hits and misses at `DEBUG`; internal detail permitted at `TRACE`. A connection phase's time is attributed from readings taken while the connection runs, so the set of lines and their sum are what a reader may rely on, not one phase's time ([architecture.md](architecture.md#the-read-lifecycle)) | `FR-GLOB-017` |
 | One line is structurally load-bearing | The per-query line carries a fixed leading token, which is what makes the query count observable from outside the process and `NFR-PERF-001` and `NFR-PERF-002` checkable at all. `NFR-PERF-008` is verified by counting those lines at `-v` against the server's statement record for the same invocation (sixty-second edition), which needs the fixture | `NFR-PERF-008`, `NFR-PERF-007` |
 | Six categories reach no stream, at any level | Denied a home rather than denied by a rule: the sink is a closed set of typed emission functions, and no subscriber is installed for a dependency's events to reach | `FR-GLOB-018`, `FR-SEC-005` |
 | No colour, no terminal detection | Nothing the system composes for presentation carries an ANSI byte, on either stream; a carried byte is escaped or passed through as `FR-ERR-024`, `FR-OUT-018` and `FR-OUT-019` decide | `NFR-DET-003`, `NFR-DET-004` |

@@ -1,7 +1,7 @@
 ---
 title: Verification
 status: draft
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md, security.md, operations.md, quality-attributes.md]
 ---
 
@@ -135,7 +135,7 @@ peer of the test's own instead of a fixture: `tests/session_statements.rs` and
 `tests/truncated_greeting.rs` a scripted server on the loopback interface, and
 `tests/login_faults.rs` a closed port or a listener for five of its tests.
 `tests/template_commands.rs` reaches no server **by design**: `FR-TMPL-003`
-makes the absence of a connection the property under test, and that target
+makes the absence of a database read the property under test, and that target
 establishes it with a control run instead of a fixture, which its own header
 records.
 
@@ -346,8 +346,8 @@ in `src/mariadb.rs`; for a `mysql` read, by
 | 28 | `fr_lite_018_the_statements_issued_are_the_closed_list_in_the_order_of_fr_lite_017` | The write-ahead-log copy of the main database as a third file. The record is compared with the crate's own constants, which `src/sqlite/catalogue/statements.rs` checks in turn: `fr_lite_015_the_connection_start_and_the_read_are_members_of_the_closed_list`, `fr_lite_015_no_statement_invokes_pragma_table_list_or_passes_a_view_to_a_pragma_function` and `fr_lite_016_no_statement_writes_attaches_or_names_another_schema` |
 | 29 | `tests/sqlite_provider.rs::fr_lite_018_a_read_leaves_the_database_and_every_file_outside_tpl_as_found` | — |
 | 30 | `fr_lite_037_the_plan_issues_as_many_statements_over_the_fixture_as_over_an_empty_file` | The probe once and seven catalogue statements over each file; `BEGIN DEFERRED` and `COMMIT` once each, and not counted |
-| 31 | `fr_lite_018_no_statement_names_a_view_and_the_read_succeeds_over_the_views_that_do_not_compile` | The record of the read holds the read transaction, the check and the six statements of the plan, none naming a view; the control compiles each of the three views on the reader's own connection and sees it fail |
-| 32 | `fr_lite_018_over_the_fts5_database_no_statement_compiles_a_view_or_connects_a_virtual_table` | The control runs the view on a plain connection and sees the module's own statement in the record |
+| 31 | `fr_lite_018_no_statement_names_a_view_and_the_read_succeeds_over_the_views_that_do_not_compile` | The record of the read holds the read transaction, the check and the six statements of the plan, none naming a view; the control compiles each of the three views through the reader's own open of the file and sees it fail |
+| 32 | `fr_lite_018_over_the_fts5_database_no_statement_compiles_a_view_or_connects_a_virtual_table` | The control runs the view through a plain open of the file and sees the module's own statement in the record |
 | 33 | `fr_lite_041_each_database_the_check_refuses_is_78_naming_its_row_and_no_statement_follows` | The `cause` names the path and the check, and the `hint` the repointing command; the record ends at the check, with no `COMMIT` (`FR-LITE-042`), and nothing of the read is alive afterwards. Through the binary, `tests/sqlite_provider.rs::fr_cfg_056_the_test_of_a_sqlite_entry_reports_the_four_steps` refuses each of the fourteen with `78` |
 
 ### The tests of the forty-second edition
@@ -362,7 +362,7 @@ re-measured** and remain the count at `243c4d6`.
 | `FR-RND-036`, `FR-RND-037` | Unit tests over the engine and the counting writer — fuel exhausted, inside an include too; output past the limit, and exactly at it — and in-process runs of `tpl render` over a `.tpl/.cfg` declaring each bound | `src/render.rs`, `src/render/bounds.rs`, `src/cli/render.rs` |
 | `FR-RND-039` | Through the binary, where the counter is installed: a doubling render past a 16 MiB limit is `65` and writes nothing; the default stops it; raising the limit lets a large render pass | `tests/render_command.rs` |
 | `FR-RND-038` | Under the defaults, endless output reaches the output limit before the memory limit | `tests/render_command.rs` |
-| `FR-CACHE-039` with `FR-RND-038` | An abandoned render keeps evaluating after a miss reached through a lookup function; crossing each of the four bounds after the miss is `65`, writes nothing and opens no connection, with a control that reads the server | `src/cli/render.rs`; `tests/render_command.rs`, gated on the fixture |
+| `FR-CACHE-039` with `FR-RND-038` | An abandoned render keeps evaluating after a miss reached through a lookup function; crossing each of the four bounds after the miss is `65`, writes nothing and reads no database, with a control that reads the server | `src/cli/render.rs`; `tests/render_command.rs`, gated on the fixture |
 | `FR-CONF-045`, `FR-CONF-002` | The key forms — eighteen at that edition, twenty since the sixty-fifth; each range at its extremes and one past them, `78` from the file with key, value and range named, `64` from `tpl cfg set`; the memory floor through the binary | `src/project/config/keys.rs`, `src/project/config.rs`, `src/project/edit.rs`, `tests/render_command.rs` |
 | `FR-ERR-034` row `65` | The `cause` and `hint` of each bound name the bound, the value and the key | `src/diagnostics/render.rs` |
 | `FR-CTX-042` | A dangling `foreign_keys` and a dangling `referenced_by` are `ContextFault::DanglingReference`; a column's absent `table_name` is not; the `cause` names all four values and escapes them; the render is `65`, not `70` | `src/model/document.rs`, `src/diagnostics/render.rs`, `src/cli/render.rs` |
@@ -483,10 +483,10 @@ the differential run exists, it is the whole of the evidence. The order is
 |---|---|---|---|
 | 1 | `NFR-PERF-001` | No query per object on a full read | The catalogue queries the server receives, over two workloads of different size |
 | 2 | `NFR-PERF-002` | Reading one named object does not scale with the database | The same, for a named-object read |
-| 3 | `NFR-PERF-003` | A cache hit opens no connection and issues no query | The connections the server accepts, and the queries it receives: none of either |
+| 3 | `NFR-PERF-003` | A cache hit does not read the database: no connection and no query | The connections the server accepts, and the queries it receives: none of either |
 | 4 | `NFR-PERF-004` | At most one connection per invocation | The connections the server accepts |
 | 5 | `NFR-PERF-005` | The commands of `FR-PROJ-025` touch nothing | Per clause, per target — see below |
-| 6 | `NFR-PERF-006` | A command needing no catalogue opens no connection | The connections the server accepts |
+| 6 | `NFR-PERF-006` | A command needing no catalogue does not read the database | The connections the server accepts |
 | 7 | `FR-SRV-012` | The closed statement list | The statements the server receives: four kinds, no fifth, three of them once each in order |
 | 8 | `FR-SRV-013` | The read-back of `@@session.tx_read_only`, in both outcomes | The statements the server receives, and what the session reports |
 | 9 | `FR-SRV-014` | The connection count | The connections the server accepts |
@@ -496,7 +496,7 @@ states the split in its own text rather than leaving it to the harness.
 
 | Clause of `NFR-PERF-005` | Evidence | On which targets |
 |---|---|---|
-| Opens no connection | The server's connection record | all four |
+| Reads no database — the connection clause | The server's connection record | all four |
 | Performs no project discovery | A differential run: `tpl init` inside a subdirectory of an existing project, which `FR-PROJ-012` and `FR-PROJ-013` make create a project there and report no ancestor | all four |
 | Reads no configuration file | A differential run: a command of `FR-PROJ-025` inside a project whose `.tpl/.cfg` would fail `FR-CONF-034`, asserting exit `0` and stdout byte-identical to the same command run outside any project | all four |
 | The two clauses above, as syscalls | A syscall trace: no `stat` of an ancestor, no open of `.tpl/.cfg` | **the two Linux targets only** |
@@ -663,7 +663,7 @@ it; `70` is the single exception, exercised in process through the seam above.
 | `73` | `tpl init` against an existing `.tpl` | no | **no** |
 | `74` | An I/O failure, including a pipe closed mid-document | no | yes |
 | `77` | Authentication refused, or a privilege shortfall on a named object | yes for both | yes |
-| `78` | A configuration that does not describe a usable connection; an unsupported series; a read-only session that could not be enforced | Only for the last two | yes |
+| `78` | A configuration that does not describe a database `tpl` can read; an unsupported series; a read-only session that could not be enforced | Only for the last two | yes |
 
 The last column is read from the tree at commit `243c4d6`, by searching every
 target of `tests/` for an assertion over each code. **`73` is the one gap**, and
@@ -1118,10 +1118,10 @@ Every test is named for the requirement it verifies, per
 | `FR-LITE-005` | A directory and a FIFO are `78`, and the FIFO is never opened; the link to the main database is read through | Integration | The directory, the FIFO, the link |
 | `FR-LITE-006`, `FR-LITE-007` | A path naming nothing and the dangling link are `74`, nothing is created at either, and the `cause` names the check of the kind and what the filesystem returned; the text file, the truncated file and the length-limit database are `78`; the write-ahead-log copy in a directory refusing writes is `74`; each `cause` names the resolved path and what the library returned | Integration | The artefacts named |
 | `FR-LITE-008` | The write-ahead-log copy is read, and no file but its two is created | Integration | The write-ahead-log copy |
-| `FR-LITE-009` | A database held by an exclusive transaction of the test process, under `core.query_timeout` of `1`, is `69` within the bound, and the `cause` names the lock and the resolved deadline; a remaining bound past `i32::MAX` milliseconds sets the busy timeout to that maximum and does not panic ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)) | Integration; Unit | The main database, in rollback-journal mode |
+| `FR-LITE-009` | A database held by an exclusive transaction of the test process, under `core.query_timeout` of `1`, is `69` within the bound, and the `cause` names the lock and the resolved deadline; a remaining bound past `i32::MAX` milliseconds sets the busy timeout to that maximum and does not panic ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file)) | Integration; Unit | The main database, in rollback-journal mode |
 | `FR-LITE-010` … `FR-LITE-012` | Every control and limit reads back as set — views disabled among them, since the sixty-ninth edition — `temp_store` with the `TEMP_STORE` row of `PRAGMA compile_options`; the comparison, given a value read back that differs or a `TEMP_STORE` row of `0` or none, is the `70` naming the control, the value set and the value read | Unit | The main database |
 | `FR-LITE-041` | The verdict of `sqlite/catalogue/check.rs` over each of the seven kinds: a `pragma_` name on a table and on a view, in each letter case, as text and as a BLOB, refused, and on an index and on a trigger, which pass; each excluded storage class in each column; both contradictions of the root page, with `VIRTUAL` after a block comment and after a line comment, and a table named `"virtual"`, which passes; every spelling of a type the library loads — upper, title and mixed case, and the type followed by a NUL character — refused, `pragma_encoding` typed `TABLE` among them; `NULL` and the empty text refused on every type but `index`; a NUL character before, after and inside `name`, `tbl_name` and `sql`, refused under its column; `TEMP`, `TEMPORARY`, `IF NOT EXISTS` and a text not beginning `CREATE TRIGGER`, refused, and lower case, a comment inside the header and a trigger named `temp` or a quoted `IF`, admitted; rows SQLite writes pass every kind; a row refused under several kinds is reported under the first. `trigger.rs` holds the header and the word after `CREATE` as vectors. Through the reader, row 33, and a view named `pragma_encoding` refused beside an index and a trigger so named, which pass | Vector; Unit | The fourteen databases of row 33 |
-| `FR-LITE-042` | The record of row 28 places `BEGIN DEFERRED` and `COMMIT`; a read the check refuses issues no `COMMIT` (row 33); `tpl cfg database test` issues the check alone and neither statement, and over a refused database ends at the check; a table `pragma_encoding` a second connection commits between the check and the next statement is not read, in either journal mode — the writer fails with `SQLITE_BUSY` in rollback-journal mode and commits unseen in write-ahead-log mode — and the next read refuses it | Unit | The main database and its write-ahead-log copy; a database of row 33 |
+| `FR-LITE-042` | The record of row 28 places `BEGIN DEFERRED` and `COMMIT`; a read the check refuses issues no `COMMIT` (row 33); `tpl cfg database test` issues the check alone and neither statement, and over a refused database ends at the check; a table `pragma_encoding` committed through a second open of the file between the check and the next statement is not read, in either journal mode — the writer fails with `SQLITE_BUSY` in rollback-journal mode and commits unseen in write-ahead-log mode — and the next read refuses it | Unit | The main database and its write-ahead-log copy; a database of row 33 |
 | `FR-LITE-015`, `FR-LITE-016` | Over the constants of `statements.rs`: none writes, attaches, names another schema, or is a transaction statement but `BEGIN DEFERRED` and `COMMIT`; none invokes `pragma_table_list`; each pragma function that takes a name is reached through a schema row restricted to type `table` and a root page other than `0`, by `CROSS JOIN`; every statement after the check that reads the schema table selects `type` then `name`. Through the reader, the shapes of the security review's two proofs of concept — thirteen nested views over a table of 2 000 columns, and ten thousand views — read with the constant plan, and the top view fails to compile on the reader's connection | Vector; Unit | Databases built by the test |
 | `FR-LITE-040` | The classification of `sqlite/fault.rs`, over each stage and statement kind: every row of `FR-LITE-007` and of `FR-LITE-040`'s table, with an extended code under each primary that has one, `SQLITE_READONLY` with and without one, and a primary code SQLite has not published | Vector | — |
 | `FR-ERR-046` | A value of the file of 256 characters is written whole, one of 257 is cut with the marker counting what was left out, and a cut that would fall inside each escape form — a C1 or bidirectional escape among them — keeps the form whole outside the kept part; the same value from a `mariadb` read or a `--context` document is written whole; through the binary, a value of the file is bounded in a `cause`, a name from the argument vector is written whole, and a name of the file past 64 characters reaches no suggestion while one of 64 is suggested whole | Vector; Unit; Integration | Databases built by the test |
@@ -1172,8 +1172,8 @@ source, so the unit tests reach the same code a `mariadb` read takes.
 ### The requirements of form, for a `sqlite` entry
 
 `FR-LITE-037` holds the six for a `sqlite` entry and names the record of row 28
-as the count's instrument. A SQLite connection has no server side to observe, so
-the server's two instruments have no counterpart here.
+as the count's instrument. An open SQLite database file has no server side to
+observe, so the server's two instruments have no counterpart here.
 
 | Requirement | Instrument | Where it runs |
 |---|---|---|
