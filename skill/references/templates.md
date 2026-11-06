@@ -41,14 +41,16 @@ At most one of `table`, `view` and `routine` is bound per render. The others are
 
 ## The model
 
-Use `tpl -d NAME schema table T --format json --pretty` (or a dump) to see real values. The field names below were observed in tpl 0.0.1 output.
+Use `tpl -d NAME schema table T --format json --pretty` (or a dump) to see real values. The field names below are the same for every provider; only the values differ.
 
 | Object | Fields |
 |---|---|
 | table | `name`, `table_type`, `engine`, `collation`, `comment`, `columns`, `primary_key`, `indexes`, `foreign_keys`, `referenced_by`, `triggers`, `check_constraints` |
-| column | `name`, `table_name`, `position`, `column_type` (raw, e.g. `smallint(5) unsigned`), `data_type` (e.g. `smallint`), `precision`, `scale`, `length`, `unsigned`, `charset`, `collation`, `values` (ENUM or SET members), `nullable`, `default`, `comment`, `auto_increment`, `invisible`, `generated`, `on_update` |
+| column | `name`, `table_name`, `position`, `column_type` (raw, e.g. `smallint(5) unsigned` on MariaDB), `data_type` (e.g. `smallint`), `precision`, `scale`, `length`, `unsigned`, `charset`, `collation`, `values` (ENUM or SET members), `nullable`, `default`, `comment`, `auto_increment`, `invisible`, `generated` (`expression`, `storage`), `on_update` |
 | index / primary_key | `name`, `unique`, `columns` (`name`, `direction`, `prefix_length`), `type`, `comment`, `ignored`. `primary_key` is `null` when the table has none |
 | foreign key | `name`, `columns` (`column`, `referenced_column`), `referenced_table` (embedded one level: its columns and indexes, with nested `foreign_keys` cut short), `referenced_key`, `match_option`, `on_update`, `on_delete` |
+| check constraint | `name`, `level`, `clause` |
+| trigger | `name`, `event`, `timing`, `action_order`, `statement`, `orientation`, `old_row_alias`, `new_row_alias`, `sql_mode`, `definer`, `character_set_client`, `collation_connection`, `database_collation` |
 | view | `name`, `definition`, `is_updatable`, `algorithm`, `check_option`, `security_type`, `definer`, `character_set_client`, `collation_connection` |
 | routine | `name`, `kind` (`PROCEDURE` or `FUNCTION`), `return_type`, `parameters` (`name`, `mode`, `parameter_type`), `body`, `body_kind`, `is_deterministic`, `sql_data_access`, `security_type`, `definer`, `comment`, `parameter_style`, `sql_mode`, `character_set_client`, `collation_connection`, `database_collation` |
 
@@ -62,22 +64,28 @@ The fields are the same, and MySQL fills nearly all of them. Branch on `database
 - Three `data_type` values appear that a MariaDB read does not produce: `json`, `geomcollection` (MariaDB's `geometrycollection`) and, on `9.7`, `vector`. A type-mapping macro needs a branch for each. `json` satisfies `textual`; the other two satisfy no family test.
 - An expression default, a generated column's expression and a check clause are MySQL's own SQL: one layer of backslash escaping is removed, and the character-set introducers MySQL writes before a string literal, such as `_utf8mb4'…'`, are kept.
 - An index with a functional key part is not carried.
+- An integer `column_type` carries no display width (`int`, `smallint unsigned`), save `tinyint(1)` and a `ZEROFILL` type.
+- `on_update` is MySQL's phrase, upper case: `on update CURRENT_TIMESTAMP` where MariaDB gives `on update current_timestamp()`.
+- A foreign key rule written as `SET DEFAULT` is reported as `SET DEFAULT`, and one not written as `NO ACTION`.
 
 ### A SQLite read
 
 The fields are the same; SQLite fills fewer of them. Branch on `database.provider` when a template serves more than one provider.
 
-- `database.name` is `main`, `database.collation` is `null`, `database.server` describes the SQLite library built into `tpl`, and `routines` is `[]`.
+- `database.name` is `main`, `database.charset` is the file's encoding (e.g. `UTF-8`), `database.collation` is `null`, `database.server` describes the SQLite library built into `tpl`, and `routines` is `[]`. Naming a routine is exit 66.
 - A column's `data_type` is its SQLite type affinity — `integer`, `text`, `blob`, `real` or `numeric` — and `column_type` is the declared type as written (empty when none was declared). A type mapping for SQLite keys on the affinity, or on `column_type`.
 - A table's `engine` and `collation` are `null`. Its `primary_key` may have a `null` `name` and `type`: a rowid key has no index.
 - A view's `definition` is its whole stored `CREATE VIEW` statement, and every other view field but `name` is `null`.
+- `check_constraints` is always `[]`. A foreign key's `name` and `referenced_key`, and a generated column's `expression`, are `null`. Every `comment` is the empty string.
+- A trigger's `statement` is its whole stored `CREATE TRIGGER` statement; `orientation` is `ROW`, the row aliases `OLD` and `NEW`, and the other fields beyond `name`, `event` and `timing` are `null`.
+- A rowid-alias `INTEGER PRIMARY KEY` column reads `nullable`, as SQLite reports it. To test "never `NULL` once stored", use `auto_increment`.
 
 ## Filters, tests and functions
 
 The functions, and the tests and filters tpl registers, are a contract. The engine filters that are listed are pinned. Anything else the engine offers works, but may change when the engine version changes.
 
 - **Naming filters:** `pascal`, `camel`, `snake`, `upper_snake`, `kebab`.
-- **Code filters:** `quote` (MariaDB and MySQL backticks), `sql_type` (a column's `data_type`), `json`, `indent(n)`, `comment(prefix)`, `escape("html"|"xml")`.
+- **Code filters:** `quote` (MariaDB backticks, whatever the provider), `sql_type` (a column's `data_type`), `json`, `indent(n)`, `comment(prefix)`, `escape("html"|"xml")`.
 - **Pinned engine filters:** `default`, `join`, `length`, `map(attribute=…)`, `select`, `reject`, `first`, `last`, `reverse`, `sort(attribute=…, reverse=…, case_sensitive=…)`, `trim`, `upper`, `lower`, `replace`.
 - **Column tests:** `nullable`, `primary_key`, `auto_increment`, `unique`, `numeric`, `temporal`, `textual`. Each fails the render on anything but a column. On a SQLite read, `numeric` is true for the affinities `integer`, `real` and `numeric` (so a column declared `DATETIME` or `BOOLEAN` is numeric), `textual` for `text`, and `temporal` is never true; `primary_key` and `unique` hold for a rowid key too.
 - **Functions:** `table_named(name)`, `view_named(name)`, `routine_named(name)` (the first routine of that name), `column(table, name)` (using the result fails the render when the object is missing), and `fail(message)`, which stops the render with exit 65. The old names `table()`, `view()` and `routine()` no longer exist: calling one is exit 65, "unknown function".

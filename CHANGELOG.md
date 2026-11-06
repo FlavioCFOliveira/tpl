@@ -36,6 +36,28 @@ workflow, before it closes.
 
 ## Unreleased
 
+## [0.1.1] - 2026-11-06
+
+### Changed
+
+- **The help states what each command reads, for every provider.** The text
+  help and `tpl help --format json` say whether a command reads no database,
+  always reads it, or reads it only on a cache miss, and that a read connects
+  to the server of a `mariadb` or `mysql` entry or opens the file of a `sqlite`
+  entry; no help text speaks of a server for a fact that also holds for a
+  `sqlite` entry.
+
+### Fixed
+
+- **The Claude Code skill states each provider's behaviour correctly.** The
+  skill shipped in `tpl-skill-<tag>.tar.gz` gave some MariaDB-only facts as
+  facts of every provider. It now says that a login needing the server's RSA
+  public key over an unencrypted session exits `78` for a `mysql` entry and
+  `69` for a `mariadb` entry, that `quote` writes MariaDB backticks whatever
+  the provider, which statements a read issues for each provider, that a
+  `--direct --no-cache` read may leave `-wal` and `-shm` files beside a SQLite
+  database, and which model values differ per provider.
+
 ## [0.1.0] - 2026-11-05
 
 ### Added

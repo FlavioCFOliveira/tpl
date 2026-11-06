@@ -1,7 +1,7 @@
 ---
 title: tpl Functional Specification
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [glossary.md, cli-contract.md, catalogue-coverage.md, sqlite-contract.md, mysql-contract.md, open-questions.md, upstream-divergences.md]
 ---
 
@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty-seven editions. All are in force;
+The specification has been written in eighty-eight editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6774,6 +6774,39 @@ divergence entry is raised, and [glossary.md](glossary.md) is unchanged.
 
 The fifth validation rule is applied: the root `README.md` quotes no help
 text, so [upstream-divergences.md](upstream-divergences.md) raises no entry.
+
+### Eighty-eighth edition — help that reads a database, not a server
+
+rmp `#362`, sprint 32: the help of `tpl` 0.1.0 still described every read as
+a connection to a server, although a `sqlite` entry reads a file and is
+cached the same way. **No identifier is assigned, retired or renumbered**;
+no open question or divergence entry is raised, and
+[glossary.md](glossary.md) is unchanged.
+
+- **The first side-effect statement of a leaf** — `FR-HELP-031`: it asks
+  whether the command reads a database, in three fixed forms —
+  `Reads no database.`, `Always reads the database.`, and a sentence opening
+  with `Reads the database only when .tpl/.cache/ does not already hold` —
+  and a leaf that reads follows it with one fixed sentence stating that a
+  read connects to the server of a MariaDB or a MySQL entry and opens the
+  database file of a SQLite entry. The example is rewritten.
+- **The words that name the server providers** — `FR-HELP-038`: speaking of
+  a server, a connection, a session, a login, TLS or `INFORMATION_SCHEMA`
+  names MariaDB and MySQL, and a statement of every provider speaks of the
+  database; twenty-three rows fix the statements found in the help of
+  `tpl`, `tpl schema`, `tpl schema info`, `tpl schema dump`,
+  `tpl template`, `tpl template check`, `tpl render`, `tpl cache`,
+  `tpl cache load`, `tpl cache clean`, `tpl cfg`, `tpl cfg database` and
+  `tpl cfg database test`, and the purpose of `--direct` wherever it is
+  declared. The JSON command tree carries each where it carries the string.
+- **This file** — the edition count of the Scope, and this record.
+
+`FR-HELP-008`, `FR-HELP-014`, `FR-HELP-022`, `FR-HELP-036`, `BR-HELP-002`,
+`FR-CACHE-010`, `FR-CACHE-011`, `FR-CFG-056`, `FR-LITE-002` and
+`FR-LITE-015` were read against the change, and none is amended. The fifth
+validation rule is applied: neither the root `README.md` nor `CLAUDE.md`
+quotes a help string this edition changes, so
+[upstream-divergences.md](upstream-divergences.md) raises no entry.
 
 ### Still out of scope
 

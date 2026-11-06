@@ -1019,9 +1019,19 @@ fn description(help: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The three forms of the first statement of `FR-HELP-031`; the third is
+/// the opening the requirement fixes, which each leaf completes.
+const NEVER: &str = "Reads no database.";
+const ALWAYS: &str = "Always reads the database.";
+const ON_A_MISS: &str = "Reads the database only when .tpl/.cache/ does not already hold";
+
+/// The sentence that follows the first statement of every leaf that reads.
+const READING_IS: &str = "Reading the database connects to the server of a MariaDB or a MySQL \
+    entry, or opens the database file of a SQLite entry.";
+
 #[test]
 fn fr_help_031_every_leaf_ends_its_description_with_the_four_statements() {
-    // FR-HELP-031: the first statement answers the server question, the
+    // FR-HELP-031: the first statement answers the read question, the
     // second the entry question, and both channels end with the same four.
     // Each of the four is recognised by the words the first two open with;
     // the text and the JSON are compared against each other rather than
@@ -1063,10 +1073,10 @@ fn fr_help_031_every_leaf_ends_its_description_with_the_four_statements() {
         let closing = json.rsplit("\n\n").next().expect("a last paragraph");
 
         assert!(
-            closing.starts_with("Connects")
-                || closing.starts_with("Always connects")
-                || closing.starts_with("Does not contact the server."),
-            "{} does not open its last paragraph with the server statement: {closing}",
+            closing.starts_with(NEVER)
+                || closing.starts_with(ALWAYS)
+                || closing.starts_with(ON_A_MISS),
+            "{} does not open its last paragraph with the read statement: {closing}",
             written(&path)
         );
         assert!(
@@ -1749,6 +1759,365 @@ fn fr_help_038_the_fixed_statements_read_as_the_requirement_gives_them() {
         assert!(
             !meaning.contains("supported MariaDB version"),
             "{path:?}: {meaning}"
+        );
+    }
+}
+
+/// Every leaf of the tree, as its path.
+fn leaf_paths(tree: &serde_json::Value) -> Vec<Vec<String>> {
+    let commands = tree["data"]["commands"]
+        .as_array()
+        .expect("commands is an array");
+    node_paths()
+        .into_iter()
+        .filter(|path| {
+            !commands.iter().any(|other| {
+                let segments = other["path"].as_array().expect("path is an array");
+                segments.len() == path.len() + 1
+                    && segments
+                        .iter()
+                        .zip(path)
+                        .all(|(segment, own)| segment.as_str() == Some(own.as_str()))
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn fr_help_031_the_first_statement_takes_one_of_the_three_forms_and_names_every_provider() {
+    // FR-HELP-031, eighty-eighth edition: the 18 leaves that never read say
+    // so in the fixed form; the 11 that read say always or on a miss, and the
+    // sentence that says what a read is for each provider follows at once,
+    // before any other sentence; no leaf speaks of contacting a server.
+    let tree = document();
+    let normalise = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    let always: [&[&str]; 2] = [&["cache", "load"], &["cfg", "database", "test"]];
+    let schema_miss = "Reads the database only when .tpl/.cache/ does not already hold the \
+        data, and always with --direct.";
+    let render_miss = "Reads the database only when .tpl/.cache/ does not already hold what \
+        the template reads, always with --direct, and never with --context.";
+
+    let (mut never, mut reading) = (0, 0);
+    for path in leaf_paths(&tree) {
+        let path: Vec<&str> = path.iter().map(String::as_str).collect();
+        let entry = json_entry(&tree, &path);
+        let json = entry["description"].as_str().expect("a description");
+        let closing = normalise(json.rsplit("\n\n").next().expect("a last paragraph"));
+        let text = description(
+            &String::from_utf8(succeeds(&borrowed(&with(
+                &path.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>(),
+                &["--help"],
+            ))))
+            .expect("UTF-8"),
+        );
+        assert!(text.ends_with(&closing), "{path:?}: {text}");
+
+        for found in [&text, &closing] {
+            assert!(!found.contains("contact"), "{path:?}: {found}");
+            assert!(
+                !found.contains("onnects to the server only"),
+                "{path:?}: {found}"
+            );
+            assert!(!found.contains("Always connects"), "{path:?}: {found}");
+        }
+
+        let first = if always.contains(&path.as_slice()) {
+            ALWAYS
+        } else if path == ["render"] {
+            render_miss
+        } else if path[0] == "schema" {
+            schema_miss
+        } else {
+            NEVER
+        };
+
+        assert!(
+            closing.starts_with(first),
+            "{path:?} opens its statements otherwise: {closing}"
+        );
+        if first == NEVER {
+            never += 1;
+            assert!(!closing.contains(READING_IS), "{path:?}: {closing}");
+        } else {
+            reading += 1;
+            let rest = closing[first.len()..].trim_start();
+            assert!(
+                rest.starts_with(READING_IS),
+                "{path:?} does not follow its first statement with the provider sentence: \
+                 {closing}"
+            );
+        }
+    }
+
+    assert_eq!((never, reading), (18, 11));
+}
+
+#[test]
+fn fr_help_038_the_eighty_eighth_edition_rows_read_as_the_requirement_gives_them() {
+    // FR-HELP-038, eighty-eighth edition: the twenty-three rows that replace
+    // server wording on facts that hold for a sqlite entry too. Each is
+    // asserted in the text help of its node, and in the JSON command tree
+    // wherever the tree carries the string: a description, a flag or argument
+    // purpose, an example caption or an exit-code line. The root has no entry
+    // in the tree, and an ARGUMENTS child summary is text-only.
+    let tree = document();
+    let normalise = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");
+
+    // Every string the JSON entry of `path` carries, whitespace-normalised.
+    let carried = |path: &[&str]| -> Vec<String> {
+        fn walk(value: &serde_json::Value, into: &mut Vec<String>) {
+            match value {
+                serde_json::Value::String(text) => {
+                    into.push(text.split_whitespace().collect::<Vec<_>>().join(" "));
+                }
+                serde_json::Value::Array(items) => items.iter().for_each(|v| walk(v, into)),
+                serde_json::Value::Object(map) => map.values().for_each(|v| walk(v, into)),
+                _ => {}
+            }
+        }
+        let mut strings = Vec::new();
+        walk(&json_entry(&tree, path), &mut strings);
+        strings
+    };
+
+    const DIRECT: &str = "Reads the database even when the cache holds the data, and replaces \
+        the cached copy with what it read; add --no-cache to leave the cache untouched.";
+
+    // (node, statement, carried by the JSON tree)
+    let rows: &[(&[&str], &str, bool)] = &[
+        (
+            &[],
+            "Copies of what tpl read from a database, kept under .tpl/.cache/ so that later \
+             commands need not read it again.",
+            false,
+        ),
+        (
+            &[],
+            "Manages the local copy of what tpl read from a database",
+            false,
+        ),
+        (
+            &["schema"],
+            "Reads the structure of the selected database: its tables, views and routines, and \
+             the server that holds it or, for a SQLite entry, the SQLite library that reads it. \
+             It only reads: for a MariaDB or a MySQL entry, the session is made read-only first, \
+             and every query is a SELECT, against INFORMATION_SCHEMA for the structure; for a \
+             SQLite entry, the database file is opened read-only, and the structure is read with \
+             SELECT from sqlite_schema and SQLite's pragma functions. What it reads is kept in \
+             .tpl/.cache/, so a second read of the same data does not read the database again.",
+            true,
+        ),
+        (
+            &["schema"],
+            "Reports the selected database, and the server or SQLite library that reads it",
+            false,
+        ),
+        (
+            &["schema", "info"],
+            "Reports the selected database: its name, character set and collation, the server \
+             that holds it or, for a SQLite entry, the SQLite library that reads it, and how many \
+             tables, views and routines it holds.",
+            true,
+        ),
+        (
+            &["schema", "info"],
+            "Read the version of the server, or of the SQLite library for a SQLite entry, from \
+             the JSON document; this needs jq, an external JSON tool.",
+            true,
+        ),
+        (
+            &["schema", "dump"],
+            "tpl render --context reads this document back and renders without reading the \
+             database.",
+            true,
+        ),
+        (
+            &["schema", "dump"],
+            "Render from a dump; the render itself reads no database. rust/struct stands for a \
+             template of your own.",
+            true,
+        ),
+        (
+            &["template"],
+            "No subcommand reads a database, runs a template, or reads a template outside \
+             .tpl/templates/.",
+            true,
+        ),
+        (
+            &["template", "check"],
+            "Checks the syntax of templates without running them: no expression is evaluated, no \
+             filter is called and no database is read, so it is safe on a template you have not \
+             read.",
+            true,
+        ),
+        (
+            &["render"],
+            "Reads the data from this JSON file, written by tpl schema dump, or from stdin when \
+             the path is -, so that no database is read and no database entry is used.",
+            true,
+        ),
+        (
+            &["cache"],
+            "Manages the cache under .tpl/.cache/: copies of what tpl read from a database, one \
+             folder per database entry. The schema commands and render read the cache first and \
+             read the database only for what it lacks, storing what they read.",
+            true,
+        ),
+        (
+            &["cache"],
+            "Reads the database and stores the result in the cache",
+            false,
+        ),
+        (
+            &["cache", "load"],
+            "Reads the database of the selected entry and stores the result in .tpl/.cache/, \
+             replacing what was stored before.",
+            true,
+        ),
+        (
+            &["cache", "load"],
+            "Accepted and has no effect: this command always reads the database.",
+            true,
+        ),
+        (
+            &["cache", "load"],
+            "The data was read from the database and stored in .tpl/.cache/.",
+            true,
+        ),
+        (
+            &["cache", "clean"],
+            "Nothing else removes cached data: after pointing entry NAME at another server or \
+             another database file with tpl cfg database update NAME, run tpl -d NAME cache \
+             clean.",
+            true,
+        ),
+        (&["cfg"], "Only cfg database test reads a database.", true),
+        (
+            &["cfg", "database"],
+            "Manages the database entries of .tpl/.cfg, each a named way to reach one database — \
+             a MariaDB or a MySQL server, or a SQLite database file — that -d/--database selects.",
+            true,
+        ),
+        (
+            &["cfg", "database"],
+            "Reads the database of one entry and reports the outcome",
+            false,
+        ),
+        (
+            &["cfg", "database", "test"],
+            "Reads the database of one entry and reports four answers. For a MariaDB or a MySQL \
+             entry they are whether it connected and logged in, whether the session was made \
+             read-only, which server answered, MariaDB or MySQL, and whether the database user \
+             may read the database structure (can_read_catalogue).",
+            true,
+        ),
+        (
+            &["cfg", "database", "test"],
+            "Names the database entry to test.",
+            true,
+        ),
+    ];
+
+    for (path, statement, in_json) in rows {
+        let statement = normalise(statement);
+        let text = prose(path);
+        assert!(
+            text.contains(&statement),
+            "{path:?} lacks {statement:?}: {text}"
+        );
+        if *in_json {
+            assert!(
+                carried(path).iter().any(|found| found.contains(&statement)),
+                "the JSON entry of {path:?} lacks {statement:?}"
+            );
+        }
+    }
+
+    // The purpose of --direct, on the eight schema leaves and render.
+    let mut direct: Vec<Vec<String>> = node_paths()
+        .into_iter()
+        .filter(|path| path.len() == 2 && path[0] == "schema")
+        .collect();
+    direct.push(vec!["render".to_owned()]);
+    assert_eq!(direct.len(), 9, "{direct:?}");
+    for path in &direct {
+        let path: Vec<&str> = path.iter().map(String::as_str).collect();
+        assert!(prose(&path).contains(DIRECT), "{path:?}");
+        assert_eq!(
+            normalise(&json_purpose(&json_entry(&tree, &path), "--direct")),
+            DIRECT,
+            "{path:?}"
+        );
+    }
+
+    // The replaced wording reaches neither channel at any node.
+    let mut every: Vec<Vec<String>> = node_paths();
+    every.push(Vec::new());
+    for path in &every {
+        let path: Vec<&str> = path.iter().map(String::as_str).collect();
+        let text = prose(&path);
+        let json = if path.is_empty() {
+            Vec::new()
+        } else {
+            carried(&path)
+        };
+        for stale in [
+            "read from the server",
+            "reads from the server",
+            "need no connection",
+            "needs no connection",
+            "no server is contacted",
+            "contacts no server",
+            "renders without a server",
+            "connects to a server",
+            "the named connections",
+            "Opens a connection with one database entry",
+            "Reports the server and the selected database",
+            "Names the database entry to connect with.",
+        ] {
+            assert!(!text.contains(stale), "{path:?} still says {stale:?}");
+            assert!(
+                !json.iter().any(|found| found.contains(stale)),
+                "the JSON entry of {path:?} still says {stale:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn fr_help_011_the_exit_codes_of_cache_load_name_the_sqlite_outcomes_the_schema_leaves_name() {
+    // FR-HELP-011 with FR-HELP-038: cache load performs the read the schema
+    // leaves perform, so its 69 and 74 lines carry the sqlite clauses theirs
+    // carry, in the text help and in the JSON exit_codes; its 77 and 78 lines
+    // read as the schema leaves' do.
+    const LOCKED: &str = "The server could not be reached, or a connection step took longer \
+        than its time limit; for a sqlite entry, the database file stayed locked or busy past \
+        core.query_timeout. What was already stored is left unchanged.";
+    const UNREADABLE: &str = "A file under .tpl, the entry's ca_file or ca_path, or the \
+        database file of a sqlite entry could not be read or written.";
+
+    let tree = document();
+    let normalise = |value: &str| value.split_whitespace().collect::<Vec<_>>().join(" ");
+    let load = ["cache", "load"];
+    let entry = json_entry(&tree, &load);
+    let text = prose(&load);
+
+    for (code, line) in [(69, LOCKED), (74, UNREADABLE)] {
+        let line = normalise(line);
+        assert!(
+            text.contains(&line),
+            "the text help lacks the {code} line: {text}"
+        );
+        assert_eq!(normalise(&json_meaning(&entry, code)), line, "exit {code}");
+    }
+
+    let info = json_entry(&tree, &["schema", "info"]);
+    for code in [77, 78] {
+        assert_eq!(
+            normalise(&json_meaning(&entry, code)),
+            normalise(&json_meaning(&info, code)),
+            "exit {code}"
         );
     }
 }

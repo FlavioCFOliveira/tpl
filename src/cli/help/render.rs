@@ -1519,8 +1519,8 @@ USAGE
 DESCRIPTION
   Prints tpl, a space and the version, such as tpl 0.1.0, and nothing else.
 
-  Does not contact the server. Needs no database entry and no project. Writes no
-  file. Prints the version line.
+  Reads no database. Needs no database entry and no project. Writes no file.
+  Prints the version line.
 
 EXAMPLES
   Print the version.
