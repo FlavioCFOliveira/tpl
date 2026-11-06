@@ -3,7 +3,7 @@
 # Server:   SQLite 3.54.1, series 3.54, standing supported.
 # Schema:   main, UTF-8 / .
 # Tables:   24.
-# Renderer: tpl 0.1.2.
+# Renderer: tpl 0.1.3.
 
 """A data layer for the `main` schema, rendered from the catalogue of the
 server named above.
