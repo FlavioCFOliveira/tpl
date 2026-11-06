@@ -338,6 +338,21 @@ impl Clock {
         }
     }
 
+    /// A clock whose budget starts now rather than at process start.
+    ///
+    /// [`Clock::new`] measures from the instant the whole test binary first
+    /// reached, so a budget it carries is already partly spent by every test
+    /// that ran before; a test that asserts a budget still has time left builds
+    /// its clock here instead, and its outcome does not depend on how long the
+    /// suite has run.
+    #[cfg(test)]
+    pub(crate) fn starting_now(budget: Option<Seconds>) -> Self {
+        Self {
+            started: Instant::now(),
+            budget,
+        }
+    }
+
     /// How long this invocation has been running.
     pub(crate) fn elapsed(&self) -> Duration {
         self.started.elapsed()
@@ -588,7 +603,7 @@ mod tests {
         assert_eq!(short.limit(), Duration::from_secs(1));
         assert!(short.remaining() <= Duration::from_secs(1));
 
-        let long = Clock::new(Some(seconds(600))).bound(seconds(30));
+        let long = Clock::starting_now(Some(seconds(600))).bound(seconds(30));
         assert_eq!(long.bound(), DeadlineBound::Phase);
         assert_eq!(long.limit(), Duration::from_secs(30));
         assert_eq!(long.remaining(), Duration::from_secs(30));
@@ -600,7 +615,7 @@ mod tests {
         // phase deadline. The four [core] keys are reachable whatever the flag
         // says, which is what the third edition's amendment restored.
         let resolved = Deadlines::resolve(None, Some(seconds(2)), None, None);
-        let clock = Clock::new(Some(seconds(600)));
+        let clock = Clock::starting_now(Some(seconds(600)));
 
         assert_eq!(resolved.of(Phase::CatalogueQuery).get(), 2);
         assert_eq!(
@@ -612,8 +627,10 @@ mod tests {
     #[test]
     fn fr_glob_012_a_spent_budget_leaves_a_phase_no_time_at_all() {
         // FR-GLOB-012: the phase ends at the first of the two, and a budget
-        // already exhausted is the first.
-        let clock = Clock::new(Some(seconds(1)));
+        // already exhausted is the first, while a budget with time left does
+        // not expire the phase. The clock starts now, so the time the suite has
+        // already run cannot spend its budget.
+        let clock = Clock::starting_now(Some(seconds(600)));
         let bound = super::Bound {
             bound: DeadlineBound::Overall,
             limit: Duration::from_secs(1),
