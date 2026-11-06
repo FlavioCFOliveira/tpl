@@ -502,7 +502,7 @@ words that name a provider in every line.
   3. .cfg read and validation                  78
   4. template resolution                       66
   5. database entry resolution                 78 or 66
-  6. cache or connection                       69, 77, or 78
+  6. cache or database read                    69, 77, or 78
   7. catalogue object resolution               66
   8. render                                    65
   ```
@@ -761,6 +761,14 @@ words that name a provider in every line.
   thirtieth edition's rejected option above, which says that it does,
   describes entry resolution as it then stood. The order of the steps is
   unchanged.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. Step 6 is named *cache or
+  database read*, where it was named *cache or connection*: the step reads the
+  database of every provider, and opens a connection only for a `mariadb` or a
+  `mysql` entry. The step, its codes and its place are unchanged. The edition
+  notes above, and those of other requirements, that name the
+  cache-or-connection step name this step.
 
 - **FR-ERR-007**: The order of `FR-ERR-006` SHALL decide which code wins when
   more than one condition is unsatisfied.
@@ -2351,7 +2359,7 @@ no requirement of this file is amended.
   through `FR-ERR-012`. The examples fix the facts named, the command
   carried and the code.
 
-  The condition is one of the cache-or-connection step of `FR-ERR-006`, and
+  The condition is one of the cache-or-read step of `FR-ERR-006`, and
   it holds for every command that opens a connection, `tpl cfg database test`
   among them, which ends at the first step of `FR-CFG-024` with this message.
 
@@ -2443,6 +2451,11 @@ no requirement of this file is amended.
   first two examples refers to the host and port named above and no longer
   writes them, per `FR-ERR-022`. The *Observed* note above records the
   wording before this edition.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The paragraph on the step
+  names the cache-or-read step, where it said the cache-or-connection step,
+  after the step's new name in `FR-ERR-006`. The behaviour is unchanged.
 
 - **FR-ERR-048**: WHEN the server of a `mariadb` or a `mysql` entry answers
   the login with an error packet, the system SHALL NOT read the catalogue,
@@ -2669,7 +2682,7 @@ no requirement of this file is amended.
   or the TLS handshake, each of which completed before the session opened.
 
   The conditions other requirements route elsewhere are the three of the
-  cache-or-connection step of `FR-ERR-006`, and all three are `78`: the
+  cache-or-read step of `FR-ERR-006`, and all three are `78`: the
   read-only session statement and its read-back, under `FR-SRV-010`, which is
   `78` whether the server refused the statement or the session did not survive
   it, because a setting that cannot be applied is a setting that cannot be
@@ -2781,6 +2794,11 @@ no requirement of this file is amended.
   `FR-CFG-044` reads as a privilege error, and no longer every error packet.
   An error packet the probe is answered with that carries another number is
   a statement that failed, and is reported here with `69`.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The text names the
+  cache-or-read step, where it said the cache-or-connection step, after the
+  step's new name in `FR-ERR-006`. The behaviour is unchanged.
 
 ## Template codes
 

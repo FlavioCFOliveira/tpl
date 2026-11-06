@@ -1,7 +1,7 @@
 ---
 title: SQLite Contract
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [configuration-model.md, server-contract.md, catalogue-coverage.md, context-document.md, privileges-and-completeness.md, security.md, cfg-commands.md, performance-requirements.md, errors-and-exit-codes.md, global-flags.md, project-and-discovery.md]
 ---
 
@@ -30,7 +30,8 @@ a SQLite read on the same principles as from a MariaDB read, and
 In scope: the SQLite library and the `server` object it yields, the selection
 of the driver, the opening of the database file and the outcomes when it
 cannot be read, the hardening controls and what happens when one cannot be
-applied, the closed statement list and the order of the connection start, the
+applied, the closed statement list and the order of the steps that open the
+file, the
 schema a read covers and what it excludes, the source of every model property
 for a SQLite read, the completeness of a SQLite read, its requirements of form,
 and the fixture its tests use.
@@ -103,9 +104,9 @@ two builds returned, in the same sense as those above.
 
 *Observed again on 2026-11-03, for the sixty-ninth edition,* for the security
 review of rmp `#317`, on `aarch64-apple-darwin`, in two ways: through the
-Python library **3.54.1**, the release of the library the binary carries, on a
-read-only connection under every control of `FR-LITE-010` and every limit of
-`FR-LITE-011` that a Python connection can set; and through the release build
+Python library **3.54.1**, the release of the library the binary carries, with
+the file opened read-only under every control of `FR-LITE-010` and every limit of
+`FR-LITE-011` that the Python library can set; and through the release build
 of `tpl` at `cb99236`. The databases read were built for single questions,
 outside this repository, and the main fixture database of `FR-LITE-038` was
 built from `scripts/sqlite/freight.sql` for the comparisons that needed it.
@@ -115,29 +116,29 @@ published package of the driver selected under `FR-LITE-004` bundles, read at
 that public source on the same date.
 
 *Observed again on 2026-11-04, for the seventieth edition,* for rmp `#317`,
-on `aarch64-apple-darwin`, through the Python library **3.54.1**, on a
-read-only connection under every control of `FR-LITE-010`, views disabled
-included, and every limit of `FR-LITE-011` that a Python connection can set,
+on `aarch64-apple-darwin`, through the Python library **3.54.1**, with
+the file opened read-only under every control of `FR-LITE-010`, views disabled
+included, and every limit of `FR-LITE-011` that the Python library can set,
 with the statements of `FR-LITE-015` as the sixty-ninth edition writes them.
 The database read was the main fixture database of `FR-LITE-038`, built from
 `scripts/sqlite/freight.sql` outside this repository, once in
 rollback-journal mode and once in write-ahead-log mode, and an empty file of
-zero bytes was read beside it; a second, ordinary read-write connection to
+zero bytes was read beside it; a second, ordinary read-write open of
 the same file was the writer. The database of one
 table and 320 000 views that `FR-LITE-009` records served the reading of the
 deadline.
 
 *Observed again on 2026-11-04, for the seventy-first edition,* for rmp
-`#317`, on `aarch64-apple-darwin`, through the Python library **3.54.1**, on
-a read-only connection under every control of `FR-LITE-010`, views disabled
-included, and every limit of `FR-LITE-011` that a Python connection can set,
+`#317`, on `aarch64-apple-darwin`, through the Python library **3.54.1**, with
+the file opened read-only under every control of `FR-LITE-010`, views disabled
+included, and every limit of `FR-LITE-011` that the Python library can set,
 with the statements of `FR-LITE-015` as the seventieth edition writes them.
 The databases read were built for single questions, outside this repository:
 each held a table, an index, a view and a trigger in the freight domain, and
 had the `type` of one row of the schema table rewritten under
-`writable_schema` by a connection whose defensive mode was off. Whether the
+`writable_schema` through an open of the file whose defensive mode was off. Whether the
 object of that row still worked in the library was read on a copy, through an
-ordinary read-write connection with views enabled. The main fixture database
+ordinary read-write open of the file with views enabled. The main fixture database
 of `FR-LITE-038`, and the databases `internal.sql` and `fts5_view.sql` build,
 were built from `scripts/sqlite/` outside this repository for the comparisons
 that needed them. Further databases were built for two questions: which rows
@@ -147,8 +148,8 @@ single and composite `UNIQUE` constraints, a `WITHOUT ROWID` table with a
 `fts5`, `fts4` and `rtree` tables, and the statistics `ANALYZE` writes; and
 how the catalogue reports a name one object writes for another in a
 different letter case, where how SQLite resolved such a name was read by
-inserting rows with foreign keys enforced, on an ordinary read-write
-connection. A final sweep took each column of the schema table — `type`,
+inserting rows with foreign keys enforced, through an ordinary read-write
+open of the file. A final sweep took each column of the schema table — `type`,
 `name`, `tbl_name`, `rootpage` and `sql` — and rewrote it, one shape to a
 database, under `writable_schema` as above; and it read, over databases
 SQLite wrote, the values the catalogue statements take from the pragma
@@ -197,7 +198,7 @@ would present.
   file, because preparing it loads the schema: over a text file it failed with
   `file is not a database` and over a truncated file with
   `database disk image is malformed`, while the two pragma statements issued
-  before it on the same connections succeeded. `FR-LITE-017` places it for
+  before it on the same opens of the file succeeded. `FR-LITE-017` places it for
   that reason.
 
   *Why the object keeps its name.* `server` is a structural key of the
@@ -208,6 +209,11 @@ would present.
   `sqlite` entry that is the library.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The observation says that
+  the two pragma statements succeeded on the same opens of the file, where it
+  said connections. The requirement is unchanged.
 
 - **FR-LITE-003**: The supported version window of `FR-SRV-001`, the refusal of
   `FR-SRV-020`, the marked read of `FR-SRV-031` and the product check of
@@ -434,11 +440,16 @@ would present.
   invocation.
 
   *Observed.* A read-only open of a path that names nothing failed with
-  `unable to open database file` (`SQLITE_CANTOPEN`) and created nothing. On a
-  connection opened read-only, `CREATE TABLE` and `INSERT` failed with
+  `unable to open database file` (`SQLITE_CANTOPEN`) and created nothing. On the
+  file opened read-only, `CREATE TABLE` and `INSERT` failed with
   `attempt to write a readonly database` (`SQLITE_READONLY`).
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The observation speaks of
+  the file opened read-only, where it said a connection. The requirement is
+  unchanged.
 
 - **FR-LITE-007**: A failure to read the file — from the check of its kind
   under `FR-LITE-005` onwards, save the kinds that requirement refuses — SHALL
@@ -559,7 +570,7 @@ would present.
   NOT create, change or remove any other file outside `.tpl/` on account of a
   `sqlite` read.
 
-  *Observed.* A read-only connection to a database in write-ahead-log mode
+  *Observed.* A read-only open of a database in write-ahead-log mode
   created `-wal` and `-shm` beside it and left both after it closed. The same
   database in a directory with no write permission, and without the two files,
   could not be read at all: `attempt to write a readonly database`
@@ -576,8 +587,8 @@ would present.
   and not yet checkpointed was **absent** from an `immutable` read and present
   in an ordinary read-only one. A read that misses committed structure is the
   silent corruption this corpus refuses. *Rejected: the exclusive locking mode,
-  which keeps the log index in memory.* Observed: a read-only connection
-  refused it with `disk I/O error` (`SQLITE_IOERR_LOCK`). *Rejected: refusing
+  which keeps the log index in memory.* Observed: a read-only open of the
+  file refused it with `disk I/O error` (`SQLITE_IOERR_LOCK`). *Rejected: refusing
   a database in write-ahead-log mode.* It refuses the mode an application
   holding the database open is most likely to use.
 
@@ -592,8 +603,13 @@ would present.
   control of `FR-LITE-010`, which is what keeps the last sentence of this
   requirement true.
 
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The observation and the
+  rejected exclusive locking mode speak of a read-only open of the file, where
+  they said a connection. The requirement is unchanged.
+
 - **FR-LITE-009**: For a `sqlite` entry, every statement the system issues on
-  the connection SHALL run under the catalogue-query deadline of
+  the open database file SHALL run under the catalogue-query deadline of
   `FR-CONF-005`, resolved from `core.query_timeout`, and a statement that finds
   the database locked SHALL wait for it within that deadline and no longer.
   The phases of DNS resolution, TCP connect, TLS handshake and
@@ -602,7 +618,7 @@ would present.
 
   *Observed,* as *Observations* above states, with the statements of
   `FR-LITE-015` as this edition writes them and an interrupt of the
-  connection — the means by which the deadline ends a statement — sent from a
+  statements on the open file — the means by which the deadline ends a statement — sent from a
   second thread:
 
   - Over one table and 40 000, 80 000, 160 000 or 320 000 views of the form
@@ -669,6 +685,12 @@ would present.
   open, and the connection's close ended it, as `FR-LITE-042` requires. What
   the read costs a writer of the database is stated there.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The statements the
+  deadline bounds are those the system issues on the open database file, where
+  the text said the connection, and the observation speaks of an interrupt of
+  the statements on the open file. The behaviour is unchanged.
+
 - **FR-LITE-040**: For a `sqlite` entry, every
   [result code](glossary.md#result-code) by which the library reports a
   failure SHALL be classified, and the failure SHALL end the invocation with
@@ -689,15 +711,15 @@ would present.
   | Result code | What the library reports | Code |
   |---|---|---|
   | `SQLITE_MISUSE`, `SQLITE_RANGE`, `SQLITE_NOTFOUND` | A use of the library by `tpl` that the library refuses: an interface called in a way it does not support, a parameter or column number out of range, or an operation code it does not recognise | `70` (`EX_SOFTWARE`) |
-  | `SQLITE_ERROR` | An error in a statement of `FR-LITE-015`, which `tpl` wrote and issued over a file whose schema has loaded, or in how `tpl` opened the connection | `70` |
+  | `SQLITE_ERROR` | An error in a statement of `FR-LITE-015`, which `tpl` wrote and issued over a file whose schema has loaded, or in how `tpl` opened the database file | `70` |
   | `SQLITE_INTERNAL` | A malfunction inside the library the binary carries, per `FR-LITE-001` | `70` |
-  | `SQLITE_ABORT`, `SQLITE_AUTH`, `SQLITE_CONSTRAINT`, `SQLITE_LOCKED`, `SQLITE_MISMATCH`, and `SQLITE_READONLY` with no extended code of its own | An outcome that only an operation `tpl` does not perform produces: a write or a constraint on one, an abort or a rollback it requests, an authorisation callback, a plan a virtual-table module refuses, or a conflict inside its one connection or with a second connection sharing its cache | `70` |
+  | `SQLITE_ABORT`, `SQLITE_AUTH`, `SQLITE_CONSTRAINT`, `SQLITE_LOCKED`, `SQLITE_MISMATCH`, and `SQLITE_READONLY` with no extended code of its own | An outcome that only an operation `tpl` does not perform produces: a write or a constraint on one, an abort or a rollback it requests, an authorisation callback, a plan a virtual-table module refuses, or a conflict inside its one open of the file or with a second open of it sharing its cache | `70` |
   | `SQLITE_EMPTY`, `SQLITE_FORMAT`, `SQLITE_NOTICE`, `SQLITE_WARNING` | A code the library documents as not used, or as returned by no interface | `70` |
   | `SQLITE_NOMEM` | An allocation the library needed failed | `74` (`EX_IOERR`) |
   | `SQLITE_FULL`, `SQLITE_NOLFS`, `SQLITE_PERM` | The disk is full; the filesystem cannot hold a file of the database's size; or it did not grant the access mode the library asked for a file it creates beside the database | `74` |
-  | `SQLITE_READONLY` under an extended code other than `SQLITE_READONLY_DIRECTORY` | A file the read needs beside the database — the shared memory of the write-ahead log, or a journal to roll back — cannot be written, a recovery needs write access the connection does not have, or the database file moved after it was opened | `74` |
-  | `SQLITE_PROTOCOL` | In write-ahead-log mode, other connections kept winning the race for the database's locks, and the library gave up after retrying | `69` (`EX_UNAVAILABLE`) |
-  | `SQLITE_SCHEMA` | Another connection kept changing the schema while a statement ran, past the library's own re-preparation of it | `69` |
+  | `SQLITE_READONLY` under an extended code other than `SQLITE_READONLY_DIRECTORY` | A file the read needs beside the database — the shared memory of the write-ahead log, or a journal to roll back — cannot be written, a recovery needs write access the file was not opened with, or the database file moved after it was opened | `74` |
+  | `SQLITE_PROTOCOL` | In write-ahead-log mode, other opens of the file kept winning the race for the database's locks, and the library gave up after retrying | `69` (`EX_UNAVAILABLE`) |
+  | `SQLITE_SCHEMA` | Another open of the file kept changing the schema while a statement ran, past the library's own re-preparation of it | `69` |
   | `SQLITE_INTERRUPT` | The statement was ended at the catalogue-query deadline, per `FR-LITE-009` and `FR-ERR-027` | `69` |
   | A primary result code that no row of this table or of `FR-LITE-007` names | A code SQLite had not published on the date below | `70` |
 
@@ -742,14 +764,14 @@ would present.
   `FR-LITE-012` and `FR-LITE-032` already use. Where the host or the
   filesystem did not supply what the read needed — memory, space, an access
   mode, a writable file beside the database — the next step is the host's,
-  which is the step `74` states. Where another connection holds or changes the
+  which is the step `74` states. Where another open of the file holds or changes the
   database, the next step is the one `FR-LITE-009` gives a lock: the operation
   is read-only and therefore repeatable, which is `69`. A primary result code
   SQLite publishes after the date above is an outcome the system was not built
   to classify, and `FR-ERR-030` declines to continue past one.
 
-  *Observed, on 2026-11-03, through the Python library 3.54.1, on a read-only
-  connection with `trusted_schema` off.* A database whose schema calls a
+  *Observed, on 2026-11-03, through the Python library 3.54.1, with the file
+  opened read-only and `trusted_schema` off.* A database whose schema calls a
   function and names a collation that the reading library does not hold — in
   a generated column, a `CHECK`, a `DEFAULT`, a collated index, a partial
   index and an expression index — loaded, and statements of each kind the
@@ -771,8 +793,8 @@ would present.
   `74` for every other code. The split is followed except in two places, each
   decided by `FR-ERR-002`: `SQLITE_PROTOCOL` and
   `SQLITE_SCHEMA` are `69`, because what the caller has to look at is another
-  connection and not the filesystem, and the read is repeatable; and
-  `SQLITE_LOCKED` is `70`, because with one connection and no write the only
+  open of the file and not the filesystem, and the read is repeatable; and
+  `SQLITE_LOCKED` is `70`, because with one open of the file and no write the only
   conflict it can report is one `tpl` made.
 
   *Rejected: `70` for every result code the rows above do not classify.* A
@@ -822,20 +844,28 @@ would present.
   it, now name the files the check admits, because a file the check refuses
   was observed to make the statements fail with that code.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The rows of
+  `SQLITE_ERROR`, of `SQLITE_LOCKED`, of `SQLITE_READONLY` under an extended
+  code, of `SQLITE_PROTOCOL` and of `SQLITE_SCHEMA` speak of the database file `tpl`
+  opened and of another open of the file, where they said connections, and so
+  do the note on the three codes, the observation and the rationale below the
+  table. No code changes.
+
 ## Hardening against an untrusted file
 
 - **FR-LITE-010**: The database file SHALL be treated as untrusted input, per
-  the trust boundaries of [security.md](security.md). On every connection it
-  opens, before the version probe, the system SHALL apply each of the
+  the trust boundaries of [security.md](security.md). Each time it opens
+  the file, before the version probe, the system SHALL apply each of the
   following controls and SHALL confirm, by reading the setting back, that each
   took effect. Extension loading is the one control that is not a setting of
-  the connection: it is a property of the library the binary carries, applied
+  the open database file: it is a property of the library the binary carries, applied
   when the library is built, and its read-back is `PRAGMA compile_options`,
   which the system SHALL issue before any statement that reads the file. The
   control is in effect only WHERE that statement returns the row
   `OMIT_LOAD_EXTENSION`; IF the row is absent, the control has not taken
   effect, under `FR-LITE-012`. Temporary storage is a setting of the
-  connection whose effect also depends on how the library is built, so it is
+  open database file whose effect also depends on how the library is built, so it is
   confirmed twice: it is in effect only WHERE `PRAGMA temp_store` reads back
   `2` and `PRAGMA compile_options` returns the row `TEMP_STORE=1`,
   `TEMP_STORE=2` or `TEMP_STORE=3`; IF that statement returns `TEMP_STORE=0`,
@@ -844,7 +874,7 @@ would present.
 
   | Control | Setting | Closes |
   |---|---|---|
-  | Read-only open | read-only, never creating the file, per `FR-LITE-006` | any write through the connection |
+  | Read-only open | read-only, never creating the file, per `FR-LITE-006` | any write through the open file |
   | `query_only` | on | any write the open itself did not refuse, as defence in depth |
   | Defensive mode | on | the features by which ordinary SQL can corrupt a database file |
   | `trusted_schema` | off | an SQL function or a virtual table that is not marked innocuous, run from a view, a trigger or a schema expression |
@@ -872,11 +902,11 @@ would present.
   "returns the names of compile-time options used when building SQLite, one
   option per row", without the `SQLITE_` prefix.
 
-  *Observed.* Each setting read back as set, on a read-only connection: the
+  *Observed.* Each setting read back as set, on the file opened read-only: the
   pragmas `query_only` `1`, `trusted_schema` `0`, `cell_size_check` `1` and
   `mmap_size` `0`, and the configuration flags `defensive on`,
   `load_extension off` and `trusted_schema off` through the shell's
-  configuration report. A `query_only` connection opened read-write refused
+  configuration report. With `query_only` on, the file opened read-write refused
   `CREATE TABLE`, `INSERT` and `PRAGMA user_version=5` with
   `attempt to write a readonly database`.
 
@@ -904,7 +934,7 @@ would present.
   taken after rmp `#315` found that the closest candidate driver could switch
   extension loading off through the library interface without `unsafe` code
   and could not read the switch back, and that the library as that driver
-  bundles it starts every connection with the switch on: compile the mechanism
+  bundles it starts every open of a database file with the switch on: compile the mechanism
   out, confirm the omission at every open, and end the invocation with `70`,
   like any other control not in effect. The control is not removed, which
   `FR-LITE-004` forbids: the mechanism absent is a stronger setting than the
@@ -933,8 +963,8 @@ would present.
   neither failure. A `CHECK` constraint, a `DEFAULT` and a trigger body
   calling such a function did not affect the read: the schema loaded and the
   table's columns were read. Creating such a `CHECK` was refused with
-  `unsafe use of rtreedepth()` on a connection with `trusted_schema` off and
-  succeeded on one with it on, so a database holding one was written under
+  `unsafe use of rtreedepth()` with `trusted_schema` off and
+  succeeded with it on, so a database holding one was written under
   `trusted_schema` on. A function the library does not hold at all failed only
   the view that called it, with `no such function: realpath`, and did not stop
   the schema loading. Among the functions the shell held, those not marked
@@ -988,7 +1018,7 @@ would present.
   `https://sqlite.org/c3ref/c_dbconfig_defensive.html`, checked 2026-11-03,
   disables views in the main schema and in attached ones, leaves `TEMP` views
   allowed, and reads the setting back, without changing it, when passed a
-  negative value; `temp` holds no view on the connection, per the observation
+  negative value; `temp` holds no view on a file just opened, per the observation
   under `FR-LITE-041`. The driver the decision records select sets and reads
   back the option through its safe configuration interface, as its published
   package shows, read 2026-11-03, so the control disqualifies no driver under
@@ -1009,7 +1039,7 @@ would present.
   holds content of an untrusted file in an amount the file decides.
 
   *Observed, on 2026-11-03, through the Python library 3.54.1, built with
-  SQLite's default `TEMP_STORE=1`, on a read-only connection under
+  SQLite's default `TEMP_STORE=1`, with the file opened read-only under
   `query_only`, `trusted_schema` off, `cell_size_check` on and `mmap_size`
   `0`.* The database held 40 tables of 250 columns each, with column names
   3 000 characters long, each schema statement within the length limits of
@@ -1081,8 +1111,16 @@ would present.
   deadline through the listing this edition removes. The other eight controls
   are unchanged.
 
-- **FR-LITE-011**: On every connection, before the version probe, the system
-  SHALL set the following run-time limits of the library and SHALL confirm
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The controls apply each
+  time the system opens the file, where the text said on every connection;
+  extension loading is not, and temporary storage is, a setting of the open
+  database file, the first row of the table closes any write through the open
+  file, and the observations and the provenance speak of the file opened
+  read-only or of an open of a database file. No control changes.
+
+- **FR-LITE-011**: Each time it opens the database file, before the version
+  probe, the system SHALL set the following run-time limits of the library and SHALL confirm
   each by reading it back:
 
   | Limit | Value |
@@ -1124,6 +1162,11 @@ would present.
   and at `200` the schema loaded. The refusal the accepted cost names was
   observed as `SQLITE_TOOBIG`, which `FR-LITE-007` now carries in a row of its
   own.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The limits apply each
+  time the system opens the database file, where the text said on every
+  connection. No limit changes.
 
 - **FR-LITE-012**: IF a control of `FR-LITE-010` or a limit of `FR-LITE-011`
   cannot be applied, or its read-back does not confirm the value set, THEN the
@@ -1183,9 +1226,9 @@ would present.
 
   | Statement | Purpose | When |
   |---|---|---|
-  | `PRAGMA query_only`, `PRAGMA trusted_schema`, `PRAGMA cell_size_check`, `PRAGMA mmap_size` and `PRAGMA temp_store`, each in the form that sets the value `FR-LITE-010` fixes and in the form that reads it back | The controls of `FR-LITE-010` that a statement applies | Once each, at connection start |
-  | `PRAGMA compile_options`, in the form that reads the options | The confirmation of the extension-loading control of `FR-LITE-010`, and of the build on which its temporary-storage control depends | Once, at connection start |
-  | `SELECT sqlite_version()`, reading nothing else | The version probe of `FR-LITE-002` | Once, at connection start |
+  | `PRAGMA query_only`, `PRAGMA trusted_schema`, `PRAGMA cell_size_check`, `PRAGMA mmap_size` and `PRAGMA temp_store`, each in the form that sets the value `FR-LITE-010` fixes and in the form that reads it back | The controls of `FR-LITE-010` that a statement applies | Once each, when the file is opened |
+  | `PRAGMA compile_options`, in the form that reads the options | The confirmation of the extension-loading control of `FR-LITE-010`, and of the build on which its temporary-storage control depends | Once, when the file is opened |
+  | `SELECT sqlite_version()`, reading nothing else | The version probe of `FR-LITE-002` | Once, when the file is opened |
   | `BEGIN DEFERRED` and `COMMIT` | The [read transaction](glossary.md#read-transaction) of `FR-LITE-042`, in which the check of `FR-LITE-041` and the catalogue statements read one snapshot of the file | Once each, around the check and the catalogue statements, by a read that issues a catalogue statement after the check |
   | `SELECT` against the schema table `sqlite_schema` and the pragma table-valued functions `pragma_table_xinfo`, `pragma_index_list`, `pragma_index_info`, `pragma_index_xinfo`, `pragma_foreign_key_list` and `pragma_encoding`, restricted to the schema `main` | Reading the catalogue, and the check of `FR-LITE-041`, which is also the catalogue probe of `FR-CFG-056` | As the command requires |
 
@@ -1294,6 +1337,12 @@ would present.
   `NFR-PERF-008`, or reported by the line `FR-GLOB-017` gives a catalogue
   query.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The first three rows of
+  the table run when the file is opened, where they said at connection start.
+  No statement changes. The virtual table a statement must not connect keeps
+  the library's own verb, per [glossary.md](glossary.md#connection).
+
 - **FR-LITE-016**: The system SHALL NOT issue any other statement for a
   `sqlite` entry. It SHALL issue no DDL, no DML, no `ATTACH` or `DETACH`, no
   `VACUUM`, `ANALYZE` or `REINDEX`, no `PRAGMA` outside the list of
@@ -1325,7 +1374,7 @@ would present.
   (`SQLITE_READONLY`), in both journal modes, and `BEGIN DEFERRED` followed
   by `COMMIT` succeeded under `query_only`.
 
-- **FR-LITE-017**: WHEN the system opens a connection for a `sqlite` entry, it
+- **FR-LITE-017**: WHEN the system reads the database of a `sqlite` entry, it
   SHALL establish the kind of the file under `FR-LITE-005`, open it under
   `FR-LITE-006`, apply and confirm every control of `FR-LITE-010` — the
   extension-loading control by `PRAGMA compile_options`, and the
@@ -1376,6 +1425,11 @@ would present.
   *Observations* above states: the statement trace reported `BEGIN DEFERRED`,
   the check, the six catalogue statements and `COMMIT`, in that order, each
   without the prefix `-- `.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The order applies WHEN
+  the system reads the database of a `sqlite` entry, where the text said WHEN
+  it opens a connection for one. The order is unchanged.
 
 - **FR-LITE-041**: For a `sqlite` entry, after the version probe and before
   every other catalogue statement, the system SHALL issue one statement
@@ -1446,7 +1500,7 @@ would present.
   `pragma_table_list` failed at the probe with
   `malformed database schema (innocent)`: the library checks a row's name
   against its `CREATE` text when it loads the schema, so the name the check
-  reads is the name the object is resolved by. On a new connection,
+  reads is the name the object is resolved by. On a file just opened,
   `temp.sqlite_schema` held no row, and `pragma_database_list` named `main`
   and `temp` alone.
 
@@ -1717,6 +1771,11 @@ would present.
   first three kinds are unchanged: the first and the third compared `type`
   exactly already, and the new paragraph states it.
 
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The observation speaks of
+  a file just opened, where it said a new connection. The requirement is
+  unchanged.
+
 - **FR-LITE-042**: For a `sqlite` entry, WHEN a read issues a catalogue
   statement after the check of `FR-LITE-041`, the system SHALL issue
   `BEGIN DEFERRED` immediately before the check, and `COMMIT` immediately
@@ -1727,8 +1786,8 @@ would present.
   SHALL run between the two. IF the read ends before its last catalogue
   statement completes — the check refuses the file, a statement fails, or a
   deadline ends one — THEN the system SHALL NOT issue `COMMIT`, and the
-  transaction SHALL end with the connection, which the library rolls back
-  when it closes. A command whose only catalogue statement is the check —
+  transaction SHALL end when the database file is closed: the library
+  rolls it back when it closes the file. A command whose only catalogue statement is the check —
   `tpl cfg database test`, under `FR-CFG-056` — SHALL issue neither
   statement: one statement reads one snapshot of its own. The placement of
   the two statements SHALL be verified by the statement record of
@@ -1769,12 +1828,12 @@ would present.
     (`SQLITE_BUSY`), and committed when tried again after `COMMIT`; given a
     busy timeout of 5 s, it waited and committed after `COMMIT`. In
     write-ahead-log mode the writer committed during the read, and the read
-    did not see it. After `COMMIT`, a new statement on the same connection
+    did not see it. After `COMMIT`, a new statement on the same open of the file
     returned `forged`, in both modes.
   - A writer that committed the same table after `BEGIN DEFERRED` and before
     the check was seen by the check, which returned its row: the snapshot is
     taken by the check, not by `BEGIN DEFERRED`.
-  - In rollback-journal mode, a reader's connection closed inside its
+  - In rollback-journal mode, a reader that closed the file inside its
     transaction without `COMMIT` held off a writer until the close and not
     after it, and so did one whose statement an interrupt had ended inside the
     transaction, per the note on `FR-LITE-009`.
@@ -1785,9 +1844,9 @@ would present.
   connected. It adds two statements and no condition: each can fail only with
   a result code `FR-LITE-040` already classifies, and a read has the outcomes
   it had. `DEFERRED` is the one form that takes no write lock: `IMMEDIATE`
-  starts a write at once, and `EXCLUSIVE` also stops other connections
+  starts a write at once, and `EXCLUSIVE` also stops other opens of the file
   reading, per `https://sqlite.org/lang_transaction.html`; both failed on the
-  read-only connection, per the observation under `FR-LITE-016`. `COMMIT`,
+  file opened read-only, per the observation under `FR-LITE-016`. `COMMIT`,
   and not `ROLLBACK`, ends it: the transaction wrote nothing, so either ends
   it alike, but `COMMIT` "runs immediately, even if there are pending SELECT
   statements", where a `ROLLBACK` may abort them with `SQLITE_ABORT`, per the
@@ -1805,7 +1864,7 @@ would present.
   *Rejected: bracketing the read with the schema cookie* — reading
   `PRAGMA schema_version` before the check and after the last catalogue
   statement, and ending with `69`, the code `FR-LITE-040` gives another
-  connection changing the schema, when the two readings differ. The
+  open of the file changing the schema, when the two readings differ. The
   statement form is not resolved among the file's objects: observed, over a
   file holding a table `pragma_schema_version` whose one row held `999999`,
   `PRAGMA schema_version` returned the cookie, `42`, where
@@ -1817,7 +1876,7 @@ would present.
   after the check, would have had its module run before the second reading,
   per the observation under that requirement. It rests on a value the writer
   sets: `PRAGMA schema_version` given a value sets the cookie, and defensive
-  mode makes that a no-op only on the connection that has it on — `tpl`'s,
+  mode makes that a no-op only on the open of the file that has it on — `tpl`'s,
   not the writer's — per `https://sqlite.org/pragma.html`, last updated
   2026-10-04 and checked 2026-11-04. Observed, in both modes: a writer that
   created the table, let the statement reading the encoding return `forged`,
@@ -1829,7 +1888,7 @@ would present.
   *Rejected: bracketing with `PRAGMA data_version`,* which a writer cannot
   set — observed, a writer's `PRAGMA data_version = 1` left the reader's
   value unchanged. It detects after the fact too, and it moves on every
-  commit by another connection, data included — observed, in both modes, a
+  commit by another open of the file, data included — observed, in both modes, a
   one-row update moved it by one with the schema cookie unchanged — so a
   read of a database an application writes to would end with `69` on any
   write during it. *Rejected: repeating the check after the last catalogue
@@ -1876,12 +1935,18 @@ would present.
 
   *Added in the seventieth edition,* for rmp `#317`.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. A transaction a read
+  leaves without `COMMIT` ends when the database file is closed, where the
+  text said with the connection; the observations and the rejected
+  alternatives speak of an open of the file. The behaviour is unchanged.
+
 - **BR-LITE-001**: For a `sqlite` entry the read-only promise of `BR-SEC-002`
   has three parts, and two of them prevent. The read-only open of
-  `FR-LITE-006` prevents at the library: a connection opened that way cannot
-  write the file. The closed list of `FR-LITE-015` prevents in `tpl`: it is
-  what `tpl` is built to send. `query_only` makes a write fail on a connection
-  that could otherwise make one, and is defence in depth beside the two. No
+  `FR-LITE-006` prevents at the library: the file, opened that way, cannot be
+  written through that open. The closed list of `FR-LITE-015` prevents in `tpl`: it is
+  what `tpl` is built to send. `query_only` makes a write fail on an open of the
+  file that could otherwise make one, and is defence in depth beside the two. No
   flag disables any of them, per `FR-LITE-014`. What the promise does not
   cover, in write-ahead-log mode, is stated by `FR-LITE-008`. The
   [read transaction](glossary.md#read-transaction) of `FR-LITE-042` is part of
@@ -1899,10 +1964,15 @@ would present.
   in its directory; in write-ahead-log mode the file was likewise unchanged,
   and the two files `FR-LITE-008` admits appeared beside it.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The read-only open and
+  `query_only` are stated of the file opened read-only and of an open of the
+  file, where the rule said connections. The promise is unchanged.
+
 - **FR-LITE-018**: The closed list of `FR-LITE-015` and the order of
   `FR-LITE-017` SHALL be verified by an integration test that records, through
   the library's statement trace — the event SQLite names `SQLITE_TRACE_STMT`
-  — every statement the trace reports on the connection from the first
+  — every statement the trace reports on the open database file from the first
   statement the system issues after the open, reached through the seam of
   `FR-ERR-031` and from no invocation of the distributed binary. Over the
   fixture database of `FR-LITE-038` and over an empty database file, the test
@@ -1939,8 +2009,8 @@ would present.
   compile, so that nothing stops a statement before it reaches the table.
 
   *Why the statement record is taken in process.* `BR-SRV-003` observes the
-  statements a server receives, from the server's side. A SQLite connection
-  has no other side: the library that receives the statements runs inside the
+  statements a server receives, from the server's side. An open SQLite
+  database file has no other side: the library that receives the statements runs inside the
   process, and its trace interface is the boundary at which they are received.
   What the process does to the file — the promise a caller relies on — is
   observed from outside it.
@@ -1989,7 +2059,7 @@ would present.
   module run. Counting them would break `FR-LITE-037`, because the pragma
   functions run one for each table or index, and a count that grows with the
   objects is the dependence `NFR-PERF-001` forbids. What a nested statement
-  can do to the file is bounded by the controls that bound the connection —
+  can do to the file is bounded by the controls that bound the open of the file —
   the read-only open and `query_only` — and no view is compiled and no
   virtual table connected, per `FR-LITE-015`, so nothing a view names and no
   module runs during the read; the read-only promise is verified from outside
@@ -2057,6 +2127,12 @@ would present.
   bytes: the trace reported the two statements, in their places, and no
   prefixed text but the pragma functions' own.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The record holds every
+  statement the trace reports on the open database file, where the text said
+  on the connection, and the note on the statement record speaks of an open
+  SQLite database file. The assertions are unchanged.
+
 ## The part of the database a read covers
 
 - **FR-LITE-019**: A `sqlite` read SHALL cover the schema `main` and no other.
@@ -2065,7 +2141,7 @@ would present.
 
   *Rationale.* `main` is the database file the entry names, which is the
   database `FR-CONF-041` makes a read cover for a server. `temp` holds what one
-  connection created, and the read creates nothing; an attached schema is a
+  open of the file created, and the read creates nothing; an attached schema is a
   second file the entry does not name, the ground `FR-CAT-057` gives for not
   reading a second schema.
 
@@ -2079,6 +2155,11 @@ would present.
   `pragma_table_list` any more, per `FR-LITE-015`: the objects come from
   `main.sqlite_schema`, and every pragma function is passed the schema
   `main`, so no statement reaches `temp`. The requirement is unchanged.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The rationale says that
+  `temp` holds what one open of the file created, where it said one
+  connection. The requirement is unchanged.
 
 - **FR-LITE-020**: The model SHALL cover, for a `sqlite` read, the rows of
   the schema table `main.sqlite_schema` of type `table`, as tables, and of
@@ -2946,8 +3027,8 @@ would present.
      object is marked, so the read holds nothing `FR-CACHE-037` keeps out of
      the cache, and `FR-PRIV-008` accepts its dump as a `--context`.
 
-  *Observed, on 2026-11-03, through the Python library 3.54.1, on a read-only
-  connection with `trusted_schema` off.* Over a database holding a view that
+  *Observed, on 2026-11-03, through the Python library 3.54.1, with the file
+  opened read-only and `trusted_schema` off.* Over a database holding a view that
   selects from a missing table, one that calls a function the library lacks,
   one that calls `bm25()`, which `trusted_schema` off refuses, and one over an
   `fts5` table, the probe and the six catalogue statements the read issues
@@ -2959,7 +3040,7 @@ would present.
   library
   connected the `fts5` table to list it, and its module read a table of the
   file, with no view read. A statement reading the columns of the view over
-  that table, on a connection that had not yet listed the objects, ran the
+  that table, on an open of the file that had not yet listed the objects, ran the
   same nested statement. With the statements of `FR-LITE-015` as the
   sixty-ninth edition writes them, which invoke no `pragma_table_list`, no
   nested statement but a pragma function's own ran, per the observation under
@@ -3014,6 +3095,11 @@ would present.
   The decision of this requirement, the view object, the absence of a
   marking, and what the cache and `--context` do with the read are
   unchanged.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The observation speaks of
+  the file opened read-only and of an open of the file, where it said
+  connections. The requirement is unchanged.
 
 - **FR-LITE-034**: For a `sqlite` read, every table's `CHECK` constraints SHALL
   be `[]`. The system SHALL NOT read a `CHECK` constraint from the stored
@@ -3076,9 +3162,8 @@ would present.
   [performance-requirements.md](performance-requirements.md) SHALL hold as
   they hold for a server: the number of catalogue statements a full read and a
   named read issue SHALL NOT depend on the number of objects; an invocation
-  SHALL open at most one connection to the file, per `NFR-PERF-004`; and a
-  cache hit SHALL open none and issue none, per `NFR-PERF-003`. A
-  **connection** here is one connection of the library to the database file.
+  SHALL open the database file at most once, per `NFR-PERF-004`; and a
+  cache hit SHALL NOT open it and SHALL issue none, per `NFR-PERF-003`.
 
   The equality of `NFR-PERF-001` SHALL be verified, for a `sqlite` entry, over
   the fixture database of `FR-LITE-038` and over an empty database file, with
@@ -3119,6 +3204,14 @@ would present.
   Neither is a catalogue statement, per `FR-LITE-015`, so neither enters the
   count this requirement fixes, and both are issued once whatever the
   objects.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. An invocation SHALL open
+  the database file at most once, and a cache hit SHALL NOT open it, where the
+  text said at most one connection to the file and none, and defined a
+  connection of the library to the file; the definition is withdrawn, because
+  [glossary.md](glossary.md#opening-the-database-file) holds the term. The
+  requirement holds as before.
 
 ## The fixture
 
@@ -3170,7 +3263,7 @@ would present.
   write-ahead-log mode; an empty file; a text file; a truncated database; a
   directory, a FIFO, a symbolic link to the main database and a dangling one;
   a database whose schema holds a statement longer than the length limit of
-  `FR-LITE-011`, written by a connection that does not set that limit; a
+  `FR-LITE-011`, written through an open of the file that does not set that limit; a
   database whose only objects are the internal tables; a database whose
   schema holds a view named `pragma_table_list`, and one whose schema holds a
   table named `PRAGMA_TABLE_XINFO`; a database whose schema table holds the
@@ -3188,8 +3281,8 @@ would present.
   table's name followed by a NUL character, one whose schema table holds a
   view whose `sql` is its definition followed by a NUL character and further
   text, and one whose schema table holds a trigger whose text begins
-  `CREATE TEMP TRIGGER`, the last twelve written under `writable_schema` by a
-  connection that does not set the controls of `FR-LITE-010`; and a
+  `CREATE TEMP TRIGGER`, the last twelve written under `writable_schema` through an
+  open of the file that does not set the controls of `FR-LITE-010`; and a
   database holding an `fts5` table, a view over it that compiles, and no
   view that does not. A read of each of the fourteen databases named like a
   pragma function or written under `writable_schema` SHALL end with `78`
@@ -3290,6 +3383,11 @@ would present.
   that a reference is matched on the bytes and not on the text they convert
   to. They are built apart from the main database so that no name of it
   carries U+FFFD.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. Two databases of the list
+  are written through an open of the file that does not set a limit or the
+  controls, where the text said a connection. The fixture is unchanged.
 
 ## Dependencies
 

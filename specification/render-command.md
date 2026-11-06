@@ -289,8 +289,13 @@ tpl render <template> --routine <name>      binds routine
 - **FR-RND-021**: The system SHALL accept a `--context` document in either
   compact or indented form.
 
-- **FR-RND-022**: WHEN `--context` is supplied, the system SHALL NOT open a
-  database connection and SHALL NOT read or write the cache.
+- **FR-RND-022**: WHEN `--context` is supplied, the system SHALL NOT read the
+  database and SHALL NOT read or write the cache.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The system SHALL NOT read
+  the database, where the text said that it opens no database connection. The
+  behaviour is unchanged.
 
 ## Context assembly
 
@@ -393,14 +398,14 @@ tpl render <template> --routine <name>      binds routine
 
 - **FR-RND-040**: WHEN `tpl render` reads the database — a read under
   `--direct` or `--no-cache`, a cache miss under `FR-CACHE-007`, or the read
-  of `FR-CACHE-039` after an abandoned render — the system SHALL close the
-  connection that read the catalogue before the render starts. For a
-  `mariadb` or a `mysql` entry, closing it SHALL end the session with the
-  server, close the socket, and shut down every runtime the database driver
-  started. For a `sqlite` entry, it SHALL close the connection of the library
-  to the database file and end everything the read started to enforce the
-  deadlines of `FR-GLOB-012`. No connection SHALL be open, and nothing the
-  read started SHALL be alive, while a template is evaluated.
+  of `FR-CACHE-039` after an abandoned render — the system SHALL close what
+  the read opened before the render starts. For a `mariadb` or a `mysql`
+  entry, it SHALL close the connection: end the session with the server,
+  close the socket, and shut down every runtime the database driver started.
+  For a `sqlite` entry, it SHALL close the database file and end everything
+  the read started to enforce the deadlines of `FR-GLOB-012`. No connection
+  and no database file SHALL be open, and nothing the read started SHALL be
+  alive, while a template is evaluated.
 
   *Verification.* For a `mariadb` or a `mysql` entry, two observations, both
   required. From the server side, through the fixture harness, the fixture's
@@ -408,7 +413,7 @@ tpl render <template> --routine <name>      binds routine
   reaches stdout. In process, the suite SHALL assert, at the moment the
   template begins to evaluate, that no connection is open and no runtime of
   the driver is alive. For a `sqlite` entry, which has no server side, the
-  in-process observation alone: no connection to the file is open, and nothing
+  in-process observation alone: the database file is not open, and nothing
   the read started to enforce a deadline is alive.
 
   *Added in the forty-second edition, as decided for rmp `#258`.* The render
@@ -430,6 +435,12 @@ tpl render <template> --routine <name>      binds routine
   `src/cli/render.rs`). The requirement now states that for every provider,
   and the verification states the observation a `sqlite` entry admits. No
   behaviour changes.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The system closes what
+  the read opened: the connection, for a `mariadb` or a `mysql` entry, and the
+  database file, for a `sqlite` entry, where the text spoke of the connection
+  of the library to the file. The behaviour is unchanged.
 
 - **FR-RND-027**: `tpl render` SHALL NOT declare `--format` or `--pretty`. Its
   result is the rendered text, which has no alternative representation.

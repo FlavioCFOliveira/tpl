@@ -303,7 +303,7 @@ leaves the rest of the wording out of it.
   in a read-only checkout — and what it will leave behind. Before this
   requirement those facts were stated in the group help of `tpl schema` and
   `tpl cache` and in no leaf, so `tpl schema tables --help` did not say that it
-  needs an entry, connects on a miss, and writes `.tpl/.cache/`; and
+  needs an entry, reads the database on a miss, and writes `.tpl/.cache/`; and
   `tpl cache status --help` did not say that it never contacts the server.
 
   *Weighed against `BR-HELP-002`.* The statements are repeated in every leaf,
@@ -336,6 +336,11 @@ leaves the rest of the wording out of it.
   calls the act a read, per `FR-CACHE-013`. *Rejected: two per-provider
   sentences in every leaf.* It doubles the cost in every leaf for a fact one
   sentence states.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The rationale says that
+  `tpl schema tables --help` did not say that the command reads the database
+  on a miss, where it said connects. The requirement is unchanged.
 
 - **FR-HELP-033**: The `DESCRIPTION` section of `tpl render` SHALL state,
   before the four statements of `FR-HELP-031`:

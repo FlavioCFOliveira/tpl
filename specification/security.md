@@ -1,7 +1,7 @@
 ---
 title: Security Rules Across the Surface
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [configuration-model.md, project-and-discovery.md, errors-and-exit-codes.md, template-commands.md, render-command.md, cache-commands.md, cache-documents.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -251,8 +251,8 @@ states the rule that answers it.
   project, or flood with one name the diagnostic line a calling agent reads.
   Nor may a table or a view of the file take the place of a function the read
   reads through and forge the catalogue `tpl` presents at exit `0` — whether
-  the file holds it when the read begins or another connection adds it during
-  the read — nor may a read make the library compile a view or run a virtual
+  the file holds it when the read begins or another open of the file adds it
+  during the read — nor may a read make the library compile a view or run a virtual
   table's module.
 
   *Added in the sixty-fifth edition,* for rmp `#314`.
@@ -275,6 +275,11 @@ states the rule that answers it.
   the check and a later statement forged the catalogue at exit `0`, as
   observed under that requirement.
 
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The threat names another
+  open of the file, where it said another connection. The requirement is
+  unchanged.
+
 ## Template containment
 
 - **FR-SEC-017**: A symbolic link inside `.tpl/templates/` SHALL be refused, and
@@ -292,7 +297,8 @@ states the rule that answers it.
   remove as a link a link that is itself the thing removed. Every other
   command that reads or writes the cache SHALL refuse with `78` a link at
   `.tpl/.cache`, at the selected entry's folder, or at a collection folder it
-  would read or write, before it reads, writes or connects. A record of the
+  would read or write, before it reads or writes the cache or reads the
+  database. A record of the
   cache, `meta.json` or `database.json`, that is a link, is not a regular
   file, or exceeds its bound SHALL be unusable and SHALL never be read
   through. See `FR-CACHE-042`, `FR-CACHE-044` and `FR-CDOC-017`.
@@ -308,10 +314,20 @@ states the rule that answers it.
   threats are new. *Amended again within it:* the sentence on the records and
   the last threat are new.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The refusal comes before
+  the command reads or writes the cache or reads the database, where the text
+  said before it reads, writes or connects. The behaviour is unchanged.
+
 - **FR-SEC-018**: `tpl template check` SHALL parse only, never evaluating an
-  expression, calling a function, or connecting to a database, so that it is
+  expression, calling a function, or reading a database, so that it is
   safe to run against a template that has not been read. See `FR-TMPL-017` and
   `BR-TMPL-001`.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The command never reads a
+  database, where the text said that it never connects to one. The behaviour
+  is unchanged.
 
 ## Output and diagnostics
 

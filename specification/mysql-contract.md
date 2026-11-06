@@ -1,7 +1,7 @@
 ---
 title: MySQL Contract
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [configuration-model.md, server-contract.md, sqlite-contract.md, catalogue-coverage.md, context-document.md, privileges-and-completeness.md, security.md, cfg-commands.md, performance-requirements.md, errors-and-exit-codes.md, template-environment.md, open-questions.md]
 ---
 
@@ -1357,7 +1357,7 @@ second.
   `2d652bd`, the first as the *Observed* note below records it with the
   fixture's values.
 
-  The condition is one of the cache-or-connection step of `FR-ERR-006`, and
+  The condition is one of the cache-or-read step of `FR-ERR-006`, and
   it is raised at the authentication, before the read-only session of
   `FR-MYSQL-018` is set. It holds for every command that opens a connection
   for a `mysql` entry, `tpl cfg database test` among them, which ends at the
@@ -1482,6 +1482,11 @@ second.
   and the implementation prints; it now carries both, and a second example
   shows the `preferred` case, whose `cause` and `hint` say that the server
   offered no TLS. The requirement is unchanged.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The paragraph on the step
+  names the cache-or-read step, where it said the cache-or-connection step,
+  after the step's new name in `FR-ERR-006`. The behaviour is unchanged.
 
 ## The part of the database a read covers
 

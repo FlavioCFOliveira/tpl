@@ -1,7 +1,7 @@
 ---
 title: Project and Discovery
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-06
 related: [configuration-model.md, cfg-commands.md, cache-commands.md, security.md, errors-and-exit-codes.md, global-flags.md, help-and-version.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -843,8 +843,8 @@ tpl init [<path>]
   library writes. The first exception, and everything this requirement
   forbids for a `mariadb` entry, are unchanged.
 
-  *Observed, on 2026-11-03, through the Python library 3.54.1, on a read-only
-  connection.* A read of a database in write-ahead-log mode, with neither file
+  *Observed, on 2026-11-03, through the Python library 3.54.1, with the file
+  opened read-only.* A read of a database in write-ahead-log mode, with neither file
   present, created `-wal` and `-shm` and left the database's bytes and
   modification time as it found them. A second read, with both files present,
   left `-wal` unchanged and left the content of `-shm` as it found it, but
@@ -866,6 +866,11 @@ tpl init [<path>]
   database's own locking protocol, every SQLite client that reads such a
   database creates them, and neither changes the database's content, per
   `FR-LITE-008`.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The observation speaks of
+  the file opened read-only, where it said a read-only connection. The
+  requirement is unchanged.
 
 - **BR-PROJ-001**: What `tpl` does is fully determined by the contents of the
   project, which is what makes its behaviour reproducible between machines and

@@ -76,7 +76,7 @@ scope names the database, which holds for every provider.
 
 - **FR-CACHE-006**: WHEN a cached read command runs, the system SHALL consult
   the cache first. On a hit it SHALL serve the result from disk and SHALL NOT
-  open a connection.
+  read the database.
 
   *Note added in the fortieth edition.* Under `FR-CACHE-038` a render no longer
   settles whether it is a hit before it starts. An invocation is a hit only if
@@ -89,6 +89,11 @@ scope names the database, which holds for every provider.
   entry is resolved for a connection only by an invocation that opens one,
   so a variable the entry references may be unset while every read is a
   hit.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. A hit SHALL NOT read the
+  database, where the text said that it opens no connection. The behaviour is
+  unchanged.
 
 - **FR-CACHE-007**: WHEN a cached read misses, the system SHALL read the
   database, SHALL write the result to the cache except for the objects
@@ -108,7 +113,7 @@ scope names the database, which holds for every provider.
   compile is not a fact about the catalogue. The ordinary next action after a
   `65` from `FR-RND-030` is to correct the template and render again, against
   the same entry and the same objects — which the filled store serves without
-  a connection, per `NFR-PERF-003`. An exemption would therefore spend a
+  reading the database, per `NFR-PERF-003`. An exemption would therefore spend a
   correct read in order to make the caller pay for it a second time on the very
   next invocation they make. A caller who does not want the store written has
   `--no-cache`, per `FR-CACHE-014`, and `--direct --no-cache` is the pure read
@@ -132,6 +137,11 @@ scope names the database, which holds for every provider.
   that a miss reads "the server", and its rationale spoke of a "correct read
   of the server"; a miss reads the database of the selected entry, whatever
   its provider, and the text now says so. No behaviour changes.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The rationale says that
+  the filled store serves the next invocation without reading the database,
+  where it said without a connection. The requirement is unchanged.
 
 - **FR-CACHE-038**: WHEN `tpl render` reads through the cache and every
   collection is recorded as whole under `FR-CDOC-006`, the system SHALL read
@@ -161,7 +171,7 @@ scope names the database, which holds for every provider.
 
   *Why the bound object's file is read up front.* Every render that binds an
   object reaches it, so reading it first costs nothing, and a miss on it is then
-  decided before the render starts, at the cache-or-connection step of
+  decided before the render starts, at the cache-or-read step of
   `FR-ERR-006`, exactly as before this edition.
 
   *Rejected: narrowing the context to the bound object.* It removes the rest of
@@ -263,12 +273,18 @@ scope names the database, which holds for every provider.
   server"; both are reads of the database for every provider, and now say so.
   No behaviour changes.
 
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The rationale names the
+  cache-or-read step, where it said the cache-or-connection step, after the
+  step's new name in `FR-ERR-006`. The requirement is unchanged.
+
 - **FR-CACHE-039**: IF a file read under `FR-CACHE-038` during the render is a
   miss under `FR-CACHE-033`, including a file removed after the listing was
   read, THEN the system SHALL abandon the render, SHALL treat the invocation as
   a miss under `FR-CACHE-007`, and SHALL render again from the document read
   from the database. No byte of the abandoned render SHALL reach stdout. The
-  invocation SHALL open at most one connection, per `NFR-PERF-004`. The render
+  invocation SHALL open at most one connection, or open the database file at
+  most once, per `NFR-PERF-004`. The render
   that produces the result SHALL have the whole deadline of `FR-CONF-005`, and
   SHALL use the value of `now` evaluated for the abandoned render.
 
@@ -294,12 +310,12 @@ scope names the database, which holds for every provider.
   found up front. `--no-cache` still suppresses the write, per `FR-CACHE-014`.
 
   *Consequence.* A condition the abandoned render raised before it reached the
-  miss is reported as the first failure, per `FR-ERR-006`, and no connection is
-  opened. A condition of the cache-or-connection step or of catalogue object
+  miss is reported as the first failure, per `FR-ERR-006`, and the database is
+  not read. A condition of the cache-or-read step or of catalogue object
   resolution raised after the render is abandoned is reported with that step's
   code. A render bound the abandoned render crosses is a render condition too,
   before the miss or after it: the invocation ends with `65` and that bound's
-  `cause`, with no connection opened, per the second paragraph of this
+  `cause`, without reading the database, per the second paragraph of this
   requirement.
 
   *Amended in the forty-second edition.* The second paragraph of the
@@ -317,9 +333,9 @@ scope names the database, which holds for every provider.
 
   *Rejected: fetching only the missing object and continuing.* The document
   would mix sources within one render, and `NFR-PERF-004` would hold only if
-  the connection stayed open for the rest of the render, which `FR-RND-040`
-  now forbids: the connection the read opens is closed, and the driver's
-  runtime shut down, before the render that follows starts. *Also rejected:
+  the connection, or the open database file, stayed open for the rest of the
+  render, which `FR-RND-040` now forbids: what the read opens is closed, and
+  the driver's runtime shut down, before the render that follows starts. *Also rejected:
   failing the invocation.* It fails a read that can succeed, which is what
   `FR-CACHE-033` forbids.
 
@@ -328,6 +344,13 @@ scope names the database, which holds for every provider.
   that a crossed bound "SHALL NOT read the server", and spoke of a "server
   read". The read is of the database whatever the provider, and the text now
   says so. No behaviour changes.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The invocation SHALL open
+  at most one connection, or open the database file at most once, where the
+  text said at most one connection; the consequence and the rejected
+  alternative speak of reading the database and of what the read opens. The
+  behaviour is unchanged.
 
 - **FR-CACHE-008**: The system SHALL NOT apply a time-to-live and SHALL NOT
   expire an entry automatically. A cached object stays until `tpl cache clean`
@@ -480,7 +503,7 @@ tpl -d shop cache status
   `FR-GLOB-025` — meets all three of the following conditions, the system
   SHALL remove `.tpl/.cache/<name>`, SHALL exit `0`, SHALL write exactly one
   warning line to stderr, per `FR-OUT-020`, SHALL write nothing to stdout,
-  and SHALL open no connection:
+  and SHALL NOT read the database:
 
   1. the name matches `FR-CONF-048`;
   2. no entry of `.tpl/.cfg` has a name equal to it, ignoring ASCII case;
@@ -560,6 +583,11 @@ tpl -d shop cache status
 
   *Added in the fifty-third edition,* for rmp `#287`.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The command SHALL NOT
+  read the database, where the text said that it opens no connection. The
+  behaviour is unchanged.
+
 - **FR-CACHE-024**: `tpl cache load` and `tpl cache clean` SHALL name an
   individual object with `--table <name>`, `--view <name>`, or
   `--routine <name>` — the same flag spellings `tpl render` uses. `--routine`
@@ -572,7 +600,7 @@ tpl -d shop cache status
 - **FR-CACHE-040**: IF `tpl cache clean` is given `--table`, `--view` or
   `--routine`, and the cache of the selected entry holds no object of that
   kind under that name, THEN the system SHALL exit `66` (`EX_NOINPUT`), SHALL
-  delete nothing, and SHALL open no connection. The cache that holds nothing
+  delete nothing, and SHALL NOT read the database. The cache that holds nothing
   at all for the entry is one case of this condition.
 
   The `cause` SHALL name the kind, the name and the entry, and SHALL state
@@ -609,7 +637,7 @@ tpl -d shop cache status
   learns nothing of the slip, per `BR-ERR-002`.
 
   *Why the cache and not the database.* The command requires no catalogue
-  data and opens no connection, per `NFR-PERF-006`, so the population is what
+  data and reads no database, per `NFR-PERF-006`, so the population is what
   the cache holds.
 
   *Added in the fiftieth edition,* for rmp `#282`.
@@ -617,6 +645,11 @@ tpl -d shop cache status
   *Amended in the eighty-ninth edition,* for rmp `#368`: the heading of the
   last note said "not the server"; the alternative it rejects is reading the
   database, of any provider. No behaviour changes.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The command SHALL NOT
+  read the database, where the text said that it opens no connection, and the
+  rationale says the same. The behaviour is unchanged.
 
 - **FR-CACHE-042**: `tpl cache clean`, in every form — with no object flag
   under `FR-CACHE-023`, for a name no entry declares under `FR-CACHE-041`, and
@@ -628,8 +661,8 @@ tpl -d shop cache status
   1. **A link on the path is refused.** IF `.tpl/.cache` is a symbolic link,
      or, for a clean given an object flag, `.tpl/.cache/<name>` or the folder
      of the object's collection beneath it is a symbolic link, THEN the system
-     SHALL remove nothing, SHALL write nothing to the cache, SHALL open no
-     connection, and SHALL exit `78` (`EX_CONFIG`). The `cause` SHALL name the
+     SHALL remove nothing, SHALL write nothing to the cache, SHALL NOT read
+     the database, and SHALL exit `78` (`EX_CONFIG`). The `cause` SHALL name the
      link by its path; the `hint` SHALL carry the command that removes the
      link and nothing it points at, with the absolute path built under
      `FR-ERR-041`.
@@ -684,6 +717,11 @@ tpl -d shop cache status
 
   *Added in the fifty-eighth edition,* for rmp `#288`.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. Item 1 says that the
+  command SHALL NOT read the database, where it said that it opens no
+  connection. The behaviour is unchanged.
+
 - **FR-CACHE-043**: WHEN `tpl cache clean` is given `--table`, `--view` or
   `--routine` and removes the object's file, the system SHALL change exactly
   one thing in `meta.json`: it SHALL record the object's collection as not
@@ -728,14 +766,14 @@ tpl -d shop cache status
   IF `.tpl/.cache` is a symbolic link, or `.tpl/.cache/<name>` for the
   selected entry is one, or the folder of a collection the invocation would
   read or write beneath it is one, THEN the system SHALL read nothing from the
-  cache, SHALL write nothing to it, SHALL open no connection, SHALL write
+  cache, SHALL write nothing to it, SHALL NOT read the database, SHALL write
   nothing to stdout, and SHALL exit `78` (`EX_CONFIG`). The `cause` and the
   `hint` SHALL follow item 1 of `FR-CACHE-042`: the `cause` names the link by
   its path, and the `hint` carries the command that removes the link alone,
   with the absolute path built under `FR-ERR-041`. `.tpl` is canonicalised
   first, per `FR-PROJ-009`, and every component below it is tested as it is
   written. The condition SHALL be evaluated at step 6 of `FR-ERR-006`, before
-  the cache is consulted and before any connection is opened, so a read that
+  the cache is consulted and before the database is read, so a read that
   would be a hit is refused as a read that would miss is.
 
   ```
@@ -791,6 +829,11 @@ tpl -d shop cache status
   --no-cache` "reads the database", and the rejected option serves the read
   "from the database", for every provider; both said "server". No behaviour
   changes.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The command SHALL NOT
+  read the database, and the condition is evaluated before the database is
+  read, where the text spoke of a connection. The behaviour is unchanged.
 
 - **FR-CACHE-025**: `tpl cache status` SHALL report the database entry, when the
   cache was loaded, and the object counts it holds.

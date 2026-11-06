@@ -1639,7 +1639,7 @@ tpl cfg database test   <name>
   another destination, and there is none to choose.
 
   *Rejected: `78` (`EX_CONFIG`).* It is the code for a configuration that does
-  not describe a usable connection, and this requirement guarantees the
+  not describe a database `tpl` can read, and this requirement guarantees the
   configuration is exactly as it was. The message would send the caller to
   correct a file that is correct, which is the wrong diagnosis
   `FR-CONF-033`'s rationale refuses in the same shape.
@@ -1649,6 +1649,11 @@ tpl cfg database test   <name>
   commands' help before any requirement said so — a help text filling a gap in
   this corpus, which is the state this amendment ends. The code it chose is the
   code this requirement now states, so nothing a caller observes changes.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The rejected `78` is the
+  code for a configuration that does not describe a database `tpl` can read,
+  where the text said a usable connection. The requirement is unchanged.
 
 - **FR-CFG-042**: The system SHALL NOT take a lock over `.tpl/.cfg`. Two
   processes rewriting it yield one whole file or the other, never a half file,
