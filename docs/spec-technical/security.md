@@ -1,7 +1,7 @@
 ---
 title: Security
 status: draft
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [README.md, traceability.md, open-decisions.md, overview.md, architecture.md, interfaces.md, data-model.md]
 ---
 
@@ -348,7 +348,7 @@ closed by the design; the seventh is stated rather than closed.
 | A shell interpreting a value from an untrusted `.cfg` | Direct execution from an argument array; no shell exists on the path | `FR-SEC-011`, `FR-CONF-024` |
 | A catalogue name formatted into a runnable suggestion | A `hint` is built from literals and from names inside the admitted character set; a candidate outside it is presented in no form, and the generic hint stands alone | `FR-SEC-019`, `FR-ERR-022`, `FR-ERR-023` |
 | A control character rewriting a terminal, a bidirectional formatting character showing a name other than the one printed, or a line forged in the four-line diagnostic format | The escaping of C0, C1 and bidirectional formatting characters, applied in `output/` and in `diagnostics/` by the two rules that differ between them over tab, with the two emissions that are exempt and byte-for-byte ([interfaces.md](interfaces.md#the-document-emitter)) | `FR-SEC-020`, `FR-OUT-018`, `FR-OUT-019`, `FR-ERR-024` |
-| A caller's pattern reaching the server | The pattern is matched in memory against names already read and is never sent | `FR-SCH-013` |
+| A caller's pattern reaching the database | The pattern is matched in memory against names already read and is passed to the database in no statement | `FR-SCH-013` |
 | A path chosen from catalogue data | There is no file-writing surface to choose a path for | `FR-RND-028`, `BR-RND-003` |
 
 **The surface that is stated rather than closed.** Identifiers reach the model

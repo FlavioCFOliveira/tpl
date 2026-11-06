@@ -1,7 +1,7 @@
 ---
 title: Decision Register
 status: draft
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [README.md, traceability.md]
 ---
 
@@ -1942,7 +1942,7 @@ the dependency budget refuses a crate used for one function.
 
 | Algorithm | Requirements | Decision | Rejected |
 |---|---|---|---|
-| The `LIKE` matcher | `FR-SCH-012` … `FR-SCH-014` | Implemented in the crate over the two metacharacters and the two escapes the requirement enumerates — `%`, `_`, `\%`, `\_` — matched in memory and never sent to the server | A regular-expression crate, which brings a full engine and a translation step for a two-metacharacter grammar, and whose own escaping rules would have to be got right over a name that is free text on the server; a glob crate, whose semantics are a different language |
+| The `LIKE` matcher | `FR-SCH-012` … `FR-SCH-014` | Implemented in the crate over the six rows the requirement gives: the two metacharacters `%` and `_`, the two escapes `\%` and `\_`, a backslash before any other character or at the end matched as a literal `\`, and every other character matched as itself; a character is one Unicode scalar value, a match is of the whole name, and the pattern is matched in memory and never passed to the database | A regular-expression crate, which brings a full engine and a translation step for a two-metacharacter grammar, and whose own escaping rules would have to be got right over a name that is free text in the catalogue; a glob crate, whose semantics are a different language |
 | POSIX word splitting | `FR-CONF-025` | Implemented in the crate, honouring single and double quotes as the requirement states. It runs **only** on a string supplied to a command, never on a value read from `.cfg`: `FR-CONF-035`'s rationale refuses "a quoting engine on the path that reads an untrusted `.cfg`", and `FR-CONF-024` makes one unnecessary by executing the stored array directly and without a shell | A shell-words crate, for the dependency budget, and because the splitting a crate performs is the shell's whole grammar rather than the two quoting forms the requirement names |
 | The word-list tokeniser | `FR-ENV-030`, with the eight-row vector of `FR-ENV-032` | Implemented in the crate. The five rules are stated in the requirement, applied once, left to right, and `FR-ENV-032` publishes the expected output for eight operands — so the implementation is testable against the corpus rather than against a library's idea of a word | An inflection or case-conversion crate, whose rules are its own: `FR-ENV-033`'s accepted cost fixes `HTTP_server` → `HttpServer`, and a crate that preserves acronyms would produce a different generated identifier at exit `0` |
 | ASCII-only case folding | `FR-ENV-031`, `FR-SCH-014` | `std`: the ASCII-restricted `str::eq_ignore_ascii_case` and `str::to_ascii_lowercase`, which exist beside the Unicode-aware `str::to_lowercase` for exactly this distinction (Rust standard library documentation, `str`, verified 2026-09-11; the exact wording of their guarantee was not retrievable from the rendered page and is not quoted here) | Unicode or locale-aware folding, which both requirements refuse in their own text, because it would make the same template produce different output on two machines and break `NFR-DET-001` |

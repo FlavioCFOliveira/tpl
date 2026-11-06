@@ -1236,7 +1236,7 @@ pub enum Error {
     },
 
     /// `tpl render` was given `--direct` together with `--context`
-    /// (`FR-RND-041`): the one demands the server read the other excludes.
+    /// (`FR-RND-041`): the one demands the database read the other excludes.
     #[error("--direct cannot be used with --context")]
     DirectWithContext,
 

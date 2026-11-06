@@ -18,12 +18,20 @@ at every level, and available as a single machine-readable document.
 
 In scope: the six help and version forms and their equivalences, the nested
 command path, the fixed help layout and the line that opens it, the content
-obligations of each section,
-and the JSON command tree — its envelope, the keys of its `data`, the shape of
-`data.commands`, and how a subtree of it is selected.
+obligations of each section, the words with which a help text names a
+database provider, the statements a requirement of this file fixes word for
+word, and the JSON command tree — its envelope, the keys of its `data`, the
+shape of `data.commands`, and how a subtree of it is selected.
 
-Out of scope: the wording of any individual help text, which is written
-alongside the command it documents.
+Out of scope: the wording of every other help text, which is written
+alongside the command it documents, under `BR-HELP-002`.
+
+*Amended in the eighty-ninth edition,* for rmp `#368`. The scope placed the
+wording of every help text out of scope, while `FR-HELP-037` fixes the line
+that opens every help, `FR-HELP-031` fixes the forms of its first statement,
+and `FR-HELP-038` fixes the words that name a provider and thirty-two
+statements word for word. The scope now states what this file fixes, and
+leaves the rest of the wording out of it.
 
 ## Actors
 
@@ -564,6 +572,11 @@ alongside the command it documents.
   captions of `tpl cfg database add` and the exit-code lines. Each states a
   fact of a `mariadb` or `mysql` entry alone, or already states the `sqlite`
   case beside it, and the rule permits it as it stands.
+
+  *Note added in the eighty-ninth edition.* `FR-ERR-051` applies the rule
+  above to the `error`, `cause` and `hint` lines of every error message and
+  to every warning line, so that a message and the help name the providers
+  in the same words.
 
 - **FR-HELP-014**: Help SHALL be self-contained. It SHALL NOT refer the reader
   to a website, a manual page, a README, or any document outside the help

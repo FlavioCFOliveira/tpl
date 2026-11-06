@@ -170,7 +170,7 @@ const REFERENCED_BY: &str = "referenced_by";
 ///
 /// It is checked here, on the inward path, because the outward builder needs
 /// the same condition to materialise the embedding of `ADR-009` and holds it as
-/// an invariant: `FR-CTX-023` guarantees it for a document a server read
+/// an invariant: `FR-CTX-023` guarantees it for a document a database read
 /// produced, and nothing guarantees it for a document a caller supplied. A
 /// document that breaks it is the caller's fault to correct — `65` — and never
 /// the `70` the invariant would report.

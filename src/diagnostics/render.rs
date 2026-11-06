@@ -3323,4 +3323,48 @@ mod tests {
                 .ends_with("tpl cfg set database.shop.tls preferred")
         );
     }
+
+    // ------------------------------------------------- FR-ERR-051, rmp #367 ---
+
+    #[test]
+    fn fr_err_051_lines_whose_fact_holds_for_every_provider_speak_of_the_database() {
+        // FR-ERR-051, rule 3: each fact below holds for a sqlite entry as for
+        // a server one, so the lines speak of the database and of reading it.
+        // FR-RND-041 fixes the first pair word for word.
+        let direct = render(&Error::DirectWithContext);
+        assert_eq!(
+            line(&direct, Label::Cause),
+            "--context reads the context from a document and reads no database; --direct demands \
+             a read of the database"
+        );
+        assert_eq!(
+            line(&direct, Label::Hint),
+            "remove --direct to render from the document, or remove --context to read the database"
+        );
+
+        let load = render(&Error::LoadWithoutStoring { object: None });
+        assert_eq!(
+            line(&load, Label::Cause),
+            "'tpl cache load' reads the database in order to store what it read, so an invocation \
+             that forbids the store asks the command to do nothing"
+        );
+        assert_eq!(
+            line(&load, Label::Hint),
+            "remove --no-cache from the command; to read the database without storing, use tpl \
+             schema dump --direct --no-cache instead"
+        );
+
+        let one = render(&Error::LoadWithoutStoring {
+            object: Some(("table", "orders".to_owned())),
+        });
+        assert_eq!(
+            line(&one, Label::Hint),
+            "remove --no-cache from the command; to read the database without storing, use tpl \
+             schema table orders --direct --no-cache instead"
+        );
+
+        for block in [&direct, &load, &one] {
+            assert!(!block.contains("server"), "{block}");
+        }
+    }
 }

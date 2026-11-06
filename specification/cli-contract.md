@@ -1,7 +1,7 @@
 ---
 title: CLI Contract
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-06
 related: [global-flags.md, help-and-version.md, errors-and-exit-codes.md, output-formats.md]
 ---
 
@@ -472,7 +472,8 @@ tpl
   compares between runs, and stderr is diagnosis.
 
 - **NFR-DET-002**: Orderings SHALL be explicit and stable, and SHALL NOT depend
-  on the order in which the server or the filesystem returns rows or entries.
+  on the order in which the database or the filesystem returns rows or
+  entries.
   Every collection the system presents SHALL be ordered by name, ascending,
   compared byte by byte, except where this specification names another order:
 
@@ -486,6 +487,10 @@ tpl
   | A routine's parameters | Declaration order | `FR-CAT-018` |
   | A table's `foreign_keys` and `referenced_by`, for a `sqlite` read, whose keys carry no name | The content order `FR-LITE-031` states | `FR-LITE-031` |
   | Every other collection | Name, ascending, byte-wise | This requirement |
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: "the server" is now
+  "the database", which returns rows in an order of its own for every
+  provider. No behaviour changes.
 
   *Amended in the sixty-fifth edition,* for rmp `#314`. The row for the foreign
   keys of a `sqlite` read is new. SQLite reports no name for a foreign key, so

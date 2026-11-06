@@ -1,7 +1,7 @@
 ---
 title: Data Model
 status: draft
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [README.md, traceability.md, open-decisions.md, overview.md, quality-attributes.md]
 ---
 
@@ -174,9 +174,9 @@ sources are [A MySQL read](#a-mysql-read)'s, and for a `sqlite` read
 | `series` | Derived from `version` as `FR-SRV-040` requires, by `<major>.<minor>` alone | A field of its own; a template cannot derive it, per `FR-CTX-032` |
 | `standing` | The resolved series against the window of `FR-SRV-015`, or the set of `FR-MYSQL-003` for a `mysql` read | Unconditionally present, because `FR-SEM-012` fails a render that reads an absent field, so a conditional marker would fail the guard that looks for it (`FR-CTX-034`, `BR-SRV-008`) |
 
-A cached `server` object describes the read that produced it and not any server
-reachable now (`BR-CTX-006`), which is the same statement `FR-CDOC-015` makes
-about the rest of a cached document.
+A cached `server` object describes the read that produced it and not what a
+read made now would find (`BR-CTX-006`), which is the same statement
+`FR-CDOC-015` makes about the rest of a cached document.
 
 ## The four treatments of a cross-series difference
 
@@ -538,9 +538,9 @@ settled here.
   that version in `meta.json` and `FR-CDOC-004` requires it to be read before
   anything under it is trusted, so a per-file copy is a second statement of one
   fact with no rule to break a tie between them.
-- *Consequence.* A cached file deserialises into the same model type the server
-  path produces, which is what keeps one representation and makes the round
-  trip of `FR-SCH-022` a property of that representation rather than of a
+- *Consequence.* A cached file deserialises into the same model type a read of
+  the database produces, which is what keeps one representation and makes the
+  round trip of `FR-SCH-022` a property of that representation rather than of a
   second reader.
 
 **Recorded ambiguity — whether a cached file is a document.** `FR-CDOC-003`
@@ -661,7 +661,7 @@ ground decides it, and the second row states what that ground spares.
 A cached document written before the change answers nobody wrongly: it carries
 the parts nested where this binary's types read them beside the column, so it
 does not decode, and a file that cannot be decoded is a **miss**
-(`FR-CACHE-033`, `FR-CDOC-004`). The read goes to the server and rewrites it.
+(`FR-CACHE-033`, `FR-CDOC-004`). The database is read and the file rewritten.
 
 **Where the consequence of a classification lives is worth stating once.**
 `FR-OUT-014` marks a change breaking or not breaking and attaches no
@@ -696,12 +696,12 @@ persisted thing.
 
 | Persisted thing | Migration rule | Forced by |
 |---|---|---|
-| `.tpl/.cache/` | None. A version the binary does not know is a miss: the data is re-read from the server and rewritten, with no error and no warning. The binary accepts the versions it writes and treats every other value as unknown | `FR-CDOC-004`, `FR-CACHE-033` |
+| `.tpl/.cache/` | None. A version the binary does not know is a miss: the data is re-read from the database and rewritten, with no error and no warning. The binary accepts the versions it writes and treats every other value as unknown | `FR-CDOC-004`, `FR-CACHE-033` |
 | `.tpl/.cfg` | None, and no version field. The key space is closed and strict in both directions, so a file is either within the key space a binary knows or is refused whole with `78` | `FR-CONF-002`, `FR-CONF-034` |
 | The JSON document | Versioned, not migrated. `FR-OUT-014`'s five rows decide whether a change moves `schema_version`; a consumer reads the field and branches | `FR-OUT-011`, `FR-OUT-014` |
 
 Maintaining a reader for a superseded `cache_format` was rejected: the cache is
-an optimisation whose whole content is recoverable by reading the server again
+an optimisation whose whole content is recoverable by reading the database again
 (`FR-CACHE-007`), so a migration path would be code carrying a risk to recover
 something already recoverable. The `.cfg` case is the opposite and is the
 accepted cost `FR-CONF-034` states in its own text: an older `tpl` cannot read
@@ -710,7 +710,7 @@ is a key in force.
 
 ## What a cached document does not promise
 
-| Promise | Server read | Cache-served |
+| Promise | Read of the database | Cache-served |
 |---|---|---|
 | Referential integrity — every object referenced from another is present | Yes, `FR-CTX-023` | **No**, `FR-CTX-025`, `FR-CDOC-015` |
 | A point-in-time snapshot | No, and the corpus states so rather than implying it, `FR-CTX-024` | **No**, `FR-CDOC-015` |
@@ -719,7 +719,7 @@ is a key in force.
 `BR-CDOC-004` gives the mechanism: one file per object, renamed into place,
 with no lock and no expiry, so the cache can hold one table read on Monday
 beside another read on Friday, and a document assembled from it is one that
-never existed on any server at any instant. That is the direct consequence of a
+never existed in any database at any instant. That is the direct consequence of a
 cache that changes only when it is told to, which `FR-CACHE-008`,
 `FR-CACHE-028` and `BR-CACHE-004` establish deliberately.
 
@@ -730,8 +730,8 @@ more than is held:
   promise (`BR-CDOC-004`), and `source` is the only place the distinction is
   recorded.
 - Repointing an entry invalidates nothing (`FR-CACHE-029`), so a read after a
-  repoint serves the previous server's catalogue at exit `0` with nothing in
-  the output saying so. `BR-CACHE-003` accepts the cost and names
+  repoint serves the catalogue of the database the entry named before at exit
+  `0` with nothing in the output saying so. `BR-CACHE-003` accepts the cost and names
   `tpl cache status`'s load time as the only signal. A change of provider or of
   `path` is a repoint too; the document served then names the provider of the
   read that filled the cache, which is the one thing it does say

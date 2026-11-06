@@ -438,6 +438,18 @@ mod tests {
         ))
     }
 
+    /// A bound no run can reach, for a test whose property is not the
+    /// deadline.
+    ///
+    /// A finite bound around a child that ends on its own makes the outcome
+    /// depend on how fast the host runs the child: under load the deadline
+    /// fires first and the test reports a refusal the code did not get wrong.
+    /// The largest bound `Seconds` carries is about 585 billion years, so the
+    /// child's own end is the only one the test can observe (rmp `#366`).
+    fn unbounded() -> crate::deadline::Bound {
+        Clock::new(None).bound(Seconds::new(NonZeroU64::MAX))
+    }
+
     /// The first of `candidates` that exists on this system.
     ///
     /// The two supported families put these programs in one of two places, and
@@ -463,7 +475,7 @@ mod tests {
     #[test]
     fn fr_conf_027_the_password_is_the_trimmed_standard_output_of_the_child() {
         // FR-CONF-027.
-        let produced = obtain(ENTRY, &command(&[&echo(), "  hunter2  "]), bound(10))
+        let produced = obtain(ENTRY, &command(&[&echo(), "  hunter2  "]), unbounded())
             .expect("the child produced a password");
 
         assert_eq!(produced.expose(), "hunter2");
@@ -475,7 +487,7 @@ mod tests {
         // shell: `;` would start a second command, `$(…)` would substitute,
         // `|` would pipe, and `*` would glob.
         for hostile in ["a; echo b", "$(echo b)", "a | echo b", "*", "a && echo b"] {
-            let produced = obtain(ENTRY, &command(&[&echo(), hostile]), bound(10))
+            let produced = obtain(ENTRY, &command(&[&echo(), hostile]), unbounded())
                 .expect("the child produced a password");
 
             assert_eq!(
@@ -487,12 +499,18 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "measurement: needs `sleep 30` to outlast a 1 s wall-clock deadline"]
     fn fr_conf_028_a_child_that_exceeds_its_deadline_is_terminated_and_refused() {
         // FR-CONF-028, FR-SEC-012: the deadline is what keeps a command
         // waiting on a FIFO from hanging the caller with no diagnosis.
+        //
+        // The child sleeps for the largest interval `sleep` takes on both
+        // families, about 68 years, so it never ends on its own: the deadline
+        // is the only end the run can reach, however loaded the host, and the
+        // test waits the one second of its bound and no longer (rmp `#366`).
+        // A `sleep 30` made the outcome depend on the host running the loop
+        // within 30 s.
         let sleep = tool(&["/bin/sleep", "/usr/bin/sleep"]);
-        let condition = obtain(ENTRY, &command(&[&sleep, "30"]), bound(1))
+        let condition = obtain(ENTRY, &command(&[&sleep, "2147483647"]), bound(1))
             .expect_err("the child outlives its deadline");
 
         match condition {
@@ -509,8 +527,8 @@ mod tests {
         // FR-CONF-031: the bound is a refusal rather than a truncation, and
         // the child is terminated.
         let yes = tool(&["/usr/bin/yes", "/bin/yes"]);
-        let condition =
-            obtain(ENTRY, &command(&[&yes]), bound(10)).expect_err("the child writes without end");
+        let condition = obtain(ENTRY, &command(&[&yes]), unbounded())
+            .expect_err("the child writes without end");
 
         match condition {
             Error::PasswordCommandOutputCapExceeded { cap, .. } => assert_eq!(cap, OUTPUT_CAP),
@@ -538,7 +556,7 @@ mod tests {
                 "-c",
                 &format!("head -c {OUTPUT_CAP} {zero} | tr '\\000' x"),
             ]),
-            bound(10),
+            unbounded(),
         );
 
         assert_eq!(
@@ -552,7 +570,7 @@ mod tests {
     fn fr_conf_033_a_child_that_exits_non_zero_is_refused_with_the_status_it_returned() {
         // FR-CONF-033: the cause names the command as stored and the status.
         let no = tool(&["/usr/bin/false", "/bin/false"]);
-        let condition = obtain(ENTRY, &command(&[&no]), bound(10)).expect_err("the child fails");
+        let condition = obtain(ENTRY, &command(&[&no]), unbounded()).expect_err("the child fails");
 
         match condition {
             Error::PasswordCommandFailed {
@@ -571,7 +589,7 @@ mod tests {
         let condition = obtain(
             ENTRY,
             &command(&["/nonexistent/tpl-password-helper"]),
-            bound(10),
+            unbounded(),
         )
         .expect_err("the child cannot be started");
 
@@ -590,7 +608,7 @@ mod tests {
         let condition = obtain(
             ENTRY,
             &command(&[&cat, "/nonexistent/tpl-file-that-is-not-there"]),
-            bound(10),
+            unbounded(),
         )
         .expect_err("the child fails");
 

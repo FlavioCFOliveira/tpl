@@ -1517,7 +1517,7 @@ USAGE
   tpl version [options]
 
 DESCRIPTION
-  Prints tpl, a space and the version, such as tpl 0.1.0, and nothing else.
+  Prints tpl, a space and the version, as in tpl <version>, and nothing else.
 
   Reads no database. Needs no database entry and no project. Writes no file.
   Prints the version line.

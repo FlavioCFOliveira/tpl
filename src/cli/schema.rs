@@ -276,7 +276,7 @@ struct InfoData<'a, 'd> {
 /// consumes under `FR-SCH-036`, and skipping three of its fields there would
 /// change both. The fields below are **borrowed** from a [`Summary`], which
 /// holds the same four members of that object whichever source served them —
-/// the cache's `database.json`, or the document a server read built — so the
+/// the cache's `database.json`, or the document a database read built — so the
 /// reduction copies nothing and cannot disagree with the object it reduces:
 /// every member is the same member, under the same name and with the same
 /// value, which is what `FR-SCH-031` promises a caller that reads

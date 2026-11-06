@@ -37,7 +37,7 @@ use crate::model::table::Table;
 /// The invariant a dangling reference violates.
 ///
 /// `FR-CTX-023` promises that every object referenced from another object in a
-/// document produced by a server read is present in it, which is exactly the
+/// document produced by a database read is present in it, which is exactly the
 /// condition the embedding needs in order to be materialisable. A document
 /// supplied to `--context` never reaches this invariant broken: `FR-CTX-042`
 /// makes the same condition a structural rule of that document, refused with
@@ -759,7 +759,7 @@ mod tests {
     #[test]
     fn fr_ctx_023_a_reference_the_model_does_not_carry_is_the_seventy_of_the_internal_invariant() {
         // FR-CTX-023 promises that every object referenced from another object
-        // in a document produced by a server read is present in it, which is
+        // in a document produced by a database read is present in it, which is
         // what makes this unreachable on that path. ADR-009's materialisation
         // is what makes it detectable rather than emitted.
         let dangling = fixture::database_of(vec![fixture::consignment_leg()]);

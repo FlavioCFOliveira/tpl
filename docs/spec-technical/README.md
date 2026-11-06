@@ -1,7 +1,7 @@
 ---
 title: tpl Technical Specification
 status: draft
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [traceability.md, open-decisions.md]
 ---
 
@@ -32,6 +32,26 @@ document waits**: what each blocks is a statement, not a document. Every other
 entry is settled. `OD-30`,
 the one entry that was settled and **interim**, was discharged on 2026-09-22,
 when the last leaf of the tree was implemented.
+
+**Changes of 2026-11-06**, for rmp `#368` — against the eighty-ninth edition
+of `/specification` (`FR-HELP-038`, `FR-ERR-051`, and the amended
+`FR-CACHE-007`, `FR-CACHE-010`, `FR-CACHE-022`, `FR-CACHE-039`, `FR-SCH-012`
+… `FR-SCH-014` and `FR-SCH-018`). Wording only; no decision changes. A fact
+that holds for every provider now speaks of the database and of reading it,
+and "server" is kept for facts of a `mariadb` and a `mysql` entry alone:
+`architecture.md` (the cache layer, `cli/source.rs`, the abandoned render, the
+pattern), `data-model.md` (the migration rule, a cached document, a repoint),
+`interfaces.md` (the producers of a model, the `cfg` group, the pattern
+matcher, the dump), `security.md`, `OD-20` and `traceability.md`. A second
+pass follows the functional owner's harmonisation of `NFR-DET-002`,
+`FR-CTX-023` and `FR-RND-040` in the same edition: the ordering rule in
+`interfaces.md` and `quality-attributes.md`, the read that promises
+referential integrity in `data-model.md`, `interfaces.md` and
+`quality-attributes.md`, and three providers for `--provider` in
+`interfaces.md`. `OD-20` states the six rows of the amended `FR-SCH-012`.
+`traceability.md` harvests the eighty-ninth edition, `FR-ERR-051` mapped in
+section 14 and `FR-RND-040` covering a `sqlite` entry; the eighty-fifth to
+the eighty-eighth are not yet harvested.
 
 **Changes of 2026-11-05**, for rmp `#343` and `#312` and sprint 29 — against the
 seventy-eighth to eighty-fourth editions of `/specification`,

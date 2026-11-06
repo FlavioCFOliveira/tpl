@@ -1881,7 +1881,7 @@ fn entry_repointed(name: &str) -> String {
 fn database_has_no_effect(command: &str, schema: &str) -> String {
     format!(
         "warning: -d/--database has no effect on tpl cfg database {command}; it selects the \
-         entry for commands that connect; the database on the server is set with --schema \
+         entry for commands that use one; the database on the server is set with --schema \
          {schema}"
     )
 }
@@ -2082,7 +2082,7 @@ fn fr_cfg_051_the_warning_names_only_the_flag_that_can_set_the_server_database()
             Some(
                 format!(
                     "warning: -d/--database has no effect on tpl cfg database {command}; it \
-                     selects the entry for commands that connect{last}"
+                     selects the entry for commands that use one{last}"
                 )
                 .as_str()
             ),
@@ -2154,12 +2154,12 @@ fn fr_cfg_051_a_refusal_at_step_one_writes_no_warning_and_its_cause_names_the_fl
     // and the FR-CFG-016 refusal, which carries the same fact.
     // The fifty-second edition adds the dsn form to the cause of `update`.
     const CLAUSE: &str = "; -d/--database was given, and it selects the entry for commands \
-                          that connect, not a field; the database on the server is set with \
+                          that use one, not a field; the database on the server is set with \
                           --schema";
     // The sixty-fifth edition names --path as the third form, for a sqlite
     // entry, and adds --provider and --path to the hint.
     const UPDATE_CLAUSE: &str = "; -d/--database was given, and it selects the entry for \
-                                 commands that connect, not a field; the database on the server \
+                                 commands that use one, not a field; the database on the server \
                                  is set with --schema, or is the path part of --dsn for an entry \
                                  defined by dsn; the database file of a sqlite entry is set with \
                                  --path";
@@ -3652,16 +3652,24 @@ fn fr_cfg_033_the_help_of_the_trust_flags_states_the_refusal() {
 // ----------------------------------------------- V-05 .. V-08, rmp #280 ---
 
 #[test]
-fn v_05_the_no_cache_hint_of_cache_load_reads_from_the_server() {
+fn v_05_the_no_cache_hint_of_cache_load_reads_the_database() {
+    // FR-ERR-051, rule 3 (rmp #367): loading reads the database whatever the
+    // provider, so neither line speaks of a server.
     let sandbox = Sandbox::new();
     sandbox.project("[core]\n");
 
     let printed = sandbox.run(&["cache", "load", "--no-cache"]);
     let written = assert_refused(&printed, 64, "cache load --no-cache");
 
-    assert!(
-        line(&written, "hint:  ").contains("tpl schema dump --direct --no-cache"),
-        "{written}"
+    assert_eq!(
+        line(&written, "cause: "),
+        "'tpl cache load' reads the database in order to store what it read, so an invocation \
+         that forbids the store asks the command to do nothing"
+    );
+    assert_eq!(
+        line(&written, "hint:  "),
+        "remove --no-cache from the command; to read the database without storing, use tpl \
+         schema dump --direct --no-cache instead"
     );
 }
 
@@ -4012,9 +4020,10 @@ fn w_07_the_refusals_name_the_command_that_was_asked_for() {
 
     let printed = sandbox.run(&["cache", "load", "--no-cache", "--table", "orders"]);
     let written = assert_refused(&printed, 64, "cache load --no-cache --table");
-    assert!(
-        line(&written, "hint:  ").ends_with("tpl schema table orders --direct --no-cache instead"),
-        "{written}"
+    assert_eq!(
+        line(&written, "hint:  "),
+        "remove --no-cache from the command; to read the database without storing, use tpl \
+         schema table orders --direct --no-cache instead"
     );
 }
 
@@ -4977,7 +4986,7 @@ fn fr_cfg_053_repointing_an_entry_says_its_cache_is_kept() {
         stderr(&printed),
         format!(
             "warning: -d/--database has no effect on tpl cfg database update; it selects the \
-             entry for commands that connect; the name argument already names the entry\n{}\n",
+             entry for commands that use one; the name argument already names the entry\n{}\n",
             entry_repointed("shop")
         )
     );
@@ -5151,7 +5160,7 @@ fn fr_cfg_051_a_value_equal_to_the_entry_name_does_not_advise_schema() {
             Some(
                 format!(
                     "warning: -d/--database has no effect on tpl cfg database {command}; it \
-                     selects the entry for commands that connect{last}"
+                     selects the entry for commands that use one{last}"
                 )
                 .as_str()
             ),

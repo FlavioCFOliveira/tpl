@@ -27,17 +27,17 @@ use std::process::{Command, Output};
 
 /// The line `FR-HELP-005` fixes, for the version this binary was built at.
 ///
-/// At version 0.1.0 it is exactly `tpl 0.1.0` and one newline. The number is
-/// read from the package rather than written out, so the test states the rule
-/// and not one of its instances.
+/// It is exactly `tpl <version>` and one newline, `<version>` being the
+/// package version. The number is read from the package rather than written
+/// out, so the test states the rule and not one of its instances.
 const VERSION_LINE: &str = concat!("tpl ", env!("CARGO_PKG_VERSION"), "\n");
 
 /// The opening line of `FR-HELP-037`, for the version this binary was built
 /// at, without its newline.
 ///
-/// At version 0.1.0 it is exactly `tpl v0.1.0 - Code Generation based on
-/// database schema`. The version is read from the package, the same source
-/// [`VERSION_LINE`] reads.
+/// It is exactly `tpl v<version> - Code Generation based on database schema`,
+/// `<version>` being the package version. The version is read from the
+/// package, the same source [`VERSION_LINE`] reads.
 const OPENING: &str = concat!(
     "tpl v",
     env!("CARGO_PKG_VERSION"),
@@ -2120,4 +2120,58 @@ fn fr_help_011_the_exit_codes_of_cache_load_name_the_sqlite_outcomes_the_schema_
             "exit {code}"
         );
     }
+}
+
+#[test]
+fn rmp_371_no_help_names_a_concrete_release_of_tpl() {
+    // BR-HELP-002 leaves the DESCRIPTION of `tpl version` to the
+    // implementation, and rmp #371 replaced the release it named with the form
+    // of the line, so that the help does not go stale with each release. The
+    // opening line of FR-HELP-037 and the `tpl_version` member are the two
+    // places a release is meant to appear, and both are set aside.
+    const FORM: &str =
+        "Prints tpl, a space and the version, as in tpl <version>, and nothing else.";
+
+    let tree = document();
+    assert!(
+        prose(&["version"]).contains(FORM),
+        "{}",
+        prose(&["version"])
+    );
+    assert!(
+        json_entry(&tree, &["version"])["description"]
+            .as_str()
+            .is_some_and(|description| description.starts_with(FORM)),
+        "{}",
+        json_entry(&tree, &["version"])
+    );
+
+    let names_a_release = |text: &str| {
+        text.contains(env!("CARGO_PKG_VERSION"))
+            || text
+                .match_indices("tpl ")
+                .any(|(at, _)| text[at + 4..].starts_with(|c: char| c.is_ascii_digit()))
+    };
+
+    for path in node_paths() {
+        let mut arguments = vec!["help"];
+        arguments.extend(path.iter().map(String::as_str));
+        let written = String::from_utf8(succeeds(&arguments)).expect("the help is UTF-8");
+        let (opening, rest) = written.split_once('\n').expect("the help has lines");
+        assert_eq!(opening, OPENING, "{path:?}");
+        assert!(
+            !names_a_release(rest),
+            "the help of {path:?} names a release"
+        );
+    }
+
+    let mut published = tree;
+    published["data"]
+        .as_object_mut()
+        .expect("data is an object")
+        .remove("tpl_version");
+    assert!(
+        !names_a_release(&published.to_string()),
+        "the JSON tree names a release outside tpl_version"
+    );
 }

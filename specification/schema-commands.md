@@ -1,7 +1,7 @@
 ---
 title: Schema Commands (First Arm)
 status: approved
-last-reviewed: 2026-11-03
+last-reviewed: 2026-11-06
 related: [cli-contract.md, cache-commands.md, output-formats.md, context-document.md, render-command.md, project-and-discovery.md]
 ---
 
@@ -10,8 +10,12 @@ related: [cli-contract.md, cache-commands.md, output-formats.md, context-documen
 ## Overview
 
 The first arm reads the structure of a database and presents it. It is the only
-arm that talks to a server on its own account, and every one of its subcommands
+arm that reads a database on its own account, and every one of its subcommands
 reads through the catalogue cache.
+
+*Amended in the eighty-ninth edition,* for rmp `#368`: the overview said that
+the arm "talks to a server"; it reads the database of the selected entry,
+which is a file for a `sqlite` entry.
 
 ## Scope
 
@@ -28,8 +32,10 @@ data model.
 ## Actors
 
 - **Calling agent** or **operator**, invoking the command.
-- **Database entry**, selected by `-d/--database`, naming the server and the
-  database to read.
+- **Database entry**, selected by `-d/--database`, naming the database to
+  read: a database on a MariaDB or a MySQL server, or a SQLite database file.
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the actor named "the
+  server and the database", which a `sqlite` entry does not have.
 
 ## Command surface
 
@@ -111,8 +117,8 @@ tpl schema dump                        The whole database as one JSON document
   the same invocation with the prefix in lower case, per `FR-ERR-009`, built
   under `FR-ERR-022` and dropped under `FR-ERR-023` where the routine name
   falls outside the character set that requirement applies to it. The token's
-  shape is decidable without a server, so the condition is evaluated at step 1
-  of `FR-ERR-006` and precedes every catalogue read.
+  shape is decidable without reading the database, so the condition is
+  evaluated at step 1 of `FR-ERR-006` and precedes every catalogue read.
 
   *Amended in the twenty-fifth edition: the casing of the prefix is stated,
   because the composition the twenty-third edition described produced a token
@@ -152,6 +158,10 @@ tpl schema dump                        The whole database as one JSON document
   commands above. The cost is already accepted for the two lower-case
   spellings, by the amendment that introduced them; this widens it to their
   case variants and to nothing else.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the shape of the
+  token was said to be decidable "without a server"; it is decidable without
+  reading the database, of any provider. No behaviour changes.
 
 - **FR-SCH-009**: `tpl schema table <name>` SHALL be exhaustive over what the
   catalogue holds for that table: its columns with position, type, nullability,
@@ -227,25 +237,69 @@ tpl schema dump                        The whole database as one JSON document
   `tpl schema routines` SHALL each declare an optional `--pattern <p>` flag that
   filters the listing by object name.
 
-- **FR-SCH-012**: `--pattern` SHALL use MariaDB `LIKE` syntax: `%` matches any
-  sequence of characters including the empty sequence, `_` matches exactly one
-  character, `\%` matches a literal `%`, and `\_` matches a literal `_`.
+- **FR-SCH-012**: `--pattern` SHALL be read from left to right, with the
+  following meanings and no other:
+
+  | Written | Matches |
+  |---|---|
+  | `%` | any sequence of characters, the empty sequence included |
+  | `_` | exactly one character |
+  | `\%` | a literal `%` |
+  | `\_` | a literal `_` |
+  | `\` followed by any other character, or at the end of the pattern | a literal `\`; reading resumes at the character after it |
+  | any other character | itself, under the case folding of `FR-SCH-014` |
+
+  A character is one Unicode scalar value, in the pattern and in the name it is
+  matched against. A pattern matches a name only where it matches the whole
+  name. The syntax is the same for every provider of `FR-CONF-051`, because the
+  pattern is evaluated by `tpl`, per `FR-SCH-013`.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`. The requirement said
+  that `--pattern` uses "MariaDB `LIKE` syntax" and listed four meanings. The
+  pattern is never passed to the database, per `FR-SCH-013`, and selects the
+  same set for a `mysql` and a `sqlite` entry and for a `--context` document,
+  per `BR-SCH-001`, so naming one server's operator stated a provider for a
+  fact that holds for none in particular. The name was also wider than the four
+  meanings: MariaDB's `LIKE` drops a backslash before any character, while the
+  four meanings gave it no reading there. The table states the syntax without
+  naming a provider, and its last two rows state what the implementation
+  already does with a backslash before any other character and with every other
+  character, as its pattern matcher read at `aed18a3` on 2026-11-06 shows; no
+  behaviour changes. *Rejected: "SQL `LIKE` syntax".* The SQL standard leaves
+  the escape character to an `ESCAPE` clause, and each server reads a backslash
+  in its own way, so the name would still say more than the table. *Rejected:
+  keeping the four rows alone.* A pattern holding a backslash before another
+  character, or a trailing one, had no stated meaning, and the implementation
+  had to choose one.
 
 - **FR-SCH-013**: The system SHALL evaluate `--pattern` locally, in memory,
-  against the names it has read. It SHALL NOT send the pattern to the server.
+  against the names it has read. It SHALL NOT pass the pattern to the
+  database in any statement.
 
   *Rationale.* Local evaluation is the only way the same pattern selects the
-  same set with a database, without one, and against any server. Server-side
-  `LIKE` would make the result depend on the collation of the catalogue columns,
-  which is invisible on the command line and therefore breaks determinism.
-  Catalogue reads are already whole-list reads, so filtering in memory costs
-  nothing.
+  same set with a database, without one, and whatever the provider and the
+  server. A `LIKE` evaluated by the database would make the result depend on
+  the collation of the catalogue columns, which is invisible on the command
+  line and therefore breaks determinism. Catalogue reads are already
+  whole-list reads, so filtering in memory costs nothing.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the requirement said
+  that the pattern is not sent "to the server", and its rationale spoke of a
+  server-side `LIKE`. A `sqlite` entry has no server, and the prohibition is
+  the same for it: no statement `tpl` issues carries the pattern. No
+  behaviour changes.
 
 - **FR-SCH-014**: `--pattern` SHALL fold case over ASCII `A-Z` and `a-z` only,
-  independently of the server, of the database collation, and of the locale.
+  independently of the provider, of the server, of the database collation, and
+  of the locale.
 
-  *Accepted cost.* `order%` also matches `Orders`, which a binary server
-  collation would not match.
+  *Accepted cost.* `order%` also matches `Orders`, which a binary collation
+  would not match.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the provider is
+  named beside the server, which a `sqlite` entry does not have, and the
+  accepted cost speaks of a binary collation of any provider. No behaviour
+  changes.
 
 - **FR-SCH-015**: `--pattern` SHALL NOT be declared by any command other than
   `tpl schema tables`, `tpl schema views`, and `tpl schema routines`.
@@ -273,12 +327,16 @@ tpl schema dump                        The whole database as one JSON document
   the `database` object itself changed; [context-document.md](context-document.md)
   fixes it, per `FR-CTX-001`.
 
-- **FR-SCH-018**: The document SHALL contain only the server-derived part of the
-  render context. It SHALL NOT contain `vars`, `tpl`, or `now`.
+- **FR-SCH-018**: The document SHALL contain only the part of the render
+  context read from the database. It SHALL NOT contain `vars`, `tpl`, or `now`.
 
   *Rationale.* Three of the five top-level context variables do not come from
   the database. Including `now` would make two dumps of an unchanged database
   differ, and a committed snapshot would produce a diff on every regeneration.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: "the server-derived
+  part" is now the part read from the database, which a `sqlite` entry
+  produces as well. No behaviour changes.
 
 - **FR-SCH-019**: `tpl schema dump` SHALL NOT declare `--format`. Supplying
   `--format` to it is an unknown-flag error under `FR-CLI-019`, exit `64`.
