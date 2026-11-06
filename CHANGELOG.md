@@ -36,6 +36,22 @@ workflow, before it closes.
 
 ## Unreleased
 
+## [0.1.2] - 2026-11-06
+
+### Fixed
+
+- **Error, cause, hint and warning lines speak of the database where every
+  provider reads one.** Lines that named a server for a fact that also holds
+  for a `sqlite` entry now name the database: the refusal of `--context` with
+  `--direct` (`contacts no server` now reads `reads no database`), the refusal
+  of `--no-cache` on `tpl cache load`, and the `-d/--database has no effect`
+  warning and the `-d/--database` clause of a refused `tpl cfg database add`
+  or `update` (`commands that connect` now reads `commands that use one`).
+  Exit codes are unchanged.
+- **The help of `tpl version` names no concrete release.** The text help and
+  `tpl help --format json` gave `such as tpl 0.1.0` as its output; they now
+  read `as in tpl <version>`.
+
 ## [0.1.1] - 2026-11-06
 
 ### Changed
@@ -224,7 +240,7 @@ workflow, before it closes.
   handshake no longer reads as a certificate not accepted; and a failure of
   the TLS layer on an open session is now a failed statement, above. Exit
   `69` throughout.
-- **An error packet during the login is classified by its number.** Every
+- **Breaking: an error packet during the login is classified by its number.** Every
   packet but `1044` and `1049` on a connection naming a database exited `77`
   as a refused user or password. Now `1045` and `1698` keep that message;
   `1130`, `1862`, `4151` and `4150` (`3118` and `3955` for a `mysql` entry)
@@ -298,8 +314,8 @@ workflow, before it closes.
   from about 2 450 tables cached, while the same render with `--direct`
   passed. It now passes up to about 4 600 tables; past that a cached render
   still exits `65` where `--direct` passes.
-- **A short or malformed packet from a server no longer ends `tpl` with
-  `70`.** A greeting cut before its fields, an error packet cut before its
+- **Breaking: a short or malformed packet from a server no longer ends `tpl`
+  with `70`.** A greeting cut before its fields, an error packet cut before its
   number or its SQL state — in the greeting's place or in answer to the
   login — and a one-byte `0x01` packet in a `caching_sha2_password` login
   made the driver panic. Each now exits `69` with
@@ -307,7 +323,7 @@ workflow, before it closes.
   an answer that is not the server's protocol. A server that sends
   continuation packets past 1 GiB is refused the same way, where `tpl` kept
   reading them into memory.
-- **`tpl cfg database test` reads only a privilege error as
+- **Breaking: `tpl cfg database test` reads only a privilege error as
   `can_read_catalogue: false`.** An error packet carrying `1044`, `1142`,
   `1143` or `1227` answers the privilege probe with `false`, exit `0`, as
   before. Any other error packet answered it with `false` too; it now exits
