@@ -16,7 +16,7 @@
 //!
 //! | **Not** checked | Why |
 //! |---|---|
-//! | `series` against the supported window of `FR-SRV-015` | `FR-CTX-033` forbids it. `FR-RND-022` opens no connection on this path, so there is no server to vouch for; validating the window would make every committed dump expire on a calendar date as the window moved |
+//! | `series` against the supported window of `FR-SRV-015` | `FR-CTX-033` forbids it. `FR-RND-022` reads no database on this path, so there is no server to vouch for; validating the window would make every committed dump expire on a calendar date as the window moved |
 //! | `standing` against `series` | `FR-CTX-033` forbids it in as many words |
 //! | The value of `schema_version` | `FR-OUT-014` fixes what moves it and names no rule for refusing one, and refusing a number this binary has not seen would be a check the corpus does not ask for |
 //! | `primary_key` against `indexes` | `FR-CAT-043` makes the index collection the authoritative source, so the model of a `mariadb` document takes the primary key from there and this key is not read back at all; a `sqlite` document's key is read from `primary_key`, the one place a rowid alias is written (`FR-LITE-029`, `OD-35`) |

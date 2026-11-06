@@ -25,7 +25,7 @@ owed and, where it is not, the commit that discharged it.
 
 ## Scope
 
-The specification has been written in eighty-nine editions. All are in force;
+The specification has been written in ninety editions. All are in force;
 each adds to the ones before it and amends them in place, and every
 amendment carries an *Amended in the nth edition* note beside the
 requirement it changes.
@@ -6886,6 +6886,105 @@ amended `FR-CACHE-010` contradicts; neither it nor `CLAUDE.md` quotes a line
 this edition changes, so [upstream-divergences.md](upstream-divergences.md)
 raises no entry.
 
+### Ninetieth edition — one meaning of connection
+
+rmp `#373`, sprint 35: the user decided on 2026-11-06 that *connection*
+means a connection to a MariaDB or a MySQL server only. The glossary defined
+it for all three providers, the opening of a SQLite database file included,
+while `FR-HELP-038` and `FR-ERR-051` already used the word for the server
+providers alone. **No identifier is assigned, retired or renumbered**; no
+open question or divergence entry is raised. No behaviour changes: every
+amended requirement holds for every provider as it held before, in words
+that name each provider's act.
+
+- **The terms** — [glossary.md](glossary.md): the entry *connection* names
+  a connection to a MariaDB or a MySQL server alone, and names the two uses
+  of the word that are not the term — a virtual table the SQLite library
+  connects, and the contract values `core.connect_timeout`, `connected` and
+  `collation_connection`. A new entry, *opening the database file*, is the
+  term for a `sqlite` entry, says that *reading the database* covers both
+  acts, and calls what the SQLite documentation names a database connection
+  an open of the database file. The entries *cache hit / cache miss*,
+  *hardening control*, *read transaction* and *requirement of form* are
+  reworded in the same terms. A sweep of the file for an entry that states a
+  fact of every provider in the words of a server reworded three more to
+  speak of the database: *cache*, which read its data "from a server",
+  *read-through cache*, consulted "before the server", and *coverage*,
+  which compared a listing with "what the server holds". The entries that
+  name a server for a fact of the server providers alone — *complete read /
+  incomplete read*, *divergence register*, *login*, *measurement point*,
+  *schema*, *scramble*, *session statement* and *volatile field* — are
+  unchanged, and so are *source* and *standing*, which name the contract
+  value `server` and the `server` object, each stating what holds for a
+  `sqlite` read.
+- **The vocabulary** — a fact of every provider speaks of reading the
+  database, a fact of the server providers of connecting to the server, and
+  a fact of a `sqlite` entry of opening the database file. A requirement
+  that a command SHALL NOT read the database forbids both acts.
+- **Requirements amended in their text** — `NFR-PERF-003`, `NFR-PERF-004`,
+  `NFR-PERF-005` and `NFR-PERF-006` in
+  [performance-requirements.md](performance-requirements.md), each stating
+  the bound for every provider; `FR-LITE-009`, `FR-LITE-010`,
+  `FR-LITE-011`, `FR-LITE-015`, `FR-LITE-017`, `FR-LITE-018`,
+  `FR-LITE-037`, `FR-LITE-038`, `FR-LITE-040`, `FR-LITE-042` and
+  `BR-LITE-001` in [sqlite-contract.md](sqlite-contract.md), whose
+  definition of a connection of the library to the file `FR-LITE-037`
+  withdraws; `FR-CACHE-006`, `FR-CACHE-039`, `FR-CACHE-040`,
+  `FR-CACHE-041`, `FR-CACHE-042` and `FR-CACHE-044` in
+  [cache-commands.md](cache-commands.md); `FR-RND-022` and `FR-RND-040` in
+  [render-command.md](render-command.md); `FR-TMPL-003` and `FR-TMPL-017`
+  in [template-commands.md](template-commands.md); `FR-SEC-018` and
+  `FR-SEC-026` in [security.md](security.md); and `FR-ERR-006` in
+  [errors-and-exit-codes.md](errors-and-exit-codes.md), whose step 6 is
+  named *cache or database read*, where it was named *cache or connection*,
+  with `FR-ERR-036` and `FR-ERR-047` in the same file, `FR-MYSQL-045` in
+  [mysql-contract.md](mysql-contract.md) and `FR-CONF-056` in
+  [configuration-model.md](configuration-model.md) naming it so.
+- **Passages harmonised beside a requirement whose text is unchanged** —
+  the observations, rationales and rejected alternatives of `FR-LITE-002`,
+  `FR-LITE-006`, `FR-LITE-008`, `FR-LITE-019`, `FR-LITE-033` and
+  `FR-LITE-041`, of `NFR-PERF-014` and `BR-PERF-008`, of `FR-CACHE-007` and
+  `FR-CACHE-038`, of `FR-SEC-028`,
+  `FR-PROJ-024`, `FR-CFG-041`, `FR-HELP-031` and `FR-GLOB-025`; the Scope
+  and the *Observations* section of
+  [sqlite-contract.md](sqlite-contract.md), and the Overview and the
+  section *Requirements of form* of
+  [performance-requirements.md](performance-requirements.md). Each
+  requirement carries its own note.
+- **This file** — the edition count of the Scope, the sixth member named
+  in *Writing conventions*, and this record.
+
+**Left unchanged, and why.** Contract values keep their spelling for every
+provider: `core.connect_timeout`, the field `connected` of `FR-CFG-039` and
+the step of `FR-CFG-056` that reports it, and `collation_connection`. The
+library's own verb for a virtual table, *connects*, stays in
+[sqlite-contract.md](sqlite-contract.md), because it names the library
+starting a table's module and not the opening of a file. Edition notes keep
+the words they were written in, the note of the sixty-fifth edition under
+`NFR-PERF-004` and the notes that name the cache-or-connection step among
+them; the note of this edition beside each says what now governs. The
+passages that state a fact of the server providers alone — the connection
+phases of `FR-CONF-005`, `FR-GLOB-017` and `FR-ERR-027`, the failures of
+`FR-ERR-036`, `FR-ERR-047`, `FR-ERR-048` and `FR-ERR-049`, the keys of
+`FR-CONF-006`, `FR-CONF-007` and `FR-CFG-048`, [server-contract.md](server-contract.md)
+and [mysql-contract.md](mysql-contract.md) — already use the word in its
+meaning. The *Says* of every entry of
+[upstream-divergences.md](upstream-divergences.md) quotes its target and is
+not this corpus's wording.
+
+The fifth validation rule is applied: the root `README.md` uses
+*connection* of a SQLite database file in two passages — the row of
+`tpl cfg database test`, "the one `cfg` subcommand that opens a
+connection", and the paragraph *The three arms are joined*, "open one
+connection to the MariaDB or MySQL server or the SQLite database file" — and
+the root `CLAUDE.md` states `NFR-PERF-003` and `NFR-PERF-004` as "a cache hit
+opens no connection, an invocation opens at most one connection". Each states
+a behaviour this edition does not change, in the wider sense of the word
+this edition withdraws. No entry is raised in
+[upstream-divergences.md](upstream-divergences.md): the passages of the root
+`README.md` are corrected under rmp `#375`, and the wording of `CLAUDE.md`
+is the user's decision.
+
 ### Still out of scope
 
 - The Rust implementation: its crates, its module layout, its types, and its
@@ -7101,9 +7200,12 @@ because they constrain the whole module rather than one interaction.
   confirm the read-only session, so that half of it is exercised in process;
   `FR-LITE-018`, where a statement that fails when it is prepared, or is
   never run, is absent from the statement trace; and `NFR-PERF-004`, where the
-  connection count of a `sqlite` entry is observed on the Linux targets and
-  not on the macOS ones. *The fifth was added in the sixty-sixth edition, and
-  the sixth in the sixty-seventh.*
+  count of opens of the database file of a `sqlite` entry is observed on the
+  Linux targets and not on the macOS ones. *The fifth was added in the
+  sixty-sixth edition, and the sixth in the sixty-seventh. Amended in the
+  ninetieth edition,* for rmp `#373`: one meaning of connection, per the
+  user's decision of 2026-11-06; the sixth was described as the connection
+  count of a `sqlite` entry.
 
 ## Status legend
 

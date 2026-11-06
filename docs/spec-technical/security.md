@@ -42,7 +42,7 @@ raw.
 | 2 | `.tpl/.cfg` | `project/` | The resolved path is canonicalised; the file is opened without following a link and without blocking, and its type and both trust checks are judged on that descriptor as a **precondition** of reading it; the bytes are then parsed strictly in `project/config.rs`, an unrecognised key being fatal. A value that would reach the login, the server's C interface or SQLite's open holding a NUL character is refused at entry resolution, before it can be cut there | `FR-PROJ-009`, `FR-PROJ-030`, `FR-PROJ-010`, `FR-PROJ-011`, `FR-CONF-034`, `BR-CONF-004`, `FR-CONF-057` |
 | 3 | The environment | `project/config/expand.rs` | Reached only by expanding the fields that admit expansion, in a single pass, at the one point in the crate that reads a variable at all, and only on an invocation that opens a connection; the lookup is a parameter of the expansion, so a hostile value can be exercised against it without the process carrying one | `FR-CLI-021`, `FR-CLI-023`, `FR-CONF-015`, `FR-CONF-019`, `FR-CONF-056`, `FR-SEC-007` |
 | 4 | Catalogue values | `mariadb/`, or `mysql/` for a `mysql` entry | Read as bytes and converted to text with the lossy substitution at that one boundary; no value is interpreted, and none reaches a statement | `FR-OUT-017`, `FR-SRV-006`, `FR-MYSQL-015` |
-| 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path opens no connection and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
+| 5 | A supplied context document | `cli/` | Validated structurally — every table a foreign key names included — and then handed to `render/`, so a dangling reference is the caller's `65` and never `tpl`'s `70`; the standard-input form is the one stdin read the tool admits, and the path reads no database and touches no cache | `FR-RND-017`, `FR-RND-020`, `FR-SCH-036`, `FR-CTX-033`, `FR-CTX-042`, `FR-RND-022`, `BR-CLI-003` |
 | 6 | Files under the template root | `render/` | Reached only through the one resolution function, which is where containment is enforced; the three `template` subcommands that resolve without the engine call the same function | [`OD-15`](open-decisions.md#od-15--the-template-loader), `FR-TMPL-023`, `FR-TMPL-024`, `FR-TMPL-025`, `FR-TMPL-026` |
 | 7 | A SQLite database file | `sqlite/` | Its kind is established without opening it; it is opened read-only and never created, and the library is confirmed hardened before any statement reads it; a schema table that could forge the catalogue is refused before any statement reads through a pragma function, and that check and every catalogue statement read one snapshot; its values are converted and coverage applied at that one boundary, and none reaches a statement | `FR-SEC-028`, `FR-LITE-005`, `FR-LITE-006`, `FR-LITE-010` … `FR-LITE-017`, `FR-LITE-041`, `FR-LITE-042`, `FR-OUT-017` |
 
@@ -205,7 +205,7 @@ not a configuration layer (`FR-CONF-030`;
 | Expansion reaches the six fields that admit it and no others | `project/settings.rs`, deciding from the declared key space and not from the caller | `FR-SEC-007`, `FR-CONF-015` |
 | Two fields are excluded by the same table, so the exclusion is structural: neither the encryption mode nor the child command is expandable, and no variable can therefore weaken transport or choose the program that runs | The declared key space, asked per field | `FR-SEC-008`, `FR-CONF-016`, `FR-CONF-017` |
 | Inside a connection string, substitution happens after the URL has been broken into fields, and the fields are handed to the driver one by one, never joined into a URL again; the percent-encoding `FR-CONF-018` names is performed by nothing ([`OD-39`](open-decisions.md#od-39--a-dsn-value-percent-encoded-by-nothing)) | `project/config/dsn.rs` splits, `project/settings.rs` expands, before any connection exists | `FR-SEC-009`, `FR-CONF-018` |
-| Expansion and the child run only for an invocation that opens a connection, so a read the cache serves neither reads the environment nor starts `password_command` | `Prepared::connect` in `project/settings.rs`, reached from the connection branch of step 6 alone | `FR-CONF-056` |
+| Expansion and the child run only for an invocation that opens a connection, so a read the cache serves neither reads the environment nor starts `password_command` | `Prepared::connect` in `project/settings.rs`, reached from the database-read branch of step 6 alone | `FR-CONF-056` |
 | An undefined variable ends the invocation; it is never an empty substitution | `project/config/expand.rs` → `error.rs` | `FR-SEC-010`, `FR-CONF-022`, `BR-CONF-002` |
 
 The third row is an ordering, not a sanitisation, and the order is what does
@@ -306,7 +306,7 @@ the reasons that entry records.
 | A symbolic link is refused at **every component of the name below the canonical root**, not at the final component alone, each read from the entry's own metadata rather than by following it | The same function | `FR-SEC-017`, `FR-TMPL-024`, [`OD-15`](open-decisions.md#od-15--the-template-loader) |
 | The path that was checked is the path that is opened: one canonical form is compared with the root's, and nothing else is opened afterwards | The same function | `FR-SEC-017`, `FR-TMPL-025`, `FR-TMPL-026` |
 | A template is read only from a regular file. It is opened relative to the canonical root, one component at a time following none, with `O_NONBLOCK`, and its type is read from the descriptor it is then read through, so a FIFO swapped in after resolution neither blocks nor is read. An entry of another kind is not listed, is `66` when named, and fails a render with `65` when an include, import or extends names it | `Root::read` in `render/root.rs`, through `src/at.rs` | `FR-TMPL-033`, `FR-SEC-027`, [`OD-24`](open-decisions.md#od-24--the-discovery-boundary-and-the-process-uid) |
-| Syntax analysis is reachable without evaluation: no expression evaluated, no function called, no connection opened | `render/`, on the check path | `FR-SEC-018`, `FR-TMPL-017`, `BR-TMPL-001` |
+| Syntax analysis is reachable without evaluation: no expression evaluated, no function called, no database read | `render/`, on the check path | `FR-SEC-018`, `FR-TMPL-017`, `BR-TMPL-001` |
 
 The second row was the final component alone until 2026-09-21. What the narrow
 form admitted was a symlinked **intermediate directory** whose target is inside
@@ -386,7 +386,7 @@ which control closes which threat, and how the build confirms each.
 | Control | Applied by | Confirmed by | Closes | Forced by |
 |---|---|---|---|---|
 | A regular file | A lookup that opens nothing | The kind it reports | A FIFO hanging the open; a device or a directory read as a database | `FR-LITE-005` |
-| A read-only open that creates nothing | The open's flags | `is_readonly` on `main` | Any write through the connection; a database created at a mistyped path | `FR-LITE-006` |
+| A read-only open that creates nothing | The open's flags | `is_readonly` on `main` | Any write through the open file; a database created at a mistyped path | `FR-LITE-006` |
 | `query_only` on | Its pragma | Its pragma, read | A write the open did not refuse, as defence in depth | `FR-LITE-010` |
 | Defensive mode on, `trusted_schema` off | The configuration interface | The configuration interface, read | Corruption by ordinary SQL; a function or module not marked innocuous run from a view or a schema expression | `FR-LITE-010` |
 | Views disabled | The configuration interface | The configuration interface, read | As defence in depth, what a statement that named a view would open: a view expanded through the views it names, and a view taking the place of a pragma function | `FR-LITE-010` |
@@ -423,9 +423,9 @@ verdict is reached is [architecture.md](architecture.md#the-sqlite-reader)'s.
 
 **The check governs what the read reads.** On a read, the check and every
 catalogue statement run in one read transaction and read one snapshot, so a
-table or a view another connection commits after the check is never read
-through: in rollback-journal mode the writer cannot commit until the read
-ends, and in write-ahead-log mode what it commits stays invisible to the read
+table or a view committed through another open of the file after the check is
+never read through: in rollback-journal mode the writer cannot commit until
+the read ends, and in write-ahead-log mode what it commits stays invisible to the read
 (`FR-SEC-028`, `FR-LITE-042`). How the transaction stands to the read-only
 promise is [below](#for-a-sqlite-entry-three-parts).
 
@@ -528,7 +528,7 @@ Neither half is disableable by a flag, a configuration key or an environment
 condition (`FR-SRV-011`), which is why no such switch exists to be reviewed. The
 ordering of the two stages relative to the version probe, and the verdicts they
 produce, are
-[architecture.md](architecture.md#the-connection-lifecycle)'s. Describing the
+[architecture.md](architecture.md#the-read-lifecycle)'s. Describing the
 session setting as prevention overstates it, and no passage of this folder may
 (`BR-SRV-002`).
 
@@ -553,9 +553,9 @@ prevent.
 
 | Part | What it is in the build | What it does | Forced by |
 |---|---|---|---|
-| The read-only open | Stage 2 of the SQLite reader, read back at stage 5 | **Prevents**, at the library: the connection cannot write the file | `FR-LITE-006` |
+| The read-only open | Stage 2 of the SQLite reader, read back at stage 5 | **Prevents**, at the library: the file, opened so, cannot be written through that open | `FR-LITE-006` |
 | The closed statement list | Every statement `sqlite/` can send is a constant of the crate | **Prevents**, in `tpl` | `FR-LITE-015`, `FR-LITE-016` |
-| `query_only` | Set and read back at stage 5 | Makes a write fail on a connection that could otherwise make one; defence in depth | `FR-LITE-010` |
+| `query_only` | Set and read back at stage 5 | Makes a write fail on an open of the file that could otherwise make one; defence in depth | `FR-LITE-010` |
 
 None is disableable (`FR-LITE-014`). The read transaction of `FR-LITE-042` is
 part of the read and no breach of the promise: it takes the shared lock every
@@ -571,7 +571,7 @@ files a database in write-ahead-log mode may leave beside it — is
 | Subject | Where |
 |---|---|
 | Every rule's normative statement | `/specification`, cited by identifier throughout and reproduced nowhere |
-| The discovery walk, the connection lifecycle, the deadline machinery, the module map | [architecture.md](architecture.md) |
+| The discovery walk, the read lifecycle, the deadline machinery, the module map | [architecture.md](architecture.md) |
 | Every contract crossing a boundary named above, and its obligations | [interfaces.md](interfaces.md) |
 | The configuration file's format, key space, mode and rewrite discipline, and everything the cache puts on disk | [data-model.md](data-model.md) |
 | The TLS crates, their features, and the calls `std` does not supply | [technology-stack.md](technology-stack.md) |

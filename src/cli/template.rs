@@ -32,7 +32,7 @@
 //! Every one of them is `.tpl` and nothing else. [`environment`] performs steps
 //! 2 and 3 of `FR-ERR-006` — discovery, and the two trust checks — and stops
 //! there: `.tpl/.cfg` is not read for its keys, no database entry is resolved,
-//! and no connection is opened, which is `FR-TMPL-003` held by what is absent
+//! and the database is not read, which is `FR-TMPL-003` held by what is absent
 //! rather than by a guard. `BR-TMPL-002` is held the same way: nothing here
 //! writes.
 //!

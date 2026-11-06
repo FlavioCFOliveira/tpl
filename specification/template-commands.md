@@ -1,7 +1,7 @@
 ---
 title: Template Commands (Second Arm)
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [cli-contract.md, render-command.md, project-and-discovery.md, security.md]
 ---
 
@@ -40,8 +40,8 @@ tpl template path  [<name>]             Print the template root, or one template
 - **FR-TMPL-002**: The system SHALL provide exactly the four subcommands listed
   above. They have no aliases.
 
-- **FR-TMPL-003**: No `template` subcommand SHALL open a database connection,
-  read the cache, or require a database entry to be selected.
+- **FR-TMPL-003**: No `template` subcommand SHALL read the database, read the
+  cache, or require a database entry to be selected.
 
   Every `template` subcommand SHALL read and validate `.tpl/.cfg` at step 3 of
   `FR-ERR-006`, as every command outside `FR-PROJ-025` does. A `.cfg` that is
@@ -61,6 +61,11 @@ tpl template path  [<name>]             Print the template root, or one template
   *Rejected: exempting the subcommands from step 3 and narrowing their help.*
   It adds a second exemption to `FR-ERR-006`, and it defers the fault to the
   first `schema` or `render` command, far from the file that caused it.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. No `template` subcommand
+  SHALL read the database, where the text said that none opens a database
+  connection. The behaviour is unchanged.
 
 ## What is a template
 
@@ -195,10 +200,15 @@ tpl template path  [<name>]             Print the template root, or one template
 
 - **FR-TMPL-017**: `tpl template check` SHALL perform syntax analysis only. It
   SHALL NOT evaluate an expression, SHALL NOT call a function or a filter, and
-  SHALL NOT connect to a database.
+  SHALL NOT read a database.
 
   *Rationale.* Validating variables would mean evaluating the template, so a
   command called `check` would execute an unknown template arriving in a clone.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The command SHALL NOT
+  read a database, where the text said that it does not connect to one. The
+  behaviour is unchanged.
 
 - **FR-TMPL-018**: WHEN `tpl template check` is invoked with no positional
   argument, the system SHALL check every template of the project.

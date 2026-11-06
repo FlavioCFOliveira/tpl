@@ -212,7 +212,7 @@ impl Environment {
     /// (`FR-TMPL-017`, `FR-TMPL-020`).
     ///
     /// This is syntax analysis alone: no expression is evaluated, no filter is
-    /// called and nothing is connected to, which is what makes `BR-TMPL-001`'s
+    /// called and no database is read, which is what makes `BR-TMPL-001`'s
     /// guarantee — `tpl template check` is safe to run against a template you
     /// have not read — a property of the operation rather than a side effect.
     ///

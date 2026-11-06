@@ -14,13 +14,13 @@
 //! | `fault` | Where the library's result becomes a condition of `FR-ERR-001` | `FR-LITE-040`, `OD-38` |
 //! | `catalogue` | The check, the read transaction, the plan, the read that owns its values, and the fold | `FR-LITE-015`, `FR-LITE-019` … `FR-LITE-037`, `FR-LITE-041`, `FR-LITE-042` |
 //!
-//! **The one route to a connection is [`open`]**, and it runs the six stages
-//! of `FR-LITE-017` in order and behind no condition: the kind of the file,
-//! the read-only open, the statement bound, the build, the other controls and
-//! the limits — views disabled among them — and the version probe, the first
-//! statement that reads the file. No flag, key or environment condition
-//! reaches any of them (`FR-LITE-014`). The check of `FR-LITE-041` follows
-//! the probe: inside the read transaction of `FR-LITE-042` on a read
+//! **The one route to an open of the database file is [`open`]**, and it runs
+//! the six stages of `FR-LITE-017` in order and behind no condition: the kind
+//! of the file, the read-only open, the statement bound, the build, the other
+//! controls and the limits — views disabled among them — and the version probe,
+//! the first statement that reads the file. No flag, key or environment
+//! condition reaches any of them (`FR-LITE-014`). The check of `FR-LITE-041`
+//! follows the probe: inside the read transaction of `FR-LITE-042` on a read
 //! ([`read`]), and alone on `tpl cfg database test` ([`Session::check`]).
 //!
 //! **No asynchronous runtime is built.** `rusqlite` is synchronous, so a
@@ -28,7 +28,7 @@
 //! in `mariadb/` (`ADR-013`, *Consequences*; `ADR-005`).
 //!
 //! **What is alive is counted per thread**, as `mariadb/` counts its own: the
-//! open connections and the live watchdogs, so that [`quiescent`] answers
+//! open database files and the live watchdogs, so that [`quiescent`] answers
 //! `FR-RND-040` for this reader.
 
 mod catalogue;
@@ -63,19 +63,19 @@ use fault::{Place, Stage, Timing};
 use watch::Watchdog;
 
 thread_local! {
-    /// The connections to a database file this thread holds open.
+    /// The opens of a database file this thread holds.
     static CONNECTIONS: Cell<usize> = const { Cell::new(0) };
 
     /// The statement watchdogs this thread has started and not yet joined.
     static WATCHDOGS: Cell<usize> = const { Cell::new(0) };
 }
 
-/// Whether this thread holds no open connection and no live watchdog
+/// Whether this thread holds no open database file and no live watchdog
 /// (`FR-RND-040`).
 ///
 /// The counts are per thread for the reason `mariadb::quiescent` gives: every
-/// statement runs on the thread that opened the connection, and a
-/// process-wide count would see another test's connection in the suite.
+/// statement runs on the thread that opened the file, and a process-wide
+/// count would see another test's open of a file in the suite.
 pub(crate) fn quiescent() -> bool {
     CONNECTIONS.with(Cell::get) == 0 && WATCHDOGS.with(Cell::get) == 0
 }
@@ -107,17 +107,17 @@ impl Drop for Alive {
     }
 }
 
-/// One connection to a database file, every control in force and the probe
+/// One open of a database file, every control in force and the probe
 /// answered.
 ///
 /// The field order is the drop order, and it is deliberate: the watchdog is
-/// stopped and joined before the connection is dropped, so no interrupt is
-/// issued against a closed connection (`OD-36`, point 4).
+/// stopped and joined before the `Connection` is dropped, so no interrupt is
+/// issued against a closed one (`OD-36`, point 4).
 #[derive(Debug)]
 pub(crate) struct Session {
     /// The watchdog of `OD-36`, and its count.
     watchdog: Option<(Watchdog, Alive)>,
-    /// The connection, and its count.
+    /// The `Connection` of the open file, and its count.
     connection: Option<(Connection, Alive)>,
     /// The entry the read is made through.
     entry: String,
@@ -272,7 +272,7 @@ impl Session {
         &self.server
     }
 
-    /// Closes the connection, the watchdog first (`OD-36`, point 4,
+    /// Closes the file, the watchdog first (`OD-36`, point 4,
     /// `FR-RND-040`).
     ///
     /// A failed close is not a condition: the answer is already produced, and
@@ -330,7 +330,7 @@ impl Session {
         self.answered(stage, answered).map(drop)
     }
 
-    /// Where a failure on this connection arose.
+    /// Where a failure on this open of the file arose.
     fn place(&self) -> Place<'_> {
         Place {
             entry: &self.entry,
@@ -338,7 +338,7 @@ impl Session {
         }
     }
 
-    /// Stages 4 and 5 of the connection start (`FR-LITE-010`,
+    /// Stages 4 and 5 of opening the file (`FR-LITE-010`,
     /// `FR-LITE-011`).
     fn harden(&self) -> Result<(), Error> {
         let place = self.place();
@@ -464,7 +464,7 @@ impl Session {
         Ok(())
     }
 
-    /// The connection, while it is open.
+    /// The `Connection` of the file, while it is open.
     fn connection(&self) -> Result<&Connection, Error> {
         self.connection
             .as_ref()
@@ -522,7 +522,7 @@ impl Session {
     ///
     /// A row borrows its statement, so `read` copies out of each what it keeps
     /// as the row is read; the statement is finalised before this returns, and
-    /// no value borrows the connection.
+    /// no value borrows the `Connection`.
     fn each<F>(&self, stage: Stage, sql: &str, catalogue: bool, mut read: F) -> Result<(), Failed>
     where
         F: FnMut(&Row<'_>) -> Result<(), Misread>,
@@ -765,7 +765,7 @@ pub(crate) mod record {
     /// The prefix the trace gives a nested statement (`FR-LITE-018`).
     pub(crate) const NESTED: &str = "-- ";
 
-    /// Installs the trace on a connection just opened, before its first
+    /// Installs the trace on a `Connection` just opened, before its first
     /// statement.
     pub(super) fn install(connection: &mut Connection) {
         let installed = connection.trace_v2(

@@ -25,7 +25,7 @@ use rusqlite::ffi;
 use crate::deadline::Bound;
 use crate::error::{Error, FileValue, LibraryReport, SqliteAt, SqliteEnd};
 
-/// Where on a connection a failure arose, which `FR-LITE-040` step 1
+/// Where, on an open of the file, a failure arose, which `FR-LITE-040` step 1
 /// classifies by.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Stage {

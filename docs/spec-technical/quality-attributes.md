@@ -54,8 +54,8 @@ matrix, the release gates and the measurement harness are `operations.md`.
 fail something, and they are what survived the withdrawal.**
 Each states a deterministic count or a deterministic absence, observable from
 outside the process and independent of how fast the host is, so none of them is
-a figure and none is reached by `BR-PERF-008`. A cache hit that opened a
-connection is a **functional defect**, failing a test for the reason a wrong
+a figure and none is reached by `BR-PERF-008`. A cache hit that read the
+database is a **functional defect**, failing a test for the reason a wrong
 exit code fails one — not a slow run. `BR-PERF-001` records that a requirement
 of form is now the only instrument the performance corpus has that can catch a
 defect at all, which is why these six, and not the measurement points, are what
@@ -72,10 +72,10 @@ instrument, on which targets and under what gate is
 |---|---|---|---|
 | `NFR-PERF-001` | A query per object on a full read | The catalogue reader is organised per object **kind**: a fixed set of queries, each returning every object of its kind, so the count over `WL-001` equals the count over `WL-003` | `architecture.md`, `interfaces.md` |
 | `NFR-PERF-002` | Reading the whole catalogue to answer for one object | The reader carries a named-object path distinct from the full-read path, with the name restricting the query the server receives | `architecture.md`, `interfaces.md` |
-| `NFR-PERF-003` | A connection opened before the cache is consulted | The cache is a read-through layer **in front of** the reader: a hit is served from disk with no connection and no query (`FR-CACHE-006`, `FR-CACHE-007`) | `architecture.md` |
+| `NFR-PERF-003` | The database read before the cache is consulted | The cache is a read-through layer **in front of** the reader: a hit is served from disk without reading the database and with no query (`FR-CACHE-006`, `FR-CACHE-007`) | `architecture.md` |
 | `NFR-PERF-004` | A pool, or a second connection for any purpose | One connection at most, opened late and closed when the read ends — and, with its runtime, before any render starts (`FR-RND-040`); it is also what rejected a pre-flight TCP connect for phase attribution in [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), and it is verifiable from the server side (`FR-SRV-014`) | `architecture.md` |
 | `NFR-PERF-005` | Startup work a command does not need | The four commands of `FR-PROJ-025` are classified **before** any filesystem access: no `stat` of an ancestor, no open of `.tpl/.cfg`, no socket — and, per [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), no timer thread | `architecture.md` |
-| `NFR-PERF-006` | A connection opened by dispatch rather than by need | Connection establishment is lazy: the reader opens it when it is about to read, so every command that needs no catalogue opens none | `architecture.md` |
+| `NFR-PERF-006` | The database read by dispatch rather than by need | Reading is lazy: the reader opens its connection when it is about to read, so every command that needs no catalogue reads no database | `architecture.md` |
 
 Two obligations attach to the six and belong elsewhere. Each is verified by an
 observation made **outside** the process and never by reading the source
@@ -87,15 +87,16 @@ that is `operations.md`, settled in
 edition `NFR-PERF-008` is verified by counting those lines at `-v` against the
 server's statement record for the same invocation, which is `verification.md`.
 
-**The six hold for a `sqlite` entry**, with a connection read as one connection
-of the library to the database file (`FR-LITE-037`, `NFR-PERF-004`'s note).
+**The six hold for a `sqlite` entry**, where `NFR-PERF-003` and `NFR-PERF-004`
+bound the opens of the database file (`FR-LITE-037`; both as amended in the
+ninetieth edition).
 What each forces there:
 
 | Requirement | The design decision for a `sqlite` entry | Described in |
 |---|---|---|
 | `NFR-PERF-001`, `NFR-PERF-002` | A fixed plan of seven catalogue statements after the probe — the check of `FR-LITE-041`, then six, each joining the schema table to the function it reads where that function takes one object — so the count over the fixture equals the count over an empty file. The `BEGIN DEFERRED` and `COMMIT` around them are issued once each whatever the objects, and are not catalogue statements, so neither is counted (`FR-LITE-042`; the note on `FR-LITE-037` of the seventieth edition). No path is excepted, and no statement invokes `pragma_table_list`, so the time each takes is linear in the objects; the fold groups once every collection it reads by name and scans none, so its own work does not grow with their square either (`FR-LITE-037`, as amended in the sixty-ninth edition; `FR-LITE-009`) | [architecture.md](architecture.md#the-sqlite-reader) |
 | `NFR-PERF-003` | The cache sits in front of the dispatch, so a hit opens no file and issues no statement | [architecture.md](architecture.md#the-provider-dispatch) |
-| `NFR-PERF-004` | One connection, opened by `sqlite/` when it is about to read and closed when the read ends, before any render | [architecture.md](architecture.md#the-sqlite-reader) |
+| `NFR-PERF-004` | One open of the database file, made by `sqlite/` when it is about to read and closed when the read ends, before any render | [architecture.md](architecture.md#the-sqlite-reader) |
 | `NFR-PERF-005`, `NFR-PERF-006` | `sqlite/` is reached only through the dispatch, which a command needing no catalogue never reaches | [architecture.md](architecture.md#the-provider-dispatch) |
 
 A statement the library runs to carry out a pragma function or a module is
@@ -361,7 +362,7 @@ under `NFR-PERF-020`. Neither gates anything (`BR-PERF-008`).
 
 | Property | How the built system holds it | Forced by |
 |---|---|---|
-| No invocation blocks without bound | A deadline on every blocking phase, composed with the overall budget measured from process start, exiting with the code of the phase in progress; the `password_command` phase runs until the child has exited and its output has closed, and a descendant holding the pipe cannot extend it. The three mechanisms are settled in [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and described in `architecture.md`. Every statement on a SQLite connection is bounded by the busy timeout and a watchdog ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)), the probe whose loading of a crafted schema grows faster than its objects included; **the open of a database file is not**, and a file swapped for a FIFO after its kind was established blocks it — the accepted cost of `FR-LITE-005` | `FR-SEC-022`, `FR-CONF-005`, `FR-CONF-028`, `FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-LITE-009` |
+| No invocation blocks without bound | A deadline on every blocking phase, composed with the overall budget measured from process start, exiting with the code of the phase in progress; the `password_command` phase runs until the child has exited and its output has closed, and a descendant holding the pipe cannot extend it. The three mechanisms are settled in [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and described in `architecture.md`. Every statement on an open SQLite database file is bounded by the busy timeout and a watchdog ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file)), the probe whose loading of a crafted schema grows faster than its objects included; **the open of a database file is not**, and a file swapped for a FIFO after its kind was established blocks it — the accepted cost of `FR-LITE-005` | `FR-SEC-022`, `FR-CONF-005`, `FR-CONF-028`, `FR-GLOB-011`, `FR-GLOB-012`, `FR-GLOB-013`, `FR-LITE-009` |
 | No render runs unbounded in work, output or memory | Render fuel, the render output limit and the render memory limit beside the deadline; the first crossed ends the render with `65`. The memory limit is observed every 10 ms and can be overshot within one interval, and an allocation the OS refuses aborts without a `cause` ([architecture.md](architecture.md#the-render-bounds), [`ADR-011`](../adr/adr-011-render-memory-accounting.md)) | `FR-SEC-025`, `FR-RND-036` … `FR-RND-039` |
 | A failed render leaves at most one incomplete result on stdout | The render writes nothing to stdout until it returns; a bound that ends it from the watchdog exits without flushing, and one invocation renders once | `FR-RND-033`, `FR-RND-034`, `FR-RND-037`, `FR-RND-039`, `FR-RND-002` |
 | A cache file is never half-written, and a killed process leaves nothing locked | Each object is written through a temporary file in the same directory and renamed over the target; no lock is taken, so two writers yield one whole result or the other | `FR-CACHE-030`, `FR-CACHE-031` |

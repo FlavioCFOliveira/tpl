@@ -152,20 +152,30 @@ becomes binding.
 
 ## cache
 
-The catalogue data `tpl` has previously read from a server and stored under
-`.tpl/.cache/`, keyed by database entry name. See
+The catalogue data `tpl` has previously read from a database and stored
+under `.tpl/.cache/`, keyed by database entry name. See
 [cache-commands.md](cache-commands.md).
+
+*Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+connection, per the user's decision of 2026-11-06. The entry said that the data was
+read from a server; the cache holds what `tpl` read from the database of any
+provider.
 
 ## cache hit / cache miss
 
-A hit is a read served entirely from `.tpl/.cache/` with no connection opened. A
-miss is a read for which the required data is absent, unreadable, of an unknown
+A hit is a read served entirely from `.tpl/.cache/` without reading the
+database. A miss is a read for which the required data is absent, unreadable, of an unknown
 format version, or held in a file `FR-CACHE-033` otherwise treats as a miss —
 among them a file holding an object other than the one requested, and a symbolic
-link — and which therefore reaches the server. Only the files a
+link — and which therefore reads the database. Only the files a
 read consults decide it, per `FR-CACHE-033`. A render served lazily under
 `FR-CACHE-038` is a hit only if no file it reads is a miss; one that abandons its
 render under `FR-CACHE-039` is a miss.
+
+*Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+connection, per the user's decision of 2026-11-06. The entry said that a hit opens no connection and that a miss reaches the
+server; both now speak of reading the database, which holds for every
+provider.
 
 ## calling agent
 
@@ -231,13 +241,49 @@ incomplete for the other. See `FR-PRIV-001`.
 
 ## connection
 
-One connection of `tpl` to the database an entry names: to a MariaDB server
-for a `mariadb` entry, to a MySQL server for a `mysql` entry, or of the SQLite
-library to the database file for a `sqlite` entry, per `FR-LITE-037`. An
-invocation opens at most one, per `NFR-PERF-004`.
+One connection of `tpl` to the server a `mariadb` or a `mysql` entry names:
+to a MariaDB server for a `mariadb` entry, or to a MySQL server for a `mysql`
+entry. It runs from the TCP connect, through the [login](#login) and the
+session, until `tpl` closes it. *Connection*, *connect* and *connecting* name
+the two server providers alone. A `sqlite` entry has no connection: its
+equivalent is [opening the database file](#opening-the-database-file). A fact
+that holds for every provider speaks of reading the database. An invocation
+opens at most one connection, per `NFR-PERF-004`.
+
+Two uses of the word are not this term. A virtual table that the SQLite
+library *connects* is a table whose module the library starts, per
+`FR-LITE-015`; and a contract value that contains the word — the key
+`core.connect_timeout`, the field `connected` of `FR-CFG-039`, or the
+catalogue field `collation_connection` — keeps its spelling for every
+provider.
 
 *Added in the sixty-fifth edition. Amended in the seventy-third edition*: the
 `mysql` entry is new.
+
+*Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+connection, per the user's decision of 2026-11-06. The entry defined a
+connection for all three providers, the opening of a SQLite database file
+included, while `FR-HELP-038` and `FR-ERR-051` already used the word for
+MariaDB and MySQL alone. It now names the server providers alone, and
+[opening the database file](#opening-the-database-file) is the term for a
+`sqlite` entry.
+
+## opening the database file
+
+What a read of a `sqlite` entry does where a read of a `mariadb` or a
+`mysql` entry opens a [connection](#connection): the SQLite library opens the
+file the entry's `path` names, read-only, under `FR-LITE-006`, the system
+applies the controls of `FR-LITE-010` and the limits of `FR-LITE-011`, the
+statements of `FR-LITE-015` read the file, and the system closes it. An
+invocation opens the database file at most once, per `NFR-PERF-004`.
+**Reading the database** names both: a requirement that a command SHALL NOT
+read the database forbids it to open a connection and to open the database
+file. What the SQLite documentation calls a *database connection* is, in
+this corpus, an **open of the database file**; a second one, by `tpl` or by
+another program, is *another open of the file*.
+
+*Added in the ninetieth edition,* for rmp `#373`: one meaning of
+connection, per the user's decision of 2026-11-06.
 
 ## context
 
@@ -277,9 +323,9 @@ and the module that owns a command owns the shape of its `data`. Fixed by
 
 ## hardening control
 
-A setting of the SQLite library that `tpl` applies on every connection to a
+A setting of the SQLite library that `tpl` applies each time it opens a
 database file, or a property the carried library is built with, which `tpl`
-confirms by reading it back on every connection, so that a file treated as
+confirms by reading it back each time it opens one, so that a file treated as
 untrusted is read under the checks SQLite offers for one. The controls are
 `FR-LITE-010`, the limits `FR-LITE-011`.
 
@@ -288,6 +334,10 @@ untrusted is read under the checks SQLite offers for one. The controls are
 *Amended in the sixty-sixth edition.* A property of the build is a hardening
 control too: extension loading is absent from the carried library, and its
 read-back is `PRAGMA compile_options`.
+
+*Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+connection, per the user's decision of 2026-11-06. The entry said that the controls apply on every connection; they apply
+each time the database file is opened.
 
 ## official driver
 
@@ -317,8 +367,12 @@ edition defined it.
 Which object kinds and which of their properties enter the model, fixed by
 [catalogue-coverage.md](catalogue-coverage.md). Coverage is applied before
 `--pattern`, per `FR-CAT-028`, so that any difference between what a listing
-shows and what the server holds is attributable to one or the other and never to
-both.
+shows and what the database holds is attributable to one or the other and
+never to both.
+
+*Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+connection, per the user's decision of 2026-11-06. The entry said what the server holds;
+coverage and `--pattern` apply to the database of every provider.
 
 ## divergence register
 
@@ -567,12 +621,12 @@ per `FR-SCH-010`.
 
 ## read transaction
 
-A transaction of the SQLite library in which a connection reads the database
-file and writes nothing. Begun by `BEGIN DEFERRED`, it starts when its first
-statement reads the file, and from then until it ends every statement on the
-connection reads one snapshot of the database: in rollback-journal mode the
-connection holds the shared lock a writer must wait out before it commits,
-and in write-ahead-log mode a write another connection commits stays
+A transaction of the SQLite library in which an open of the database file
+reads it and writes nothing. Begun by `BEGIN DEFERRED`, it starts when its
+first statement reads the file, and from then until it ends every statement
+on that open reads one snapshot of the database: in rollback-journal mode the
+open holds the shared lock a writer must wait out before it commits, and in
+write-ahead-log mode a write another open of the file commits stays
 invisible to it, per `https://sqlite.org/lang_transaction.html`,
 `https://sqlite.org/lockingv3.html` and `https://sqlite.org/isolation.html`,
 checked 2026-11-04. `FR-LITE-042` runs the check of `FR-LITE-041` and the
@@ -580,10 +634,19 @@ catalogue statements of a `sqlite` read in one.
 
 *Added in the seventieth edition.*
 
+*Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+connection, per the user's decision of 2026-11-06. The entry spoke of a connection reading the file; it now speaks of an
+open of the database file.
+
 ## read-through cache
 
-A cache consulted before the server on every read, and populated immediately
-whenever the read misses. See `FR-CACHE-006` and `FR-CACHE-007`.
+A cache consulted before the database is read, on every read, and populated
+immediately whenever the read misses. See `FR-CACHE-006` and `FR-CACHE-007`.
+
+*Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+connection, per the user's decision of 2026-11-06. The entry said that the cache is
+consulted before the server; it is consulted before the database of any
+provider is read.
 
 ## reference workload
 
@@ -616,9 +679,13 @@ a key of `.tpl/.cfg`, per `FR-CONF-045`. Neither is the output cap of
 
 A performance requirement stated as an observable, permanent property rather
 than as a figure — that the catalogue-query count does not grow with the number
-of objects, that a cache hit opens no connection. It is verified from outside
+of objects, that a cache hit does not read the database. It is verified from outside
 the process and needs no stopwatch. The six are `NFR-PERF-001` through
 `NFR-PERF-006`.
+
+*Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+connection, per the user's decision of 2026-11-06. The example said that a cache hit opens no connection; it now says that a
+cache hit does not read the database.
 
 ## differential run
 

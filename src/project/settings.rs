@@ -347,7 +347,7 @@ pub(crate) fn render_bounds(configuration: &Configuration) -> RenderBounds {
 /// a connection (step 5 of `FR-ERR-006`, `FR-CONF-056`).
 ///
 /// It is what an invocation holds between entry resolution and the
-/// cache-or-connection step: the provider's refused keys, a `sqlite` entry's
+/// cache-or-read step: the provider's refused keys, a `sqlite` entry's
 /// `path`, a DSN the grammar refuses, a value holding a NUL character and a
 /// port that is not one have each been refused, and **no** field has been
 /// expanded and no `password_command` run. [`Prepared::connect`] does both,
@@ -425,7 +425,7 @@ impl Prepared {
     /// (`FR-CONF-056`).
     ///
     /// It is called by an invocation that is to open a connection, at the
-    /// cache-or-connection step of `FR-ERR-006` and before the first
+    /// cache-or-read step of `FR-ERR-006` and before the first
     /// connection phase of `FR-CONF-005`, and by nothing else.
     ///
     /// # Errors

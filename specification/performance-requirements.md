@@ -1,7 +1,7 @@
 ---
 title: Performance Requirements
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-06
 related: [server-contract.md, cache-commands.md, cache-documents.md, global-flags.md, catalogue-coverage.md, context-document.md, project-and-discovery.md, glossary.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -19,10 +19,11 @@ written under it.
 What this file owns is two things, and they differ in kind.
 
 The first is a small set of **requirements of form** — the number of catalogue
-queries does not depend on the number of objects, a cache hit opens no
-connection, one invocation opens at most one connection, the commands of
-`FR-PROJ-025` read no configuration. These are deterministic counts and
-deterministic absences, not timings. A cache hit that opened a connection is a
+queries does not depend on the number of objects, a cache hit does not read
+the database, one invocation opens at most one connection or opens the
+database file at most once, the commands of `FR-PROJ-025` read no
+configuration. These are deterministic counts and deterministic absences, not
+timings. A cache hit that read the database is a
 **functional defect**, caught the way a wrong exit code is caught. They are
 correctness invariants, the integration suite asserts each of them wherever the
 instrument it needs is reachable on the run, and nothing here weakens them.
@@ -93,10 +94,11 @@ can fail anything.** The six **requirements of form**, `NFR-PERF-001` through
 `NFR-PERF-006`, each state a deterministic count or a deterministic absence,
 observable from outside the process and independent of how fast the host is:
 the statements over `WL-001` equal the statements over `WL-003`; a cache hit
-opens no connection; one invocation opens at most one connection; the commands
-of `FR-PROJ-025` read no configuration. `NFR-PERF-007` fixes the instruments
+does not read the database; one invocation opens at most one connection, or
+opens the database file at most once; the commands of `FR-PROJ-025` read no
+configuration. `NFR-PERF-007` fixes the instruments
 that observe them and `NFR-PERF-008` makes the query count readable, so all
-eight of this section stand together. A cache hit that opened a connection is a
+eight of this section stand together. A cache hit that read the database is a
 **functional defect**, not a slow run, and it fails a test for the reason a
 wrong exit code fails one.
 
@@ -131,14 +133,14 @@ have:
 | `NFR-PERF-008` for a `sqlite` entry, counted against the statement record of `FR-LITE-018` | The fixture database of `FR-LITE-038`, which the test builds, and nothing else | Runs, on all four targets of `NFR-PERF-018` |
 
 **A skipped assertion is not a weakened requirement.** Every clause in the table
-above holds on all four targets, and every one but the connection count of a
-`sqlite` entry is verified on all four; what varies between runs is whether a
+above holds on all four targets, and every one but the count of opens of the
+database file of a `sqlite` entry is verified on all four; what varies between runs is whether a
 given run can see it, and a run that cannot **skips the assertion with a stated
 reason and never passes it silently**. `NFR-PERF-018`'s parity clause is
 untouched, and the two places where the evidence is genuinely weaker on two
 targets are the file-open observation, which `NFR-PERF-005` names, bounds and
-states the consequence of, and the connection count of a `sqlite` entry, which
-`NFR-PERF-004` does the same for.
+states the consequence of, and the count of opens of the database file of a
+`sqlite` entry, which `NFR-PERF-004` does the same for.
 
 *Amended in the seventy-third edition,* for rmp `#324`: the second row of the
 table is new. A `mysql` entry is observed through its server's records as a
@@ -292,15 +294,24 @@ a summary.
   scalar rather than by this requirement. `BR-CTX-001` and `FR-CTX-010` record
   the same cost from the document's side, where it was accepted twice over.
 
-- **NFR-PERF-003**: A cache hit SHALL open no connection and SHALL issue no
-  catalogue query.
+- **NFR-PERF-003**: A cache hit SHALL NOT read the database: it SHALL open no
+  connection, SHALL NOT open the database file, and SHALL issue no catalogue
+  query.
 
   *Note added in the fortieth edition.* Under `FR-CACHE-038` a render that
   began serving from the cache can reach a file that is a miss. That invocation
   is a miss and not a hit, per `FR-CACHE-006`, so the connection it opens under
   `FR-CACHE-039` is outside this requirement and within `NFR-PERF-004`.
 
-- **NFR-PERF-004**: One invocation SHALL open at most one connection.
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. A cache hit SHALL NOT
+  read the database, which the requirement now states as both halves the word
+  *connection* covered until this edition: no connection, and no open of the
+  database file. The requirement holds as before.
+
+- **NFR-PERF-004**: One invocation SHALL open at most one connection, for a
+  `mariadb` or a `mysql` entry, and SHALL open the database file at most once,
+  for a `sqlite` entry.
 
   For a `sqlite` entry, this requirement SHALL be verified by the syscall trace
   of `NFR-PERF-007`, observing the opens of the database file the entry names,
@@ -322,51 +333,62 @@ a summary.
   *Observed.* No instrument of `NFR-PERF-007` observes the clause on the
   macOS targets. No outside instrument records the files a process opens on a
   macOS host under its default protection, as `NFR-PERF-005` records with its
-  date and its commands. And no differential run can make a second connection
-  change the outcome: on 2026-11-03, through the Python library 3.54.1, two
-  read-only connections to one database, in rollback-journal mode and in
-  write-ahead-log mode, read the same rows as one connection and left the same
+  date and its commands. And no differential run can make a second open of
+  the file change the outcome: on 2026-11-03, through the Python library
+  3.54.1, two read-only opens of one database, in rollback-journal mode and in
+  write-ahead-log mode, read the same rows as one open and left the same
   files with the same bytes beside it, so the exit code, stdout and the
-  artefacts left on disk would be those of one connection.
+  artefacts left on disk would be those of one open.
 
   *Consequence, stated plainly, because the evidence is weaker on two targets
   than the requirement's wording suggests.* The requirement holds on all four
   targets and, for a `sqlite` entry, is observed on two. On
   `x86_64-apple-darwin` and `aarch64-apple-darwin` nothing records how many
-  connections a `sqlite` invocation opens, so a build that opened the database
+  times a `sqlite` invocation opens the database file, so a build that opened the database
   file twice there, and only there, would satisfy every observation those
   targets afford and would not be caught. The Linux observation is not
   credited to them, for the reason `NFR-PERF-005` gives for its own clause.
   `NFR-PERF-018`'s parity clause is untouched: a failure observed on either
   Linux target fails the change.
 
-  *Rejected: an in-process count of the connections the reader opens, as
-  `FR-LITE-018` takes the statement record in process.* That record is taken
-  inside the process because the statements a SQLite connection receives
-  cannot be seen from outside it on any target. A file open can be, on two
-  targets; and a count kept by the reader sees only the connections opened
+  *Rejected: an in-process count of the opens of the file the reader makes,
+  as `FR-LITE-018` takes the statement record in process.* That record is
+  taken inside the process because the statements an open SQLite database
+  file receives cannot be seen from outside it on any target. A file open can
+  be, on two targets; and a count kept by the reader sees only the opens made
   through the route that keeps it, which is not the defect this requirement
-  exists to catch: a second connection opened by another route. A syscall
+  exists to catch: a second open of the file made by another route. A syscall
   trace sees every open, whatever route makes it.
 
   *What would change this.* An instrument that records the files a process
   opens on a macOS host without lifting its default protection, or an
-  arrangement under which a second connection changes the observable outcome.
+  arrangement under which a second open of the file changes the observable
+  outcome.
 
   *Note added in the forty-second edition.* `FR-RND-040` closes that
   connection, and shuts down the driver's runtime, before a render starts, so
   no connection is open while a template is evaluated.
 
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The requirement states
+  the bound for each kind of provider: at most one connection for a `mariadb`
+  or a `mysql` entry, and at most one open of the database file for a `sqlite`
+  entry. The note of the sixty-fifth edition, which called the opening of the
+  file a connection, is superseded by
+  [glossary.md](glossary.md#opening-the-database-file); the observation, the
+  consequence and the rejected alternative speak of opens of the file. The
+  requirement holds as before.
+
 - **NFR-PERF-005**: Every command named by `FR-PROJ-025` SHALL perform no
-  project discovery, SHALL read no configuration file, and SHALL open no
-  connection. Those commands are `tpl init`, every form of `help`, and every
+  project discovery, SHALL read no configuration file, and SHALL NOT read the
+  database. Those commands are `tpl init`, every form of `help`, and every
   form of `version`. The discovery clause is what `FR-PROJ-025` states it
   forbids — no project above the invocation decides its outcome — and the one
   upward look that requirement licenses, the ancestor `FR-PROJ-016` obliges
   `tpl init` to warn about, satisfies it rather than excepting from it.
 
-  The connection clause SHALL be verified on every target of `NFR-PERF-018`,
-  from the server side. The discovery clause and the configuration clause SHALL
+  The clause on reading the database — the connection clause — SHALL be
+  verified on every target of `NFR-PERF-018`, from the server side. The discovery clause and the configuration clause SHALL
   be verified on every target of `NFR-PERF-018` by the differential run of
   `NFR-PERF-007`, and SHALL additionally be verified by the file-open
   observation of `NFR-PERF-007` **on the two Linux targets only**. On the two
@@ -481,8 +503,14 @@ a summary.
   does not make on its own, and taking it is an amendment to this requirement
   and to `NFR-PERF-007` together.
 
-- **NFR-PERF-006**: A command that requires no catalogue data SHALL open no
-  connection. This covers every `template` subcommand, every `cfg` subcommand
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The commands SHALL NOT
+  read the database, where the text said that they open no connection; the
+  clause keeps its name, the connection clause, and its verification. The
+  requirement holds as before.
+
+- **NFR-PERF-006**: A command that requires no catalogue data SHALL NOT read
+  the database. This covers every `template` subcommand, every `cfg` subcommand
   except `database test`, `help`, `version`, `init`, any `tpl render` invoked
   with `--context`, and any `tpl render` whose template name does not resolve.
 
@@ -509,6 +537,11 @@ a summary.
   clause with the obligation alone, dropping the list. The list is what tells
   an implementer which invocations were considered, and dropping it to avoid
   having to extend it would lose the only record of that.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. A command that requires
+  no catalogue data SHALL NOT read the database, where the text said that it
+  opens no connection. The requirement holds as before.
 
 - **NFR-PERF-007**: Each of the six requirements of form, `NFR-PERF-001`
   through `NFR-PERF-006`, SHALL be verified by an observation made outside the
@@ -1224,7 +1257,7 @@ a summary.
   The one failure this set could once have been asked for, and can no longer,
   is a `tpl render` whose template does not exist: the thirtieth edition moved
   template resolution to the fourth step of `FR-ERR-006`, so that invocation
-  opens no connection at all and is measured by the row already here.
+  reads no database at all and is measured by the row already here.
 
   *Rejected: a tenth row, `The failure path against a live server`, over
   `WL-001` with `Server: yes`.* `NFR-PERF-014` fixes the set at nine "and no
@@ -1275,6 +1308,11 @@ a summary.
   except where a sentence has stopped being true, which is corrected in place
   and says so. This is the treatment the thirty-third and thirty-fourth
   editions gave a closed edition's present-tense claim.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The invocation whose
+  template does not exist reads no database, where the text said that it opens
+  no connection. The requirement is unchanged.
 
 - **NFR-PERF-019**: A figure in `NFR-PERF-014` that was taken from a document
   rather than measured SHALL be marked **adopted**, and SHALL be superseded by
@@ -1542,8 +1580,8 @@ a summary.
 
   **What still fails, so that this rule is not read wider than it is.** The
   requirements of form fail, and they are the section that says so in its own
-  text: they are deterministic counts and absences, and a cache hit that opens
-  a connection is a functional defect. `WL-002` is of the same kind and is
+  text: they are deterministic counts and absences, and a cache hit that reads
+  the database is a functional defect. `WL-002` is of the same kind and is
   stated as such. What does not fail is a **timing**, a **memory reading**, or
   any comparison between two of them.
 
@@ -1567,6 +1605,11 @@ a summary.
   one enforced figure obliges a baseline, a baseline obliges a comparison, and
   a comparison obliges a rule for what to do when it goes the wrong way, which
   is the whole regime again.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. A cache hit that reads
+  the database is the defect named, where the text said one that opens a
+  connection. The rule is unchanged.
 
 - **BR-PERF-006**: A **recorded** figure lives in `BENCHMARKS.md` and nowhere
   else. This specification names each measurement point and says where its

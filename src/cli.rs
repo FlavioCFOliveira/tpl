@@ -903,8 +903,8 @@ mod tests {
     /// list, print, check and locate the project's templates, per
     /// `FR-TMPL-002`. `tpl render` joins the two arms: it assembles the
     /// context of `FR-RND-023` from a catalogue read or a `--context`
-    /// document and renders one template, once. `tpl cfg database test` opens
-    /// a connection with one entry and reports the four steps of `FR-CFG-024`.
+    /// document and renders one template, once. `tpl cfg database test` reads
+    /// the database of one entry and reports the four steps of `FR-CFG-024`.
     ///
     /// The array is kept, rather than deleted as a list equal to [`LEAVES`],
     /// because a leaf added to that one is a leaf whose implementation is a

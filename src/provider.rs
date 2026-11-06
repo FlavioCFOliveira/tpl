@@ -74,8 +74,9 @@ impl Read {
     }
 }
 
-/// Opens the one connection of `NFR-PERF-004`, reads the whole catalogue, and
-/// closes it before returning, whether the read succeeded or not
+/// Opens the one connection or the one open of the database file
+/// `NFR-PERF-004` allows, reads the whole catalogue, and closes it before
+/// returning, whether the read succeeded or not
 /// (`FR-RND-040`).
 ///
 /// # Errors
@@ -181,7 +182,8 @@ pub(crate) fn test(source: Source<'_>, clock: &Clock) -> Result<Tested, Error> {
 }
 
 /// Whether the calling thread holds nothing of any reader's read: no
-/// connection, no driver runtime and no statement watchdog (`FR-RND-040`).
+/// connection, no open database file, no driver runtime and no statement
+/// watchdog (`FR-RND-040`).
 pub(crate) fn quiescent() -> bool {
     mariadb::quiescent() && mysql::quiescent() && sqlite::quiescent()
 }

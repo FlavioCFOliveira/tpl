@@ -138,7 +138,7 @@ pub(crate) const STORED: &str = "SELECT s.type, s.name, s.tbl_name, s.sql \
      WHERE s.type IN ('view', 'trigger')";
 
 /// Every statement of the list `FR-LITE-015` closes, in the order
-/// `FR-LITE-017` and the plan fix them: the connection start, then the read.
+/// `FR-LITE-017` and the plan fix them: the open of the file, then the read.
 #[cfg(test)]
 pub(crate) const CLOSED_LIST: [&str; 19] = [
     COMPILE_OPTIONS,
@@ -162,8 +162,8 @@ pub(crate) const CLOSED_LIST: [&str; 19] = [
     COMMIT,
 ];
 
-/// The statements of the connection start, in the order `FR-LITE-017` fixes:
-/// the build, the controls, then the probe.
+/// The statements issued as the file is opened, in the order `FR-LITE-017`
+/// fixes: the build, the controls, then the probe.
 #[cfg(test)]
 pub(crate) const CONNECTION_START: [&str; 10] = [
     COMPILE_OPTIONS,
@@ -203,7 +203,7 @@ pub(crate) const CATALOGUE: [&str; 7] = [
     STORED,
 ];
 
-/// Every statement a full read issues after the connection start, in the
+/// Every statement a full read issues after the file is opened, in the
 /// order of `FR-LITE-017`: `BEGIN DEFERRED`, the check, the plan, `COMMIT`
 /// (`FR-LITE-042`).
 #[cfg(test)]
