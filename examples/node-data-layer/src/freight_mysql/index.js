@@ -3,7 +3,7 @@
 // Server:   MySQL 9.7.4, series 9.7, standing supported.
 // Schema:   freight, utf8mb4 / utf8mb4_unicode_520_ci.
 // Tables:   22.
-// Renderer: tpl 0.1.2.
+// Renderer: tpl 0.1.3.
 
 /**
  * A data layer for the `freight` schema, rendered from the catalogue of the

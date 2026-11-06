@@ -3,7 +3,7 @@
 # Server:   MariaDB 12.3.3-MariaDB-ubu2404, series 12.3, standing supported.
 # Schema:   freight, utf8mb4 / utf8mb4_unicode_520_ci.
 # Tables:   17.
-# Renderer: tpl 0.1.2.
+# Renderer: tpl 0.1.3.
 
 """A data layer for the `freight` schema, rendered from the catalogue of the
 server named above.
