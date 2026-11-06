@@ -369,7 +369,7 @@ pub(crate) struct Entry {
     pub(crate) path: Vec<PathBuf>,
 }
 
-/// The two providers as `--provider` takes them (`FR-CONF-051`,
+/// The three providers as `--provider` takes them (`FR-CONF-051`,
 /// `FR-HELP-013`).
 ///
 /// The enumeration is the model's own, declared once in `model/database.rs`

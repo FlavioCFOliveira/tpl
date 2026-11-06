@@ -1772,12 +1772,12 @@ fn fr_rnd_041_direct_with_context_is_64_before_any_project_is_discovered() {
     );
     assert_eq!(
         line(&written, LABELS[1]),
-        "--context reads the context from a document and contacts no server; --direct demands \
-         a read from the server"
+        "--context reads the context from a document and reads no database; --direct demands \
+         a read of the database"
     );
     assert_eq!(
         line(&written, LABELS[2]),
-        "remove --direct to render from the document, or remove --context to read the server"
+        "remove --direct to render from the document, or remove --context to read the database"
     );
     assert!(!written.contains("missing.json"), "{written}");
 

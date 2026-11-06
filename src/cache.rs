@@ -1014,7 +1014,7 @@ impl Cache {
     /// The kind is part of the path, per `FR-CDOC-014`, so a bare name that
     /// could denote either is looked up as both by the caller: a cache that
     /// holds one of the two answers, and a cache that holds both puts the
-    /// ambiguity of `FR-SCH-010` in the caller's hands exactly as a server read
+    /// ambiguity of `FR-SCH-010` in the caller's hands exactly as a database read
     /// does.
     ///
     /// It is a miss on the terms of [`Cache::table`], and where the file holds
@@ -2259,7 +2259,7 @@ mod tests {
         );
     }
 
-    /// A store holding the whole fixture, as a server read writes it.
+    /// A store holding the whole fixture, as a database read writes it.
     fn stored(scratch: &Scratch) -> Cache {
         let model = crate::model::document::fixture::database();
         let document = crate::model::document::context(&model).expect("the fixture builds");

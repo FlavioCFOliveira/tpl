@@ -80,7 +80,7 @@ pub(crate) use shape::{ContextData, DatabaseDocument};
 ///
 /// Returns [`Error::InternalInvariant`] where a foreign key names a table the
 /// model does not carry, which `FR-CTX-023` makes unreachable for a model
-/// produced by a server read.
+/// produced by a database read.
 pub(crate) fn dump<'a>(
     database: &'a Database<'a>,
     source: Source,

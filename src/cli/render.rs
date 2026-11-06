@@ -85,7 +85,7 @@
 //! connection is opened for it. So is a render bound it crosses, before the
 //! miss or after it: the abandoned render keeps all four bounds until it has
 //! returned, and crossing one ends the invocation with `65` and that bound's
-//! `cause`, with no server read (`FR-CACHE-039`, `FR-RND-038`). Only an
+//! `cause`, with no database read (`FR-CACHE-039`, `FR-RND-038`). Only an
 //! abandoned render that returned within every bound returns the invocation to
 //! step 6.
 //!
@@ -550,9 +550,10 @@ fn document_flag<'a>(
 ///
 /// A miss among the files read before the render is answered as any miss is.
 /// A miss among the files read during it abandons the render, which has then
-/// written nothing, and the invocation is a miss: the server is read once, the
-/// cache written, and the render made again from the server's document, with
-/// the first render's `now` and a render deadline of its own (`FR-CACHE-039`).
+/// written nothing, and the invocation is a miss: the database is read once,
+/// the cache written, and the render made again from the document that read
+/// built, with the first render's `now` and a render deadline of its own
+/// (`FR-CACHE-039`).
 ///
 /// # Errors
 ///
@@ -1024,7 +1025,7 @@ const HEAP_POLL: Duration = Duration::from_millis(10);
 /// a lookup function of `FR-ENV-020` can go on evaluating, and a watchdog that
 /// stood down at the miss would leave its deadline and its memory unbounded.
 /// Crossing either ends the invocation here with `65` and that bound's
-/// `cause`, before any server read — which is the outcome those requirements
+/// `cause`, before any database read — which is the outcome those requirements
 /// fix for an abandoned render.
 ///
 /// # Errors

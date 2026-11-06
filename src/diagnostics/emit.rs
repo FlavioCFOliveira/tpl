@@ -213,7 +213,7 @@ fn database_line(command: &str, server: ServerDatabase<'_>) -> String {
     };
     format!(
         "{WARNING_TOKEN} -d/--database has no effect on tpl {command}; it selects the entry for \
-         commands that connect{last}"
+         commands that use one{last}"
     )
 }
 
@@ -577,7 +577,7 @@ mod tests {
         assert_eq!(
             line,
             "warning: -d/--database has no effect on tpl cfg database update; it selects the \
-             entry for commands that connect; the name argument already names the entry"
+             entry for commands that use one; the name argument already names the entry"
         );
         assert!(!line.contains("--schema"), "{line}");
     }

@@ -1,4 +1,4 @@
-//! Where a catalogue read comes from: the cache first, the server on a miss
+//! Where a catalogue read comes from: the cache first, the database on a miss
 //! (`FR-CACHE-006`, `FR-CACHE-007`, `FR-SCH-025`).
 //!
 //! Every command that reads a catalogue goes through this module: the eight
@@ -18,7 +18,7 @@
 //! | 2 | Project discovery and the two trust checks | `FR-PROJ-004` … `FR-PROJ-011` |
 //! | 3 | `.tpl/.cfg` is read and validated | `FR-CONF-001` … `FR-CONF-022` |
 //! | 5 | The entry is selected and checked as written, and the two keys a read needs are checked | `FR-GLOB-004` … `FR-GLOB-008`, `FR-CONF-040`, `FR-CONF-041` |
-//! | 6 | The cache is consulted, and only where it misses is the entry resolved for a connection and the server read | `FR-CACHE-006`, `FR-CACHE-007`, `FR-CONF-056` |
+//! | 6 | The cache is consulted, and only where it misses is the entry resolved for a connection and the database read | `FR-CACHE-006`, `FR-CACHE-007`, `FR-CONF-056` |
 //!
 //! **Step 4 is missing from that table because it is not this module's.** It is
 //! template resolution, which `FR-ERR-006` evaluates immediately after `.tpl/.cfg`
@@ -43,17 +43,17 @@
 //!
 //! # One read shape, and why
 //!
-//! Every server read this module makes is
-//! [`Scope::Everything`](catalogue::Scope::Everything). The narrowed plans of
-//! that enumeration cannot produce the document a named read must answer with:
-//! `FR-CTX-006` and `FR-CTX-010` embed, in full, the table at each end of every
-//! foreign key, and a plan that reads one table row returns that table's keys
-//! without the tables they name — which `FR-CTX-023` requires to be present and
-//! which [`crate::model::document`] detects as a dangling reference rather than
-//! emitting. The population `FR-SCH-010` draws a nearest-match suggestion from
-//! is in hand for the same reason, and `FR-CACHE-007` then warms the whole
-//! cache, so the invocation after a miss opens no connection at all, per
-//! `FR-CACHE-006`.
+//! Every database read this module makes reads the whole catalogue, which for
+//! a `mariadb` entry is [`Scope::Everything`](catalogue::Scope::Everything).
+//! The narrowed plans of that enumeration cannot produce the document a named
+//! read must answer with: `FR-CTX-006` and `FR-CTX-010` embed, in full, the
+//! table at each end of every foreign key, and a plan that reads one table row
+//! returns that table's keys without the tables they name — which `FR-CTX-023`
+//! requires to be present and which [`crate::model::document`] detects as a
+//! dangling reference rather than emitting. The population `FR-SCH-010` draws a
+//! nearest-match suggestion from is in hand for the same reason, and
+//! `FR-CACHE-007` then warms the whole cache, so the invocation after a miss
+//! opens no connection at all, per `FR-CACHE-006`.
 //!
 //! `NFR-PERF-001` and `NFR-PERF-002` are satisfied as they are stated: the plan
 //! is eleven statements for a database of one object and for a database of two
@@ -70,7 +70,7 @@
 //! # Where the process ends, the read's buffers are leaked
 //!
 //! A document borrows the buffers it was decoded from: the cache files, or the
-//! rows of a server read and the model folded from them. Under
+//! rows of a database read and the model folded from them. Under
 //! [`Ending::Process`] those owners are leaked rather than dropped, and the
 //! document borrows `'static` data ([`Served::leaked`]). That removes two costs
 //! (`BENCHMARKS.md`, 2026-09-22, rows 3 and 4 of the waste register): the
@@ -507,7 +507,7 @@ impl<'a> Reader<'a> {
             // PERF: under Ending::Process the files' bytes are leaked, so the
             // document borrows them for the rest of the process and is never
             // freed or copied (this module's documentation). A miss leaks the
-            // bytes it could not decode, which the server read then outlives.
+            // bytes it could not decode, which the database read then outlives.
             match self.ending {
                 Ending::Process => {
                     if let Some(document) = leak(loaded).document() {
@@ -530,7 +530,7 @@ impl<'a> Reader<'a> {
     }
 
     /// Serves `tpl schema info`: the metadata and the size of each collection,
-    /// from the cache where [`Cache::summary`] hits and from the server
+    /// from the cache where [`Cache::summary`] hits and from the database
     /// otherwise (`FR-SCH-031`).
     ///
     /// It is [`Reader::serve`] with a narrower hit: the cache is asked for
@@ -562,7 +562,7 @@ impl<'a> Reader<'a> {
 
     /// Serves the `text` listing of `tpl schema tables`: four members of each
     /// table, from the cache where the table collection is recorded whole and
-    /// every file decodes as a [`Listed`], and from the server otherwise
+    /// every file decodes as a [`Listed`], and from the database otherwise
     /// (`FR-SCH-026`, `FR-CDOC-007`).
     ///
     /// It is [`Reader::serve`] over [`Look::Collection`] with a reduced decode

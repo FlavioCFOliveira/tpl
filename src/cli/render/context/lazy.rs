@@ -65,7 +65,7 @@
 //!
 //! `minijinja` holds an object behind an `Arc` with a `'static` bound, and the
 //! document borrows the buffers its source was read into — the cache files,
-//! the `--context` bytes, the rows of a server read. Where the process exits
+//! the `--context` bytes, the rows of a database read. Where the process exits
 //! when the command returns, those buffers are leaked and the document arrives
 //! [`Served::leaked`], already borrowing `'static` data, and is held as it is.
 //! Otherwise it arrives [`Served::borrowed`] and is copied once into
@@ -201,7 +201,7 @@ impl Deref for Held {
 /// Where the members of the `database` object come from.
 #[derive(Debug, Clone)]
 enum Contents {
-    /// A whole document, already decoded: a server read, a `--context`
+    /// A whole document, already decoded: a database read, a `--context`
     /// document.
     Document(Held),
     /// The cache files of `FR-CACHE-038`, each read when first reached.

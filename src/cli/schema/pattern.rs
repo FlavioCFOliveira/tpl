@@ -1,7 +1,7 @@
-//! The `--pattern` filter: MariaDB `LIKE` syntax, evaluated in memory
-//! (`FR-SCH-011` … `FR-SCH-015`, `BR-SCH-001`).
+//! The `--pattern` filter: a syntax of its own, the same for every provider,
+//! evaluated in memory (`FR-SCH-011` … `FR-SCH-015`, `BR-SCH-001`).
 //!
-//! `FR-SCH-012` fixes four behaviours and no others:
+//! `FR-SCH-012` fixes these meanings and no others:
 //!
 //! | Written | Matches |
 //! |---|---|
@@ -9,28 +9,32 @@
 //! | `_` | exactly one character |
 //! | `\%` | a literal `%` |
 //! | `\_` | a literal `_` |
+//! | `\` before any other character, or at the end of the pattern | a literal `\`; reading resumes at the character after it |
+//! | any other character | itself, under the case folding of `FR-SCH-014` |
 //!
-//! **Nothing is sent to the server** (`FR-SCH-013`). The pattern is compiled
-//! here and applied to the names already read, which is the only way the same
-//! pattern selects the same set with a database, without one, and against any
-//! server: server-side `LIKE` would make the result depend on the collation of
-//! the catalogue columns, which is invisible on the command line. It costs
-//! nothing, because a catalogue read is a whole-list read either way. That is
-//! also what makes `BR-SCH-001` hold across the three sources — a live read, a
-//! cached read and a context file all reach this one matcher.
+//! A character is one Unicode scalar value, in the pattern and in the name, and
+//! a pattern matches a name only where it matches the whole name.
+//!
+//! **Nothing is passed to the database** (`FR-SCH-013`). The pattern is
+//! compiled here and applied to the names already read, which is the only way
+//! the same pattern selects the same set with a database, without one, and
+//! whatever the provider and the server: a `LIKE` evaluated by the database
+//! would make the result depend on the collation of the catalogue columns,
+//! which is invisible on the command line. It costs nothing, because a
+//! catalogue read is a whole-list read either way. That is also what makes
+//! `BR-SCH-001` hold across the three sources — a live read, a cached read and
+//! a context file all reach this one matcher.
 //!
 //! **Case is folded over ASCII `A-Z` and `a-z` alone** (`FR-SCH-014`),
-//! independently of the server, of the database collation and of the locale.
-//! `order%` therefore also matches `Orders`, which the requirement records as
-//! an accepted cost, and a character outside that range is compared as written
-//! — `É` does not match `é`, because folding it would be a rule the requirement
-//! does not state.
+//! independently of the provider, of the server, of the database collation and
+//! of the locale. `order%` therefore also matches `Orders`, which the
+//! requirement records as an accepted cost, and a character outside that range
+//! is compared as written — `É` does not match `é`, because folding it would be
+//! a rule the requirement does not state.
 //!
-//! **A backslash before anything else is a literal backslash.** `FR-SCH-012`
-//! gives the escape exactly two meanings, so a third — a backslash that
-//! disappears before an ordinary character, as a server-side `LIKE` would have
-//! it — is behaviour this corpus does not fix and is not invented here. It is
-//! reported rather than assumed correct.
+//! **A backslash before anything else is a literal backslash**, the fifth row
+//! of `FR-SCH-012`: it does not disappear before an ordinary character, as
+//! MariaDB's `LIKE` would have it.
 //!
 //! The matcher is the classic backtracking walk over the two sequences: a `%`
 //! remembers where it was last tried and the walk returns to it one character
@@ -77,9 +81,9 @@ impl Pattern {
             let token = match character {
                 '%' => Token::Any,
                 '_' => Token::One,
-                // FR-SCH-012 gives the escape two meanings and no third, so a
-                // backslash before anything else — including the end of the
-                // pattern — is the character itself.
+                // FR-SCH-012, fifth row: a backslash before anything other
+                // than `%` or `_` — including the end of the pattern — is a
+                // literal backslash, and reading resumes after it.
                 '\\' => match characters.clone().next() {
                     Some(escaped @ ('%' | '_')) => {
                         characters.next();
