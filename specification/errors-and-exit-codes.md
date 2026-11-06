@@ -1,8 +1,8 @@
 ---
 title: Errors and Exit Codes
 status: approved
-last-reviewed: 2026-11-05
-related: [cli-contract.md, output-formats.md, security.md, global-flags.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
+last-reviewed: 2026-11-06
+related: [cli-contract.md, output-formats.md, security.md, global-flags.md, help-and-version.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
 # Errors and Exit Codes
@@ -24,10 +24,17 @@ only channel of detail — which is why `FR-ERR-034` states, per code, what the
 ## Scope
 
 In scope: the exit code table, validation order, the message format and what
-each code's `cause` line must name, nearest-match suggestions, hint
-construction, and `EPIPE`.
+each code's `cause` line must name, the words with which a message names a
+database provider, nearest-match suggestions, hint construction, and `EPIPE`.
 
-Out of scope: the wording of any individual message.
+Out of scope: the wording of an individual message, except the words that
+name a provider, which `FR-ERR-051` governs, and the lines a requirement
+fixes word for word, which read as that requirement gives them.
+
+*Amended in the eighty-ninth edition,* for rmp `#367`. The scope placed the
+wording of every message out of scope, while requirements of this file and of
+the command files fix lines word for word, and `FR-ERR-051` now governs the
+words that name a provider in every line.
 
 ## Actors
 
@@ -878,7 +885,7 @@ Out of scope: the wording of any individual message.
   |---|---|
   | `64` | The token rejected as written, and why it was rejected: the unknown command or flag, the value that did not conform together with the type expected, or both members of the mutually exclusive pair |
   | `65` | For a template, the template name, the line, the column, and the chain of underlying engine errors, per `FR-ERR-011`. For a `--context` document, the path and either the position of the malformed JSON or, for a document that does not match the contract, the key path of the first member in document order that fails it and what the contract expects there: the type expected, that the key is required, or, for a reference `FR-CTX-042` governs, the table named and that `tables` does not carry it. It SHALL NOT cite a file of this specification. For a deadline, which deadline expired and its resolved value, per `FR-GLOB-012`. For a render bound, which bound was exceeded, its resolved value, and the key of `FR-CONF-002` that raises it, per `FR-RND-036`, `FR-RND-037` and `FR-RND-039` |
-  | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in — the database entry and the server-side database, the template root, the key space of `FR-CONF-002`, or the `--context` document and the collection of it the name was sought in |
+  | `66` | The identifier that was not found, the kind of object it was sought as, and the population it was sought in: the database entry and the database read through it, which is the database on the server for a `mariadb` or a `mysql` entry and the schema of the database file for a `sqlite` entry; the template root; the key space of `FR-CONF-002`; or the `--context` document and the collection of it the name was sought in |
   | `69` | The phase that failed — DNS resolution, TCP connect, TLS handshake, the login of `FR-ERR-047`, the [session statement](glossary.md#session-statement) that was running, named as `FR-ERR-027` names it, among them the version probe of `FR-SRV-002`, or a catalogue query — the host and port attempted, and what that phase returned |
   | `70` | The invariant that was violated, or that a panic occurred, and in either case where |
   | `73` | The path `tpl init` could not create, and whether the obstacle was an existing `.tpl` or a failure the filesystem reported |
@@ -1016,6 +1023,13 @@ Out of scope: the wording of any individual message.
   `FR-MYSQL-019` for a `mysql` entry, route every other failure of theirs to
   `78`. No code changes.
 
+  *Amended in the eighty-ninth edition,* for rmp `#367`: the `66` row named
+  "the server-side database" as the population of an object sought through a
+  database entry. A `sqlite` entry has no server, and the object is sought in
+  the schema of its database file, which the implementation's `cause`
+  already names; the row now names both, per `FR-ERR-051`. No code changes,
+  and the other populations are unchanged.
+
 - **FR-ERR-011**: A template error SHALL carry the template name, the line, the
   column, and the chain of underlying template-engine errors.
 
@@ -1025,6 +1039,53 @@ Out of scope: the wording of any individual message.
 
 - **FR-ERR-013**: The system SHALL NOT include credentials in any error message,
   at any verbosity level.
+
+- **FR-ERR-051**: The `error`, `cause` and `hint` lines of every error
+  message, and every warning line of `FR-OUT-020`, SHALL name a database
+  provider by the rule `FR-HELP-038` sets for the help:
+
+  1. A line that speaks of a server, a connection, connecting, a session, a
+     login, TLS or `INFORMATION_SCHEMA` names MariaDB and MySQL. It SHALL be
+     written only where the fact it states holds of a `mariadb` and a
+     `mysql` entry alone — because the condition arises only for such an
+     entry, or the line names the provider — or where the same line, or
+     another line of the same message, states what holds for a `sqlite`
+     entry.
+  2. A line that speaks of a database file or of the SQLite library names
+     SQLite, and SHALL be written only where its fact holds of a `sqlite`
+     entry.
+  3. A line whose fact holds for every provider of `FR-CONF-051`, or for an
+     invocation that reads no database, SHALL speak of the database and of
+     reading it, as the first statement of `FR-HELP-031` does, and SHALL NOT
+     speak of a server or a connection.
+
+  A line that a requirement fixes word for word reads as that requirement
+  gives it, and every such line conforms to this rule. The rule changes no
+  exit code, no condition, and no fact a line is obliged to name.
+
+  ```
+  cause: --context reads the context from a document and reads no database; --direct demands a read of the database
+  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that use one
+  ```
+
+  *Rationale.* rmp `#367`: `FR-HELP-038` fixed the words of the help in the
+  eighty-eighth edition, and the error lines kept the server wording the help
+  had dropped. `tpl render` given `--context` and `--direct` said that
+  `--direct` "demands a read from the server", and the `hint` of `--no-cache` given to
+  `tpl cache load` offered "to read from the server without storing", for
+  invocations whose entry may be a SQLite file. A message is one of the three
+  channels a calling agent has, as the help is, and a caller reading one would
+  conclude that a SQLite entry cannot be read without a server. The rule is
+  the help's, so that the two channels name the providers in the same words.
+
+  *Rejected: fixing each message word for word and stating no rule.* The
+  lines no requirement fixes, which are most of them, would keep whatever
+  words they have, and the next line written would face no rule. *Rejected:
+  naming all three providers in every line.* It lengthens every line for a
+  fact that does not depend on the provider, against the concision
+  `FR-ERR-008` asks of a message.
+
+  *Added in the eighty-ninth edition,* for rmp `#367`.
 
 ## Errors are never JSON
 

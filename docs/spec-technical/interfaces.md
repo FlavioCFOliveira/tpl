@@ -1,7 +1,7 @@
 ---
 title: Interfaces
 status: draft
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [README.md, traceability.md, open-decisions.md, overview.md, data-model.md, quality-attributes.md]
 ---
 
@@ -123,11 +123,11 @@ either half refuses the connection (`FR-SRV-008`, `FR-SRV-009`, `FR-SRV-010`,
 foreign key — to name a column absent from that table's column list, and the
 observation behind `FR-CAT-043` shows the catalogue does not supply the
 property for free. It is checked once, over an assembled table, and is called by
-each of the three producers of a model: `mariadb/` on a server read, `cache/` on
-a cached read, and the `--context` path in `cli/`. It is not placed on the
-emitting path, because `render/` consumes the same model without passing through
-`output/` — the argument `FR-CAT-026` makes for the exclusion lists, applied to
-an invariant.
+each producer of a model: a reader — `mariadb/`, `mysql/` or `sqlite/` — on a
+read of the database, `cache/` on a cached read, and the `--context` path in
+`cli/`. It is not placed on the emitting path, because `render/` consumes the
+same model without passing through `output/` — the argument `FR-CAT-026` makes
+for the exclusion lists, applied to an invariant.
 
 **Recorded gap — what a violation of `FR-CAT-044` produces.** The requirement
 states the property and names no exit code. `FR-ERR-030` gives `70` to a
@@ -518,7 +518,7 @@ per command and reach `output/` as constants — the project value for `template
 and `cfg` documents (`FR-TMPL-030`, `FR-CFG-035`) and for the cache-status
 document, which reports *on* the cache rather than being served from it
 (`FR-CACHE-034`), and the binary value for the command tree (`FR-HELP-017`). The
-one command in the `cfg` group that contacts a server carries the server value
+one command in the `cfg` group that reads a database carries the `server` value
 (`FR-CFG-035`, `FR-CACHE-010`).
 
 **Key order is stated in the type and nowhere else.** The payload types'
@@ -578,7 +578,7 @@ no result writes nothing (`FR-OUT-020`, `FR-OUT-023`, `BR-CLI-004`).
 
 ## Ordering: one default and seven exceptions
 
-Every ordering is applied by `output/` and none is inherited from the server or
+Every ordering is applied by `output/` and none is inherited from the database or
 from the filesystem (`NFR-DET-002`, `NFR-DET-001`). The default is by name,
 ascending, byte-wise. Seven collections are excepted; the first six carry their
 order **from** the reader — `mariadb/` or `sqlite/` — rather than re-derive it,
@@ -617,7 +617,7 @@ and [quality-attributes.md](quality-attributes.md#the-six-requirements-of-form)
 place every ordering in `output/`. As built, the `text` path orders there and
 the **document** path orders in `model/document/`, at the point each collection
 of the document is assembled. `NFR-DET-002` decides neither reading: it requires
-an ordering to be explicit, stable and not inherited from the server or the
+an ordering to be explicit, stable and not inherited from the database or the
 filesystem, and names no component. Both readings are recorded. Nothing
 observable distinguishes them — the ordering is applied before any byte is
 written, and `output/` receives a document already in order — and the model's
@@ -705,9 +705,9 @@ caller that opened the file (`FR-RND-020`, `FR-ERR-029`, `FR-ERR-034`).
 
 **The outward direction can fail, and for one condition.** A foreign key naming
 a table the model does not carry is a violated internal invariant, `70`, which
-`FR-CTX-023` makes unreachable for a model produced by a server read and
-`FR-CTX-042` unreachable for a supplied document, whose read-back refuses it
-with `65` first.
+`FR-CTX-023` makes unreachable for a model produced by a read of the database
+and `FR-CTX-042` unreachable for a supplied document, whose read-back refuses
+it with `65` first.
 Materialising the embedding is what makes it detectable at all: an emitter that
 reproduced the cut at write time would have written the document and left the
 caller to find the dangling reference
@@ -962,7 +962,7 @@ two registered tests then need to reach **back** into it.
 
 The last three are **always** injected and a value supplied for them in a
 context document is ignored (`FR-RND-024`), which is why a dump carries the
-server-derived part alone (`FR-SCH-018`). The `--set` surface is validated in
+part read from the database alone (`FR-SCH-018`). The `--set` surface is validated in
 `cli/`: split on the first `=`, an empty value admitted, a key matching the
 declared pattern, a dotted key rejected rather than split, a duplicate key `64`,
 and every value a string (`FR-RND-008` … `FR-RND-015`). A supplied document is
@@ -979,7 +979,7 @@ the column's table name against the render context and answer from what the
 table states (`FR-CTX-019`, `FR-CTX-021`, `FR-CTX-022`, `BR-CTX-003`,
 `FR-ENV-015`, `FR-ENV-016`, `FR-ENV-041`). A table that is absent from the
 context fails the render rather than answering `false`, whether the column came
-from a server or from a supplied document (`FR-ENV-017`, `FR-ENV-043`,
+from a read of the database or from a supplied document (`FR-ENV-017`, `FR-ENV-043`,
 `FR-SEM-017`, `FR-SEM-018`). The other five consult the operand alone.
 
 **Both read the table's key from its `primary_key`, never from an index
@@ -1069,8 +1069,8 @@ and the relative order of items, which six requirements make a functional need
 | The connection-string flag admits exactly what the file admits — the grammar, the two schemes, no query parameter — validated before the write, stored verbatim when admitted, `64` and nothing written when not; a variable reference stays opaque and unexpanded | `FR-CFG-031`, `FR-CONF-009`, `FR-CONF-010`, `FR-CONF-011`, `FR-CONF-018` |
 | A NUL character in a value given to `tpl cfg set`, or to `--dsn`, `--host`, `--user`, `--schema` or `--path`, is `64` and nothing is written. A Unix argument vector cannot carry one, so the refusal is a guard verified in process | `FR-CONF-057` |
 | The password-command flag accepts a single string, stores the array it splits into, accepts no array on the command line and is not repeatable | `FR-CFG-046`, `FR-CONF-023`, `FR-CONF-025` |
-| No `cfg` subcommand writes anywhere but the configuration file, and only one of them contacts a server | `FR-CFG-004`, `FR-CFG-005` |
-| `--provider` and `--path` write `provider` and `path`. A provider outside the two values is `64`; a `--path` that is empty or holds `${` is `64`; `path` is stored as written and never resolved by the write | `FR-CFG-027`, `FR-CONF-051`, `FR-CFG-055` item 4, `FR-CONF-054` |
+| No `cfg` subcommand writes anywhere but the configuration file, and only one of them, `tpl cfg database test`, reads a database | `FR-CFG-004`, `FR-CFG-005` |
+| `--provider` and `--path` write `provider` and `path`. A provider outside the three values is `64`; a `--path` that is empty or holds `${` is `64`; `path` is stored as written and never resolved by the write | `FR-CFG-027`, `FR-CONF-051`, `FR-CFG-055` item 4, `FR-CONF-054` |
 | The combinations of flags and provider decidable from the command line alone are refused at argument parsing, `64`, before the file is read | `FR-CFG-055` items 1 and 2, `FR-CFG-016` |
 | `tpl cfg database update` given `--provider` or `--path` writes the cache warning the other repointing flags write | `FR-CACHE-029`, `FR-CFG-053` |
 | The rewrite starts from the `.cfg` text the trust checks read, and creates, writes, `fchmod`s and `fsync`s the temporary file, renames it over `.cfg` and `fsync`s the folder, each relative to the `.tpl` descriptor those checks opened and held, following no link (`at::replace_in`). A failure up to and including the rename is `74` with the previous file in place; a failure of the folder's `fsync` after the rename is `74` as `ProjectFileNotDurable`, the `cause` stating that the file holds the new content and what the filesystem returned, the `hint` carrying `tpl cfg list` | `FR-CFG-041`, `FR-SEC-027`, `FR-ERR-034` row `74` |
@@ -1179,11 +1179,11 @@ What belongs here is the surface.
 
 | Function | Input, and where it is applied | Errors it can produce | Fixed by |
 |---|---|---|---|
-| The pattern matcher | A pattern from `cli/` and a name from `model/`, matched **in memory**, never sent to the server, case-folded over ASCII only; applied **after** coverage | None: a pattern matches or does not. Supplied where it is not declared it is an unknown flag, `64`; supplied to the dump, `64` | `FR-SCH-011` … `FR-SCH-015`, `FR-SCH-021`, `FR-CAT-028`, `BR-SCH-001` |
+| The pattern matcher | A pattern from `cli/` and a name from `model/`, matched **in memory**, never passed to the database, case-folded over ASCII only; applied **after** coverage | None: a pattern matches or does not. Supplied where it is not declared it is an unknown flag, `64`; supplied to the dump, `64` | `FR-SCH-011` … `FR-SCH-015`, `FR-SCH-021`, `FR-CAT-028`, `BR-SCH-001` |
 | The qualified-routine-name parser | One positional argument or one flag value in `cli/`, resolved against `mariadb/`, `cache/`, or a supplied `--context` document | `66` with a suggestion for a name that does not exist; `64` naming both candidates for a bare name that matches a procedure **and** a function, under every circumstance. Each code is carried by two variants, one per population — see [the error type](#the-error-type-and-the-exit-code) | `FR-SCH-008`, `FR-SCH-010`, `FR-RND-032`, `FR-CACHE-024` |
 | The word-list tokeniser | A string operand in `render/`; five rules applied once, left to right, with a published eight-row vector | None of its own; the five naming filters that consume it fail `65` on a non-string operand | `FR-ENV-030` … `FR-ENV-033`, `FR-ENV-034` |
 | The edit distance | A supplied name and a population, in `diagnostics/` | None; it returns a possibly empty candidate list | `FR-ERR-019` … `FR-ERR-021` |
-| ASCII-only case folding | Shared by the matcher and the tokeniser, independent of server, collation and locale | None | `FR-SCH-014`, `FR-ENV-031` |
+| ASCII-only case folding | Shared by the matcher and the tokeniser, independent of provider, server, collation and locale | None | `FR-SCH-014`, `FR-ENV-031` |
 | The series derivation | The probed version string, in `mariadb/`; in `sqlite/`, the library's version, with no product marker | A string without the product marker is refused, `78`; a library version without two dot-separated parts is `70` | `FR-SRV-040`, `FR-SRV-021`, `FR-SRV-041`, `FR-CTX-032`; `FR-LITE-002`, `FR-ERR-030` |
 
 One row of the six has two callers and must therefore be one implementation:

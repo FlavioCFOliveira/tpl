@@ -63,14 +63,14 @@ const EMPTY_WINDOW: &str = "no series";
 /// The clause a refusal of `tpl cfg database add` for want of a connection
 /// flag appends where `-d/--database` was given.
 const DATABASE_IS_NOT_A_FIELD: &str = "; -d/--database was given, and it selects the entry for \
-                                       commands that connect, not a field; the database on the \
+                                       commands that use one, not a field; the database on the \
                                        server is set with --schema";
 
 /// The clause a refusal of `tpl cfg database update` for want of a field flag
 /// appends where `-d/--database` was given (`FR-CFG-020`). The refusal comes
 /// before `.tpl/.cfg` is read, so it names both forms of the entry.
 const DATABASE_IS_NOT_A_FIELD_OF_ANY_FORM: &str = "; -d/--database was given, and it selects the \
-                                                   entry for commands that connect, not a \
+                                                   entry for commands that use one, not a \
                                                    field; the database on the server is set \
                                                    with --schema, or is the path part of --dsn \
                                                    for an entry defined by dsn; the database \
@@ -214,8 +214,8 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         },
         // FR-RND-041 fixes both lines: why the two contradict each other.
         Error::DirectWithContext => Cow::Borrowed(
-            "--context reads the context from a document and contacts no server; --direct demands \
-             a read from the server",
+            "--context reads the context from a document and reads no database; --direct demands \
+             a read of the database",
         ),
         Error::MutuallyExclusiveFlags { first, second } => Cow::Owned(format!(
             "the invocation supplies both '{first}' and '{second}'; at most one of the two may be \
@@ -264,7 +264,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         // FR-CACHE-019: the flag is declared by the command and contradicts
         // what the command does.
         Error::LoadWithoutStoring { .. } => Cow::Borrowed(
-            "'tpl cache load' reads the server in order to store what it read, so an invocation \
+            "'tpl cache load' reads the database in order to store what it read, so an invocation \
              that forbids the store asks the command to do nothing",
         ),
         // FR-CONF-046: the condition the string met, then what the key or the

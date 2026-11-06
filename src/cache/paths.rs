@@ -37,7 +37,7 @@
 //!
 //! *This corpus states no rule for such a name*, and the treatment above is
 //! chosen to be the one the cache's own failure model already describes: a
-//! cache that cannot hold something answers from the server and says nothing,
+//! cache that cannot hold something answers from the database and says nothing,
 //! per `FR-CACHE-036`. It is reported rather than assumed correct.
 //!
 //! *Rejected: encoding the name into a filename.* `FR-CDOC-014` fixes

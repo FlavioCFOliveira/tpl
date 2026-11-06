@@ -1,7 +1,7 @@
 ---
 title: Configuration Commands
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [configuration-model.md, cache-commands.md, security.md, errors-and-exit-codes.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -59,12 +59,19 @@ tpl cfg database test   <name>
 
 - **FR-CFG-004**: No `cfg` subcommand SHALL write anywhere but `.tpl/.cfg`.
 
-- **FR-CFG-005**: No `cfg` subcommand SHALL contact a server, with the single
-  exception of `tpl cfg database test`.
+- **FR-CFG-005**: No `cfg` subcommand SHALL read a database, with the single
+  exception of `tpl cfg database test`, which connects to the server of a
+  `mariadb` or a `mysql` entry and opens the database file of a `sqlite`
+  entry, per `FR-CFG-056`.
 
   *Note added in the sixty-fifth edition.* For a `sqlite` entry, the same
   command is the single `cfg` subcommand that opens the database file, per
   `FR-CFG-056`; no other opens it.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the requirement
+  said "contact a server", and the note above extended it to a `sqlite`
+  entry. It now states the prohibition for every provider, and the note's
+  fact is in the requirement. No behaviour changes.
 
 ## Key commands
 
@@ -364,7 +371,7 @@ tpl cfg database test   <name>
 
   WHERE the refused invocation was given `-d/--database`, the `cause` SHALL
   also state that `-d/--database` was given, that it selects the entry for
-  commands that connect and is not a field flag, and that the database on the
+  commands that use one and is not a field flag, and that the database on the
   server is set with `--schema`, or is the path part of `--dsn`, per
   `FR-CONF-009`, for an entry defined by `dsn`, and that the database file of
   a `sqlite` entry is set with `--path`. The `cause` SHALL NOT
@@ -373,7 +380,7 @@ tpl cfg database test   <name>
   ```
   tpl cfg database update shop --database shop2
   error: nothing to change: tpl cfg database update needs at least one field flag
-  cause: no field flag was given for entry 'shop'; -d/--database was given, and it selects the entry for commands that connect, not a field; the database on the server is set with --schema, or is the path part of --dsn for an entry defined by dsn; the database file of a sqlite entry is set with --path
+  cause: no field flag was given for entry 'shop'; -d/--database was given, and it selects the entry for commands that use one, not a field; the database on the server is set with --schema, or is the path part of --dsn for an entry defined by dsn; the database file of a sqlite entry is set with --path
   hint:  give at least one of --dsn, --host, --port, --user, --schema, --tls, --password-command, --ca-file, --ca-path, --provider, --path
   exit:  64 (EX_USAGE)
   ```
@@ -401,6 +408,21 @@ tpl cfg database test   <name>
   names `--path` as the third form, for a `sqlite` entry, on the same ground:
   the refusal is decided before the provider of the entry is known.
 
+  *Amended in the eighty-ninth edition,* for rmp `#367`. The `cause` said
+  that `-d/--database` selects the entry "for commands that connect". It
+  selects the entry for every command that uses one, per `FR-GLOB-025`: a
+  command that reads a `sqlite` entry opens a file and connects to nothing,
+  and `tpl cache clean` and `tpl cache status` read no database at all. The
+  clause now names what is true of all of them, per `FR-ERR-051`; the clauses
+  on `--schema`, `--dsn` and `--path` already name the provider each holds
+  for, and are unchanged. `FR-CFG-051` changes the same clause in the same
+  words.
+  *Rejected: "for commands that read a database".* It is false of
+  `tpl cache clean` and `tpl cache status`, which use the entry and read no
+  database. *Rejected: "for commands that connect or open a database file".*
+  It keeps the same falsehood for those two commands, and lists providers for
+  a fact that does not depend on them.
+
 - **FR-CFG-051**: WHEN `tpl cfg database add` or `tpl cfg database update` is
   given `-d/--database`, in either spelling and at any position `FR-GLOB-002`
   accepts, the system SHALL accept the flag, SHALL give it no effect, per
@@ -408,11 +430,11 @@ tpl cfg database test   <name>
   `FR-OUT-020`. The line takes one of five forms:
 
   ```
-  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that connect; the database on the server is set with --schema <value>
-  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that connect
-  warning: -d/--database has no effect on tpl cfg database update; it selects the entry for commands that connect; the database on the server is the path part of --dsn
-  warning: -d/--database has no effect on tpl cfg database update; it selects the entry for commands that connect; the name argument already names the entry
-  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that connect; the database file of a sqlite entry is set with --path
+  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that use one; the database on the server is set with --schema <value>
+  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that use one
+  warning: -d/--database has no effect on tpl cfg database update; it selects the entry for commands that use one; the database on the server is the path part of --dsn
+  warning: -d/--database has no effect on tpl cfg database update; it selects the entry for commands that use one; the name argument already names the entry
+  warning: -d/--database has no effect on tpl cfg database add; it selects the entry for commands that use one; the database file of a sqlite entry is set with --path
   ```
 
   1. **No effect.** The system SHALL NOT resolve the name `-d/--database`
@@ -420,7 +442,7 @@ tpl cfg database test   <name>
   2. **The line.** It SHALL name `-d/--database`, SHALL name the command given
      — `tpl cfg database add` or `tpl cfg database update`, in full whatever
      alias the invocation used — and SHALL state that the flag selects the
-     entry for commands that connect and has no effect here. Its last clause
+     entry for commands that use one and has no effect here. Its last clause
      SHALL be chosen by the first of these conditions that holds:
      1. **The invocation uses or targets a dsn.** `tpl cfg database add` is
         given `--dsn`, or `tpl cfg database update` is given `--dsn` or names
@@ -511,6 +533,14 @@ tpl cfg database test   <name>
   database, and `FR-CFG-055` refuses `--schema` for it, so the advice
   condition 4 gave could not succeed. Conditions 1 to 3 keep their precedence,
   and no clause of theirs names a value.
+
+  *Amended in the eighty-ninth edition,* for rmp `#367`. Each of the five
+  forms said that the flag selects the entry "for commands that connect",
+  which is false of a command that reads a `sqlite` entry and of
+  `tpl cache clean` and `tpl cache status`. Each now says "for commands that
+  use one", per `FR-ERR-051`, in the words `FR-CFG-020` gives its `cause`.
+  The last clause of every form, and the conditions that choose it, are
+  unchanged.
 
   *Rationale.* `cfg database show` prints the server database under the key
   `database`, so `--database` is the natural guess for the flag that writes it.
@@ -1637,8 +1667,13 @@ tpl cfg database test   <name>
 - **FR-CFG-035**: Every `cfg` subcommand that declares `--format` SHALL emit
   its `json` output in the envelope of `FR-OUT-024`, with `source` set to
   `project` per `FR-OUT-026` — except `tpl cfg database test`, whose `source`
-  SHALL be `server`, because contacting the server is what the command does,
+  SHALL be `server`, because reading the database is what the command does,
   per `FR-CACHE-010`.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the reason said
+  "contacting the server", and the command reads the database of a `sqlite`
+  entry too. The value `server` is unchanged: it is a value of the contract
+  of `FR-OUT-026`, and this edition changes no value. No behaviour changes.
 
 - **FR-CFG-036**: The `data` of `tpl cfg get` SHALL carry `key` and `value`,
   the value as written in the file, unexpanded and unredacted per `FR-CFG-006`:

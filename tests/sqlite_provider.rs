@@ -1062,7 +1062,7 @@ fn fr_cfg_051_the_fifth_form_names_path_for_an_invocation_on_a_sqlite_entry() {
     assert_eq!(
         stderr(&printed),
         "warning: -d/--database has no effect on tpl cfg database add; it selects the entry for \
-         commands that connect; the database file of a sqlite entry is set with --path\n"
+         commands that use one; the database file of a sqlite entry is set with --path\n"
     );
 
     // An update naming an entry the file gives the sqlite provider: the fifth
@@ -1082,7 +1082,7 @@ fn fr_cfg_051_the_fifth_form_names_path_for_an_invocation_on_a_sqlite_entry() {
         stderr(&printed),
         format!(
             "warning: -d/--database has no effect on tpl cfg database update; it selects the \
-             entry for commands that connect; the database file of a sqlite entry is set with \
+             entry for commands that use one; the database file of a sqlite entry is set with \
              --path\n{MAY_READ_ANOTHER_DATABASE}\n"
         )
     );

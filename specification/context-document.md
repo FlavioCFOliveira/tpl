@@ -1,7 +1,7 @@
 ---
 title: The Context Document
 status: approved
-last-reviewed: 2026-11-04
+last-reviewed: 2026-11-06
 related: [catalogue-coverage.md, output-formats.md, schema-commands.md, render-command.md, server-contract.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -25,7 +25,11 @@ the `database` object carries, reference depth in both directions, the default
 discriminant, the decomposition of a column type, the treatment of absence, the
 server version and standing the document carries, and the consistency the
 document promises; and the content of the three context variables that do not
-come from a server.
+come from the database.
+
+*Amended in the eighty-ninth edition,* for rmp `#368`: the three variables
+were said not to come "from a server"; the other two come from the database
+of any provider, a SQLite database file included.
 
 Out of scope: which objects and fields the document carries, which is
 [catalogue-coverage.md](catalogue-coverage.md); the transport rules of JSON,
@@ -43,9 +47,13 @@ variable is bound to a source, which is
 
 ## Identity of the document
 
-- **FR-CTX-001**: The document defined here SHALL be the server-derived part of
-  the render context, per `FR-SCH-018`, and SHALL be the document `tpl schema
-  dump` emits under the shape of `FR-SCH-017`.
+- **FR-CTX-001**: The document defined here SHALL be the part of the render
+  context read from the database, per `FR-SCH-018`, and SHALL be the document
+  `tpl schema dump` emits under the shape of `FR-SCH-017`.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: "the server-derived
+  part" is now the part read from the database, in the words `FR-SCH-018` now
+  uses. No behaviour changes.
 
 - **FR-CTX-002**: The document SHALL obey `FR-OUT-011` for its version key,
   `FR-OUT-012` for absent values, `FR-OUT-013` for key order, and `FR-OUT-014`
@@ -653,9 +661,12 @@ variable is bound to a source, which is
   template branches on, per `BR-SRV-007`, and a field that cannot be read is not
   exposed.
 
-- **FR-CTX-033**: WHEN the document is produced by a server read, `series` SHALL
-  be one of the series of `FR-SRV-015`, or newer than every one of them under
-  `FR-SRV-031`. WHEN the document is supplied to `tpl render --context`, the
+- **FR-CTX-033**: WHEN the document is produced by a read of the database,
+  `series` SHALL be, for a `mariadb` entry, one of the series of `FR-SRV-015`,
+  or newer than every one of them under `FR-SRV-031`; for a `mysql` entry, one
+  of the series of `FR-MYSQL-003`, or newer than every one of them under
+  `FR-MYSQL-010`; and for a `sqlite` entry, the series of the SQLite library,
+  per `FR-LITE-002`. WHEN the document is supplied to `tpl render --context`, the
   system SHALL NOT validate `series` against `FR-SRV-015`, SHALL NOT check
   `standing` against `series`, and SHALL require only that all three keys of
   `FR-CTX-031` are present, are strings, and that `standing` holds one of the
@@ -681,6 +692,12 @@ variable is bound to a source, which is
   also make every committed dump expire on a calendar date as the window moved,
   which would break a working pipeline for a reason nothing in the pipeline
   changed.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`. The first sentence
+  spoke of "a server read" and stated the series of a `mariadb` read alone,
+  and the notes of the sixty-fifth and seventy-third editions supplied the
+  other two providers. The sentence now states all three, and the notes'
+  facts are in it. No behaviour changes.
 
   *Rejected.* Applying the window to `--context` as well, for symmetry with the
   server path. It is symmetry bought with a time bomb, and the asymmetry it
@@ -986,8 +1003,8 @@ emits — `FR-SCH-018` keeps them out of it.
 
 ## Consistency
 
-- **FR-CTX-023**: WHEN the document is produced by a server read, every object
-  referenced from another object in it SHALL be present in it.
+- **FR-CTX-023**: WHEN the document is produced by a read of the database,
+  every object referenced from another object in it SHALL be present in it.
 
   *Amended in the twenty-seventh edition: the two requirements that make this
   satisfiable are named.* The promise was stated and nothing said what keeps
@@ -999,6 +1016,10 @@ emits — `FR-SCH-018` keeps them out of it.
   `FR-CTX-008` cuts an embedded table's own keys to names, so the population a
   reference can point into is the document's own `tables` collection and
   nothing deeper. Nothing this requirement promises changes.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: "a server read" is
+  now "a read of the database", which a `sqlite` entry produces as well. No
+  behaviour changes.
 
 - **FR-CTX-042**: WHEN the document is supplied to `--context`, every table
   that a foreign key of a member of `tables` names — the referenced table of a

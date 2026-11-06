@@ -1,7 +1,7 @@
 ---
 title: Glossary
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [README.md, cli-contract.md, catalogue-coverage.md, context-document.md, examples.md, performance-requirements.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -244,9 +244,12 @@ invocation opens at most one, per `NFR-PERF-004`.
 The set of top-level variables available to a template during a render:
 `database`, one of `table` / `view` / `routine`, `vars`, `tpl`, `now`. The
 command line decides which object variable is bound, per `FR-RND-023`. The
-content of the two that come from a server is fixed by
+content of the two that come from the database is fixed by
 [context-document.md](context-document.md); so is the content of the other
 three, by `FR-CTX-026` through `FR-CTX-028`.
+
+*Amended in the eighty-ninth edition,* for rmp `#368`: the two variables were
+said to come "from a server"; they come from the database of any provider.
 
 ## context document
 

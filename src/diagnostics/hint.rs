@@ -352,7 +352,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // somewhere other than the flag table and is not reproduced.
         // FR-RND-041: the flag to remove for each outcome, and never the path.
         Error::DirectWithContext => Cow::Borrowed(
-            "remove --direct to render from the document, or remove --context to read the server",
+            "remove --direct to render from the document, or remove --context to read the database",
         ),
         Error::MutuallyExclusiveFlags { first, second } => {
             if admits_flag(first) && admits_flag(second) {
@@ -515,7 +515,7 @@ fn bare(error: &Error) -> Cow<'static, str> {
         // W-07 of the sixth re-audit of rmp `#263`: with an object named, the
         // read that matches it is that object's own `schema` subcommand.
         Error::LoadWithoutStoring { object: None } => Cow::Borrowed(
-            "remove --no-cache from the command; to read from the server without storing, use \
+            "remove --no-cache from the command; to read the database without storing, use \
              tpl schema dump --direct --no-cache instead",
         ),
         Error::LoadWithoutStoring {
@@ -527,8 +527,8 @@ fn bare(error: &Error) -> Cow<'static, str> {
                 "<name>"
             };
             Cow::Owned(format!(
-                "remove --no-cache from the command; to read from the server without storing, \
-                 use tpl schema {kind} {name} --direct --no-cache instead"
+                "remove --no-cache from the command; to read the database without storing, use \
+                 tpl schema {kind} {name} --direct --no-cache instead"
             ))
         }
         // FR-CFG-031: the `cause` carries the form expected, and the hint the

@@ -1,7 +1,7 @@
 ---
 title: Catalogue Cache
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-commands.md, security.md]
 ---
 
@@ -9,9 +9,9 @@ related: [schema-commands.md, render-command.md, project-and-discovery.md, cfg-c
 
 ## Overview
 
-`.tpl/` may hold catalogue data previously read from a server, so that repeated
-invocations do not read the same structure again and again. The cache is
-read-through, written on every miss, and never expires on its own. A fourth
+`.tpl/` may hold catalogue data previously read from a database, so that
+repeated invocations do not read the same structure again and again. The cache
+is read-through, written on every miss, and never expires on its own. A fourth
 command group, `tpl cache`, loads it, cleans it, and reports on it.
 
 ## Scope
@@ -22,7 +22,11 @@ write atomicity, what is never written, and the failure modes the model
 accepts.
 
 Out of scope: the on-disk encoding of a cached object, and how the catalogue is
-read from the server on a miss.
+read from the database on a miss.
+
+*Amended in the eighty-ninth edition,* for rmp `#368`: the catalogue of a
+`sqlite` entry is read from its database file, not from a server, so the
+scope names the database, which holds for every provider.
 
 ## Actors
 
@@ -86,9 +90,10 @@ read from the server on a miss.
   so a variable the entry references may be unset while every read is a
   hit.
 
-- **FR-CACHE-007**: WHEN a cached read misses, the system SHALL read the server,
-  SHALL write the result to the cache except for the objects `FR-CACHE-037`
-  excludes, and SHALL then answer. The write happens before the answer.
+- **FR-CACHE-007**: WHEN a cached read misses, the system SHALL read the
+  database, SHALL write the result to the cache except for the objects
+  `FR-CACHE-037` excludes, and SHALL then answer. The write happens before the
+  answer.
 
   *Checked in the thirty-first edition against an invocation that fails after
   the write, and unchanged.* A `tpl render` whose template carries a syntax
@@ -98,7 +103,7 @@ read from the server on a miss.
   by an invocation that goes on to fail. It should not, and the cost stands
   with its ground stated here rather than an exemption being written in.
 
-  *Why the cost stands.* What is written is a **correct read of the server**,
+  *Why the cost stands.* What is written is a **correct read of the database**,
   and nothing downstream of it makes it wrong: the template that failed to
   compile is not a fact about the catalogue. The ordinary next action after a
   `65` from `FR-RND-030` is to correct the template and render again, against
@@ -122,6 +127,11 @@ read from the server on a miss.
   read correctly, and `tpl schema dump | head -1` would leave the store empty
   every time. The one case that raised the question would be answered by
   making every case worse.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the requirement said
+  that a miss reads "the server", and its rationale spoke of a "correct read
+  of the server"; a miss reads the database of the selected entry, whatever
+  its provider, and the text now says so. No behaviour changes.
 
 - **FR-CACHE-038**: WHEN `tpl render` reads through the cache and every
   collection is recorded as whole under `FR-CDOC-006`, the system SHALL read
@@ -204,26 +214,26 @@ read from the server on a miss.
 
   WHEN the system reads the file of a table under this requirement, it MAY
   defer the decoding of two parts of it, the table's `foreign_keys` and its
-  `referenced_by`, keeping each as the bytes the file holds until the
-  template first reaches that part — reading it, iterating it, or applying a
-  filter, a test or a function that reads it — and SHALL then decode it and
-  validate it as `FR-CACHE-033` validates a whole file. No other part SHALL be
-  deferred. IF a deferred part fails that validation, THEN the file SHALL be
-  a miss under `FR-CACHE-033` at that moment, and the render SHALL be
-  answered under `FR-CACHE-039`: abandoned, with no byte of it on stdout,
-  and rendered again from the server's document. A deferred part the
-  template never reaches is never decoded, and a fault in it is not a miss
-  of that invocation, as a file the template never reaches is not. The
-  document the template sees SHALL be the one an up-front read of the same
-  files would produce, under every equivalence of the first paragraph, so
-  that the output is byte for byte the output of an up-front read, and,
-  where every file is one `tpl` wrote, of a direct read.
+  `referenced_by`, keeping each as the bytes the file holds until the template
+  first reaches that part — reading it, iterating it, or applying a filter, a
+  test or a function that reads it — and SHALL then decode it and validate it
+  as `FR-CACHE-033` validates a whole file. No other part SHALL be deferred.
+  IF a deferred part fails that validation, THEN the file SHALL be a miss
+  under `FR-CACHE-033` at that moment, and the render SHALL be answered under
+  `FR-CACHE-039`: abandoned, with no byte of it on stdout, and rendered again
+  from the document read from the database. A deferred part the template never
+  reaches is never decoded, and a fault in it is not a miss of that
+  invocation, as a file the template never reaches is not. The document the
+  template sees SHALL be the one an up-front read of the same files would
+  produce, under every equivalence of the first paragraph, so that the output
+  is byte for byte the output of an up-front read, and, where every file is
+  one `tpl` wrote, of a direct read.
 
   The deferral is the render's alone. Every other command that reads the
   cache — the eight `schema` subcommands, `tpl schema dump` among them —
   SHALL decode and validate every part of every file it serves before it
   writes the first byte of its output, so that a malformed part is a miss
-  under `FR-CACHE-033`, read from the server, and never a document cut off
+  under `FR-CACHE-033`, read from the database, and never a document cut off
   on stdout.
 
   *Amended in the eighty-second edition: the two paragraphs above are new,*
@@ -248,24 +258,29 @@ read from the server on a miss.
   fault can surface. *Rejected: keeping the whole decode.* It refuses a read
   the direct path performs.
 
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the requirement said
+  a render is answered "from the server's document" and a cache read "from the
+  server"; both are reads of the database for every provider, and now say so.
+  No behaviour changes.
+
 - **FR-CACHE-039**: IF a file read under `FR-CACHE-038` during the render is a
   miss under `FR-CACHE-033`, including a file removed after the listing was
   read, THEN the system SHALL abandon the render, SHALL treat the invocation as
-  a miss under `FR-CACHE-007`, and SHALL render again from the server's
-  document. No byte of the abandoned render SHALL reach stdout. The invocation
-  SHALL open at most one connection, per `NFR-PERF-004`. The render that
-  produces the result SHALL have the whole deadline of `FR-CONF-005`, and SHALL
-  use the value of `now` evaluated for the abandoned render.
+  a miss under `FR-CACHE-007`, and SHALL render again from the document read
+  from the database. No byte of the abandoned render SHALL reach stdout. The
+  invocation SHALL open at most one connection, per `NFR-PERF-004`. The render
+  that produces the result SHALL have the whole deadline of `FR-CONF-005`, and
+  SHALL use the value of `now` evaluated for the abandoned render.
 
   The abandoned render SHALL keep every render bound of `FR-RND-038` — the
   deadline, render fuel, the render output limit and the render memory limit —
-  until it has returned, whether or not it evaluates further after the miss.
-  IF the abandoned render crosses any of them, before the miss or after it,
-  THEN the system SHALL end the invocation with `65` (`EX_DATAERR`) and the
-  `cause` of the first bound crossed, per `FR-RND-038`, SHALL NOT read the
-  server, and SHALL let no byte of the abandoned render reach stdout, per
-  `FR-RND-034`. The server read and the second render follow only an abandoned
-  render that returned within every bound.
+  until it has returned, whether or not it evaluates further after the miss. IF
+  the abandoned render crosses any of them, before the miss or after it, THEN
+  the system SHALL end the invocation with `65` (`EX_DATAERR`) and the `cause`
+  of the first bound crossed, per `FR-RND-038`, SHALL NOT read the database, and
+  SHALL let no byte of the abandoned render reach stdout, per `FR-RND-034`. The
+  read of the database and the second render follow only an abandoned render
+  that returned within every bound.
 
   *Note added in the eighty-second edition,* for rmp `#347`. A part of a
   file whose decoding `FR-CACHE-038` defers, found faulty when the template
@@ -273,8 +288,8 @@ read from the server on a miss.
   answered by this requirement.
 
   *Added in the fortieth edition.* The miss is answered exactly as a miss found
-  before the render is answered: one whole read of the server, the write of
-  `FR-CACHE-007`, and a render from what the server returned. The output is
+  before the render is answered: one whole read of the database, the write of
+  `FR-CACHE-007`, and a render from what that read returned. The output is
   therefore the output the invocation would have produced had the miss been
   found up front. `--no-cache` still suppresses the write, per `FR-CACHE-014`.
 
@@ -293,7 +308,7 @@ read from the server on a miss.
   `view`, `routine` or `column` — can go on evaluating after the miss, and no
   requirement said what happened if it then crossed a bound. Left unwatched,
   such a render was observed to reach 8.6 GB past a one-second deadline.
-  *Rejected: discarding the abandoned render and reading the server at once.*
+  *Rejected: discarding the abandoned render and reading the database at once.*
   A running render cannot be stopped short of ending the process, so it would
   keep consuming, unbounded, beside the read and the second render.
   *Also rejected: making a lookup-function miss unwind the evaluation at
@@ -308,6 +323,12 @@ read from the server on a miss.
   failing the invocation.* It fails a read that can succeed, which is what
   `FR-CACHE-033` forbids.
 
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the requirement and
+  its notes said that the render is answered "from the server's document",
+  that a crossed bound "SHALL NOT read the server", and spoke of a "server
+  read". The read is of the database whatever the provider, and the text now
+  says so. No behaviour changes.
+
 - **FR-CACHE-008**: The system SHALL NOT apply a time-to-live and SHALL NOT
   expire an entry automatically. A cached object stays until `tpl cache clean`
   removes it or a fresh read replaces it.
@@ -319,13 +340,17 @@ read from the server on a miss.
 - **FR-CACHE-009**: The following commands SHALL read through the cache: the
   eight `schema` subcommands, and `tpl render` when it has no `--context`.
 
-- **FR-CACHE-010**: `tpl cfg database test` SHALL always contact the server,
-  SHALL neither read nor write the cache, and SHALL read nothing into the
-  model. The one statement it issues against the catalogue is the privilege
-  probe of `FR-CFG-044`, whose result is a boolean and not model content.
+- **FR-CACHE-010**: `tpl cfg database test` SHALL always read the database of
+  the entry it names, SHALL neither read nor write the cache, and SHALL read
+  nothing into the model. For a `mariadb` or a `mysql` entry the read connects
+  to the server, and for a `sqlite` entry it opens the database file, per
+  `FR-CFG-056`. The one statement it issues against the catalogue is the
+  privilege probe of `FR-CFG-044`, or the catalogue probe of `FR-CFG-056` for
+  a `sqlite` entry, whose result is a boolean and not model content.
 
-  *Rationale.* Contacting the server is the command's only reason to exist, and
-  it must reach a verdict without a cache standing between it and the server.
+  *Rationale.* Reading the database is the command's only reason to exist,
+  and it must reach a verdict without a cache standing between it and the
+  database.
 
   *Amended in the fifth edition.* The last clause is new, and it is a
   correction rather than an addition. Three passages in this corpus cite this
@@ -340,6 +365,16 @@ read from the server on a miss.
 
   *Note added in the sixty-fifth edition.* For a `sqlite` entry, contacting the
   server is opening the database file, per `FR-CFG-056`.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`. The requirement said
+  that the command "contacts the server", and the note above gave the words a
+  second meaning for a `sqlite` entry. The requirement now states the act
+  for every provider, as the help of the command does under `FR-HELP-038`,
+  and names the catalogue probe a `sqlite` entry issues in place of the
+  privilege probe; the note's fact is now in the requirement. No behaviour
+  changes.
+  *Rejected: keeping "contact the server" with the note.* A reader of the
+  requirement alone learns that a `sqlite` entry cannot be tested.
 
 - **FR-CACHE-011**: No `template` subcommand and no `cfg` subcommand other than
   `database test` SHALL contact a database or touch the cache.
@@ -384,7 +419,11 @@ read from the server on a miss.
   command SHALL reject them as unknown flags, per `FR-CLI-019`.
 
 - **FR-CACHE-018**: `tpl cache load` SHALL accept `--direct` and SHALL ignore
-  it, because reading the server is what the command does.
+  it, because reading the database is what the command does.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: "reading the server"
+  is now "reading the database", which `tpl cache load` does for every
+  provider, per `FR-CACHE-022`. No behaviour changes.
 
 - **FR-CACHE-019**: IF `--no-cache` is supplied to `tpl cache load`, THEN the
   system SHALL exit `64` (`EX_USAGE`).
@@ -411,9 +450,14 @@ tpl -d shop cache status
 - **FR-CACHE-021**: `tpl cache` SHALL be a group node, per `FR-CLI-007`, with
   exactly the subcommands `load`, `clean`, and `status`.
 
-- **FR-CACHE-022**: `tpl cache load` SHALL read from the server and store the
-  result. With no object flag it SHALL load the whole catalogue of the selected
-  entry.
+- **FR-CACHE-022**: `tpl cache load` SHALL read the database of the selected
+  entry and store the result. With no object flag it SHALL load the whole
+  catalogue of the selected entry.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the requirement said
+  "read from the server", and the command reads a `sqlite` entry's database
+  file in the same way. It now speaks of the database, as the help of the
+  command does under `FR-HELP-038`. No behaviour changes.
 
 - **FR-CACHE-023**: `tpl cache clean` SHALL remove cached data for the selected
   entry. With no object flag it SHALL remove all of it.
@@ -564,11 +608,15 @@ tpl -d shop cache status
   more.* It is honest, and a caller that reads only the exit code still
   learns nothing of the slip, per `BR-ERR-002`.
 
-  *Why the cache and not the server.* The command requires no catalogue
+  *Why the cache and not the database.* The command requires no catalogue
   data and opens no connection, per `NFR-PERF-006`, so the population is what
   the cache holds.
 
   *Added in the fiftieth edition,* for rmp `#282`.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the heading of the
+  last note said "not the server"; the alternative it rejects is reading the
+  database, of any provider. No behaviour changes.
 
 - **FR-CACHE-042**: `tpl cache clean`, in every form — with no object flag
   under `FR-CACHE-023`, for a name no entry declares under `FR-CACHE-041`, and
@@ -662,9 +710,13 @@ tpl -d shop cache status
   recorded as not whole because a listing served from a collection one object
   has been removed from would omit that object and exit `0`, which is the
   failure `BR-CDOC-002` exists to prevent; the next listing is a miss, per
-  `FR-CDOC-007`, and reads the server.
+  `FR-CDOC-007`, and reads the database.
 
   *Added in the fifty-eighth edition,* for rmp `#302`.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: its rationale said
+  that a miss "reads the server"; it reads the database of any provider. No
+  behaviour changes.
 
 - **FR-CACHE-044**: Every command that reads or writes the cache SHALL NOT
   resolve a cache path through a symbolic link. The commands are the eight
@@ -699,7 +751,7 @@ tpl -d shop cache status
   the code.
 
   `tpl ... --direct --no-cache` touches no cache, per `FR-CACHE-016`, so it is
-  not refused and is the form that reads the server while the link stands. A
+  not refused and is the form that reads the database while the link stands. A
   symbolic link at an object file remains a miss under `FR-CACHE-033` and is
   replaced under `FR-CACHE-030`; a symbolic link at `meta.json` or at
   `database.json` is an unusable record under `FR-CDOC-017`, never read
@@ -721,7 +773,7 @@ tpl -d shop cache status
   the clean, so a read that went ahead would leave the caller a link that
   only one command reports.
 
-  *Rejected: serving the read from the server and skipping the cache write,
+  *Rejected: serving the read from the database and skipping the cache write,
   as `FR-CACHE-036` does for a cache that cannot be written.* A cache that
   cannot be written is an optimisation that failed; a linked cache root is a
   project state `tpl` does not accept, and a silent skip reports it to
@@ -734,6 +786,11 @@ tpl -d shop cache status
   `--direct --no-cache`, or the link is replaced by a folder.
 
   *Added within the fifty-eighth edition,* for rmp `#305`.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the form `--direct
+  --no-cache` "reads the database", and the rejected option serves the read
+  "from the database", for every provider; both said "server". No behaviour
+  changes.
 
 - **FR-CACHE-025**: `tpl cache status` SHALL report the database entry, when the
   cache was loaded, and the object counts it holds.
@@ -835,7 +892,7 @@ tpl -d shop cache status
 ## Invalidation
 
 - **FR-CACHE-028**: Nothing SHALL invalidate the cache automatically: no
-  clock, no configuration change and no comparison with the server SHALL
+  clock, no configuration change and no comparison with the database SHALL
   remove or replace a cached object. What is stored SHALL change only through
   an invocation that stores what it reads or removes what is stored:
   `tpl cache load`, `tpl cache clean`, and a read command of `FR-CACHE-009`
@@ -852,6 +909,10 @@ tpl -d shop cache status
   Every read would then stay live until an explicit load, which is the opt-in
   cache the rationale of `FR-CACHE-008` rejects.
 
+  *Amended in the eighty-ninth edition,* for rmp `#368`: "no comparison with
+  the server" is now "no comparison with the database", true of every
+  provider. No behaviour changes.
+
 - **FR-CACHE-029**: Changing where an entry points — `--host`, `--port`,
   `--user`, `--schema`, `--tls`, `--dsn`, `--provider`, or `--path` — SHALL
   NOT invalidate anything.
@@ -867,7 +928,8 @@ tpl -d shop cache status
   provider of the read that wrote it, per `FR-CDOC-018`.
 
 - **BR-CACHE-003**: The consequence is accepted and must be documented plainly:
-  after repointing an entry, a read serves the previous server's catalogue with
+  after repointing an entry, a read serves the catalogue of the database the
+  entry reached before, with
   exit `0`, and nothing in the output says so. The only signal is the load time
   reported by `tpl cache status`.
 
@@ -889,6 +951,11 @@ tpl -d shop cache status
   `FR-CFG-053` says the entry may point at another server and that any data
   cached for it is kept, since the command knows neither fact for certain.
   Neither line reads the cache.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: "the previous
+  server's catalogue" is now the catalogue of the database the entry reached
+  before: a repointed `sqlite` entry serves the previous file's catalogue in
+  the same way. No behaviour changes.
 
 - **BR-CACHE-004**: The cache changes when it is told to, never on its own. A
   configuration command must not delete cached data as a side effect, and a
@@ -946,12 +1013,16 @@ tpl -d shop cache status
   staying unchanged, across a write.
 
   *Accepted cost.* An object file's modification time no longer tells when
-  that object was last read from the server. No requirement offered that
+  that object was last read from the database. No requirement offered that
   reading.
 
   *Rejected: requiring the replacement in every case*, which spends a
   temporary file and a rename to produce a state indistinguishable from the
   one already on disk.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: the accepted cost
+  said "last read from the server"; an object is read from the database of any
+  provider. No behaviour changes.
 
 - **FR-CACHE-031**: The system SHALL NOT take a lock over the cache. Two
   processes writing the same object yield one whole result or the other, never a
@@ -962,7 +1033,7 @@ tpl -d shop cache status
   already stored unchanged.
 
 - **FR-CACHE-033**: IF a cache file is unreadable, or carries an unknown format
-  version, THEN the system SHALL treat it as a miss: read from the server,
+  version, THEN the system SHALL treat it as a miss: read from the database,
   rewrite the file, and report neither an error nor a warning.
 
   The condition SHALL be evaluated for the files a read consults. A file the
@@ -1039,6 +1110,10 @@ tpl -d shop cache status
   a file `tpl` writes, per `FR-CACHE-030`, and reading through it would serve
   whatever the link reaches as though the cache held it. The read now applies
   the guard the write applies.
+
+  *Amended in the eighty-ninth edition,* for rmp `#368`: its first sentence
+  said that an unusable file is read again "from the server"; it is read from
+  the database of any provider. No behaviour changes.
 
 - **FR-CACHE-036**: IF the system cannot write to `.tpl/.cache/`, THEN it SHALL
   answer from what it read, SHALL exit `0`, SHALL leave the cache as it found

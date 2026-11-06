@@ -1586,7 +1586,7 @@ const TEMPLATE_CHECK: &[Outcome] = &[
     ),
 ];
 
-/// The outcomes of `cache load`, the one cache subcommand that reads a server.
+/// The outcomes of `cache load`, the one cache subcommand that reads the database.
 const CACHE_LOAD: &[Outcome] = &[
     outcome(
         Code::Ok,
@@ -3376,7 +3376,7 @@ const ENTRIES: [Entry; 35] = [
     },
     Entry {
         path: &["version"],
-        description: "Prints tpl, a space and the version, such as tpl 0.1.0, and nothing else.",
+        description: "Prints tpl, a space and the version, as in tpl <version>, and nothing else.",
         blocks: &[],
         touches: Some(local_only(
             "Needs no database entry and no project.",

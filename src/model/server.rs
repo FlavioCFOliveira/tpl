@@ -24,7 +24,7 @@
 //! taken from a server the window has since left therefore still renders, which
 //! is the accepted cost `FR-CTX-033` records.
 //!
-//! *The two constructors are two paths and not a convenience.* A server read
+//! *The two constructors are two paths and not a convenience.* A database read
 //! derives `series` from the string the probe returned, and a `--context`
 //! document supplies all three keys already written down — `FR-CTX-033` bars
 //! the system from checking the third against the first, because the document
@@ -140,7 +140,7 @@ pub struct Server<'a> {
 }
 
 impl<'a> Server<'a> {
-    /// Builds the object from a server read, deriving `series` per
+    /// Builds the object from a database read, deriving `series` per
     /// `FR-SRV-040`.
     ///
     /// [`None`] is returned where the version string is outside the form that
