@@ -1,7 +1,7 @@
 ---
 title: Global Flags
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [cli-contract.md, configuration-model.md, cache-commands.md, output-formats.md, project-and-discovery.md, render-command.md, sqlite-contract.md]
 ---
 
@@ -169,8 +169,8 @@ which belongs to that command's module.
   `.tpl/.cache/` — so that the data of a deleted entry can be removed.
 
   *`tpl render` is the one command on both lists*, and `--context` is what
-  moves it. `FR-RND-022` keeps a `--context` invocation away from a connection
-  and a cache, and `FR-RND-018` makes `--context` with an explicit
+  moves it. `FR-RND-022` keeps a `--context` invocation away from the database
+  and the cache, and `FR-RND-018` makes `--context` with an explicit
   `-d/--database` a `64` at step 1 of `FR-ERR-006` — before any entry is
   resolved — so the two lists cannot both claim one invocation.
 
@@ -189,6 +189,12 @@ which belongs to that command's module.
   *Rejected: stating the set as a property of each command, in the module that
   owns it.* It is one fact read by two requirements in this file, and spreading
   it over five modules would leave neither of them with anything to cite.
+
+  *Note added in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The note on `tpl render`
+  says that `FR-RND-022` keeps a `--context` invocation away from the
+  database, where it said away from a connection. The requirement is
+  unchanged.
 
 - **FR-GLOB-008**: The system SHALL distinguish an entry selected by
   `-d/--database` on the command line from one resolved through `core.database`,

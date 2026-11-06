@@ -1072,8 +1072,8 @@ pub(crate) fn implied(path: &[&str], name: &str) -> Option<&'static str> {
 /// `FR-HELP-029`. **One resolver serves both**, which is why a subtree and a
 /// help text are selected by the same rules and refused by the same message.
 ///
-/// Nothing here discovers a project, reads a configuration file or opens a
-/// connection, which is what `FR-PROJ-025` requires of every form of this
+/// Nothing here discovers a project, reads a configuration file or reads the
+/// database, which is what `FR-PROJ-025` requires of every form of this
 /// command: the only inputs are the parser tree and the typed table.
 ///
 /// # Errors
@@ -1863,7 +1863,8 @@ const CFG_DATABASE_REMOVE: &[Outcome] = &[
     ),
 ];
 
-/// The outcomes of `cfg database test`, the one `cfg` subcommand that connects.
+/// The outcomes of `cfg database test`, the one `cfg` subcommand that reads the
+/// database.
 const CFG_DATABASE_TEST: &[Outcome] = &[
     outcome(
         Code::Ok,

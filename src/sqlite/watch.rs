@@ -1,12 +1,12 @@
-//! The bound on every statement of a SQLite connection (`FR-LITE-009`,
+//! The bound on every statement of a read of a SQLite file (`FR-LITE-009`,
 //! `OD-36`).
 //!
 //! Two means bound a statement, because each bounds what the other cannot: the
 //! library's own wait for a lock, whose timeout is set to what remains of the
 //! statement's bound before it runs, replacing `rusqlite`'s 5000 ms default
-//! (`ADR-013`, *Consequences*); and one watchdog thread per connection, which
-//! holds the connection's interrupt handle and interrupts a statement still
-//! running when its bound expires.
+//! (`ADR-013`, *Consequences*); and one watchdog thread per open of the file,
+//! which holds its `Connection`'s interrupt handle and interrupts a statement
+//! still running when its bound expires.
 //!
 //! **Disarming is a rendezvous.** The thread interrupts only while it is
 //! armed, under the lock [`Watchdog::disarm`] takes, so an interrupt reaches
@@ -16,8 +16,8 @@
 //! SQLite's own rule — a call "when there are no running SQL statements is a
 //! no-op" (`https://sqlite.org/c3ref/interrupt.html`, consulted 2026-11-03).
 //!
-//! **The thread is stopped and joined before the connection is closed**, so
-//! no interrupt is ever issued against a closed connection, which the same
+//! **The thread is stopped and joined before the file is closed**, so no
+//! interrupt is ever issued against a closed `Connection`, which the same
 //! page states is not safe.
 //!
 //! **The deadline arithmetic saturates.** A `core.query_timeout` the
@@ -47,11 +47,11 @@ enum State {
     Armed(Option<Instant>),
     /// The statement it was armed for was interrupted.
     Fired,
-    /// The connection is about to close; the thread ends.
+    /// The file is about to close; the thread ends.
     Stopped,
 }
 
-/// The state shared between the connection's thread and the watchdog's.
+/// The state shared between the thread that reads the file and the watchdog's.
 #[derive(Debug)]
 struct Shared {
     /// The state, under the lock every transition takes.
@@ -68,7 +68,7 @@ impl Shared {
     }
 }
 
-/// One watchdog, for one connection.
+/// One watchdog, for one open of the file.
 #[derive(Debug)]
 pub(crate) struct Watchdog {
     /// The state it shares with its thread.
@@ -78,7 +78,7 @@ pub(crate) struct Watchdog {
 }
 
 impl Watchdog {
-    /// Starts the watchdog of the connection whose interrupt handle is
+    /// Starts the watchdog of the open file whose interrupt handle is
     /// `handle`.
     ///
     /// # Errors
@@ -143,7 +143,7 @@ impl Watchdog {
 
 impl Drop for Watchdog {
     /// A watchdog dropped without [`Watchdog::stop`] — on an early return — is
-    /// stopped and joined here, before the connection beside it is dropped.
+    /// stopped and joined here, before the `Connection` beside it is dropped.
     fn drop(&mut self) {
         self.halt();
     }
@@ -198,7 +198,7 @@ mod tests {
 
     /// Whether [`ENDLESS`] has begun running, as the statement trace reports
     /// it; only [`fr_lite_009_a_statement_past_its_bound_is_interrupted_and_the_next_is_not`]
-    /// runs it on a traced connection.
+    /// runs it on a traced `Connection`.
     static BEGUN: Mutex<bool> = Mutex::new(false);
 
     /// Woken when [`BEGUN`] is set.

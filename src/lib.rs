@@ -8,17 +8,17 @@
 //!
 //! At this commit the **three arms are joined**. The first reads: the eight
 //! `schema` subcommands and the three of `tpl cache` resolve a database entry,
-//! consult the store under `.tpl/.cache/`, open the one connection they are
-//! allowed where the store does not answer, read the catalogue into the model,
-//! and present it. The second reaches none of that: the four `tpl template`
+//! consult the store under `.tpl/.cache/`, read the database, at most once,
+//! where the store does not answer, read the catalogue into the model, and
+//! present it. The second reaches none of that: the four `tpl template`
 //! subcommands list, print, parse and locate the templates under
-//! `.tpl/templates/`, without a catalogue, a cache or a connection. The third
-//! composes them — `tpl render` assembles the context of `FR-RND-023` from a
-//! catalogue read or from a `--context` document, binds at most one object,
-//! renders one template and writes the result to stdout. [`run`] is the entry
-//! point the binary calls, [`install_panic_hook`] and [`install_heap_counter`]
-//! are the process setup it performs first, and [`Error`] is the value every
-//! module reports failure through.
+//! `.tpl/templates/`, without a catalogue, a cache or a read of the database.
+//! The third composes them — `tpl render` assembles the context of `FR-RND-023`
+//! from a catalogue read or from a `--context` document, binds at most one
+//! object, renders one template and writes the result to stdout. [`run`] is the
+//! entry point the binary calls, [`install_panic_hook`] and
+//! [`install_heap_counter`] are the process setup it performs first, and
+//! [`Error`] is the value every module reports failure through.
 //!
 //! | Module | What it owns |
 //! |---|---|
@@ -132,7 +132,7 @@ pub fn install_heap_counter(counter: fn() -> usize) {
 /// `FR-ERR-006` fixes, after it has been reported. All eight steps of that
 /// order are in force: the invocation is parsed, the project is discovered and
 /// trusted, `.tpl/.cfg` is read and validated, a template is resolved, the
-/// database entry is resolved, the cache or the connection serves the read, a
+/// database entry is resolved, the cache or the database serves the read, a
 /// catalogue object is resolved, and the render runs — each step reached only
 /// by an invocation that raises its condition, and the two the commands of
 /// `FR-PROJ-025` skip skipped for them.

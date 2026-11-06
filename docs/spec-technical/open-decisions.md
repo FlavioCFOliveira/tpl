@@ -346,7 +346,7 @@ the rows of `ADR-002` and `ADR-007` dated that day below.
 | [OD-33](#od-33--uc-013-and-the-twelve-flow-acceptance-skeleton) | `UC-013` and the twelve-flow acceptance skeleton | Open | user |
 | [OD-34](#od-34--an-in-process-entry-point-over-a-supplied-argument-vector) | An in-process entry point over a supplied argument vector | Settled | — |
 | [OD-35](#od-35--the-provider-dispatch-and-the-sqlite-reader) | The provider dispatch and the SQLite reader | Settled | — |
-| [OD-36](#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) | The deadline of a statement on a SQLite connection | Settled | — |
+| [OD-36](#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file) | The deadline of a statement on an open SQLite database file | Settled | — |
 | [OD-37](#od-37--the-sqlite-fixture-and-the-statement-record) | The SQLite fixture, and the statement record | Settled | — |
 | [OD-38](#od-38--a-sqlite-result-code-the-contract-does-not-classify) | A SQLite result code the contract does not classify | Settled | — |
 | [OD-39](#od-39--a-dsn-value-percent-encoded-by-nothing) | A `dsn` value percent-encoded by nothing | Open | user, with `specification-manager` |
@@ -662,8 +662,8 @@ the subject.
 own organisation rule puts the logic in the library and reduces `main.rs` to
 parse, dispatch and map. `NFR-PERF-005` requires `tpl init`, every form of
 `help` and every form of `version` to perform no discovery, read no
-configuration and open no connection — a property that is *observable* when a
-command module is a thin adapter over a lazily reached subject, and that has to
+configuration and not read the database — a property that is *observable*
+when a command module is a thin adapter over a lazily reached subject, and that has to
 be argued when a command module contains the work. And the same subject is
 reached from several commands — a table is read by `schema table`, by
 `schema dump`, by `render` and by `cache load` — so work placed in a command
@@ -1380,7 +1380,7 @@ statement on the connection by the catalogue-query deadline. The runtime's
 timer is unavailable on that path, so the catalogue-query row is bounded there
 by the library's busy timeout and a watchdog thread holding `rusqlite`'s
 interrupt handle, settled in
-[`OD-36`](#od-36--the-deadline-of-a-statement-on-a-sqlite-connection). The
+[`OD-36`](#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file). The
 decision above is unchanged for a `mariadb` entry.
 
 **Amended on 2026-11-04, for rmp `#328`, against the seventy-seventh edition —
@@ -2944,7 +2944,7 @@ this amendment, prepared and recorded as applied under
 
 ---
 
-## OD-36 — The deadline of a statement on a SQLite connection
+## OD-36 — The deadline of a statement on an open SQLite database file
 
 **Status: settled.** Decided for rmp `#316` on 2026-11-03.
 [`ADR-013`](../adr/adr-013-sqlite-driver.md) (*Consequences*) names the two
@@ -2952,7 +2952,8 @@ means — the library's own wait for a lock, and `rusqlite`'s `InterruptHandle` 
 requires `rusqlite`'s 5000 ms default to be replaced, and leaves how the
 deadline is built to this folder.
 
-**Decision.** For each statement on a `sqlite` connection, in this order:
+**Decision.** For each statement on the open database file of a `sqlite`
+entry, in this order:
 
 1. **Its bound** is the phase clock's bound over `core.query_timeout`, composed
    with the overall budget as for every phase (`FR-LITE-009`, `FR-CONF-005`,
@@ -2961,21 +2962,21 @@ deadline is built to this folder.
 2. **The busy timeout is set to what remains of the bound**, replacing the
    default. A statement that finds the database locked waits within the bound
    and fails with `SQLITE_BUSY` at it — the `69` row of `FR-LITE-007`.
-3. **One watchdog thread per connection**, started after the open, holds the
-   connection's interrupt handle. It is armed with the statement's remaining
-   bound before the statement runs, and disarmed when it returns; disarming is
+3. **One watchdog thread per open of the file**, started after the open, holds
+   the interrupt handle of the open file. It is armed with the statement's
+   remaining bound before the statement runs, and disarmed when it returns; disarming is
    a rendezvous, so an interrupt reaches the statement it was armed for or
    none. At the bound it interrupts, the statement fails with
    `SQLITE_INTERRUPT`, and that is the `69` of `FR-ERR-027`.
-4. **The watchdog is stopped and joined before the connection is closed**, so
-   no interrupt is ever issued against a closed connection.
+4. **The watchdog is stopped and joined before the database file is closed**,
+   so no interrupt is ever issued against a closed one.
 
 The open itself is outside every bound: `FR-LITE-005` states, as its accepted
 cost, that no deadline interrupts a blocked open, and the watchdog exists only
-once there is a connection to interrupt.
+once there is an open file to interrupt.
 
-**Sources, consulted 2026-11-03.** One busy handler per connection, sleeping
-until the total reaches the timeout and then returning `SQLITE_BUSY`
+**Sources, consulted 2026-11-03.** One busy handler per open of the file,
+sleeping until the total reaches the timeout and then returning `SQLITE_BUSY`
 (`https://sqlite.org/c3ref/busy_timeout.html`). An interrupt is safe from
 another thread; an interrupted operation returns `SQLITE_INTERRUPT`; a call
 "when there are no running SQL statements is a no-op" and does not reach a
@@ -2985,8 +2986,8 @@ with a database connection that is closed"
 Duration)`, `Connection::get_interrupt_handle`, and
 `InterruptHandle::interrupt`, "Interrupt the query currently executing on
 another thread", with `InterruptHandle` both `Send` and `Sync` (docs.rs,
-`rusqlite` 0.41.1). **What `InterruptHandle::interrupt` does once its
-connection is closed is not confirmed in `rusqlite`'s official
+`rusqlite` 0.41.1). **What `InterruptHandle::interrupt` does once the
+file it was taken from is closed is not confirmed in `rusqlite`'s official
 documentation**, which is why point 4 does not rely on it.
 
 **Rejected.**
@@ -2998,10 +2999,10 @@ documentation**, which is why point 4 does not rely on it.
   2026-11-03), outside the feature set `ADR-013` fixes, and it puts a callback
   on every statement's evaluation where one waiting thread suffices.
 - **A thread per statement.** The same mechanism, started once per statement
-  rather than once per connection.
+  rather than once per open of the file.
 - **The read on a worker thread while the caller waits on a channel.** `OD-12`
   rejects the inverted construct for the render; here it would also leave an
-  abandoned worker holding the connection open after the invocation answered,
+  abandoned worker holding the database file open after the invocation answered,
   which `FR-RND-040` refuses before a render.
 - **The runtime's timer.** The SQLite path builds no runtime (`ADR-013`,
   *Consequences*; `ADR-005`), and building one for a timer is start-up work
@@ -3056,11 +3057,11 @@ record taken?
    through `rusqlite`**, which is the library the binary carries — the ground
    `FR-LITE-038` gives for building from text. It is `tests/support/sqlite.rs`,
    reached by `#[path]` from the library's unit tests and from the integration
-   targets, as `tests/support/fixture.rs` is. The builder uses a plain
-   connection and none of `tpl`'s controls: item 9 must be written under
-   `trusted_schema` on, and the length-limit database by a connection that
-   does not set the limit. The same code makes the artefacts that are not SQL
-   — the write-ahead-log copy, the empty, text and truncated files, the
+   targets, as `tests/support/fixture.rs` is. The builder opens the file
+   plainly, with none of `tpl`'s controls: item 9 must be written under
+   `trusted_schema` on, and the length-limit database through an open of the
+   file that does not set the limit. The same code makes the artefacts that
+   are not SQL — the write-ahead-log copy, the empty, text and truncated files, the
    directory, the FIFO and the two links — the FIFO with the system's
    `mkfifo`, as `tests/non_regular_files.rs` already does, and the oversized
    `CREATE TABLE` generated by a rule rather than stored.
@@ -3073,7 +3074,7 @@ record taken?
    identifier is `0`, so that test skips, with a printed reason, when run as
    root.
 4. **The record is taken in process.** A `#[cfg(test)]` hook in `sqlite/`
-   installs `trace_v2` with `SQLITE_TRACE_STMT` on the connection immediately
+   installs `trace_v2` with `SQLITE_TRACE_STMT` on the open file immediately
    after the open and before the first statement, and records every text the
    trace reports, per thread, as the quiescence count is kept, so that tests
    running in parallel never share a record. A text beginning with `-- ` is a

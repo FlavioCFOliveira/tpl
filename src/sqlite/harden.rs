@@ -1,8 +1,8 @@
-//! The nine hardening controls and the three limits of a connection, each set
-//! and read back (`FR-LITE-010` … `FR-LITE-012`).
+//! The nine hardening controls and the three limits applied each time the
+//! file is opened, each set and read back (`FR-LITE-010` … `FR-LITE-012`).
 //!
 //! Every comparison of a value set with the value read back is a function of
-//! its own, separable from any connection, so the refusal of `FR-LITE-012` is
+//! its own, separable from any open file, so the refusal of `FR-LITE-012` is
 //! testable over every control without a library that misbehaves.
 //!
 //! | Control | Through | Confirmed by |

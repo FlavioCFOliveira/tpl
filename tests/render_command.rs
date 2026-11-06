@@ -47,7 +47,7 @@
 //!
 //! | Property | Requirement |
 //! |---|---|
-//! | A render from a `--context` document opens no connection | `FR-RND-022` |
+//! | A render from a `--context` document reads no database | `FR-RND-022` |
 //! | A render that fails leaves at most one incomplete result on stdout | `FR-RND-034`, `FR-SEM-020` |
 //!
 //! Both are observed in

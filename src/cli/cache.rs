@@ -236,13 +236,13 @@ pub(crate) fn run<W: Write>(
 /// `FR-CACHE-032` requires an unreachable server to exit `69` and to leave
 /// everything already stored **unchanged**, and the order of the body is what
 /// establishes it: every step that can fail — the project, the configuration,
-/// the entry, the connection, the catalogue read, the fold, the document build
-/// and the resolution of a named object — runs **before** the single call to
-/// [`Store::write`], so a failure returns with no file of the store created,
-/// truncated or removed. There is no partial-load path: the store is written
-/// once, from a document that is already whole, and [`Store::of`] composes
-/// paths without creating a directory, so even reaching the failing step leaves
-/// nothing behind.
+/// the entry, the read of the database, the catalogue read, the fold, the
+/// document build and the resolution of a named object — runs **before** the
+/// single call to [`Store::write`], so a failure returns with no file of the
+/// store created, truncated or removed. There is no partial-load path: the
+/// store is written once, from a document that is already whole, and
+/// [`Store::of`] composes paths without creating a directory, so even reaching
+/// the failing step leaves nothing behind.
 ///
 /// # Errors
 ///
@@ -276,7 +276,7 @@ fn load(
     // the invocation said.
     let reader = Reader::new(globals, None, ending);
     // FR-CACHE-044: the collections the store write reaches are checked for a
-    // link before the connection is opened.
+    // link before the database is read.
     let opened = reader.open(wanted.collections())?;
     let catalogue = reader.fetch(&opened)?;
     let model = catalogue.model()?;

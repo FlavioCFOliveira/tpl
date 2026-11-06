@@ -36,6 +36,12 @@ workflow, before it closes.
 
 ## Unreleased
 
+## [0.1.3] - 2026-11-06
+
+No change a caller can observe. This release carries documentation work only:
+the specification, the technical specification, the README and code comments
+now use `connection` for a MariaDB or MySQL server alone.
+
 ## [0.1.2] - 2026-11-06
 
 ### Fixed

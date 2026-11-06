@@ -1,7 +1,7 @@
 ---
 title: Configuration Model
 status: approved
-last-reviewed: 2026-11-05
+last-reviewed: 2026-11-06
 related: [cfg-commands.md, global-flags.md, project-and-discovery.md, security.md, sqlite-contract.md, mysql-contract.md]
 ---
 
@@ -1437,7 +1437,7 @@ describes a `mysql` entry as it describes a `mariadb` one, per
   system SHALL expand no field and SHALL run no `password_command`.
 
   The conditions that expansion and the helper raise are therefore raised
-  only by an invocation that opens a connection, at the cache-or-connection
+  only by an invocation that opens a connection, at the cache-or-read
   step of `FR-ERR-006`, and never by one served from the cache: the
   undefined variable of `FR-CONF-022`, the unclosed reference of
   `FR-CONF-021`, the invalid name of the second item of `FR-CONF-049`, the
@@ -1482,6 +1482,11 @@ describes a `mysql` entry as it describes a `mariadb` one, per
   field is expanded, which is where `FR-CONF-049` already places it.
 
   *Added in the seventy-ninth edition,* for rmp `#310`.
+
+  *Amended in the ninetieth edition,* for rmp `#373`: one meaning of
+  connection, per the user's decision of 2026-11-06. The text names the
+  cache-or-read step, where it said the cache-or-connection step, after the
+  step's new name in `FR-ERR-006`. The behaviour is unchanged.
 
 - **FR-CONF-016**: The system SHALL NOT expand `${VAR}` in `tls`.
 

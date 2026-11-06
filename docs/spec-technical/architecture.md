@@ -90,7 +90,7 @@ therefore the shape of the process, not a convention of the error module.
 | 2 | Discover the project and apply the trust checks | `project/` | `78` |
 | 3 | Read and validate the configuration file | `project/config.rs` | `78` |
 | 4 | Resolve the database entry | `project/settings.rs` | `78` or `66` |
-| 5 | Consult the cache; open a connection if it does not answer | `cache/`, then `provider.rs`, which reaches `mariadb/`, `mysql/` or `sqlite/` | `69`, `77` or `78` for a server entry; for a `sqlite` entry `69`, `70`, `74` or `78` (`FR-ERR-006`, note of the sixty-fifth edition) |
+| 5 | Consult the cache; read the database if it does not answer | `cache/`, then `provider.rs`, which reaches `mariadb/`, `mysql/` or `sqlite/` | `69`, `77` or `78` for a server entry; for a `sqlite` entry `69`, `70`, `74` or `78` (`FR-ERR-006`, note of the sixty-fifth edition) |
 | 6 | Resolve the named catalogue object | The reader or `cache/`, or `cli/` where a `--context` document is the source | `66` |
 | 7 | Resolve the template | `render/` | `66` |
 | 8 | Render | `render/` | `65` |
@@ -203,8 +203,8 @@ arrangement is recorded, and its discharge, in
 ## Inside `project/`
 
 `project/` is the whole of the path from a working directory to a validated
-configuration, and to the settings a connection will need. It is divided by the
-step of `FR-ERR-006` each part serves, so that the order of the steps is a
+configuration, and to the settings a read of the database will need. It is
+divided by the step of `FR-ERR-006` each part serves, so that the order of the steps is a
 property of the code rather than a convention: a project value exists only once
 discovery and the trust checks have passed, and parsing the text they read is a
 method on it.
@@ -216,7 +216,7 @@ method on it.
 | The reader | Parse, key space, declared types, coherence, DSN grammar — in that order, over the whole file; the two values of `provider`, and the refusal of `${` in `path` | Step 3 (`FR-CONF-001`, `FR-CONF-002`, `FR-CONF-006` … `FR-CONF-014`, `FR-CONF-034`, `FR-CONF-035`, `FR-CONF-051`, `FR-CONF-054`) |
 | The key space | The enumerated keys as a type, with the declared type of each, and what `unset` may be given | `FR-CONF-002`, `FR-CFG-009`, `FR-CFG-010`, `FR-CFG-011` |
 | The entry | One `[database.<name>]` block typed, and the predicate that decides `FR-CONF-007` | `FR-CONF-002`, `FR-CONF-006`, `FR-CONF-007` |
-| The resolution | In two halves. At step 5, `prepare`: entry selection, the keys the provider refuses and the `path` it requires, a value holding a NUL character, the four deadlines and the three render bounds — the entry held as written, nothing expanded and no child run. On the connection branch of step 6 alone, `Prepared::connect`: `${VAR}` expansion and the child, into the settings a connection takes — for a `sqlite` entry, the resolved path alone | Steps 5 and 6 (`FR-CONF-004`, `FR-CONF-029`, `FR-CONF-045`, `FR-CONF-056`, `FR-CONF-057`, `FR-GLOB-004` … `FR-GLOB-008`, `FR-CONF-052` … `FR-CONF-054`) |
+| The resolution | In two halves. At step 5, `prepare`: entry selection, the keys the provider refuses and the `path` it requires, a value holding a NUL character, the four deadlines and the three render bounds — the entry held as written, nothing expanded and no child run. On the database-read branch of step 6 alone, `Prepared::connect`: `${VAR}` expansion and the child, into the settings a read takes — for a `sqlite` entry, the resolved path alone | Steps 5 and 6 (`FR-CONF-004`, `FR-CONF-029`, `FR-CONF-045`, `FR-CONF-056`, `FR-CONF-057`, `FR-GLOB-004` … `FR-GLOB-008`, `FR-CONF-052` … `FR-CONF-054`) |
 | The writer | The format-preserving rewrite of `.tpl/.cfg`, every step of it relative to the `.tpl` folder the trust checks opened and held, and made durable | `FR-CFG-034`, `FR-CFG-041`, `FR-CFG-042` |
 | The creator | The five artefacts of a new project | `FR-PROJ-012` … `FR-PROJ-024` |
 
@@ -332,8 +332,8 @@ single point at which the environment reaches an invocation at all
 ([overview.md](overview.md#what-tpl-is-not)). It runs, with the child of
 `password_command`, only on an invocation that opens a connection: `prepare`
 in `project/settings.rs` checks the entry as written at step 5, and
-`Prepared::connect` expands and runs the child where `cli/source.rs` reaches
-the server on a miss, on `--direct`, on the read a render returns to, and for
+`Prepared::connect` expands and runs the child where `cli/source.rs` reads
+the database on a miss, on `--direct`, on the read a render returns to, and for
 `tpl cache load`; `tpl cfg database test` calls both halves through `resolve`.
 A read the cache serves therefore reads no variable and starts no child
 (`FR-CONF-056`). The two checks of `FR-CONF-040` and `FR-CONF-041` run on the
@@ -359,9 +359,10 @@ requirement or the code moves, and what a literal `dsn` password may hold, is
 [`OD-39`](open-decisions.md#od-39--a-dsn-value-percent-encoded-by-nothing),
 open.
 
-## The connection lifecycle
+## The read lifecycle
 
-One connection at most, per invocation (`NFR-PERF-004`). There is no pool: the
+One connection, or one open of the database file, at most per invocation
+(`NFR-PERF-004`). There is no pool: the
 process is ephemeral and issues a handful of queries, which is the root
 coordination document's rule (`CLAUDE.md`, *Performance and Efficiency*) and also
 what `NFR-PERF-004` makes verifiable from the server side (`FR-SRV-014`).
@@ -562,10 +563,10 @@ section prescribes, against the seventy-first edition.
 
 | Part | What it owns | Forced by |
 |---|---|---|
-| `sqlite.rs` | The one route to a connection — kind check, open, hardening and probe, in that order and behind no condition; the one function every statement runs through; the close; the per-thread count of open connections and live watchdogs | `FR-LITE-017`, `FR-LITE-014`, `NFR-PERF-004`, `FR-RND-040` |
+| `sqlite.rs` | The one route to an open database file — kind check, open, hardening and probe, in that order and behind no condition; the one function every statement runs through; the close; the per-thread count of open database files and live watchdogs | `FR-LITE-017`, `FR-LITE-014`, `NFR-PERF-004`, `FR-RND-040` |
 | `sqlite/open.rs` | The kind of the file, and the read-only open | `FR-LITE-005`, `FR-LITE-006` |
-| `sqlite/harden.rs` | Each control and limit, set and read back, and the comparison of the two as a function separable from any connection | `FR-LITE-010` … `FR-LITE-012` |
-| `sqlite/watch.rs` | The busy timeout and the watchdog that bound every statement | `FR-LITE-009`, [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) |
+| `sqlite/harden.rs` | Each control and limit, set and read back, and the comparison of the two as a function separable from any open file | `FR-LITE-010` … `FR-LITE-012` |
+| `sqlite/watch.rs` | The busy timeout and the watchdog that bound every statement | `FR-LITE-009`, [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file) |
 | `sqlite/fault.rs` | Where the library's result stops and a condition of `FR-ERR-001` begins: one pure function over the stage or statement and the result code, and the table of SQLite's names for the codes | `FR-LITE-040`, `FR-LITE-007`, `FR-LITE-012`, `FR-GLOB-018`, [`OD-38`](open-decisions.md#od-38--a-sqlite-result-code-the-contract-does-not-classify) |
 | `sqlite/catalogue.rs` | The read transaction, the plan, and the read that owns its values | `FR-LITE-015`, `FR-LITE-037`, `FR-LITE-042` |
 | `sqlite/catalogue/statements.rs` | The text of every statement, one constant each | `FR-LITE-015`, `FR-LITE-016` |
@@ -573,8 +574,8 @@ section prescribes, against the seventy-first edition.
 | `sqlite/catalogue/fold.rs` | The values into the model: coverage, affinity, default, rowid alias, keys, the match of names, order | `FR-LITE-019` … `FR-LITE-034`, `BR-LITE-003` |
 | `sqlite/catalogue/trigger.rs` | The timing and the event, read from a trigger's stored header, and the reading of SQLite's comment syntax the check shares for its third and seventh kinds | `FR-LITE-032`, `FR-LITE-041` |
 
-**The connection start, in the order `FR-LITE-017` fixes.** No byte of the file
-is parsed before stage 5 has confirmed every control; the probe at stage 6 is
+**Opening the database file, in the order `FR-LITE-017` fixes.** No byte of
+the file is parsed before stage 5 has confirmed every control; the probe at stage 6 is
 the first statement that reads the file (`FR-LITE-002`, observed there). On a
 read, the `BEGIN DEFERRED` of `FR-LITE-042` and then the check of
 `FR-LITE-041`, the first catalogue statement of the plan below, follow it.
@@ -583,7 +584,7 @@ read, the `BEGIN DEFERRED` of `FR-LITE-042` and then the check of
 |---|---|---|---|---|
 | 1 | The kind of the file | `std::fs::metadata` on the resolved path, which "will traverse symbolic links" and "currently corresponds to the `stat` function on Unix" (Rust standard library documentation, consulted 2026-11-03), so it opens nothing and a FIFO does not block | none | `78` for anything but a regular file; a lookup that fails — the path names nothing, a link on it dangles, the filesystem refuses it — opens nothing and is `74` under the first row of `FR-LITE-007`, to which `FR-LITE-005` routes it, the `cause` naming what the filesystem returned |
 | 2 | The open | `Connection::open_with_flags` with `SQLITE_OPEN_READ_ONLY`, `SQLITE_OPEN_NO_MUTEX` and `SQLITE_OPEN_EXRESCODE`, and without `SQLITE_OPEN_CREATE`, `SQLITE_OPEN_URI` or `SQLITE_OPEN_NOFOLLOW` | none | `74` for `SQLITE_CANTOPEN` (`FR-LITE-006`, `FR-LITE-007`); any other result code by `FR-LITE-040` |
-| 3 | The statement bound | The busy timeout replaced, and the watchdog started ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)) | none | — |
+| 3 | The statement bound | The busy timeout replaced, and the watchdog started ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file)) | none | — |
 | 4 | The build | `PRAGMA compile_options`, which must return the row `OMIT_LOAD_EXTENSION`, for extension loading, and one of `TEMP_STORE=1`, `TEMP_STORE=2` and `TEMP_STORE=3`, for temporary storage | 1 | `70` (`FR-LITE-010`, `FR-LITE-012`) |
 | 5 | The other controls, and the limits | The read-only open read back through `is_readonly` on `main`; defensive mode on, `trusted_schema` off and views disabled, through `set_db_config` and read back through `db_config`; `query_only` on, `cell_size_check` on, `mmap_size` `0` and `temp_store` `MEMORY`, read back as `2`, each set and read back through its pragma; the three limits through `set_limit`, read back through `limit` | 8 | `70` (`FR-LITE-010` … `FR-LITE-012`) |
 | 6 | The version probe | `SELECT sqlite_version()` | 1 | By `FR-LITE-040`: `69`, `74` or `78` under the rows of `FR-LITE-007`, and the code its own table gives any other result code |
@@ -596,7 +597,7 @@ Why each flag of stage 2 is set or left out:
 | `SQLITE_OPEN_EXRESCODE` | Set | `FR-LITE-007` separates `SQLITE_READONLY_DIRECTORY` from the rest of its class, and the library returns primary codes by default (`https://sqlite.org/rescode.html`, last updated 2026-02-18, consulted 2026-11-03); the flag enables extended codes from SQLite 3.37.0 (`OpenFlags`, as above) |
 | `SQLITE_OPEN_NOFOLLOW` | Left out | `FR-LITE-005` follows links |
 | `SQLITE_OPEN_URI` | Left out, and not needed to keep the path literal | The bundled build defines `SQLITE_USE_URI` (`libsqlite3-sys` 0.39.1, `build.rs`, consulted 2026-11-03), under which a filename beginning with `file:` is a URI whatever the flags; the open is handed the absolute path of `FR-CONF-054`, which begins with `/`, and SQLite "interprets any filename that does not begin with "file:" as an ordinary filename" (`https://sqlite.org/uri.html`, consulted 2026-11-03) |
-| `SQLITE_OPEN_NO_MUTEX` | Set | The connection is used from one thread; it is `rusqlite`'s own default mode (`OpenFlags`, as above) |
+| `SQLITE_OPEN_NO_MUTEX` | Set | The open database file is used from one thread; it is `rusqlite`'s own default mode (`OpenFlags`, as above) |
 
 **Three controls go through the configuration interface and four through their
 pragma.** `rusqlite`'s `DbConfig` carries `SQLITE_DBCONFIG_DEFENSIVE`,
@@ -638,8 +639,8 @@ Four rules bind the text of every statement:
   [register](verification.md#mandated-by-the-corpus)).
 - **The check comes first.** Every statement that reads through a pragma
   function follows it, inside the same read transaction, so a table or a view
-  that would replace one has been refused before one runs, and none added by
-  another connection after the check is read (`FR-LITE-017`, `FR-LITE-041`,
+  that would replace one has been refused before one runs, and none added through
+  another open of the file after the check is read (`FR-LITE-017`, `FR-LITE-041`,
   `FR-LITE-042`).
 - **No value read from the file enters a statement's text.**
 - **The plan is a constant.** No path adds a statement (`FR-LITE-037`), and no
@@ -658,8 +659,8 @@ that requirement's and are not restated.
 |---|---|---|
 | Where `BEGIN DEFERRED` is issued | After the probe and immediately before the check. It reads nothing; the snapshot is taken by the check | `FR-LITE-017`, `FR-LITE-042` |
 | Where `COMMIT` is issued | Immediately after statement 7 completes, and on no other path | `FR-LITE-042` |
-| A read that ends early — the check refuses the file, a statement fails, a bound ends one | No `COMMIT` is issued; the transaction ends with the connection, which the library rolls back when it closes | `FR-LITE-042`; `FR-LITE-041`: a refused file is read by no further statement |
-| How each of the two runs | Through the one function every statement runs through, under its own bound ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)); neither writes the line of `FR-GLOB-017`, because neither is a catalogue statement | `FR-LITE-009`; `FR-LITE-015` and `FR-LITE-037`, as amended and noted in the seventieth edition |
+| A read that ends early — the check refuses the file, a statement fails, a bound ends one | No `COMMIT` is issued; the transaction ends when the database file is closed, the library rolling it back as it closes the file | `FR-LITE-042`; `FR-LITE-041`: a refused file is read by no further statement |
+| How each of the two runs | Through the one function every statement runs through, under its own bound ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file)); neither writes the line of `FR-GLOB-017`, because neither is a catalogue statement | `FR-LITE-009`; `FR-LITE-015` and `FR-LITE-037`, as amended and noted in the seventieth edition |
 | How a failure of either is classified | As a statement of stage `Transaction`, by steps 2 and 3 of `FR-LITE-040` and never by step 1 ([interfaces.md](interfaces.md#the-sqlite-reader)) | `FR-LITE-040`; the note on `FR-ERR-006` of the seventieth edition |
 | `tpl cfg database test` | Issues the check alone and no transaction statement | `FR-LITE-042`, `FR-CFG-056` |
 
@@ -683,7 +684,7 @@ is decided in `tpl`, not in the statement's text.
 
 **The read owns its values, typed and converted at the boundary.** A `rusqlite`
 row borrows its statement, so every value the read keeps is copied out as its
-row is read, and the statements are dropped before the connection closes. A
+row is read, and the statements are dropped before the database file is closed. A
 value the join repeats over consecutive rows is kept once per run of them — a
 table's name in statements 4 to 6, and an index's `name`, `unique` and
 `origin` in statement 5 — and rows that come apart form a run per part, so no
@@ -745,7 +746,7 @@ Grouping holds whatever order the rows arrive in. No statement orders its rows:
 every order the model carries is the fold's (`FR-LITE-025`, `FR-LITE-029` …
 `FR-LITE-031`, `NFR-DET-002`). The fold runs after the last statement, outside
 every statement's bound
-([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)),
+([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file)),
 so a lookup that scanned would let a file of many objects cost time growing
 with their square where the statements' grows with their number (`FR-LITE-009`,
 *Consequence*; `FR-LITE-020`, *Provenance*). **Discharged at `82eb1d4` — the
@@ -771,8 +772,8 @@ stated in the code (`sqlite/catalogue.rs`, `Raw`) and not confirmed in the
 official documentation.
 
 **The close.** Every statement is dropped, the watchdog is stopped and joined,
-and then the connection is closed — before any render starts (`FR-RND-040`). A
-failed close is not a condition: the answer is already produced, and `close` is
+and then the database file is closed — before any render starts
+(`FR-RND-040`). A failed close is not a condition: the answer is already produced, and `close` is
 "functionally equivalent to the `Drop` implementation" apart from returning the
 error (docs.rs, `rusqlite` 0.41.1, `Connection::close`, consulted 2026-11-03).
 
@@ -840,7 +841,7 @@ subcommand reads through it, and so does a render that has no supplied context
 
 | Path | What happens | Forced by |
 |---|---|---|
-| Hit | Served from disk; no connection opened, no catalogue query issued | `FR-CACHE-006`, `NFR-PERF-003` |
+| Hit | Served from disk; the database not read, no catalogue query issued | `FR-CACHE-006`, `NFR-PERF-003` |
 | Miss | The database is read, the result is written, **then** the answer is produced | `FR-CACHE-007` |
 | Unreadable file, or a version the binary does not know | A **silent** miss: read the database, rewrite, report nothing | `FR-CACHE-033`, `FR-CDOC-004` |
 | An object file that is not a regular file, or a named read whose file holds another object | The same silent miss; a link is never read through | `FR-CACHE-033`, `FR-CDOC-008`, with [data-model.md](data-model.md#tplcache) |
@@ -1066,7 +1067,7 @@ fails before any formatter is reached. The two tests that hold this are in
 restatement of what the engine already does would break the three at once.
 
 **Parsing is separable from rendering.** The check command performs syntax
-analysis only — no expression evaluated, no filter called, no connection opened
+analysis only — no expression evaluated, no filter called, no database read
 — so the parse step is reachable without the render step (`FR-TMPL-017`,
 `BR-TMPL-001`, `FR-SEC-018`).
 
@@ -1088,7 +1089,7 @@ The render time is the single documented source of non-reproducibility
 (`NFR-DET-005`, `FR-CTX-028`, `FR-CTX-029`); the clock, the conversion and the
 one grammar used in both directions are
 [`OD-25`](open-decisions.md#od-25--the-clock-source-for-now). Supplying a
-context document opens no connection and touches no cache (`FR-RND-022`), and
+context document reads no database and touches no cache (`FR-RND-022`), and
 two of the registered tests reach back into the assembled context rather than
 answering from their operand, which is
 [interfaces.md](interfaces.md#context-access-from-a-filter-or-a-test)'s.
@@ -1110,7 +1111,7 @@ not restated.
 | 3 | TLS handshake | What remains of the same budget | The same timer and the same call | `FR-CONF-005`, `FR-ERR-027` |
 | 4 | The login | What remains of the same budget | The same timer and the same call; the login runs before and after a TLS handshake | `FR-CONF-005`, `FR-ERR-027`, `FR-ERR-047` |
 | 5 | A session statement — the read-only statement, its read-back, the version probe | The query budget, for each statement from its own start, shared with nothing | The runtime's own timer, around each statement | `FR-CONF-005`, `FR-ERR-027`, `FR-SRV-010` |
-| 6 | Catalogue query | The query budget, per query — for a `sqlite` entry, per statement on the connection | The runtime's own timer; for a `sqlite` entry, the library's busy timeout and a watchdog thread holding the interrupt handle ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection)) | `FR-CONF-005`, `FR-ERR-027`, `FR-LITE-009` |
+| 6 | Catalogue query | The query budget, per query — for a `sqlite` entry, per statement on the open database file | The runtime's own timer; for a `sqlite` entry, the library's busy timeout and a watchdog thread holding the interrupt handle ([`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file)) | `FR-CONF-005`, `FR-ERR-027`, `FR-LITE-009` |
 | 7 | `password_command` | The password budget, until the child has exited **and** its standard output has closed | A reader thread draining the child's pipe and a polling loop in the parent, which kills the child's whole process group and reports the expiry | `FR-CONF-005`, `FR-CONF-028` |
 | 8 | Render | The render budget | A watchdog thread that writes the diagnostic and terminates the process; the same thread observes the render memory limit ([The render bounds](#the-render-bounds)) | `FR-CONF-005`, `FR-RND-033`, `FR-RND-039` |
 
@@ -1142,7 +1143,7 @@ Six rules bind the table.
   work.
 - **A `sqlite` entry runs phases 6 and 8 alone.** DNS resolution, TCP connect,
   the TLS handshake, the login, the session statements and `password_command`
-  do not run, and every statement on the connection to the file is bounded as
+  do not run, and every statement on the open database file is bounded as
   a catalogue query (`FR-LITE-009`). The open of the file is bounded by
   nothing, which is `FR-LITE-005`'s accepted cost. A `mysql` entry runs all
   eight, as a `mariadb` entry does (`FR-MYSQL-020`).
@@ -1218,7 +1219,7 @@ Five properties of the built arrangement follow.
   it with the read already closed, so the check is the in-process observation
   `FR-RND-040` names rather than a reachable path. `provider::quiescent()`
   answers for the three readers — no MariaDB or MySQL connection or runtime, and
-  no SQLite connection or watchdog, on the calling thread
+  no open SQLite database file or watchdog, on the calling thread
   ([`OD-35`](open-decisions.md#od-35--the-provider-dispatch-and-the-sqlite-reader)).
 
 ## Lazy initialisation
@@ -1231,10 +1232,10 @@ it observable rather than reviewable.
 | Nothing is built | Unless | Forced by |
 |---|---|---|
 | A discovery walk, a configuration read, a socket | The command is not one of the four `FR-PROJ-025` exempts | `NFR-PERF-005`, `FR-PROJ-025` |
-| A connection — to a server, or of the SQLite library to a database file | The command needs catalogue data and the cache did not answer | `NFR-PERF-006`, `NFR-PERF-003`, `FR-CACHE-011`, `FR-RND-022`, `FR-LITE-037` |
+| A connection to a server, or an open of the database file | The command needs catalogue data and the cache did not answer | `NFR-PERF-006`, `NFR-PERF-003`, `FR-CACHE-011`, `FR-RND-022`, `FR-LITE-037` |
 | The template engine | The invocation renders | `NFR-PERF-006` |
 | The asynchronous runtime | `mariadb/` or `mysql/` is reached, and at most one of them per invocation; never for a `sqlite` entry | [`ADR-005`](../adr/adr-005-async-runtime-scope.md), [`ADR-013`](../adr/adr-013-sqlite-driver.md) |
-| A thread of the crate's own | A phase bounded without the runtime is entered — the statements on a SQLite connection among them | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection) |
+| A thread of the crate's own | A phase bounded without the runtime is entered — the statements on an open SQLite database file among them | [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced), [`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file) |
 
 Each row is verified by an observation made outside the process and never by
 reading the source (`NFR-PERF-007`), which is why laziness is placed at a module
@@ -1253,7 +1254,7 @@ restated. In this document they decide the *Bounded by* column of
 [The phase deadlines](#the-phase-deadlines), whose mechanisms are
 [`OD-12`](open-decisions.md#od-12--how-six-phase-deadlines-are-enforced) and, for
 a `sqlite` entry,
-[`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-a-sqlite-connection),
+[`OD-36`](open-decisions.md#od-36--the-deadline-of-a-statement-on-an-open-sqlite-database-file),
 and the runtime's row of [Lazy initialisation](#lazy-initialisation).
 
 ## Two exits that do not return through `main.rs`

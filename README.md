@@ -20,9 +20,9 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 
 ---
 
-> ## Status: implemented, released (latest v0.1.2)
+> ## Status: implemented, released (latest v0.1.3)
 >
-> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 was the first release of `tpl` and v0.1.2 is the latest; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds. The SQLite and MySQL providers ship from v0.1.0.
+> The table below is the whole command tree, and every command in it is written: nothing this file describes is unbuilt. Every node parses, every node has help, and `tpl help --format json` publishes the whole surface in one call. v0.0.1 was the first release of `tpl` and v0.1.3 is the latest; [`CHANGELOG.md`](CHANGELOG.md) carries the record of what it holds. The SQLite and MySQL providers ship from v0.1.0.
 >
 > | Command | State |
 > |---|---|
@@ -30,13 +30,13 @@ The intended caller is an AI coding agent rather than a person at a prompt. Such
 > | `tpl help`, `tpl help <path>`, `tpl help <path> --format json`, `-h/--help` at any node, `tpl version`, `-V/--version` | **works** |
 > | `tpl cfg get`, `set`, `unset`, `list` | **works** |
 > | `tpl cfg database add`, `list`, `show`, `update`, `remove` | **works** |
-> | `tpl cfg database test` | **works** — the one `cfg` subcommand that opens a connection |
+> | `tpl cfg database test` | **works** — the one `cfg` subcommand that reads a database: it connects to the server of a MariaDB or MySQL entry, or opens the database file of a SQLite entry |
 > | `tpl schema info`, `tables`, `table`, `views`, `view`, `routines`, `routine`, `dump` | **works** |
 > | `tpl cache load`, `clean`, `status` | **works** |
 > | `tpl template list`, `show`, `check`, `path` | **works** |
 > | `tpl render` | **works** |
 >
-> **The three arms are joined.** The eight `schema` subcommands and `tpl cache load` open one connection to the MariaDB or MySQL server or the SQLite database file the selected entry names, read the catalogue, and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and opens no connection at all. The four `tpl template` subcommands read `.tpl/templates/` and reach no database at all. `tpl render` composes the two: it assembles the render context from the selected database or from a `--context` document, binds at most one object, renders one template, and writes the result to stdout. When it reads the database, the connection is closed — and, for a MariaDB or MySQL server, the driver's runtime shut down — before the template starts: nothing of the read is alive while a template runs.
+> **The three arms are joined.** The eight `schema` subcommands and `tpl cache load` read the catalogue of the database the selected entry names — through one connection to its MariaDB or MySQL server, or one open of its SQLite database file — and store what they read under `.tpl/.cache/`; a later read of the same entry is served from there and does not read the database at all. The four `tpl template` subcommands read `.tpl/templates/` and reach no database at all. `tpl render` composes the two: it assembles the render context from the selected database or from a `--context` document, binds at most one object, renders one template, and writes the result to stdout. When it reads the database, what the read opened is closed before the template starts — for a MariaDB or MySQL entry, the connection, with the driver's runtime shut down; for a SQLite entry, the database file: nothing of the read is alive while a template runs.
 >
 > **And they compose.** [`examples/`](examples/README.md) holds four worked examples that build an application's data layer — in Go, Rust, Python and Node.js — out of three known schemas, through the command line alone, and each one ends by submitting what it rendered to that language's own compiler.
 
@@ -327,7 +327,7 @@ Precedence, strongest first: **command-line flag → `.tpl/.cfg` → built-in de
 
 `.tpl/.cfg` admits a closed set of keys, under `[core]` and per `[database.<name>]` block, each with a declared type and a declared default. The table is [`FR-CONF-002`](specification/configuration-model.md) and is not copied here.
 
-**The file is read strictly.** A key outside that space, **anywhere** in the file, exits `78` naming the key and suggesting the nearest one that exists. A value of the wrong type exits `78` naming the line and column, what was found, and what that key takes. Nothing is ignored and nothing is repaired, because a file that decides where to connect and what to run is not a file to guess at — so a `.cfg` a newer `tpl` wrote and an older one does not understand is refused whole rather than read in part.
+**The file is read strictly.** A key outside that space, **anywhere** in the file, exits `78` naming the key and suggesting the nearest one that exists. A value of the wrong type exits `78` naming the line and column, what was found, and what that key takes. Nothing is ignored and nothing is repaired, because a file that decides which database to read and what to run is not a file to guess at — so a `.cfg` a newer `tpl` wrote and an older one does not understand is refused whole rather than read in part.
 
 ### A database entry and its provider
 
