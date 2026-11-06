@@ -22,7 +22,7 @@ This skill is the only way to operate `tpl`. Its main purpose is to carry what t
 ## Finding and installing the binary
 
 ```sh
-command -v tpl && tpl version        # prints e.g. "tpl 0.0.1"
+command -v tpl && tpl version        # prints "tpl <version>"
 ```
 
 If `tpl` is missing or out of date, **ask the user before installing**. The README one-liner both installs and updates (by default to `/usr/local/bin`, and it may use `sudo`; set `TPL_INSTALL_DIR` to install somewhere else):
@@ -68,7 +68,7 @@ For the full workflows, including one file per table, offline rendering, repoint
 
 | Question | Rule |
 |---|---|
-| Live server, cache or `--context`? | By default, reads go through the cache: the first read connects and stores what it read, and later reads open no connection. Use `--direct` when the schema may have changed, or run `tpl -d NAME cache load` once. Use `--direct --no-cache` for a pure read that touches no file. Use `tpl render --context FILE` (from `tpl schema dump`) for a render that needs no server, no entry and no password: CI, sharing a snapshot, or a down server. |
+| Live server, cache or `--context`? | By default, reads go through the cache: the first read connects and stores what it read, and later reads open no connection. Use `--direct` when the schema may have changed, or run `tpl -d NAME cache load` once. Use `--direct --no-cache` for a pure read that touches no file (beside a SQLite database in write-ahead-log mode, the `-wal` and `-shm` files excepted). Use `tpl render --context FILE` (from `tpl schema dump`) for a render that needs no server, no entry and no password: CI, sharing a snapshot, or a down server. |
 | A MySQL server? | Register it as a `mysql` entry (`--provider mysql`); a `mariadb` entry that reaches MySQL exits 78, and so does a `mysql` entry that reaches MariaDB. The `--dsn` scheme never selects the provider. Keep TLS on: over an unencrypted session (`tls` `disabled`, or `preferred` against a server without TLS) `tpl` never requests the server's RSA public key, so a login that needs it exits 78. The document says `database.provider` is `mysql`. |
 | A SQLite file? | Register it as a `sqlite` entry and use every command as for a server: `-d`, the cache, `--direct` and `--context` work the same. The document says which provider read it in `database.provider`. SQLite has no routines (`routines` is `[]`) and no privileges, so a read is complete or fails. Never point an entry at a file you were not asked to read: the file is opened read-only, but in write-ahead-log mode SQLite may leave `-wal` and `-shm` files beside it. |
 | Is the cache stale? | Nothing in the cache expires, and no output says it is stale. Only `tpl -d NAME cache status` shows `loaded_at`. After a schema change, run `cache load` or add `--direct`. After repointing an entry, run `tpl -d NAME cache clean`. |
@@ -85,7 +85,7 @@ For the full workflows, including one file per table, offline rendering, repoint
 | 64 | Usage: bad command, flag, value, conflicting flags, or unknown key for `cfg set`. | Fix the invocation. Run `tpl help <path>`. |
 | 65 | Template syntax error, render failure, `fail()`, malformed `--context` or one with the wrong `schema_version`, a render limit, or a template path outside `.tpl/templates/`. | Fix the template, or its input. Run `tpl template check NAME`. |
 | 66 | A named thing does not exist: a table, view, routine, template, entry or key. | List what exists, then retry with a real name. |
-| 69 | The server is unreachable or refused the TCP connect, the login did not complete, a statement failed on an open session, the server hit a limit on connections or blocked the host, or a connection step timed out; or a SQLite database stayed locked by a writer past `core.query_timeout`. The `cause` names the phase, and a server error number where there is one. | Check host, port and network, or what holds the file. Retrying is safe. |
+| 69 | The server is unreachable or refused the TCP connect, the login did not complete, a statement failed on an open session, the server hit a limit on connections or blocked the host, or a connection step timed out; for a `mariadb` entry, a login over an unencrypted session that needs the server's RSA public key; or a SQLite database stayed locked by a writer past `core.query_timeout`. The `cause` names the phase, and a server error number where there is one. | Check host, port and network, or what holds the file. Retrying is safe. For the RSA key, retrying does not help: run the `--tls verify-identity` command the hint gives. |
 | 70 | A bug in tpl, including a SQLite safeguard that did not take effect. | Report it with the command and `tpl version`. Don't work around it. |
 | 73 | `tpl init`: `.tpl` already exists, or the destination can't be created. | Use the existing project, or pick another path. |
 | 74 | I/O error on `.tpl` files, the `--context` file, CA files, a SQLite database file (missing, unreadable, or its directory refusing the `-wal`/`-shm` files), or stdout. | Check paths, permissions and disk space. |
@@ -100,7 +100,7 @@ For the per-command playbook, message format, validation order and traps, read `
 - Or use `--password-command "pass db/shop"`. It runs without a shell, and its trimmed stdout is the password.
 - A literal value on a command line is visible in the process list. `tpl` warns about this in its help but does not prevent it. Don't do it.
 - `tpl cfg list` and `tpl cfg database show` redact passwords and print `${VAR}` unexpanded, so they are safe to show. `tpl cfg get` does not redact.
-- TLS defaults to `verify-identity`. A local MariaDB server without a trusted certificate needs `--tls disabled` or `--tls preferred`, or `--ca-file`. Say so to the user instead of weakening TLS for a remote server without asking. For a MySQL server, prefer `--ca-file` with `verify-identity`: over an unencrypted session `tpl` never requests the RSA public key MySQL's default authentication may need, and such a login exits 78.
+- TLS defaults to `verify-identity`. A local MariaDB server without a trusted certificate needs `--tls disabled` or `--tls preferred`, or `--ca-file`. Say so to the user instead of weakening TLS for a remote server without asking. Over an unencrypted session `tpl` never requests the server's RSA public key, so a login that needs it fails: exit 78 for a `mysql` entry, where the default authentication may need it, and 69 for a `mariadb` entry. For a MySQL server, prefer `--ca-file` with `verify-identity`.
 - An account with no password is reached with `password = ""` or with no password source at all; both are sent as the server's own clients send an empty password.
 - A `sqlite` entry has no password, no `password_command` and no TLS. Its file is treated as untrusted: `tpl` reads it with a built-in SQLite library that cannot load extensions, and applies safeguards no flag relaxes.
 - Templates can arrive through a clone. `tpl template check` only parses, so it is safe on an unread template. Renders are bounded by time, fuel, output and memory limits.

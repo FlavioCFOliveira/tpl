@@ -67,7 +67,7 @@ SHOP_PASSWORD=… tpl cfg database test shop --format json
 Read the result:
 
 - Exit 0 means the four checks ran. Then read `data.can_read_catalogue`: `false` means the user logs in but can't see the catalogue, so request `SELECT` access to it. `data.server.standing` is `supported` or `newer_than_supported`.
-- Exit 69: unreachable, refused, the login did not complete, a limit on connections or a blocked host, or timed out. The `cause` names the phase. Check the host and port. Retrying is safe.
+- Exit 69: unreachable, refused, the login did not complete, a limit on connections or a blocked host, or timed out. The `cause` names the phase. Check the host and port. Retrying is safe, save for a `mariadb` login that needs the server's RSA public key over an unencrypted session: run the `--tls verify-identity` command the hint gives.
 - Exit 77: login refused. The `cause` names why: the user or password, the client's host, an expired password, or a locked or blocked account. Fix the user or the password source, or follow the hint.
 - Exit 78: undefined `${VAR}`, `password_command` failed, a server that is not the entry's product or of an unsupported series, the session could not be made read-only, or `tls` does not encrypt where the server or the login requires it (follow the `--tls verify-identity` hint); for SQLite, a path that is not a regular file or not a readable SQLite database, or a schema `tpl` refuses.
 - For a SQLite entry, exit 0 always has `can_read_catalogue: true`, and a missing or unopenable file is exit 74.
@@ -90,6 +90,7 @@ tpl -d shop schema routine function:calc_vat --format json
 - The first read connects and stores what it read. Later reads are served from `.tpl/.cache/` (`"source":"cache"`).
 - `schema tables --format json` already returns full table objects (columns, indexes, keys). One call is often enough, with no need for one `schema table` call per table.
 - A routine name shared by a procedure and a function is exit 64 until you qualify it as `procedure:NAME` or `function:NAME`.
+- A SQLite entry has no routines: `schema routines` is `[]`, and naming a routine is exit 66.
 - A name the cache does not hold is a cache miss and triggers a connection. With the server down, a mistyped name therefore reports 69, not 66. Check spelling against the listing first.
 
 ## 4. Render one object
@@ -137,6 +138,7 @@ tpl -d shop schema dump | tpl render rust/struct --context - --table orders   # 
 
 - `--context` uses no entry, no password, no cache and no network, so it suits CI, reviewing a snapshot, or a down server. Don't also pass `-d` or `--direct` (exit 64).
 - The document must be `schema dump` output (compact or `--pretty`). A malformed document is exit 65, and an unreadable file is exit 74.
+- A document with no `database.provider` is read as a `mariadb` document; one with a value other than `mariadb`, `mysql` or `sqlite` is exit 65.
 - An object missing from the document is exit 66. The hint suggests `jq -r '.data.database.tables[].name' FILE`.
 - A dump is a snapshot. Regenerate it after schema changes.
 - A dump is tied to its `schema_version`. A document whose `schema_version` differs from the one the installed tpl emits (1 for now), for example one kept from another tpl release, is refused with exit 65 and nothing is rendered. Re-dump it with the installed binary (`tpl -d <entry> schema dump > shop.json`) rather than editing the version number.
@@ -148,7 +150,7 @@ tpl -d shop cache load                   # whole database. Exit 69 leaves the ol
 tpl -d shop cache load --table orders    # refresh one object
 tpl -d shop cache status --format json   # loaded_at, and per-collection count and "whole"
 tpl -d shop schema tables --direct       # force a live read, and refresh the cache
-tpl -d shop schema dump --direct --no-cache > live.json   # live read that touches no file
+tpl -d shop schema dump --direct --no-cache > live.json   # live read that touches no file (SQLite WAL: -wal/-shm excepted)
 tpl -d shop cache clean                  # delete everything cached for the entry
 tpl -d shop cache clean --view v_sales   # delete one object (exit 66 if it is not cached)
 ```
@@ -168,7 +170,7 @@ tpl -d shop cache clean                                      # required, or read
 tpl cfg database test shop
 ```
 
-A SQLite entry is repointed the same way, with `tpl cfg database update ledger --path other.sqlite`, then `tpl -d ledger cache clean`. An entry cannot move between a server provider and `sqlite` while it carries the other provider's keys (64): add a new entry instead. A server entry moves between `mariadb` and `mysql` with `tpl cfg set database.NAME.provider mysql` (or `mariadb`), followed by `tpl -d NAME cache clean`.
+A SQLite entry is repointed the same way, with `tpl cfg database update ledger --path other.sqlite`, then `tpl -d ledger cache clean`. An entry cannot move between a server provider and `sqlite` while it carries the other provider's keys (64): add a new entry instead. A server entry moves between `mariadb` and `mysql` with `tpl cfg database update NAME --provider mysql` (or `mariadb`, or `tpl cfg set database.NAME.provider …`), followed by `tpl -d NAME cache clean`: the cache keeps serving the provider that wrote it.
 
 Remove an entry:
 
