@@ -461,7 +461,7 @@ impl Reached {
     ///
     /// It is the bound object's value, which a render reaches whole before it
     /// starts, so a fault in either part of the bound table is decided at the
-    /// cache-or-connection step, as `FR-CACHE-038` decides a miss on the bound
+    /// cache-or-read step, as `FR-CACHE-038` decides a miss on the bound
     /// object's file.
     pub(in crate::cli::render) fn whole(&self) -> Option<TableDocument<'static>> {
         let table = &self.table;

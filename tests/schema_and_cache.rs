@@ -15,7 +15,7 @@
 //! | `FR-SCH-013` | No pattern reaches the server, observed in the server's own statement record |
 //! | `FR-SCH-019`, `FR-SCH-021` | `tpl schema dump` declares no `--format` and refuses `--pattern` |
 //! | `FR-SCH-035` | `source` is `server` or `cache` according to what served the read |
-//! | `FR-CACHE-006`, `NFR-PERF-003` | A read served from the cache opens no connection, observed in the server's own connection record |
+//! | `FR-CACHE-006`, `NFR-PERF-003` | A read served from the cache reads no database, observed as no connection in the server's own connection record |
 //! | `FR-CACHE-007` | A miss writes before it answers |
 //! | `FR-CACHE-016` | `--direct --no-cache` touches no file of the store |
 //! | `FR-CACHE-033`, `FR-CDOC-004` | An unreadable file and an unknown version are each a miss and not an error |

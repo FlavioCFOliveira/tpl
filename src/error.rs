@@ -835,7 +835,7 @@ impl fmt::Display for SqliteAt {
     }
 }
 
-/// What ended a statement on a SQLite connection with `69` (`FR-LITE-009`,
+/// What ended a statement on an open SQLite file with `69` (`FR-LITE-009`,
 /// `FR-LITE-040`, the note on `FR-ERR-034` for a `sqlite` entry).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SqliteEnd {
@@ -857,8 +857,8 @@ pub enum SqliteEnd {
         /// Its resolved value.
         limit: Duration,
     },
-    /// `SQLITE_PROTOCOL` or `SQLITE_SCHEMA`: another connection kept winning
-    /// the locks, or kept changing the schema (`FR-LITE-040`).
+    /// `SQLITE_PROTOCOL` or `SQLITE_SCHEMA`: another open of the file kept
+    /// winning the locks, or kept changing the schema (`FR-LITE-040`).
     Contended {
         /// What the library returned, boxed for the reason
         /// [`SqliteEnd::Locked`] gives.
@@ -1353,8 +1353,8 @@ pub enum Error {
     /// two are separate variants because `FR-ERR-034` forbids a `cause` whose
     /// wording would be equally true of a different failure, and that one's
     /// names a database entry the reader was opened through — which
-    /// `FR-RND-019` makes absent here, and `FR-RND-022` makes meaningless: no
-    /// connection was opened and no entry was resolved.
+    /// `FR-RND-019` makes absent here, and `FR-RND-022` makes meaningless: the
+    /// database was not read and no entry was resolved.
     #[error("routine '{name}' names both a procedure and a function in the --context document")]
     AmbiguousRoutineInContext {
         /// The bare name as written.
@@ -1715,7 +1715,7 @@ pub enum Error {
     },
 
     /// `tpl cache clean` named an object the cache of the entry does not hold
-    /// (`FR-CACHE-040`). Nothing was deleted and no connection was opened.
+    /// (`FR-CACHE-040`). Nothing was deleted and the database was not read.
     #[error("nothing cached for {kind} '{name}' in database entry '{entry}'")]
     NothingCachedNamed {
         /// The kind the object flag named.
@@ -1746,7 +1746,7 @@ pub enum Error {
     /// and it is a variant of its own for the reason
     /// [`AmbiguousRoutineInContext`](Error::AmbiguousRoutineInContext) gives:
     /// that one's `cause` names `INFORMATION_SCHEMA` and a database entry, and
-    /// `FR-RND-022` opens no connection and `FR-RND-019` resolves no entry, so
+    /// `FR-RND-022` reads no database and `FR-RND-019` resolves no entry, so
     /// neither exists here to be named.
     #[error("{kind} '{name}' does not exist in the --context document")]
     ContextObjectNotFound {
@@ -2017,8 +2017,8 @@ pub enum Error {
         fault: StatementFault,
     },
 
-    /// A statement on a SQLite connection was ended by a lock, the
-    /// catalogue-query deadline, or another connection (`FR-LITE-009`,
+    /// A statement on an open SQLite file was ended by a lock, the
+    /// catalogue-query deadline, or another open of the file (`FR-LITE-009`,
     /// `FR-LITE-040`).
     #[error("the SQLite database {} could not be read now, for database entry '{entry}'", .path.display())]
     SqliteUnavailable {
@@ -2048,9 +2048,9 @@ pub enum Error {
         location: &'static Location<'static>,
     },
 
-    /// A hardening control or limit of a SQLite connection did not take
-    /// effect, or its read-back did not confirm it (`FR-LITE-012`). Nothing is
-    /// read from the file.
+    /// A hardening control or limit applied as a SQLite file was opened did not
+    /// take effect, or its read-back did not confirm it (`FR-LITE-012`).
+    /// Nothing is read from the file.
     #[error("the SQLite control {control} did not take effect, for database entry '{entry}'")]
     SqliteControlNotInEffect {
         /// The entry the read was made through.
@@ -2738,7 +2738,7 @@ pub enum Error {
     },
 
     /// The selected entry carries a key its provider refuses (`FR-CONF-052`).
-    /// No connection is opened and no file.
+    /// The database is not read.
     #[error("database entry '{entry}' carries keys its provider does not take")]
     ProviderRefusesKeys {
         /// The entry.

@@ -52,11 +52,11 @@
 //! is reached. `tpl render` is the only command that reaches both sides of that
 //! step, and what follows it is everything an invocation that cannot render has
 //! no use for: the entry, with the `${VAR}` expansion of `FR-CONF-015` and the
-//! `password_command` child of `FR-CONF-024`; the one connection of
-//! `NFR-PERF-004`; the catalogue read of `NFR-PERF-001`; and the store written
-//! under `FR-CACHE-030`. `OD-15` already splits the resolution by who asks and
-//! makes the loader resolve again, so the cost of stating the step is one
-//! `realpath` on a path already in the page cache.
+//! `password_command` child of `FR-CONF-024`; the one read of the database
+//! `NFR-PERF-004` allows; the catalogue read of `NFR-PERF-001`; and the store
+//! written under `FR-CACHE-030`. `OD-15` already splits the resolution by who
+//! asks and makes the loader resolve again, so the cost of stating the step is
+//! one `realpath` on a path already in the page cache.
 //!
 //! Two visible consequences follow from the position, and `FR-ERR-006` records
 //! both as accepted: an invocation carrying two faults reports the template
@@ -81,8 +81,8 @@
 //! `FR-CACHE-039`: the server is read, the cache written, and steps 7 and 8
 //! run again over the server's document, so a condition raised after that
 //! carries the code of the step that raised it. A condition the abandoned
-//! render raised before it reached the miss is the invocation's, and no
-//! connection is opened for it. So is a render bound it crosses, before the
+//! render raised before it reached the miss is the invocation's, and the
+//! database is not read for it. So is a render bound it crosses, before the
 //! miss or after it: the abandoned render keeps all four bounds until it has
 //! returned, and crossing one ends the invocation with `65` and that bound's
 //! `cause`, with no database read (`FR-CACHE-039`, `FR-RND-038`). Only an
@@ -577,8 +577,8 @@ fn from_catalogue<W: std::io::Write>(
 
     // Step 4, before an entry is resolved: FR-RND-029 through FR-TMPL-027. An
     // invocation refused here has spared itself the ${VAR} expansion of
-    // FR-CONF-015, the password_command child of FR-CONF-024, the one
-    // connection of NFR-PERF-004, the catalogue read and the store write.
+    // FR-CONF-015, the password_command child of FR-CONF-024, the one read of
+    // the database NFR-PERF-004 allows, the catalogue read and the store write.
     environment.resolve(supplied.template)?;
 
     // Steps 5 and 6. A render reads every collection before it starts, per
@@ -638,7 +638,7 @@ fn from_catalogue<W: std::io::Write>(
 ///
 /// It is steps 7 and 8 of `FR-ERR-006`, as [`produce`] makes them, over a
 /// `database` whose members are read on demand. A condition either step raises
-/// is answered as [`produce`] answers it, and no connection is opened for it,
+/// is answered as [`produce`] answers it, and the database is not read for it,
 /// **unless** the render reached a miss first: once a member is a miss, the
 /// render is abandoned whatever it then did, because what it rendered is not
 /// the document the cache could serve.
@@ -737,7 +737,7 @@ fn attempt<W: std::io::Write>(
 /// Renders from a `--context` document (`FR-RND-016`, `FR-RND-022`).
 ///
 /// Steps 5 and 6 of `FR-ERR-006` are skipped entirely: no entry is selected,
-/// so `password_command` does not run, and no connection is opened and no file
+/// so `password_command` does not run, the database is not read, and no file
 /// of the cache is read or written. Steps 2, 3 and 4 are **not** skipped —
 /// `FR-TMPL-023` makes the template root a property of the resolved project and
 /// `FR-CONF-004` resolves the render deadline from `[core]`, and neither is
@@ -1015,9 +1015,9 @@ const HEAP_POLL: Duration = Duration::from_millis(10);
 ///
 /// **Nothing of a catalogue read is alive when the render starts**
 /// (`FR-RND-040`): the render is refused, as a violated invariant, while this
-/// thread holds an open connection or a driver runtime. Every caller reaches
-/// here with the read already closed, so the check is the requirement's
-/// in-process observation rather than a path a caller can take.
+/// thread holds an open connection, an open database file or a driver runtime.
+/// Every caller reaches here with the read already closed, so the check is the
+/// requirement's in-process observation rather than a path a caller can take.
 ///
 /// **A render abandoned under `FR-CACHE-039` is watched like any other**,
 /// until it has returned. `FR-CACHE-039` and `FR-RND-038` keep all four bounds
@@ -1030,9 +1030,10 @@ const HEAP_POLL: Duration = Duration::from_millis(10);
 ///
 /// # Errors
 ///
-/// Returns [`Error::InternalInvariant`] — `70` — where a connection or a
-/// driver runtime is alive, [`Error::RenderDeadlineExceeded`] — `65` — where
-/// the bound was already spent, and whatever `render` returns.
+/// Returns [`Error::InternalInvariant`] — `70` — where a connection, an open
+/// database file or a driver runtime is alive,
+/// [`Error::RenderDeadlineExceeded`] — `65` — where the bound was already
+/// spent, and whatever `render` returns.
 fn bounded<T>(
     deadline: Bound,
     memory: RenderMemoryLimit,
@@ -1278,8 +1279,8 @@ mod tests {
     #[test]
     fn fr_rnd_023_a_render_from_a_document_carries_the_five_variables() {
         // FR-RND-023 and FR-RND-024 end to end, over the document path, which
-        // FR-RND-022 keeps free of a connection and of the cache: the template
-        // reads all five and the result is what it wrote.
+        // FR-RND-022 keeps from reading the database and the cache: the
+        // template reads all five and the result is what it wrote.
         let scratch = Scratch::new();
         let tpl_dir = project(
             &scratch,

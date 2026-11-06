@@ -1,7 +1,7 @@
 //! The tests of the SQLite reader over the fixture of `FR-LITE-038`.
 //!
 //! They are unit tests because several of them read the statement record of
-//! `FR-LITE-018`, or make another connection write the file between the check
+//! `FR-LITE-018`, or make another open of the file write it between the check
 //! and the plan (`FR-LITE-042`), through test seams of `FR-ERR-031` compiled
 //! into no other build; the rest share the fixture with them. Each test builds
 //! the fixture into a scratch directory of its own.
@@ -47,8 +47,8 @@ fn over(path: &std::path::Path) -> FileSettings {
     FileSettings::new(ENTRY, path, Deadlines::default())
 }
 
-/// The catalogue of the file at `path`, read through the whole connection
-/// start.
+/// The catalogue of the file at `path`, read through every stage of opening
+/// the file.
 ///
 /// The model borrows the rows of its catalogue, so the catalogue is kept for
 /// the rest of the test process and every model folded from it lives as long.
@@ -170,8 +170,8 @@ fn fr_lite_002_the_server_object_describes_the_carried_library() {
 
 #[test]
 fn fr_lite_010_every_control_and_limit_reads_back_as_set_on_the_connection() {
-    // FR-LITE-010 and FR-LITE-011: read back on the connection the reader
-    // opened, after the connection start.
+    // FR-LITE-010 and FR-LITE-011: read back through the reader's own open of
+    // the file, after every stage of opening it.
     let (_scratch, artefacts) = built();
     let clock = settings::clock(None);
     let session = super::open(&over(&artefacts.main), &clock).expect("the file opens");
@@ -240,7 +240,7 @@ fn fr_lite_018_the_statements_issued_are_the_closed_list_in_the_order_of_fr_lite
     // FR-LITE-018 items 1 and 2, over the main fixture database in both
     // journal modes and over an empty file: every statement the trace reports
     // without the prefix is a statement of FR-LITE-015, in the order of
-    // FR-LITE-017 — the connection start, BEGIN DEFERRED, the check, the six
+    // FR-LITE-017 — the open of the file, BEGIN DEFERRED, the check, the six
     // statements of the plan and COMMIT, which is how FR-LITE-042 is verified;
     // every one with it is nested and neither checked nor counted.
     let (_scratch, artefacts) = built();
@@ -257,7 +257,7 @@ fn fr_lite_018_the_statements_issued_are_the_closed_list_in_the_order_of_fr_lite
             );
         }
 
-        // The connection start first, in its order, then the read
+        // The open of the file first, in its order, then the read
         // transaction around the check and the plan, and nothing after it.
         let start = statements::CONNECTION_START.len();
         assert_eq!(&issued[..start], statements::CONNECTION_START);
@@ -880,8 +880,8 @@ fn fr_lite_038_every_trigger_and_key_of_the_main_database_is_attached_but_those_
     // INSTEAD OF triggers on views, and every foreign key the library reports
     // is carried but the two FR-LITE-021 excludes — the key naming a table the
     // file does not hold, and the key of another arity. Counted against the
-    // library on a plain connection, so that a key or a trigger the match of
-    // BR-LITE-003 dropped would show.
+    // library through a plain open of the file, so that a key or a trigger the
+    // match of BR-LITE-003 dropped would show.
     let (_scratch, artefacts) = built();
     let database = model(&artefacts);
 
@@ -1177,7 +1177,7 @@ fn fr_lite_018_no_statement_names_a_view_and_the_read_succeeds_over_the_views_th
     // transaction around the check and the six statements of the plan and
     // nothing else, none of which names a view. The outcome of the read is the
     // instrument: the control below shows that a statement naming any of the
-    // three on the reader's own hardened connection fails, so a read that
+    // three on the reader's own hardened open of the file fails, so a read that
     // named one would have failed with it.
     let (_scratch, artefacts) = built();
     let clock = settings::clock(None);
@@ -1194,7 +1194,8 @@ fn fr_lite_018_no_statement_names_a_view_and_the_read_succeeds_over_the_views_th
         }
     }
 
-    // The control: each of the three, compiled on the same connection, fails.
+    // The control: each of the three, compiled on the same open of the file,
+    // fails.
     let connection = session.connection().expect("the connection is open");
     for view in UNCOMPILABLE {
         let compiled = connection.prepare(&format!("SELECT * FROM main.\"{view}\""));
@@ -1400,8 +1401,8 @@ fn fr_lite_018_over_the_fts5_database_no_statement_compiles_a_view_or_connects_a
     }
 
     // The control: the same instrument sees the module run when the view is
-    // compiled and run on a plain connection, so the silence above means
-    // something.
+    // compiled and run through a plain open of the file, so the silence above
+    // means something.
     let mut plain = Connection::open_with_flags(&artefacts.fts5, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .expect("the fixture opens");
     record::install(&mut plain);
@@ -1678,21 +1679,22 @@ fn fr_lite_042_tpl_cfg_database_test_issues_the_check_alone_and_no_transaction()
     assert!(super::quiescent());
 }
 
-/// The writer's connection, and what its `COMMIT` answered during the read.
+/// The writer's open of the file, and what its `COMMIT` answered during the
+/// read.
 type Written = (Connection, rusqlite::Result<()>);
 
 #[test]
 fn fr_lite_042_a_pragma_table_a_writer_commits_after_the_check_is_not_read_in_either_journal_mode()
 {
-    // FR-LITE-042: the check and every catalogue statement read one snapshot.
-    // A second connection, given the moment between the check and the first
-    // statement after it, creates a table named pragma_encoding holding the
-    // row `forged` — which, read by the statement reading the encoding, would
-    // forge it at exit 0. The read is unaffected: in rollback-journal mode the
-    // writer cannot commit until the read ends, and in write-ahead-log mode
-    // what it commits stays invisible to the read. Once the writer has
-    // committed, a new read is refused by the check, which shows the table
-    // was one the check exists for.
+    // FR-LITE-042: the check and every catalogue statement read one snapshot. A
+    // second open of the file, given the moment between the check and the first
+    // statement after it, creates a table named pragma_encoding holding the row
+    // `forged` — which, read by the statement reading the encoding, would forge
+    // it at exit 0. The read is unaffected: in rollback-journal mode the writer
+    // cannot commit until the read ends, and in write-ahead-log mode what it
+    // commits stays invisible to the read. Once the writer has committed, a new
+    // read is refused by the check, which shows the table was one the check
+    // exists for.
     let (_scratch, artefacts) = built();
 
     for (path, journal) in [(&artefacts.main, "rollback"), (&artefacts.wal, "wal")] {
@@ -1781,7 +1783,7 @@ fn fr_lite_015_the_poc_dos_shape_reads_without_compiling_a_view() {
     assert_eq!(database.tables.len(), 1);
     assert_eq!(database.tables[0].columns().len(), 2_000);
 
-    // The control: on the reader's own connection the top view fails to
+    // The control: on the reader's own open of the file the top view fails to
     // compile at once.
     let connection = session.connection().expect("the connection is open");
     assert!(connection.prepare("SELECT * FROM main.v13").is_err());

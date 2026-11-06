@@ -403,7 +403,7 @@ fn fr_help_028_a_segment_that_names_no_child_is_refused_with_the_node_it_was_sou
 #[test]
 fn fr_proj_025_every_form_succeeds_where_no_project_exists_and_nothing_is_in_the_environment() {
     // FR-PROJ-025 and NFR-PERF-005: none of these forms performs discovery,
-    // reads configuration or opens a connection, so each succeeds in a
+    // reads configuration or reads the database, so each succeeds in a
     // directory with no `.tpl` above it and with an empty environment — which
     // is the state a calling agent's first invocation is made in.
     for form in [
@@ -1731,7 +1731,7 @@ fn fr_help_038_the_fixed_statements_read_as_the_requirement_gives_them() {
         .contains(ANSWERED)
     );
 
-    // The 78 of every command that opens a connection (FR-GLOB-026).
+    // The 78 of every command that reads the database (FR-GLOB-026).
     let mut connecting: Vec<Vec<String>> = node_paths()
         .into_iter()
         .filter(|path| path.len() == 2 && path[0] == "schema")

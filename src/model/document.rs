@@ -584,7 +584,7 @@ mod tests {
         // FR-CTX-033: on this path the system SHALL NOT validate `series`
         // against FR-SRV-015 and SHALL NOT check `standing` against `series`.
         // The document is a record of a read that already happened, and
-        // FR-RND-022 opens no connection, so there is no server to vouch for.
+        // FR-RND-022 reads no database, so there is no server to vouch for.
         // Validating the window would make every committed dump expire on a
         // calendar date as the window moved.
         let document = compact(&fixture::database()).replace(

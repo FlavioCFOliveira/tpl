@@ -53,7 +53,7 @@
 //! dangling reference rather than emitting. The population `FR-SCH-010` draws a
 //! nearest-match suggestion from is in hand for the same reason, and
 //! `FR-CACHE-007` then warms the whole cache, so the invocation after a miss
-//! opens no connection at all, per `FR-CACHE-006`.
+//! reads no database at all, per `FR-CACHE-006`.
 //!
 //! `NFR-PERF-001` and `NFR-PERF-002` are satisfied as they are stated: the plan
 //! is eleven statements for a database of one object and for a database of two
@@ -490,8 +490,8 @@ impl<'a> Reader<'a> {
     where
         P: FnOnce(Served<'_, '_>, Source, &str) -> Result<T, Error>,
     {
-        // FR-CACHE-006: the cache is consulted first, and a hit opens no
-        // connection. FR-CACHE-013 skips the lookup outright, and
+        // FR-CACHE-006: the cache is consulted first, and a hit reads no
+        // database. FR-CACHE-013 skips the lookup outright, and
         // FR-CACHE-033 makes a file that will not decode a miss rather than a
         // condition — which is why the decode is part of the hit.
         //
@@ -597,11 +597,12 @@ impl<'a> Reader<'a> {
     /// `source` set to `server` (`FR-CACHE-007`, `FR-SCH-035`).
     ///
     /// `tpl render` calls it directly on a miss, including the miss
-    /// `FR-CACHE-039` finds during a render; that is the one connection of
-    /// `NFR-PERF-004`, because nothing before it opened one.
+    /// `FR-CACHE-039` finds during a render; that is the one read of the
+    /// database `NFR-PERF-004` allows, because nothing before it read one.
     ///
     /// `present` runs only after [`Reader::fetch`] has returned, so the
-    /// connection is closed and the runtime shut down before a template is
+    /// connection or the database file is closed and any runtime shut down
+    /// before a template is
     /// evaluated from what it is handed (`FR-RND-040`).
     ///
     /// # Errors

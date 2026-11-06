@@ -4,11 +4,11 @@
 //! **The read is one read transaction.** `BEGIN DEFERRED` is issued
 //! immediately before the check of `FR-LITE-041`, and `COMMIT` immediately
 //! after the last catalogue statement, so that the check and every catalogue
-//! statement read one snapshot of the file: a table or a view another
-//! connection adds after the check is never read through (`FR-LITE-042`). A
+//! statement read one snapshot of the file: a table or a view another open
+//! of the file adds after the check is never read through (`FR-LITE-042`). A
 //! read that ends early — the check refuses the file, a statement fails, a
-//! deadline ends one — issues no `COMMIT`; the transaction ends with the
-//! connection, which the library rolls back when it closes.
+//! deadline ends one — issues no `COMMIT`; the transaction ends when the file
+//! is closed, and the library rolls it back as it closes.
 //!
 //! **The plan is a constant**: the check, then six statements, fixed before
 //! the first is sent, each joining `main.sqlite_schema` to the function it
@@ -456,7 +456,7 @@ const STORED: &str = "the catalogue statement reading the stored text of every v
 ///
 /// Returns the `78` of the check for a file it refuses, and the code
 /// `FR-LITE-040` gives the first statement that fails. Either way no `COMMIT`
-/// is issued, and the transaction ends with the connection.
+/// is issued, and the transaction ends when the file is closed.
 pub(crate) fn read(session: &Session) -> Result<Catalogue, Error> {
     session.transaction(Stage::Transaction(BEGIN), statements::BEGIN)?;
     session.check()?;
@@ -628,7 +628,7 @@ fn column_row(row: &Row<'_>) -> Result<ColumnRow, Misread> {
 }
 
 /// A seam of the test configuration alone, between the check and the first
-/// statement after it, where a test makes another connection write the file
+/// statement after it, where a test makes another open of the file write it
 /// (`FR-LITE-042`). It is compiled into no other build, like the statement
 /// record of `FR-LITE-018` (`FR-ERR-031`, `OD-21`).
 #[cfg(test)]
@@ -793,7 +793,7 @@ mod tests {
 
     /// Asserts every order the specification requires of `database`, each
     /// against the library's own answer, ordered by the oracle's `ORDER BY`
-    /// on a connection of its own.
+    /// through an open of the file of its own.
     fn assert_ordered(database: &Database<'_>, connection: &Connection, seed: u64) {
         // NFR-DET-002: the tables and the views by name, byte-wise.
         assert!(
@@ -938,7 +938,7 @@ mod tests {
     /// and `sql` to the bytes beside it. SQLite writes no name that is not
     /// UTF-8 from a statement's text, so they are written under
     /// `writable_schema`, as `tests/support/sqlite.rs` writes its artefacts,
-    /// by a connection whose defensive mode is off.
+    /// through an open of the file whose defensive mode is off.
     fn renamed(path: &Path, sql: &str, renamed: &[(&str, &str)]) {
         let connection = Connection::open(path).expect("the database opens");
         connection

@@ -22,9 +22,9 @@
 //!
 //! | Requirement | The property |
 //! |---|---|
-//! | `NFR-PERF-005` | The commands of `FR-PROJ-025` open no connection, perform no project discovery, and read no configuration file |
-//! | `NFR-PERF-006` | A command that requires no catalogue data opens no connection |
-//! | `FR-RND-022` | `tpl render --context` opens no connection, from a file and from standard input alike |
+//! | `NFR-PERF-005` | The commands of `FR-PROJ-025` read no database — the server accepts no connection from them —, perform no project discovery, and read no configuration file |
+//! | `NFR-PERF-006` | A command that requires no catalogue data reads no database: the server accepts no connection from it |
+//! | `FR-RND-022` | `tpl render --context` reads no database — the server accepts no connection from it —, from a file and from standard input alike |
 //! | `FR-ERR-006` | A `tpl render` whose template does not resolve opens no connection and writes no file of the cache, against a project whose entry reaches a live server |
 //! | `FR-SRV-012` | The server receives the four kinds of the closed list of `FR-SRV-006` and no fifth, the three connection-start statements in the order `FR-SRV-042` fixes |
 //! | `FR-SRV-013` | The read-back of `FR-SRV-009` is issued exactly once, in the one spelling every series of the window carries |
@@ -110,9 +110,10 @@ const BOUND: &str = "charge";
 /// `FR-RND-016` — and the body below writes it there before the instruments are
 /// armed.
 ///
-/// This is what gives the no-connection claim of `FR-TMPL-003` the **server's
-/// own connection record**, in place of the exit-code proxy
-/// `tests/template_commands.rs` uses for it where no fixture is required.
+/// This is what gives the claim of `FR-TMPL-003` that no `template` subcommand
+/// reads the database the **server's own connection record**, in place of the
+/// exit-code proxy `tests/template_commands.rs` uses for it where no fixture is
+/// required.
 const POPULATION: [&[&str]; 23] = [
     &["init"],
     &["template", "list"],
@@ -234,7 +235,7 @@ fn fr_srv_029_one_body_is_driven_once_per_series_of_fr_srv_015() {
 
 #[test]
 fn nfr_perf_007_the_commands_that_need_no_catalogue_open_no_connection() {
-    // NFR-PERF-005 requires every command of FR-PROJ-025 to open no connection,
+    // NFR-PERF-005 requires every command of FR-PROJ-025 to read no database,
     // and NFR-PERF-006 requires the same of every command that needs no
     // catalogue data — which, among the commands that exist today, is every cfg
     // subcommand but `database test`. One observation of the connections a
@@ -992,12 +993,13 @@ const REPORT_SOURCE: &str = "{{ database.name }}/{{ table.name }}\n";
 
 #[test]
 fn fr_rnd_022_a_render_from_a_document_opens_no_connection_and_touches_no_cache() {
-    // FR-RND-022 with BR-SRV-003: a render from a `--context` document opens no
-    // connection and reads and writes no file of the cache. The first clause is
-    // the one a process cannot establish about itself, and this is the server's
-    // own connection record answering it — over the file form of FR-RND-016 and
-    // over the standard-input form of FR-RND-017 alike, because the two reach
-    // the same step of FR-ERR-006 by two different reads.
+    // FR-RND-022 with BR-SRV-003: a render from a `--context` document reads no
+    // database — against a server, it opens no connection — and reads and
+    // writes no file of the cache. The first clause is the one a process cannot
+    // establish about itself, and this is the server's own connection record
+    // answering it — over the file form of FR-RND-016 and over the
+    // standard-input form of FR-RND-017 alike, because the two reach the same
+    // step of FR-ERR-006 by two different reads.
     //
     // **The arrangement is one that could have been tripped.** The project
     // names an entry that reaches this very server and `core.database` selects

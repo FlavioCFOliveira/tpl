@@ -241,7 +241,7 @@ pub(super) fn cause(error: &Error) -> Cow<'static, str> {
         )),
         // FR-RND-032, over the other context source of FR-RND-023. The line
         // names the document rather than a database entry, because
-        // FR-RND-022 opened no connection and FR-RND-019 resolved no entry —
+        // FR-RND-022 read no database and FR-RND-019 resolved no entry —
         // which is the whole of why this is not the arm above.
         Error::AmbiguousRoutineInContext {
             name,

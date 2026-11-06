@@ -17,7 +17,7 @@
 //! | A name that reaches nothing is `66` with a nearest-match suggestion | `FR-TMPL-027` |
 //! | An empty project lists nothing, checks nothing, and succeeds | `FR-TMPL-031` |
 //! | The `json` documents, and their `source` | `FR-TMPL-028` … `FR-TMPL-030` |
-//! | No subcommand opens a database connection | `FR-TMPL-003` |
+//! | No subcommand reads the database | `FR-TMPL-003` |
 //!
 //! **Every run is made in a temporary directory of its own**, with no `.tpl`
 //! above it, under a cleared environment — on the same terms as
@@ -25,7 +25,7 @@
 //! directory is removed when the test's sandbox goes out of scope, and nothing
 //! outside it is read or written.
 //!
-//! # No fixture is needed, and the connection clause says why
+//! # No fixture is needed, and the database clause says why
 //!
 //! `FR-TMPL-003` is a statement about what these commands do **not** do, and an
 //! absence is worth nothing until the same instrument is shown to observe the
@@ -46,7 +46,7 @@ use sandbox::Sandbox;
 
 /// A `.tpl/.cfg` with no database entry at all, which is what `FR-PROJ-018`
 /// leaves a fresh project with and what every body below works against unless
-/// it is about the connection clause.
+/// it is about the database clause.
 const NO_ENTRY: &str = "[core]\n";
 
 /// A `.tpl/.cfg` whose selected entry describes a read the server would refuse
@@ -576,7 +576,7 @@ fn fr_err_020_a_name_nothing_is_near_is_refused_with_the_generic_hint_alone() {
 
 #[test]
 fn fr_tmpl_003_no_subcommand_of_the_second_arm_opens_a_database_connection() {
-    // FR-TMPL-003: no `template` subcommand opens a connection, reads the
+    // FR-TMPL-003: no `template` subcommand reads the database, reads the
     // cache, or requires a database entry to be selected. The project below
     // selects an entry that describes a read no server would answer, so a
     // subcommand that resolved and connected could not exit 0.

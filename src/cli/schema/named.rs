@@ -18,7 +18,7 @@
 //!
 //! **The prefix is decided from the token alone**, so it precedes every
 //! catalogue read: `FR-SCH-008` places the condition at step 1 of `FR-ERR-006`,
-//! and [`routine_token`] is called before anything opens a connection.
+//! and [`routine_token`] is called before anything reads the database.
 //!
 //! **The suggestion is selected here and composed in `diagnostics`.**
 //! `FR-ERR-021`'s populations belong to the components that own them, and the
@@ -151,8 +151,8 @@ fn lower(kind: &RoutineKind<'_>) -> Option<&'static str> {
 /// The two are distinguished rather than merged because `FR-ERR-034` forbids a
 /// `cause` "whose wording would be equally true of a different failure", and
 /// the catalogue wording names `INFORMATION_SCHEMA` and a database entry —
-/// neither of which exists on the document path, where `FR-RND-022` opens no
-/// connection and `FR-RND-019` resolves no entry.
+/// neither of which exists on the document path, where `FR-RND-022` reads no
+/// database and `FR-RND-019` resolves no entry.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Sought<'a> {
     /// A catalogue read, served by the cache or by a server or a database
