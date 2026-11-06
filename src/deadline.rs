@@ -309,6 +309,16 @@ pub(crate) struct Clock {
     started: Instant,
     /// The budget `--timeout` set, or [`None`] where the flag was absent.
     budget: Option<Seconds>,
+    /// Whether the budget is spent whatever the clock reads, which only
+    /// [`Clock::spent`] sets.
+    ///
+    /// A test seam, compiled out of every build but the tests' (`OD-21`): a
+    /// spent budget cannot be built from instants alone, because an
+    /// [`Instant`] a whole second before now does not exist on a host that
+    /// booted less than a second ago, and a clock that fell back to now would
+    /// leave the budget unspent (rmp `#366`).
+    #[cfg(test)]
+    spent: bool,
 }
 
 impl Clock {
@@ -321,6 +331,8 @@ impl Clock {
         Self {
             started: process_start(),
             budget,
+            #[cfg(test)]
+            spent: false,
         }
     }
 
@@ -328,13 +340,10 @@ impl Clock {
     /// composes has nothing left (`FR-GLOB-012`).
     #[cfg(test)]
     pub(crate) fn spent() -> Self {
-        let started = Instant::now()
-            .checked_sub(Duration::from_secs(2))
-            .unwrap_or_else(Instant::now);
-
         Self {
-            started,
+            started: Instant::now(),
             budget: Some(Seconds::new(std::num::NonZeroU64::MIN)),
+            spent: true,
         }
     }
 
@@ -350,6 +359,7 @@ impl Clock {
         Self {
             started: Instant::now(),
             budget,
+            spent: false,
         }
     }
 
@@ -360,6 +370,11 @@ impl Clock {
 
     /// What remains of the overall budget, or [`None`] where there is none.
     fn remaining(&self) -> Option<Duration> {
+        #[cfg(test)]
+        if self.spent {
+            return self.budget.map(|_| Duration::ZERO);
+        }
+
         self.budget
             .map(|budget| budget.duration().saturating_sub(self.elapsed()))
     }
@@ -639,6 +654,24 @@ mod tests {
 
         assert!(bound.expired());
         assert!(!clock.bound(seconds(30)).expired());
+    }
+
+    #[test]
+    fn fr_glob_012_a_spent_clock_leaves_every_bound_it_composes_expired() {
+        // FR-GLOB-012, through the test seam `Clock::spent`: the overall
+        // budget is the first bound to expire, at once, for a phase and for
+        // the shared connection budget alike. The answer reads no clock, so it
+        // is the same on a host that booted a moment ago (rmp #366).
+        let clock = Clock::spent();
+
+        let bound = clock.bound(seconds(30));
+        assert_eq!(bound.bound(), DeadlineBound::Overall);
+        assert_eq!(bound.limit(), Duration::from_secs(1));
+        assert!(bound.expired());
+
+        let shared = clock.connection_budget(seconds(10)).remaining();
+        assert_eq!(shared.bound(), DeadlineBound::Overall);
+        assert!(shared.expired());
     }
 
     #[test]

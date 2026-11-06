@@ -188,16 +188,53 @@ fn watch(shared: &Shared, handle: &InterruptHandle) {
 mod tests {
     use super::Watchdog;
     use rusqlite::Connection;
+    use rusqlite::trace::{TraceEvent, TraceEventCodes};
+    use std::sync::{Condvar, Mutex, PoisonError};
     use std::time::Duration;
 
+    /// A statement that never returns on its own: only an interrupt ends it.
+    const ENDLESS: &str =
+        "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n) SELECT count(*) FROM n";
+
+    /// Whether [`ENDLESS`] has begun running, as the statement trace reports
+    /// it; only [`fr_lite_009_a_statement_past_its_bound_is_interrupted_and_the_next_is_not`]
+    /// runs it on a traced connection.
+    static BEGUN: Mutex<bool> = Mutex::new(false);
+
+    /// Woken when [`BEGUN`] is set.
+    static BEGAN: Condvar = Condvar::new();
+
+    /// The statement trace: records that [`ENDLESS`] has begun.
+    ///
+    /// SQLite reports a statement when it begins running, after it has
+    /// counted it as running, so an interrupt issued from here on reaches it
+    /// rather than being the no-op an interrupt with no statement running is
+    /// (`https://sqlite.org/c3ref/interrupt.html`).
+    fn note(event: TraceEvent<'_>) {
+        if let TraceEvent::Stmt(_, text) = event
+            && text == ENDLESS
+        {
+            *BEGUN.lock().unwrap_or_else(PoisonError::into_inner) = true;
+            BEGAN.notify_all();
+        }
+    }
+
     #[test]
-    fn fr_lite_009_a_statement_past_its_bound_is_interrupted_and_one_within_it_is_not() {
-        let connection = Connection::open_in_memory().expect("a memory database opens");
+    fn fr_lite_009_a_statement_past_its_bound_is_interrupted_and_the_next_is_not() {
+        // rmp #366: nothing here depends on how fast the host runs. The
+        // statements within their bound are armed with a bound no clock
+        // reaches, and the endless statement is armed only once the trace has
+        // reported it running, so the interrupt cannot be issued before it
+        // starts, and the statement cannot end before the interrupt.
+        let mut connection = Connection::open_in_memory().expect("a memory database opens");
+        connection
+            .trace_v2(TraceEventCodes::SQLITE_TRACE_STMT, Some(note))
+            .expect("the statement trace installs");
         let watchdog =
             Watchdog::start(connection.get_interrupt_handle()).expect("the thread starts");
 
-        // A statement that finishes well within its bound.
-        watchdog.arm(Duration::from_secs(30));
+        // A statement that returns within its bound.
+        watchdog.arm(Duration::MAX);
         let answered: i64 = connection
             .query_row("SELECT 1", [], |row| row.get(0))
             .expect("the statement answers");
@@ -205,12 +242,18 @@ mod tests {
         assert!(!watchdog.disarm());
 
         // A statement that runs past a bound of 50 ms.
+        let running = std::thread::spawn(move || {
+            let answered = connection.query_row(ENDLESS, [], |row| row.get::<_, i64>(0));
+            (answered, connection)
+        });
+        {
+            let mut begun = BEGUN.lock().unwrap_or_else(PoisonError::into_inner);
+            while !*begun {
+                begun = BEGAN.wait(begun).unwrap_or_else(PoisonError::into_inner);
+            }
+        }
         watchdog.arm(Duration::from_millis(50));
-        let interrupted = connection.query_row(
-            "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n) SELECT count(*) FROM n",
-            [],
-            |row| row.get::<_, i64>(0),
-        );
+        let (interrupted, connection) = running.join().expect("the statement thread returns");
         assert!(watchdog.disarm(), "the watchdog fired");
         let code = match interrupted {
             Err(rusqlite::Error::SqliteFailure(failure, _)) => failure.extended_code,
@@ -219,11 +262,32 @@ mod tests {
         assert_eq!(code, rusqlite::ffi::SQLITE_INTERRUPT);
 
         // The next statement is not reached by the interrupt.
-        watchdog.arm(Duration::from_secs(30));
+        watchdog.arm(Duration::MAX);
         let after: i64 = connection
             .query_row("SELECT 2", [], |row| row.get(0))
             .expect("the next statement answers");
         assert_eq!(after, 2);
+        assert!(!watchdog.disarm());
+
+        watchdog.stop();
+    }
+
+    #[test]
+    #[ignore = "measurement: needs `SELECT 1` to return within a 30 s wall-clock bound"]
+    fn fr_lite_009_a_statement_within_a_bound_the_clock_reaches_is_not_interrupted() {
+        // The armed path with an instant the clock reaches, which the
+        // deterministic test above does not take for a statement within its
+        // bound: the watchdog waits for the instant and does not fire before
+        // it.
+        let connection = Connection::open_in_memory().expect("a memory database opens");
+        let watchdog =
+            Watchdog::start(connection.get_interrupt_handle()).expect("the thread starts");
+
+        watchdog.arm(Duration::from_secs(30));
+        let answered: i64 = connection
+            .query_row("SELECT 1", [], |row| row.get(0))
+            .expect("the statement answers");
+        assert_eq!(answered, 1);
         assert!(!watchdog.disarm());
 
         watchdog.stop();
